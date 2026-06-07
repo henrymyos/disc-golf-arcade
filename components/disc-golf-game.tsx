@@ -17,8 +17,15 @@ const W = 320;
 const H = 448;
 const DISC_R = 3;
 const CATCH_R = 9;
-const STOP_SPEED = 0.18;
+const STOP_SPEED = 0.35;
 const BEST_KEY = "discgolf.best";
+
+// Height physics: a throw arcs up and comes back down. While airborne the disc
+// clears water and trees (throw over hazards); once it lands it brakes hard so
+// it doesn't keep gliding forever after the fade.
+const GRAVITY = 0.11; // downward pull on height per frame
+const AIRBORNE_H = 3; // above this height, hazards are cleared
+const GROUND_FRICTION = 0.8; // hard deceleration once on the ground
 
 type Vec = { x: number; y: number };
 type Tree = { x: number; y: number; r: number };
@@ -72,6 +79,8 @@ type GameState = {
   holedAt: number | null;
   fadeTurn: number; // radians the current flight has curved so far
   fadeSign: number; // -1 backhand (left), +1 forehand (right)
+  h: number; // current height above the ground
+  vh: number; // vertical velocity (height units per frame)
 };
 
 // Aim straight at the basket from a given lie.
@@ -92,6 +101,8 @@ function freshHole(holeIndex: number) {
     holedAt: null as number | null,
     fadeTurn: 0,
     fadeSign: -1,
+    h: 0,
+    vh: 0,
   };
 }
 
@@ -259,12 +270,15 @@ export function DiscGolfGame() {
     throwStyleRef.current = throwStyle;
   }, [throwStyle]);
 
-  // Load personal best once.
+  // Load personal best once, after mount. Done in an effect (not a lazy
+  // initializer) so server and first client render agree — avoids a hydration
+  // mismatch on the "Your best" line.
   useEffect(() => {
     try {
       const raw = localStorage.getItem(BEST_KEY);
       if (raw) {
         const n = Number(raw);
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         if (Number.isFinite(n)) setBestScore(n);
       }
     } catch {
@@ -307,6 +321,10 @@ export function DiscGolfGame() {
     // Backhand fades left, forehand fades right (relative to "up the screen").
     g.fadeSign = throwStyleRef.current === "BH" ? -1 : 1;
     g.fadeTurn = 0;
+    // Launch upward — height scales with power, so soft throws stay low (and
+    // must avoid hazards) while big throws sail over them.
+    g.h = 0;
+    g.vh = g.power * 3.0;
     g.throws += 1;
     g.phase = "fly";
     audioRef.current?.sfx("throw");
@@ -420,10 +438,20 @@ export function DiscGolfGame() {
         const disc = DISCS[g.discIndex];
         d.x += d.vx;
         d.y += d.vy;
+
+        // Height: arc up then down. Disc is "airborne" until it lands.
+        g.h += g.vh;
+        g.vh -= GRAVITY;
+        if (g.h <= 0) {
+          g.h = 0;
+          g.vh = 0;
+        }
+        const airborne = g.h > AIRBORNE_H;
+
         const sp = Math.hypot(d.vx, d.vy);
-        // Fade by *rotating* the velocity (so speed only ever decreases — never a
-        // backward push), capped so the path can't curve past MAX_FADE_TURN.
-        if (sp > 0.6 && Math.abs(g.fadeTurn) < MAX_FADE_TURN) {
+        // Fade by *rotating* the velocity (speed never increases → never a
+        // backward push), only while airborne and capped at MAX_FADE_TURN.
+        if (airborne && sp > 0.6 && Math.abs(g.fadeTurn) < MAX_FADE_TURN) {
           const a = g.fadeSign * disc.fade;
           const cos = Math.cos(a);
           const sin = Math.sin(a);
@@ -433,62 +461,91 @@ export function DiscGolfGame() {
           d.vy = nvy;
           g.fadeTurn += a;
         }
-        d.vx *= disc.friction;
-        d.vy *= disc.friction;
+        // Glide through the air, but brake hard once on the ground so the disc
+        // plants soon after it lands instead of floating on.
+        const friction = airborne ? disc.friction : GROUND_FRICTION;
+        d.vx *= friction;
+        d.vy *= friction;
 
-        // Basket catch — chains grab the disc; skip the rest of this step.
-        if (Math.hypot(d.x - hole.basket.x, d.y - hole.basket.y) < CATCH_R) {
-          g.phase = "holed";
-          g.holedAt = performance.now();
-          d.vx = 0;
-          d.vy = 0;
-          d.x = hole.basket.x;
-          d.y = hole.basket.y;
-          audioRef.current?.sfx("basket");
-          return;
-        }
-
-        // Tree bounce
-        for (const tr of hole.trees) {
-          const dist = Math.hypot(d.x - tr.x, d.y - tr.y);
-          const min = tr.r + DISC_R;
-          if (dist < min && dist > 0) {
-            const nx = (d.x - tr.x) / dist;
-            const ny = (d.y - tr.y) / dist;
-            d.x = tr.x + nx * min;
-            d.y = tr.y + ny * min;
-            const dot = d.vx * nx + d.vy * ny;
-            d.vx = (d.vx - 2 * dot * nx) * 0.45;
-            d.vy = (d.vy - 2 * dot * ny) * 0.45;
-            audioRef.current?.sfx("tree");
-          }
-        }
-
-        // Water / OB → penalty stroke, reset to last lie
-        let penalized = false;
-        for (const wt of hole.water) {
-          if (d.x > wt.x && d.x < wt.x + wt.w && d.y > wt.y && d.y < wt.y + wt.h) {
-            penalized = true;
-            break;
-          }
-        }
+        // Out of bounds always counts (can't fly off the course).
         const oob = d.x < 2 || d.x > W - 2 || d.y < 2 || d.y > H - 2;
-        if (penalized || oob) {
-          audioRef.current?.sfx(penalized ? "water" : "tree");
+        if (oob) {
+          audioRef.current?.sfx("tree");
           g.throws += 1;
           d.x = g.rest.x;
           d.y = g.rest.y;
           d.vx = 0;
           d.vy = 0;
-          g.angle = aimAt(g.rest, hole.basket); // re-aim at the basket
+          g.h = 0;
+          g.vh = 0;
+          g.angle = aimAt(g.rest, hole.basket);
           g.phase = "aim";
           syncHud();
-        } else if (g.phase === "fly" && Math.hypot(d.vx, d.vy) < STOP_SPEED) {
-          d.vx = 0;
-          d.vy = 0;
-          g.rest = { x: d.x, y: d.y };
-          g.angle = aimAt(g.rest, hole.basket); // auto-aim at the basket
-          g.phase = "aim";
+          return;
+        }
+
+        // Hazards & the basket only interact when the disc is low enough —
+        // a high throw sails over water and trees.
+        if (!airborne) {
+          // Basket catch — chains grab the disc.
+          if (Math.hypot(d.x - hole.basket.x, d.y - hole.basket.y) < CATCH_R) {
+            g.phase = "holed";
+            g.holedAt = performance.now();
+            d.vx = 0;
+            d.vy = 0;
+            d.x = hole.basket.x;
+            d.y = hole.basket.y;
+            audioRef.current?.sfx("basket");
+            return;
+          }
+
+          // Tree bounce
+          for (const tr of hole.trees) {
+            const dist = Math.hypot(d.x - tr.x, d.y - tr.y);
+            const min = tr.r + DISC_R;
+            if (dist < min && dist > 0) {
+              const nx = (d.x - tr.x) / dist;
+              const ny = (d.y - tr.y) / dist;
+              d.x = tr.x + nx * min;
+              d.y = tr.y + ny * min;
+              const dot = d.vx * nx + d.vy * ny;
+              d.vx = (d.vx - 2 * dot * nx) * 0.45;
+              d.vy = (d.vy - 2 * dot * ny) * 0.45;
+              audioRef.current?.sfx("tree");
+            }
+          }
+
+          // Water → penalty stroke, reset to last lie
+          let penalized = false;
+          for (const wt of hole.water) {
+            if (d.x > wt.x && d.x < wt.x + wt.w && d.y > wt.y && d.y < wt.y + wt.h) {
+              penalized = true;
+              break;
+            }
+          }
+          if (penalized) {
+            audioRef.current?.sfx("water");
+            g.throws += 1;
+            d.x = g.rest.x;
+            d.y = g.rest.y;
+            d.vx = 0;
+            d.vy = 0;
+            g.h = 0;
+            g.vh = 0;
+            g.angle = aimAt(g.rest, hole.basket);
+            g.phase = "aim";
+            syncHud();
+            return;
+          }
+
+          // Came to rest on the ground.
+          if (sp < STOP_SPEED) {
+            d.vx = 0;
+            d.vy = 0;
+            g.rest = { x: d.x, y: d.y };
+            g.angle = aimAt(g.rest, hole.basket); // auto-aim at the basket
+            g.phase = "aim";
+          }
         }
       } else if (g.phase === "holed") {
         if (g.holedAt && performance.now() - g.holedAt > 850) {
@@ -546,14 +603,22 @@ export function DiscGolfGame() {
         ctx.fillRect(Math.round(ex) - 1, Math.round(ey) - 1, 3, 3);
       }
 
-      // Disc
+      // Shadow on the ground + disc lifted by its height. The gap between them
+      // shows how high the disc is flying (so you can read carries over water).
       const disc = DISCS[g.discIndex];
+      const shadowR = Math.max(1.5, DISC_R - g.h * 0.03);
+      ctx.fillStyle = "rgba(0,0,0,0.28)";
+      ctx.beginPath();
+      ctx.ellipse(g.disc.x, g.disc.y, shadowR, shadowR * 0.6, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      const discY = g.disc.y - g.h;
       ctx.fillStyle = "#ffffff";
       ctx.beginPath();
-      ctx.arc(g.disc.x, g.disc.y, DISC_R, 0, Math.PI * 2);
+      ctx.arc(g.disc.x, discY, DISC_R, 0, Math.PI * 2);
       ctx.fill();
       ctx.fillStyle = disc.color;
-      ctx.fillRect(Math.round(g.disc.x) - 1, Math.round(g.disc.y) - 1, 2, 2);
+      ctx.fillRect(Math.round(g.disc.x) - 1, Math.round(discY) - 1, 2, 2);
 
       // HUD
       ctx.fillStyle = "rgba(0,0,0,0.45)";
