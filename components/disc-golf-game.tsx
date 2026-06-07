@@ -23,7 +23,7 @@ const BEST_KEY = "discgolf.best";
 // Height physics: a throw arcs up and comes back down. While airborne the disc
 // clears water and trees (throw over hazards); once it lands it brakes hard so
 // it doesn't keep gliding forever after the fade.
-const GRAVITY = 0.11; // downward pull on height per frame
+const GRAVITY = 0.08; // downward pull on height per frame (gentler = floatier flight)
 const AIRBORNE_H = 3; // above this height, hazards are cleared
 const GROUND_FRICTION = 0.8; // hard deceleration once on the ground
 
@@ -52,11 +52,14 @@ const TOTAL_PAR = HOLES.reduce((s, h) => s + h.par, 0);
 // path curves per frame (the disc bends one way; backhand left, forehand
 // right), and friction is glide (higher = floats/rolls farther). Curving is
 // capped per throw (MAX_FADE_TURN) so a disc can never loop or fade backward.
-type Disc = { key: string; name: string; power: number; fade: number; friction: number; color: string; blurb: string };
+type Disc = { key: string; name: string; power: number; arc: number; fade: number; friction: number; color: string; blurb: string };
 const DISCS: Disc[] = [
-  { key: "putter", name: "Putter", power: 0.82, fade: 0.004, friction: 0.971, color: "#36D7B7", blurb: "Short, low fade" },
-  { key: "mid", name: "Mid", power: 1.0, fade: 0.008, friction: 0.980, color: "#f5d24a", blurb: "Balanced" },
-  { key: "driver", name: "Driver", power: 1.34, fade: 0.014, friction: 0.987, color: "#e23b3b", blurb: "Far, big fade" },
+  // `arc` is the vertical launch per unit power. The putter flies flat so it
+  // stays low and reaches the basket near the ground (high chance to catch);
+  // the driver climbs to sail over hazards.
+  { key: "putter", name: "Putter", power: 0.82, arc: 1.2, fade: 0.004, friction: 0.971, color: "#36D7B7", blurb: "Flat, low fade" },
+  { key: "mid", name: "Mid", power: 1.0, arc: 2.2, fade: 0.008, friction: 0.980, color: "#f5d24a", blurb: "Balanced" },
+  { key: "driver", name: "Driver", power: 1.34, arc: 2.9, fade: 0.014, friction: 0.987, color: "#e23b3b", blurb: "Far, big fade" },
 ];
 // Most the flight path may bend over a single throw (~46°) — keeps fade
 // noticeable without ever curving back toward the thrower.
@@ -314,17 +317,19 @@ export function DiscGolfGame() {
     const g = stateRef.current;
     if (!g || g.phase !== "aim") return;
     const disc = DISCS[g.discIndex];
-    const speed = disc.power * (1.7 + g.power * 4.6);
+    // A touch slower than before so the disc reads as gliding across, not zipping.
+    const speed = disc.power * (1.4 + g.power * 3.8);
     g.disc.vx = Math.cos(g.angle) * speed;
     g.disc.vy = Math.sin(g.angle) * speed;
     g.rest = { x: g.disc.x, y: g.disc.y };
     // Backhand fades left, forehand fades right (relative to "up the screen").
     g.fadeSign = throwStyleRef.current === "BH" ? -1 : 1;
     g.fadeTurn = 0;
-    // Launch upward — height scales with power, so soft throws stay low (and
-    // must avoid hazards) while big throws sail over them.
+    // Launch upward — height scales with power and the disc's arc, so a putter
+    // stays low (lands near the basket to catch) while a driver climbs to clear
+    // hazards.
     g.h = 0;
-    g.vh = g.power * 3.0;
+    g.vh = g.power * disc.arc;
     g.throws += 1;
     g.phase = "fly";
     audioRef.current?.sfx("throw");
