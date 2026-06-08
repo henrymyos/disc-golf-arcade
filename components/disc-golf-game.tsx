@@ -37,31 +37,49 @@ type Hole = { par: number; tee: Vec; basket: Vec; trees: Tree[]; water: Water[];
 
 const TEE: Vec = { x: 160, y: 416 };
 
-// Fixed course — identical every play.
-// Glendoveer East–inspired: open, long fairways with sparse trees and the
-// occasional water/OB — an original homage in the style of the real course
-// (18 holes, par 66), not a copy of any map.
+// Glendoveer East (2026 Northwest Championship), 18 holes / par 66. Each hole
+// is an original pixel interpretation of the real one — tee at the bottom, with
+// the green, dogleg shape, OB lines, water and tree guards placed to match the
+// hole's actual character. Comments note the real par/distance.
 const HOLES: Hole[] = [
-  // ── Front nine (par 33) ──
-  { par: 3, tee: TEE, basket: { x: 160, y: 120 }, trees: [], water: [] },
-  { par: 4, tee: TEE, basket: { x: 110, y: 90 }, trees: [{ x: 182, y: 250, r: 13 }], water: [] },
-  { par: 3, tee: TEE, basket: { x: 212, y: 140 }, trees: [{ x: 140, y: 240, r: 13 }], water: [] },
-  { par: 4, tee: TEE, basket: { x: 160, y: 78 }, trees: [{ x: 110, y: 230, r: 13 }, { x: 210, y: 230, r: 13 }], water: [] },
-  { par: 5, tee: TEE, basket: { x: 150, y: 58 }, trees: [{ x: 120, y: 300, r: 13 }, { x: 212, y: 200, r: 13 }], water: [{ x: 58, y: 150, w: 80, h: 46 }], ob: [{ x: 244, y: 70, w: 40, h: 250 }] },
-  { par: 3, tee: TEE, basket: { x: 88, y: 130 }, trees: [], water: [] },
-  { par: 4, tee: TEE, basket: { x: 240, y: 100 }, trees: [{ x: 162, y: 232, r: 13 }], water: [{ x: 92, y: 118, w: 70, h: 50 }] },
-  { par: 4, tee: TEE, basket: { x: 160, y: 70 }, trees: [{ x: 120, y: 200, r: 13 }, { x: 206, y: 200, r: 13 }], water: [] },
-  { par: 3, tee: TEE, basket: { x: 202, y: 150 }, trees: [{ x: 128, y: 258, r: 13 }], water: [] },
-  // ── Back nine (par 33) ──
-  { par: 4, tee: TEE, basket: { x: 112, y: 96 }, trees: [{ x: 182, y: 240, r: 13 }], water: [] },
-  { par: 3, tee: TEE, basket: { x: 160, y: 132 }, trees: [], water: [] },
-  { par: 4, tee: TEE, basket: { x: 230, y: 90 }, trees: [{ x: 150, y: 230, r: 13 }, { x: 250, y: 168, r: 13 }], water: [] },
-  { par: 3, tee: TEE, basket: { x: 90, y: 140 }, trees: [{ x: 162, y: 250, r: 13 }], water: [] },
-  { par: 5, tee: TEE, basket: { x: 160, y: 56 }, trees: [{ x: 112, y: 290, r: 13 }, { x: 210, y: 208, r: 13 }], water: [{ x: 120, y: 150, w: 80, h: 46 }] },
-  { par: 3, tee: TEE, basket: { x: 210, y: 150 }, trees: [], water: [] },
-  { par: 4, tee: TEE, basket: { x: 150, y: 80 }, trees: [{ x: 100, y: 230, r: 13 }, { x: 210, y: 230, r: 13 }], water: [] },
-  { par: 4, tee: TEE, basket: { x: 240, y: 110 }, trees: [{ x: 150, y: 240, r: 13 }], water: [{ x: 78, y: 150, w: 70, h: 48 }] },
-  { par: 3, tee: TEE, basket: { x: 160, y: 110 }, trees: [{ x: 120, y: 212, r: 13 }, { x: 206, y: 212, r: 13 }], water: [] },
+  // ── Front nine (par 31) ──
+  // 1 — par 4, 670ft. Dogleg left around a pond to an upper-right green; mando tree short.
+  { par: 4, tee: TEE, basket: { x: 190, y: 98 }, trees: [{ x: 206, y: 152, r: 13 }, { x: 118, y: 124, r: 12 }], water: [{ x: 104, y: 206, w: 76, h: 58 }], ob: [{ x: 6, y: 60, w: 48, h: 332 }, { x: 266, y: 60, w: 48, h: 332 }] },
+  // 2 — par 3, 390ft. Tight tree-lined corridor bending right; cart-path OB hard left.
+  { par: 3, tee: TEE, basket: { x: 196, y: 122 }, trees: [{ x: 132, y: 252, r: 13 }, { x: 210, y: 208, r: 13 }, { x: 150, y: 170, r: 12 }], water: [], ob: [{ x: 6, y: 60, w: 72, h: 332 }, { x: 286, y: 60, w: 28, h: 332 }] },
+  // 3 — par 3, 370ft. Tree-lined, mando tree, green up the left.
+  { par: 3, tee: TEE, basket: { x: 150, y: 110 }, trees: [{ x: 196, y: 252, r: 13 }, { x: 120, y: 200, r: 13 }, { x: 202, y: 150, r: 12 }], water: [], ob: [{ x: 6, y: 60, w: 40, h: 332 }, { x: 274, y: 60, w: 40, h: 332 }] },
+  // 4 — par 3, 450ft. Guarded green, OB left + golf green right.
+  { par: 3, tee: TEE, basket: { x: 150, y: 96 }, trees: [{ x: 150, y: 152, r: 14 }, { x: 118, y: 232, r: 12 }], water: [], ob: [{ x: 6, y: 60, w: 50, h: 332 }, { x: 250, y: 60, w: 64, h: 332 }] },
+  // 5 — par 4, 910ft. Wide & open with sand hazards and a pond short of the pin.
+  { par: 4, tee: TEE, basket: { x: 160, y: 72 }, trees: [], water: [{ x: 132, y: 118, w: 56, h: 34 }], ob: [{ x: 6, y: 50, w: 40, h: 342 }, { x: 274, y: 50, w: 40, h: 342 }, { x: 116, y: 182, w: 30, h: 22 }, { x: 184, y: 202, w: 28, h: 20 }] },
+  // 6 — par 3, 415ft. Mostly open, a couple trees, OB right (mando).
+  { par: 3, tee: TEE, basket: { x: 168, y: 110 }, trees: [{ x: 132, y: 242, r: 13 }, { x: 196, y: 190, r: 13 }], water: [], ob: [{ x: 6, y: 60, w: 36, h: 332 }, { x: 250, y: 60, w: 64, h: 332 }] },
+  // 7 — par 4, 710ft. Tree-lined dogleg left; OB right (mando).
+  { par: 4, tee: TEE, basket: { x: 132, y: 86 }, trees: [{ x: 196, y: 252, r: 13 }, { x: 150, y: 182, r: 13 }, { x: 206, y: 140, r: 12 }], water: [], ob: [{ x: 6, y: 60, w: 40, h: 332 }, { x: 256, y: 60, w: 58, h: 332 }] },
+  // 8 — par 3, 500ft. Straight tree-lined; OB right (mando) + golf fairway left.
+  { par: 3, tee: TEE, basket: { x: 160, y: 90 }, trees: [{ x: 122, y: 242, r: 13 }, { x: 200, y: 242, r: 13 }, { x: 160, y: 162, r: 12 }], water: [], ob: [{ x: 6, y: 60, w: 58, h: 332 }, { x: 256, y: 60, w: 58, h: 332 }] },
+  // 9 — par 4, 695ft. S-shaped tree-lined fairway; OB lines + a sand hazard.
+  { par: 4, tee: TEE, basket: { x: 150, y: 86 }, trees: [{ x: 206, y: 252, r: 13 }, { x: 120, y: 182, r: 13 }, { x: 196, y: 130, r: 12 }], water: [], ob: [{ x: 6, y: 60, w: 44, h: 332 }, { x: 262, y: 60, w: 52, h: 332 }, { x: 148, y: 202, w: 28, h: 20 }] },
+  // ── Back nine (par 35) ──
+  // 10 — par 4, 710ft. S-curve with sand hazards, OB both sides (mandos).
+  { par: 4, tee: TEE, basket: { x: 168, y: 84 }, trees: [{ x: 122, y: 252, r: 13 }, { x: 206, y: 252, r: 13 }, { x: 150, y: 172, r: 12 }], water: [], ob: [{ x: 6, y: 50, w: 46, h: 342 }, { x: 262, y: 50, w: 52, h: 342 }, { x: 176, y: 150, w: 30, h: 22 }, { x: 118, y: 112, w: 28, h: 20 }] },
+  // 11 — par 5, 1145ft. Long straight tree-lined corridor; OB connecting mandos.
+  { par: 5, tee: TEE, basket: { x: 160, y: 56 }, trees: [{ x: 120, y: 292, r: 13 }, { x: 206, y: 232, r: 13 }, { x: 132, y: 172, r: 12 }, { x: 196, y: 120, r: 12 }], water: [], ob: [{ x: 6, y: 46, w: 50, h: 348 }, { x: 264, y: 46, w: 50, h: 348 }] },
+  // 12 — par 3, 370ft. Dogleg right around trees; OB right (mando).
+  { par: 3, tee: TEE, basket: { x: 196, y: 110 }, trees: [{ x: 140, y: 232, r: 13 }, { x: 168, y: 162, r: 13 }], water: [], ob: [{ x: 6, y: 60, w: 64, h: 332 }, { x: 282, y: 60, w: 32, h: 332 }] },
+  // 13 — par 4, 775ft. Dogleg right, tree-lined; OB surrounding.
+  { par: 4, tee: TEE, basket: { x: 196, y: 84 }, trees: [{ x: 132, y: 252, r: 13 }, { x: 168, y: 182, r: 13 }, { x: 214, y: 140, r: 12 }], water: [], ob: [{ x: 6, y: 60, w: 56, h: 332 }, { x: 278, y: 60, w: 36, h: 332 }] },
+  // 14 — par 4, 845ft. Dogleg left to a guarded green; OB both sides + pond + sand.
+  { par: 4, tee: TEE, basket: { x: 138, y: 76 }, trees: [{ x: 196, y: 252, r: 13 }, { x: 150, y: 172, r: 13 }], water: [{ x: 120, y: 108, w: 50, h: 30 }], ob: [{ x: 6, y: 56, w: 44, h: 336 }, { x: 258, y: 56, w: 56, h: 336 }, { x: 176, y: 140, w: 26, h: 20 }] },
+  // 15 — par 3, 335ft. Narrow tree-lined tunnel straight to the green.
+  { par: 3, tee: TEE, basket: { x: 158, y: 88 }, trees: [{ x: 108, y: 300, r: 14 }, { x: 212, y: 300, r: 14 }, { x: 104, y: 200, r: 14 }, { x: 216, y: 200, r: 14 }, { x: 110, y: 122, r: 13 }, { x: 210, y: 122, r: 13 }], water: [], ob: [{ x: 6, y: 60, w: 24, h: 332 }, { x: 290, y: 60, w: 24, h: 332 }] },
+  // 16 — par 3, 410ft. Straight, but trees stand in the fairway; OB left/right.
+  { par: 3, tee: TEE, basket: { x: 158, y: 110 }, trees: [{ x: 150, y: 300, r: 14 }, { x: 168, y: 232, r: 14 }, { x: 132, y: 182, r: 13 }, { x: 186, y: 160, r: 13 }], water: [], ob: [{ x: 6, y: 60, w: 36, h: 332 }, { x: 278, y: 60, w: 36, h: 332 }] },
+  // 17 — par 4, 830ft. Tree-lined with mando gates both sides; sand hazard.
+  { par: 4, tee: TEE, basket: { x: 160, y: 80 }, trees: [{ x: 120, y: 252, r: 13 }, { x: 200, y: 252, r: 13 }, { x: 134, y: 160, r: 12 }, { x: 188, y: 160, r: 12 }], water: [], ob: [{ x: 6, y: 56, w: 50, h: 336 }, { x: 264, y: 56, w: 50, h: 336 }, { x: 82, y: 150, w: 28, h: 22 }] },
+  // 18 — par 5, 1000ft. Long slight dogleg left with a pond in the fairway; OB right.
+  { par: 5, tee: TEE, basket: { x: 168, y: 58 }, trees: [{ x: 120, y: 300, r: 13 }, { x: 206, y: 222, r: 13 }, { x: 140, y: 152, r: 12 }], water: [{ x: 150, y: 188, w: 70, h: 40 }], ob: [{ x: 6, y: 46, w: 44, h: 348 }, { x: 268, y: 46, w: 46, h: 348 }] },
 ];
 const TOTAL_PAR = HOLES.reduce((s, h) => s + h.par, 0);
 
@@ -818,8 +836,8 @@ export function DiscGolfGame() {
               <span className="text-[#36D7B7]">DISC</span> GOLF
             </h1>
             <p className="text-gray-300 text-xs sm:text-sm max-w-xs">
-              18 holes · Glendoveer-style open fairways. <span className="text-white font-semibold">Drag back</span>{" "}
-              from the disc to aim &amp; set power, then release to throw. The arrow shows your line and fade.
+              Glendoveer East · 18 holes · par 66. <span className="text-white font-semibold">Drag back</span>{" "}
+              from the disc to aim &amp; set power, then release to throw. Mind the OB lines.
             </p>
             {bestScore != null && (
               <p className="text-[#36D7B7] text-xs font-semibold">
