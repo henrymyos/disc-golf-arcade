@@ -115,18 +115,29 @@ const HOLES: Hole[] = HOLE_TEMPLATES.map((t) => {
 });
 const TOTAL_PAR = HOLES.reduce((s, h) => s + h.par, 0);
 
-// Disc bag — power scales throw speed, `fade` is how many radians the flight
-// path curves per frame (the disc bends one way; backhand left, forehand
-// right), and friction is glide (higher = floats/rolls farther). Curving is
-// capped per throw (MAX_FADE_TURN) so a disc can never loop or fade backward.
-type Disc = { key: string; name: string; power: number; arc: number; fade: number; friction: number; color: string; blurb: string };
+// The two flight shapes you can pick per throw:
+//  • "overstable" — bends steadily one way the whole flight (uses `fade`).
+//  • "straight"   — flies straighter and FARTHER. On the climb it `turn`s the
+//    opposite way (high-speed turn), then on the descent it fades back with
+//    `sFade`. Tuned so the mid is nearly dead straight while the driver carves
+//    a gentle S (for a backhand: out to the right, finishing slightly left).
+type FlightPath = "overstable" | "straight";
+// Straight throws launch this much faster (carry farther) than overstable ones.
+const STRAIGHT_SPEED_MUL = 1.13;
+
+// Disc bag — power scales throw speed, `fade` is how many radians an overstable
+// flight curves per frame (backhand left, forehand right); `turn`/`sFade` are
+// the climb-turn / descent-fade for a straight flight; friction is glide
+// (higher = floats/rolls farther). Curving is capped per throw (MAX_FADE_TURN)
+// so a disc can never loop or fade backward.
+type Disc = { key: string; name: string; power: number; arc: number; fade: number; turn: number; sFade: number; friction: number; color: string; blurb: string };
 const DISCS: Disc[] = [
   // `arc` is the vertical launch per unit power. The putter flies flat so it
   // stays low and reaches the basket near the ground (high chance to catch);
   // the driver climbs to sail over hazards.
-  { key: "putter", name: "Putter", power: 0.82, arc: 1.2, fade: 0.004, friction: 0.975, color: "#36D7B7", blurb: "Flat, low fade" },
-  { key: "mid", name: "Mid", power: 1.0, arc: 2.2, fade: 0.008, friction: 0.984, color: "#f5d24a", blurb: "Balanced" },
-  { key: "driver", name: "Driver", power: 1.34, arc: 2.9, fade: 0.014, friction: 0.990, color: "#e23b3b", blurb: "Far, big fade" },
+  { key: "putter", name: "Putter", power: 0.82, arc: 1.2, fade: 0.004, turn: 0.004, sFade: 0.006, friction: 0.975, color: "#36D7B7", blurb: "Flat, controlled" },
+  { key: "mid", name: "Mid", power: 1.0, arc: 2.2, fade: 0.008, turn: 0.0, sFade: 0.002, friction: 0.984, color: "#f5d24a", blurb: "Balanced" },
+  { key: "driver", name: "Driver", power: 1.34, arc: 2.9, fade: 0.014, turn: 0.011, sFade: 0.015, friction: 0.990, color: "#e23b3b", blurb: "Far, S-flight" },
 ];
 // Most the flight path may bend over a single throw (~46°) — keeps fade
 // noticeable without ever curving back toward the thrower.
@@ -150,6 +161,7 @@ type GameState = {
   holedAt: number | null;
   fadeTurn: number; // radians the current flight has curved so far
   fadeSign: number; // -1 backhand (left), +1 forehand (right)
+  path: FlightPath; // shape of the current flight (overstable / straight)
   h: number; // current height above the ground
   vh: number; // vertical velocity (height units per frame)
   camY: number; // top of the viewport in world coords (vertical scroll)
@@ -175,6 +187,7 @@ function freshHole(holeIndex: number) {
     holedAt: null as number | null,
     fadeTurn: 0,
     fadeSign: -1,
+    path: "overstable" as FlightPath,
     h: 0,
     vh: 0,
     camY: 0, // start showing the basket (top), then pan down
@@ -357,7 +370,7 @@ function obCrossingLie(f: Flight, hole: Hole): Vec {
   return { x: f.x, y: f.y };
 }
 
-function stepFlight(f: Flight, disc: Disc, fadeSign: number, hole: Hole): { status: StepStatus; treeHit: boolean } {
+function stepFlight(f: Flight, disc: Disc, fadeSign: number, path: FlightPath, hole: Hole): { status: StepStatus; treeHit: boolean } {
   f.x += f.vx;
   f.y += f.vy;
   f.h += f.vh;
@@ -369,7 +382,13 @@ function stepFlight(f: Flight, disc: Disc, fadeSign: number, hole: Hole): { stat
   const airborne = f.h > AIRBORNE_H;
   const sp = Math.hypot(f.vx, f.vy);
   if (airborne && sp > 0.6 && Math.abs(f.fadeTurn) < MAX_FADE_TURN) {
-    const a = fadeSign * disc.fade;
+    // Overstable bends steadily one way. Straight turns the OTHER way while
+    // climbing (high-speed turn), then fades back while descending — an S that
+    // finishes slightly toward the fade side.
+    const a =
+      path === "straight"
+        ? (f.vh > 0 ? -fadeSign * disc.turn : fadeSign * disc.sFade)
+        : fadeSign * disc.fade;
     const cos = Math.cos(a);
     const sin = Math.sin(a);
     const nvx = f.vx * cos - f.vy * sin;
@@ -429,6 +448,7 @@ export function DiscGolfGame() {
   const [muted, setMuted] = useState(false);
   const [discIndex, setDiscIndex] = useState(1); // Mid by default
   const [throwStyle, setThrowStyle] = useState<"BH" | "FH">("BH");
+  const [flightPath, setFlightPath] = useState<FlightPath>("overstable");
   const [hud, setHud] = useState({ hole: 1, par: 3, throws: 0 });
 
   // End-of-round state
@@ -456,6 +476,11 @@ export function DiscGolfGame() {
   useEffect(() => {
     throwStyleRef.current = throwStyle;
   }, [throwStyle]);
+
+  const flightPathRef = useRef<FlightPath>("overstable");
+  useEffect(() => {
+    flightPathRef.current = flightPath;
+  }, [flightPath]);
 
   // Load personal best once, after mount. Done in an effect (not a lazy
   // initializer) so server and first client render agree — avoids a hydration
@@ -501,8 +526,11 @@ export function DiscGolfGame() {
     const g = stateRef.current;
     if (!g || g.phase !== "aim") return;
     const disc = DISCS[g.discIndex];
-    // Slower launch + extra glide (disc friction) so it floats across the fairway.
-    const speed = disc.power * (1.2 + g.power * 3.35);
+    g.path = flightPathRef.current;
+    // Slower launch + extra glide (disc friction) so it floats across the
+    // fairway. Straight throws carry farther than overstable ones.
+    const pathMul = g.path === "straight" ? STRAIGHT_SPEED_MUL : 1;
+    const speed = disc.power * (1.2 + g.power * 3.35) * pathMul;
     g.disc.vx = Math.cos(g.angle) * speed;
     g.disc.vy = Math.sin(g.angle) * speed;
     g.rest = { x: g.disc.x, y: g.disc.y };
@@ -645,7 +673,7 @@ export function DiscGolfGame() {
         const d = g.disc;
         const disc = DISCS[g.discIndex];
         const f: Flight = { x: d.x, y: d.y, vx: d.vx, vy: d.vy, h: g.h, vh: g.vh, fadeTurn: g.fadeTurn };
-        const res = stepFlight(f, disc, g.fadeSign, hole);
+        const res = stepFlight(f, disc, g.fadeSign, g.path, hole);
         d.x = f.x;
         d.y = f.y;
         d.vx = f.vx;
@@ -775,6 +803,7 @@ export function DiscGolfGame() {
         const dr = dragRef.current;
         const aimDisc = DISCS[g.discIndex];
         const sign = throwStyleRef.current === "BH" ? -1 : 1;
+        const path = flightPathRef.current;
         const dsx = g.disc.x;
         const dsy = g.disc.y - cam; // disc screen position
 
@@ -798,7 +827,8 @@ export function DiscGolfGame() {
         }
 
         if (dr.active && power > 0.04) {
-          const speed = aimDisc.power * (1.2 + power * 3.35);
+          const pathMul = path === "straight" ? STRAIGHT_SPEED_MUL : 1;
+          const speed = aimDisc.power * (1.2 + power * 3.35) * pathMul;
           const f: Flight = {
             x: g.disc.x, y: g.disc.y,
             vx: Math.cos(g.angle) * speed, vy: Math.sin(g.angle) * speed,
@@ -806,7 +836,7 @@ export function DiscGolfGame() {
           };
           const pts: { x: number; y: number }[] = [{ x: f.x, y: f.y }];
           for (let i = 0; i < 360; i++) {
-            const r = stepFlight(f, aimDisc, sign, hole);
+            const r = stepFlight(f, aimDisc, sign, path, hole);
             pts.push({ x: f.x, y: f.y });
             if (r.status !== "fly") break;
           }
@@ -1081,6 +1111,25 @@ export function DiscGolfGame() {
                 <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: d.color }} />
                 <span className="truncate">{d.name}</span>
                 <span className="ml-auto text-[10px] text-gray-500">{i + 1}</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="flex gap-1 bg-[#1a1d23] border border-white/10 rounded-lg p-1">
+            {([
+              { key: "overstable", label: "Overstable" },
+              { key: "straight", label: "Straight" },
+            ] as const).map((p) => (
+              <button
+                key={p.key}
+                type="button"
+                onClick={() => setFlightPath(p.key)}
+                aria-pressed={flightPath === p.key}
+                className={`flex-1 rounded-md px-2 py-2 text-xs font-bold transition ${
+                  flightPath === p.key ? "bg-[#36D7B7] text-[#0f1117]" : "text-gray-400 hover:text-white"
+                }`}
+              >
+                {p.label}
               </button>
             ))}
           </div>
