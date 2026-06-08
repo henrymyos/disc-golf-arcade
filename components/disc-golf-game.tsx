@@ -33,15 +33,19 @@ type Tree = { x: number; y: number; r: number };
 type Water = { x: number; y: number; w: number; h: number };
 // `ob` = out-of-bounds rough regions: flying over them is fine, but coming to
 // rest in one costs a penalty stroke (like water). Optional per hole.
-type Hole = { par: number; tee: Vec; basket: Vec; trees: Tree[]; water: Water[]; ob?: Water[] };
+// `worldH` is the hole's full length (taller than the 448px viewport); the
+// camera scrolls vertically along it.
+type Hole = { par: number; worldH: number; tee: Vec; basket: Vec; trees: Tree[]; water: Water[]; ob?: Water[] };
 
+// Holes are authored in this old 448-tall frame, then stretched to a length
+// that scales with par (below).
 const TEE: Vec = { x: 160, y: 416 };
 
 // Glendoveer East (2026 Northwest Championship), 18 holes / par 66. Each hole
 // is an original pixel interpretation of the real one — tee at the bottom, with
 // the green, dogleg shape, OB lines, water and tree guards placed to match the
 // hole's actual character. Comments note the real par/distance.
-const HOLES: Hole[] = [
+const HOLE_TEMPLATES: Omit<Hole, "worldH">[] = [
   // ── Front nine (par 31) ──
   // 1 — par 4, 670ft. Dogleg left around a pond to an upper-right green; mando tree short.
   { par: 4, tee: TEE, basket: { x: 190, y: 98 }, trees: [{ x: 206, y: 152, r: 13 }, { x: 118, y: 124, r: 12 }], water: [{ x: 104, y: 206, w: 76, h: 58 }], ob: [{ x: 6, y: 60, w: 48, h: 332 }, { x: 266, y: 60, w: 48, h: 332 }] },
@@ -81,6 +85,28 @@ const HOLES: Hole[] = [
   // 18 — par 5, 1000ft. Long slight dogleg left with a pond in the fairway; OB right.
   { par: 5, tee: TEE, basket: { x: 168, y: 58 }, trees: [{ x: 120, y: 300, r: 13 }, { x: 206, y: 222, r: 13 }, { x: 140, y: 152, r: 12 }], water: [{ x: 150, y: 188, w: 70, h: 40 }], ob: [{ x: 6, y: 46, w: 44, h: 348 }, { x: 268, y: 46, w: 46, h: 348 }] },
 ];
+
+// A max drive carries ~DRIVE world px, so a hole's length is ~(par-2) drives:
+// par 3 ≈ reachable in one big drive, par 4 ≈ two, par 5 ≈ three. Each template
+// (authored tee y≈416, basket near the top) is stretched vertically to fit, with
+// extra room left behind the tee so the pull-back slider isn't cramped.
+const DRIVE = 330;
+const TEE_BEHIND = 120;
+const worldHForPar = (par: number) => (par - 2) * DRIVE + 60 + TEE_BEHIND;
+const HOLES: Hole[] = HOLE_TEMPLATES.map((t) => {
+  const worldH = worldHForPar(t.par);
+  const scale = (worldH - 60 - TEE_BEHIND) / (416 - 50); // template y[50..416] → world[60..tee]
+  const ty = (y: number) => 60 + (y - 50) * scale;
+  return {
+    par: t.par,
+    worldH,
+    tee: { x: 160, y: worldH - TEE_BEHIND },
+    basket: { x: t.basket.x, y: ty(t.basket.y) },
+    trees: t.trees.map((tr) => ({ x: tr.x, y: ty(tr.y), r: tr.r })),
+    water: t.water.map((w) => ({ x: w.x, y: ty(w.y), w: w.w, h: w.h * scale })),
+    ob: (t.ob ?? []).map((o) => ({ x: o.x, y: ty(o.y), w: o.w, h: o.h * scale })),
+  };
+});
 const TOTAL_PAR = HOLES.reduce((s, h) => s + h.par, 0);
 
 // Disc bag — power scales throw speed, `fade` is how many radians the flight
@@ -100,7 +126,8 @@ const DISCS: Disc[] = [
 // noticeable without ever curving back toward the thrower.
 const MAX_FADE_TURN = 0.8;
 
-type Phase = "aim" | "fly" | "holed";
+// "intro" plays a short basket → tee fly-over before you take the tee shot.
+type Phase = "intro" | "aim" | "fly" | "holed";
 type Screen = "title" | "playing" | "holeComplete" | "gameComplete";
 
 type GameState = {
@@ -119,6 +146,8 @@ type GameState = {
   fadeSign: number; // -1 backhand (left), +1 forehand (right)
   h: number; // current height above the ground
   vh: number; // vertical velocity (height units per frame)
+  camY: number; // top of the viewport in world coords (vertical scroll)
+  introT: number; // frames elapsed in the intro fly-over
 };
 
 // Aim straight at the basket from a given lie.
@@ -127,12 +156,13 @@ function aimAt(from: Vec, basket: Vec): number {
 }
 
 function freshHole(holeIndex: number) {
-  const basket = HOLES[holeIndex].basket;
+  const hole = HOLES[holeIndex];
+  const tee = hole.tee;
   return {
-    phase: "aim" as Phase,
-    disc: { x: TEE.x, y: TEE.y, vx: 0, vy: 0 },
-    rest: { x: TEE.x, y: TEE.y },
-    angle: aimAt(TEE, basket), // auto-aimed at the basket
+    phase: "intro" as Phase, // basket → tee fly-over before the tee shot
+    disc: { x: tee.x, y: tee.y, vx: 0, vy: 0 },
+    rest: { x: tee.x, y: tee.y },
+    angle: aimAt(tee, hole.basket), // auto-aimed at the basket
     powerT: 0,
     power: 0,
     throws: 0,
@@ -141,6 +171,8 @@ function freshHole(holeIndex: number) {
     fadeSign: -1,
     h: 0,
     vh: 0,
+    camY: 0, // start showing the basket (top), then pan down
+    introT: 0,
   };
 }
 
@@ -299,7 +331,7 @@ function stepFlight(f: Flight, disc: Disc, fadeSign: number, hole: Hole): { stat
   f.vx *= friction;
   f.vy *= friction;
 
-  if (f.x < 2 || f.x > W - 2 || f.y < 2 || f.y > H - 2) return { status: "oob", treeHit: false };
+  if (f.x < 2 || f.x > W - 2 || f.y < 2 || f.y > hole.worldH - 2) return { status: "oob", treeHit: false };
 
   // Trees are tall — they block at ANY height, so you must go around them.
   let treeHit = false;
@@ -338,6 +370,7 @@ export function DiscGolfGame() {
   const keysRef = useRef<Set<string>>(new Set());
   // Drag-to-throw (Wii-golf style): pull back to set power + aim, release to throw.
   const dragRef = useRef<{ active: boolean; cx: number; cy: number }>({ active: false, cx: 0, cy: 0 });
+  const camRef = useRef(0); // current camera scroll, mirrored for the pointer handlers
   const audioRef = useRef<AudioEngine | null>(null);
   const rafRef = useRef<number>(0);
 
@@ -529,6 +562,31 @@ export function DiscGolfGame() {
       const g = stateRef.current;
       if (!g || screenRef.current !== "playing") return;
       const hole = HOLES[g.holeIndex];
+      const maxCam = Math.max(0, hole.worldH - H);
+
+      // Intro fly-over: hold on the basket, then pan down to the tee, then play.
+      if (g.phase === "intro") {
+        const HOLD = 26;
+        const PAN = 60;
+        g.introT += 1;
+        if (g.introT <= HOLD) {
+          g.camY = 0;
+        } else {
+          const p = Math.min(1, (g.introT - HOLD) / PAN);
+          g.camY = p * p * (3 - 2 * p) * maxCam; // smoothstep
+        }
+        if (g.introT >= HOLD + PAN) {
+          g.camY = maxCam;
+          g.phase = "aim";
+        }
+        camRef.current = g.camY;
+        return;
+      }
+
+      // Camera follows the disc, keeping it ~66% down so the fairway ahead shows.
+      const camTarget = Math.min(maxCam, Math.max(0, g.disc.y - H * 0.66));
+      g.camY += (camTarget - g.camY) * 0.16;
+      camRef.current = g.camY;
 
       if (g.phase === "aim") {
         // Aim + power are driven by the pointer drag handlers; nothing to do here.
@@ -586,43 +644,49 @@ export function DiscGolfGame() {
       const g = stateRef.current;
       if (!g) return;
       const hole = HOLES[g.holeIndex];
+      const cam = g.camY; // world→screen: screenY = worldY - cam
 
-      for (let y = 0; y < H; y += 14) {
-        ctx.fillStyle = (y / 14) % 2 === 0 ? "#4a8a3a" : "#3f7e31";
-        ctx.fillRect(0, y, W, 14);
+      // Grass mowing stripes across the visible world slice.
+      const startY = Math.floor(cam / 14) * 14;
+      for (let y = startY; y < cam + H; y += 14) {
+        ctx.fillStyle = Math.round(y / 14) % 2 === 0 ? "#4a8a3a" : "#3f7e31";
+        ctx.fillRect(0, y - cam, W, 14);
       }
+      // Side borders (screen-fixed) + world top/bottom edges when in view.
       ctx.fillStyle = "#356b29";
-      ctx.fillRect(0, 0, W, 4);
-      ctx.fillRect(0, H - 4, W, 4);
       ctx.fillRect(0, 0, 4, H);
       ctx.fillRect(W - 4, 0, 4, H);
+      if (cam < 4) ctx.fillRect(0, -cam, W, 4);
+      if (hole.worldH - cam < H) ctx.fillRect(0, hole.worldH - cam - 4, W, 4);
 
       // Out-of-bounds rough — tan fill with a dashed white OB line.
       for (const ob of hole.ob ?? []) {
+        const oy = ob.y - cam;
         ctx.fillStyle = "rgba(120,104,70,0.55)";
-        ctx.fillRect(ob.x, ob.y, ob.w, ob.h);
+        ctx.fillRect(ob.x, oy, ob.w, ob.h);
         ctx.strokeStyle = "rgba(255,255,255,0.85)";
         ctx.lineWidth = 1;
         ctx.setLineDash([3, 3]);
-        ctx.strokeRect(ob.x + 0.5, ob.y + 0.5, ob.w - 1, ob.h - 1);
+        ctx.strokeRect(ob.x + 0.5, oy + 0.5, ob.w - 1, ob.h - 1);
         ctx.setLineDash([]);
       }
 
       for (const wt of hole.water) {
+        const wy = wt.y - cam;
         ctx.fillStyle = "#3a6ea5";
-        ctx.fillRect(wt.x, wt.y, wt.w, wt.h);
+        ctx.fillRect(wt.x, wy, wt.w, wt.h);
         ctx.fillStyle = "#5b8fc4";
-        for (let i = 0; i < wt.h; i += 6) ctx.fillRect(wt.x + 2, wt.y + 3 + i, wt.w - 6, 1);
+        for (let i = 0; i < wt.h; i += 6) ctx.fillRect(wt.x + 2, wy + 3 + i, wt.w - 6, 1);
       }
 
       // Tee pad
       ctx.fillStyle = "#caa46a";
-      ctx.fillRect(hole.tee.x - 7, hole.tee.y - 5, 14, 10);
+      ctx.fillRect(hole.tee.x - 7, hole.tee.y - cam - 5, 14, 10);
       ctx.fillStyle = "#8a6a3a";
-      ctx.fillRect(hole.tee.x - 7, hole.tee.y - 5, 14, 2);
+      ctx.fillRect(hole.tee.x - 7, hole.tee.y - cam - 5, 14, 2);
 
-      drawBasket(ctx, hole.basket.x, hole.basket.y);
-      for (const tr of hole.trees) drawTree(ctx, tr);
+      drawBasket(ctx, hole.basket.x, hole.basket.y - cam);
+      for (const tr of hole.trees) drawTree(ctx, { x: tr.x, y: tr.y - cam, r: tr.r });
 
       // Aim: the exact predicted flight path (simulated with the real physics)
       // plus a visible pull-back slider/knob on the disc.
@@ -630,30 +694,28 @@ export function DiscGolfGame() {
         const dr = dragRef.current;
         const aimDisc = DISCS[g.discIndex];
         const sign = throwStyleRef.current === "BH" ? -1 : 1;
+        const dsx = g.disc.x;
+        const dsy = g.disc.y - cam; // disc screen position
 
-        // Knob position: where you've pulled to (clamped), or a resting handle
-        // just below the disc inviting a pull.
         let kx: number;
         let ky: number;
         let power: number;
         if (dr.active) {
-          let pullX = dr.cx - g.disc.x;
-          let pullY = dr.cy - g.disc.y;
+          let pullX = dr.cx - dsx;
+          let pullY = dr.cy - dsy;
           const dist = Math.hypot(pullX, pullY) || 0.0001;
           const cl = Math.min(dist, MAX_DRAG);
           pullX = (pullX / dist) * cl;
           pullY = (pullY / dist) * cl;
-          kx = g.disc.x + pullX;
-          ky = g.disc.y + pullY;
+          kx = dsx + pullX;
+          ky = dsy + pullY;
           power = cl / MAX_DRAG;
         } else {
-          kx = g.disc.x;
-          ky = g.disc.y + 26;
+          kx = dsx;
+          ky = dsy + 26;
           power = 0;
         }
 
-        // Exact trajectory — simulate the real flight forward, draw it solid
-        // early and fading out toward the end (so the precise landing is fuzzy).
         if (dr.active && power > 0.04) {
           const speed = aimDisc.power * (1.2 + power * 3.35);
           const f: Flight = {
@@ -667,8 +729,7 @@ export function DiscGolfGame() {
             pts.push({ x: f.x, y: f.y });
             if (r.status !== "fly") break;
           }
-          // Only reveal the first half of the flight, fading from solid to gone —
-          // so you commit to a line without seeing exactly where it lands.
+          // Only reveal the first half of the flight, fading from solid to gone.
           const shown = Math.max(2, Math.floor(pts.length * 0.5));
           ctx.lineWidth = 2;
           ctx.strokeStyle = "#ffffff";
@@ -676,8 +737,8 @@ export function DiscGolfGame() {
             const t = i / (shown - 1);
             ctx.globalAlpha = Math.max(0.04, 0.95 * (1 - Math.pow(t, 1.4)));
             ctx.beginPath();
-            ctx.moveTo(pts[i].x, pts[i].y);
-            ctx.lineTo(pts[i + 1].x, pts[i + 1].y);
+            ctx.moveTo(pts[i].x, pts[i].y - cam);
+            ctx.lineTo(pts[i + 1].x, pts[i + 1].y - cam);
             ctx.stroke();
           }
           ctx.globalAlpha = 1;
@@ -687,7 +748,7 @@ export function DiscGolfGame() {
         ctx.strokeStyle = "rgba(255,255,255,0.55)";
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.moveTo(g.disc.x, g.disc.y);
+        ctx.moveTo(dsx, dsy);
         ctx.lineTo(kx, ky);
         ctx.stroke();
         const pc = power < 0.5 ? "#36D7B7" : power < 0.85 ? "#f5d24a" : "#e23b3b";
@@ -701,16 +762,15 @@ export function DiscGolfGame() {
         ctx.lineWidth = 1;
       }
 
-      // Shadow on the ground + disc lifted by its height. The gap between them
-      // shows how high the disc is flying (so you can read carries over water).
+      // Shadow on the ground + disc lifted by its height.
       const disc = DISCS[g.discIndex];
+      const dscreenY = g.disc.y - cam;
       const shadowR = Math.max(1.5, DISC_R - g.h * 0.03);
       ctx.fillStyle = "rgba(0,0,0,0.28)";
       ctx.beginPath();
-      ctx.ellipse(g.disc.x, g.disc.y, shadowR, shadowR * 0.6, 0, 0, Math.PI * 2);
+      ctx.ellipse(g.disc.x, dscreenY, shadowR, shadowR * 0.6, 0, 0, Math.PI * 2);
       ctx.fill();
-
-      const discY = g.disc.y - g.h;
+      const discY = dscreenY - g.h;
       ctx.fillStyle = "#ffffff";
       ctx.beginPath();
       ctx.arc(g.disc.x, discY, DISC_R, 0, Math.PI * 2);
@@ -718,18 +778,66 @@ export function DiscGolfGame() {
       ctx.fillStyle = disc.color;
       ctx.fillRect(Math.round(g.disc.x) - 1, Math.round(discY) - 1, 2, 2);
 
-      // HUD
+      // ── Mini-map (screen-fixed, top-right) ──
+      {
+        const s = Math.min(40 / W, (H - 34) / hole.worldH);
+        const mw = W * s;
+        const mh = hole.worldH * s;
+        const ox = W - 8 - mw;
+        const oy = 20;
+        ctx.fillStyle = "rgba(0,0,0,0.45)";
+        ctx.fillRect(ox - 2, oy - 2, mw + 4, mh + 4);
+        ctx.fillStyle = "#3a6f2c";
+        ctx.fillRect(ox, oy, mw, mh);
+        ctx.fillStyle = "rgba(120,104,70,0.7)";
+        for (const ob of hole.ob ?? []) ctx.fillRect(ox + ob.x * s, oy + ob.y * s, ob.w * s, ob.h * s);
+        ctx.fillStyle = "#3a6ea5";
+        for (const wt of hole.water) ctx.fillRect(ox + wt.x * s, oy + wt.y * s, wt.w * s, wt.h * s);
+        ctx.fillStyle = "#234d1f";
+        for (const tr of hole.trees) {
+          ctx.beginPath();
+          ctx.arc(ox + tr.x * s, oy + tr.y * s, Math.max(1, tr.r * s), 0, Math.PI * 2);
+          ctx.fill();
+        }
+        // viewport window
+        ctx.strokeStyle = "rgba(255,255,255,0.7)";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(ox + 0.5, oy + cam * s + 0.5, mw - 1, Math.min(mh, H * s) - 1);
+        // basket + disc
+        ctx.fillStyle = "#fff";
+        ctx.beginPath();
+        ctx.arc(ox + hole.basket.x * s, oy + hole.basket.y * s, 1.6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = disc.color;
+        ctx.beginPath();
+        ctx.arc(ox + g.disc.x * s, oy + g.disc.y * s, 1.6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // HUD (screen-fixed)
       ctx.fillStyle = "rgba(0,0,0,0.45)";
       ctx.fillRect(0, 0, W, 14);
       ctx.fillStyle = "#fff";
       ctx.font = "8px monospace";
       ctx.textBaseline = "middle";
+      ctx.textAlign = "left";
       const over = g.scores.reduce((s, n) => s + n, 0) - HOLES.slice(0, g.holeIndex).reduce((s, h) => s + h.par, 0);
       const overStr = over === 0 ? "E" : over > 0 ? `+${over}` : `${over}`;
       ctx.fillText(`H${g.holeIndex + 1}/${HOLES.length}`, 6, 7);
-      ctx.fillText(`PAR ${hole.par}`, 70, 7);
-      ctx.fillText(`THR ${g.throws}`, 140, 7);
-      ctx.fillText(`TOT ${overStr}`, 220, 7);
+      ctx.fillText(`PAR ${hole.par}`, 64, 7);
+      ctx.fillText(`THR ${g.throws}`, 128, 7);
+      ctx.fillText(`TOT ${overStr}`, 196, 7);
+
+      // Intro caption
+      if (g.phase === "intro") {
+        ctx.fillStyle = "rgba(0,0,0,0.55)";
+        ctx.fillRect(0, H / 2 - 10, W, 20);
+        ctx.fillStyle = "#fff";
+        ctx.font = "10px monospace";
+        ctx.textAlign = "center";
+        ctx.fillText(`HOLE ${g.holeIndex + 1}  ·  PAR ${hole.par}`, W / 2, H / 2);
+        ctx.textAlign = "left";
+      }
     }
 
     function frame() {
@@ -767,7 +875,7 @@ export function DiscGolfGame() {
   // it: drag the knob back, aim by its direction, release to throw the opposite way.
   const applyDrag = useCallback((g: GameState, px: number, py: number) => {
     const pullX = px - g.disc.x;
-    const pullY = py - g.disc.y;
+    const pullY = py - (g.disc.y - camRef.current); // disc's on-screen Y
     const dist = Math.hypot(pullX, pullY);
     g.power = Math.min(1, dist / MAX_DRAG);
     if (dist > 4) g.angle = Math.atan2(-pullY, -pullX); // throw opposite the pull
