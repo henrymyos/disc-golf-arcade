@@ -26,6 +26,7 @@ const BEST_KEY = "discgolf.best";
 const GRAVITY = 0.08; // downward pull on height per frame (gentler = floatier flight)
 const AIRBORNE_H = 3; // above this height, hazards are cleared
 const GROUND_FRICTION = 0.8; // hard deceleration once on the ground
+const MAX_DRAG = 130; // pull-back distance (internal px) that maps to full power
 
 type Vec = { x: number; y: number };
 type Tree = { x: number; y: number; r: number };
@@ -237,7 +238,10 @@ export function DiscGolfGame() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const stateRef = useRef<GameState | null>(null);
   const keysRef = useRef<Set<string>>(new Set());
-  const aimDirRef = useRef<0 | -1 | 1>(0);
+  // Drag-to-throw (Wii-golf style): pull back to set power + aim, release to throw.
+  const dragRef = useRef<{ active: boolean; sx: number; sy: number; cx: number; cy: number }>({
+    active: false, sx: 0, sy: 0, cx: 0, cy: 0,
+  });
   const audioRef = useRef<AudioEngine | null>(null);
   const rafRef = useRef<number>(0);
 
@@ -402,8 +406,7 @@ export function DiscGolfGame() {
       if (e.key === "b" || e.key === "B") setThrowStyle("BH");
       if (e.key === "f" || e.key === "F") setThrowStyle("FH");
       if (e.key === " " || e.key === "Enter") {
-        if (screenRef.current === "playing") throwDisc();
-        else if (screenRef.current === "title") startGame();
+        if (screenRef.current === "title") startGame();
         else if (screenRef.current === "holeComplete") nextHole();
       }
     }
@@ -416,7 +419,7 @@ export function DiscGolfGame() {
       window.removeEventListener("keydown", onDown);
       window.removeEventListener("keyup", onUp);
     };
-  }, [throwDisc, startGame, nextHole, selectDisc]);
+  }, [startGame, nextHole, selectDisc]);
 
   // Main loop
   useEffect(() => {
@@ -432,12 +435,7 @@ export function DiscGolfGame() {
       const hole = HOLES[g.holeIndex];
 
       if (g.phase === "aim") {
-        const left = keysRef.current.has("ArrowLeft") || aimDirRef.current === -1;
-        const right = keysRef.current.has("ArrowRight") || aimDirRef.current === 1;
-        if (left) g.angle -= 0.03;
-        if (right) g.angle += 0.03;
-        g.powerT = (g.powerT + 0.025) % 2;
-        g.power = g.powerT <= 1 ? g.powerT : 2 - g.powerT;
+        // Aim + power are driven by the pointer drag handlers; nothing to do here.
       } else if (g.phase === "fly") {
         const d = g.disc;
         const disc = DISCS[g.discIndex];
@@ -592,20 +590,56 @@ export function DiscGolfGame() {
       drawBasket(ctx, hole.basket.x, hole.basket.y);
       for (const tr of hole.trees) drawTree(ctx, tr);
 
-      // Aim indicator
+      // Aim preview: a curved arrow showing where the disc goes and how it
+      // fades, plus the pulled-back "slingshot" line while dragging.
       if (g.phase === "aim") {
-        const len = 16 + g.power * 46;
-        const ex = g.disc.x + Math.cos(g.angle) * len;
-        const ey = g.disc.y + Math.sin(g.angle) * len;
-        ctx.strokeStyle = "#ffffff";
-        ctx.globalAlpha = 0.85;
+        const dr = dragRef.current;
+        const aimDisc = DISCS[g.discIndex];
+        const sign = throwStyleRef.current === "BH" ? -1 : 1;
+        // Total bend shown, matched to the disc's fade and the chosen power, capped.
+        const totalCurve = sign * Math.min(MAX_FADE_TURN, aimDisc.fade * 70 * (0.4 + g.power));
+        const len = 18 + g.power * 70;
+        const steps = 16;
+        const segs: { x: number; y: number }[] = [{ x: g.disc.x, y: g.disc.y }];
+        let dir = g.angle;
+        let px = g.disc.x;
+        let py = g.disc.y;
+        for (let i = 0; i < steps; i++) {
+          dir += totalCurve / steps;
+          px += Math.cos(dir) * (len / steps);
+          py += Math.sin(dir) * (len / steps);
+          segs.push({ x: px, y: py });
+        }
+        // Backswing line (where you've pulled to).
+        if (dr.active) {
+          ctx.strokeStyle = "rgba(255,255,255,0.35)";
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(g.disc.x, g.disc.y);
+          ctx.lineTo(g.disc.x + (dr.cx - dr.sx), g.disc.y + (dr.cy - dr.sy));
+          ctx.stroke();
+        }
+        // Forward curved arrow.
+        ctx.strokeStyle = g.power > 0.85 ? "#e23b3b" : "#ffffff";
+        ctx.globalAlpha = dr.active ? 0.95 : 0.5;
+        ctx.lineWidth = 1.5;
         ctx.beginPath();
-        ctx.moveTo(g.disc.x, g.disc.y);
-        ctx.lineTo(ex, ey);
+        ctx.moveTo(segs[0].x, segs[0].y);
+        for (const s of segs) ctx.lineTo(s.x, s.y);
         ctx.stroke();
+        // Arrowhead.
+        const tip = segs[segs.length - 1];
+        const prev = segs[segs.length - 2];
+        const ah = Math.atan2(tip.y - prev.y, tip.x - prev.x);
+        ctx.beginPath();
+        ctx.moveTo(tip.x, tip.y);
+        ctx.lineTo(tip.x - Math.cos(ah - 0.5) * 5, tip.y - Math.sin(ah - 0.5) * 5);
+        ctx.lineTo(tip.x - Math.cos(ah + 0.5) * 5, tip.y - Math.sin(ah + 0.5) * 5);
+        ctx.closePath();
+        ctx.fillStyle = ctx.strokeStyle;
+        ctx.fill();
         ctx.globalAlpha = 1;
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect(Math.round(ex) - 1, Math.round(ey) - 1, 3, 3);
+        ctx.lineWidth = 1;
       }
 
       // Shadow on the ground + disc lifted by its height. The gap between them
@@ -637,19 +671,6 @@ export function DiscGolfGame() {
       ctx.fillText(`PAR ${hole.par}`, 70, 7);
       ctx.fillText(`THR ${g.throws}`, 140, 7);
       ctx.fillText(`TOT ${overStr}`, 220, 7);
-
-      // Power meter
-      if (g.phase === "aim") {
-        const bw = 160;
-        const bx = (W - bw) / 2;
-        const by = H - 12;
-        ctx.fillStyle = "rgba(0,0,0,0.5)";
-        ctx.fillRect(bx - 2, by - 2, bw + 4, 10);
-        ctx.fillStyle = "#222";
-        ctx.fillRect(bx, by, bw, 6);
-        ctx.fillStyle = g.power < 0.5 ? "#36D7B7" : g.power < 0.8 ? "#f5d24a" : "#e23b3b";
-        ctx.fillRect(bx, by, bw * g.power, 6);
-      }
     }
 
     function frame() {
@@ -676,18 +697,64 @@ export function DiscGolfGame() {
     });
   }
 
+  // ── Drag-to-throw (pointer) ────────────────────────────────────────────────
+  function canvasPoint(e: React.PointerEvent<HTMLCanvasElement>) {
+    const c = canvasRef.current;
+    if (!c) return { x: 0, y: 0 };
+    const r = c.getBoundingClientRect();
+    return { x: (e.clientX - r.left) * (W / r.width), y: (e.clientY - r.top) * (H / r.height) };
+  }
+  function onCanvasDown(e: React.PointerEvent<HTMLCanvasElement>) {
+    if (screenRef.current !== "playing") return;
+    const g = stateRef.current;
+    if (!g || g.phase !== "aim") return;
+    const p = canvasPoint(e);
+    dragRef.current = { active: true, sx: p.x, sy: p.y, cx: p.x, cy: p.y };
+    g.power = 0;
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+  }
+  function onCanvasMove(e: React.PointerEvent<HTMLCanvasElement>) {
+    const dr = dragRef.current;
+    if (!dr.active) return;
+    const g = stateRef.current;
+    if (!g || g.phase !== "aim") return;
+    const p = canvasPoint(e);
+    dr.cx = p.x;
+    dr.cy = p.y;
+    const pullX = p.x - dr.sx;
+    const pullY = p.y - dr.sy;
+    const dist = Math.hypot(pullX, pullY);
+    g.power = Math.min(1, dist / MAX_DRAG);
+    // Throw opposite the pull (slingshot). Ignore tiny jitters.
+    if (dist > 4) g.angle = Math.atan2(-pullY, -pullX);
+  }
+  function onCanvasUp() {
+    const dr = dragRef.current;
+    if (!dr.active) return;
+    dr.active = false;
+    const g = stateRef.current;
+    if (!g) return;
+    if (g.phase === "aim" && g.power > 0.06) throwDisc();
+    else g.power = 0;
+  }
+
   const finalOver = finalTotal - TOTAL_PAR;
   const overStr = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
 
   return (
-    <div className="min-h-screen w-full bg-[#0f1117] flex flex-col items-center justify-center gap-4 p-4 select-none">
-      <div className="relative" style={{ aspectRatio: `${W} / ${H}`, height: "min(72vh, 600px)" }}>
+    <div className="h-[100dvh] w-full bg-[#0f1117] flex flex-col select-none overflow-hidden">
+      {/* Play area — canvas fills the available space, keeping its aspect ratio */}
+      <div className="relative flex-1 min-h-0 flex items-center justify-center p-2">
         <canvas
           ref={canvasRef}
           width={W}
           height={H}
-          className="h-full w-full rounded-lg border border-white/10 bg-[#4a8a3a]"
-          style={{ imageRendering: "pixelated" }}
+          onPointerDown={onCanvasDown}
+          onPointerMove={onCanvasMove}
+          onPointerUp={onCanvasUp}
+          onPointerCancel={onCanvasUp}
+          className="max-h-full max-w-full rounded-lg border border-white/10 bg-[#4a8a3a]"
+          style={{ imageRendering: "pixelated", touchAction: "none" }}
         />
 
         {screen === "title" && (
@@ -696,7 +763,8 @@ export function DiscGolfGame() {
               <span className="text-[#36D7B7]">DISC</span> GOLF
             </h1>
             <p className="text-gray-300 text-xs sm:text-sm max-w-xs">
-              9 holes. Throw bottom → top. Pick a disc, aim with ◄ ►, time the power bar, sink the basket.
+              9 holes. <span className="text-white font-semibold">Drag back</span> from the disc to aim &amp; set
+              power, then release to throw. The arrow shows your line and fade.
             </p>
             {bestScore != null && (
               <p className="text-[#36D7B7] text-xs font-semibold">
@@ -721,86 +789,52 @@ export function DiscGolfGame() {
         )}
       </div>
 
-      {/* Disc selector + controls (hidden on the results screen) */}
+      {/* Compact footer: disc + stance + mute (hidden on the results screen) */}
       {screen !== "gameComplete" && (
-        <div className="w-full max-w-[420px] flex flex-col gap-3">
+        <div className="shrink-0 w-full max-w-[480px] mx-auto px-3 pb-[max(env(safe-area-inset-bottom),0.6rem)] pt-1 flex flex-col gap-2">
+          <p className="text-center text-[11px] text-gray-400 leading-none">Drag back to aim &amp; throw</p>
           <div className="grid grid-cols-3 gap-2">
             {DISCS.map((d, i) => (
               <button
                 key={d.key}
                 type="button"
                 onClick={() => selectDisc(i)}
-                className={`rounded-lg border px-2 py-1.5 text-left transition ${
-                  i === discIndex ? "border-white/40 bg-white/10" : "border-white/10 hover:border-white/25"
+                title={d.blurb}
+                className={`rounded-lg border px-2 py-2 flex items-center gap-1.5 text-xs font-bold transition ${
+                  i === discIndex ? "border-white/40 bg-white/10 text-white" : "border-white/10 text-gray-300 hover:border-white/25"
                 }`}
               >
-                <span className="flex items-center gap-1.5 text-xs font-bold text-white">
-                  <span className="w-2.5 h-2.5 rounded-full" style={{ background: d.color }} />
-                  {d.name}
-                  <span className="ml-auto text-[10px] text-gray-500">{i + 1}</span>
-                </span>
-                <span className="block text-[10px] text-gray-400 mt-0.5">{d.blurb}</span>
+                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: d.color }} />
+                <span className="truncate">{d.name}</span>
+                <span className="ml-auto text-[10px] text-gray-500">{i + 1}</span>
               </button>
             ))}
           </div>
 
-          {/* Backhand / forehand — fades left / right */}
-          <div className="flex gap-1 bg-[#1a1d23] border border-white/10 rounded-lg p-1">
-            {([
-              { key: "BH", label: "Backhand", hint: "fades ◄ left" },
-              { key: "FH", label: "Forehand", hint: "fades right ►" },
-            ] as const).map((s) => (
-              <button
-                key={s.key}
-                type="button"
-                onClick={() => setThrowStyle(s.key)}
-                aria-pressed={throwStyle === s.key}
-                className={`flex-1 rounded-md px-2 py-1.5 text-xs font-bold transition ${
-                  throwStyle === s.key ? "bg-[#4B3DFF] text-white" : "text-gray-400 hover:text-white"
-                }`}
-              >
-                {s.label} <span className="font-normal text-[10px] opacity-80">{s.hint}</span>
-              </button>
-            ))}
-          </div>
-
-          <div className="flex items-center gap-3 justify-center">
-            <button
-              type="button"
-              aria-label="Aim left"
-              onPointerDown={() => (aimDirRef.current = -1)}
-              onPointerUp={() => (aimDirRef.current = 0)}
-              onPointerLeave={() => (aimDirRef.current = 0)}
-              className="bg-[#1a1d23] border border-white/10 text-white text-xl w-16 h-12 rounded-lg active:bg-white/10"
-            >
-              ◄
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (screen === "playing") throwDisc();
-                else if (screen === "title") startGame();
-                else if (screen === "holeComplete") nextHole();
-              }}
-              className="bg-[#4B3DFF] hover:bg-[#3a2ee0] text-white font-bold text-lg flex-1 max-w-[200px] h-12 rounded-lg transition"
-            >
-              {screen === "playing" ? "THROW" : "▶"}
-            </button>
-            <button
-              type="button"
-              aria-label="Aim right"
-              onPointerDown={() => (aimDirRef.current = 1)}
-              onPointerUp={() => (aimDirRef.current = 0)}
-              onPointerLeave={() => (aimDirRef.current = 0)}
-              className="bg-[#1a1d23] border border-white/10 text-white text-xl w-16 h-12 rounded-lg active:bg-white/10"
-            >
-              ►
-            </button>
+          <div className="flex items-stretch gap-2">
+            <div className="flex-1 flex gap-1 bg-[#1a1d23] border border-white/10 rounded-lg p-1">
+              {([
+                { key: "BH", label: "Backhand ◄" },
+                { key: "FH", label: "► Forehand" },
+              ] as const).map((s) => (
+                <button
+                  key={s.key}
+                  type="button"
+                  onClick={() => setThrowStyle(s.key)}
+                  aria-pressed={throwStyle === s.key}
+                  className={`flex-1 rounded-md px-2 py-2 text-xs font-bold transition ${
+                    throwStyle === s.key ? "bg-[#4B3DFF] text-white" : "text-gray-400 hover:text-white"
+                  }`}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
             <button
               type="button"
               onClick={toggleMute}
               aria-label={muted ? "Unmute" : "Mute"}
-              className="bg-[#1a1d23] border border-white/10 text-white w-12 h-12 rounded-lg active:bg-white/10"
+              className="bg-[#1a1d23] border border-white/10 text-white w-12 rounded-lg active:bg-white/10"
             >
               {muted ? "🔇" : "🔊"}
             </button>
