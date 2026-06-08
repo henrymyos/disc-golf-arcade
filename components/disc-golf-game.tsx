@@ -31,7 +31,9 @@ const MAX_DRAG = 95; // pull-back distance (internal px) that maps to full power
 type Vec = { x: number; y: number };
 type Tree = { x: number; y: number; r: number };
 type Water = { x: number; y: number; w: number; h: number };
-type Hole = { par: number; tee: Vec; basket: Vec; trees: Tree[]; water: Water[] };
+// `ob` = out-of-bounds rough regions: flying over them is fine, but coming to
+// rest in one costs a penalty stroke (like water). Optional per hole.
+type Hole = { par: number; tee: Vec; basket: Vec; trees: Tree[]; water: Water[]; ob?: Water[] };
 
 const TEE: Vec = { x: 160, y: 416 };
 
@@ -45,7 +47,7 @@ const HOLES: Hole[] = [
   { par: 4, tee: TEE, basket: { x: 110, y: 90 }, trees: [{ x: 182, y: 250, r: 13 }], water: [] },
   { par: 3, tee: TEE, basket: { x: 212, y: 140 }, trees: [{ x: 140, y: 240, r: 13 }], water: [] },
   { par: 4, tee: TEE, basket: { x: 160, y: 78 }, trees: [{ x: 110, y: 230, r: 13 }, { x: 210, y: 230, r: 13 }], water: [] },
-  { par: 5, tee: TEE, basket: { x: 150, y: 58 }, trees: [{ x: 120, y: 300, r: 13 }, { x: 212, y: 200, r: 13 }], water: [{ x: 58, y: 150, w: 80, h: 46 }] },
+  { par: 5, tee: TEE, basket: { x: 150, y: 58 }, trees: [{ x: 120, y: 300, r: 13 }, { x: 212, y: 200, r: 13 }], water: [{ x: 58, y: 150, w: 80, h: 46 }], ob: [{ x: 244, y: 70, w: 40, h: 250 }] },
   { par: 3, tee: TEE, basket: { x: 88, y: 130 }, trees: [], water: [] },
   { par: 4, tee: TEE, basket: { x: 240, y: 100 }, trees: [{ x: 162, y: 232, r: 13 }], water: [{ x: 92, y: 118, w: 70, h: 50 }] },
   { par: 4, tee: TEE, basket: { x: 160, y: 70 }, trees: [{ x: 120, y: 200, r: 13 }, { x: 206, y: 200, r: 13 }], water: [] },
@@ -252,7 +254,7 @@ class AudioEngine {
 // the on-screen trajectory preview matches the real flight exactly. Mutates the
 // passed flight object; returns what happened this frame.
 type Flight = { x: number; y: number; vx: number; vy: number; h: number; vh: number; fadeTurn: number };
-type StepStatus = "fly" | "stop" | "hole" | "oob" | "water";
+type StepStatus = "fly" | "stop" | "hole" | "oob" | "water" | "ob";
 
 function stepFlight(f: Flight, disc: Disc, fadeSign: number, hole: Hole): { status: StepStatus; treeHit: boolean } {
   f.x += f.vx;
@@ -298,11 +300,14 @@ function stepFlight(f: Flight, disc: Disc, fadeSign: number, hole: Hole): { stat
     }
   }
 
-  // The basket and water only interact when the disc is low (you carry water).
+  // The basket, water, and OB only interact when the disc is low (you carry them).
   if (!airborne) {
     if (Math.hypot(f.x - hole.basket.x, f.y - hole.basket.y) < CATCH_R) return { status: "hole", treeHit };
     for (const wt of hole.water) {
       if (f.x > wt.x && f.x < wt.x + wt.w && f.y > wt.y && f.y < wt.y + wt.h) return { status: "water", treeHit };
+    }
+    for (const ob of hole.ob ?? []) {
+      if (f.x > ob.x && f.x < ob.x + ob.w && f.y > ob.y && f.y < ob.y + ob.h) return { status: "ob", treeHit };
     }
     if (sp < STOP_SPEED) return { status: "stop", treeHit };
   }
@@ -531,7 +536,7 @@ export function DiscGolfGame() {
           d.x = hole.basket.x;
           d.y = hole.basket.y;
           audioRef.current?.sfx("basket");
-        } else if (res.status === "oob" || res.status === "water") {
+        } else if (res.status === "oob" || res.status === "water" || res.status === "ob") {
           audioRef.current?.sfx(res.status === "water" ? "water" : "tree");
           g.throws += 1;
           d.x = g.rest.x;
@@ -573,6 +578,17 @@ export function DiscGolfGame() {
       ctx.fillRect(0, H - 4, W, 4);
       ctx.fillRect(0, 0, 4, H);
       ctx.fillRect(W - 4, 0, 4, H);
+
+      // Out-of-bounds rough — tan fill with a dashed white OB line.
+      for (const ob of hole.ob ?? []) {
+        ctx.fillStyle = "rgba(120,104,70,0.55)";
+        ctx.fillRect(ob.x, ob.y, ob.w, ob.h);
+        ctx.strokeStyle = "rgba(255,255,255,0.85)";
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 3]);
+        ctx.strokeRect(ob.x + 0.5, ob.y + 0.5, ob.w - 1, ob.h - 1);
+        ctx.setLineDash([]);
+      }
 
       for (const wt of hole.water) {
         ctx.fillStyle = "#3a6ea5";
