@@ -31,11 +31,13 @@ const MAX_DRAG = 95; // pull-back distance (internal px) that maps to full power
 type Vec = { x: number; y: number };
 type Tree = { x: number; y: number; r: number };
 type Water = { x: number; y: number; w: number; h: number };
-// `ob` = out-of-bounds rough regions: flying over them is fine, but coming to
-// rest in one costs a penalty stroke (like water). Optional per hole.
+// Penalty regions (fly over them freely; only matter at ground level):
+//  • `ob` / `water` = OUT OF BOUNDS: +1 and play from where it crossed the line
+//    (so you only move back to the edge, never a full rethrow).
+//  • `hazard` = HAZARD (sand): +1 and play where it lies (the disc stays put).
 // `worldH` is the hole's full length (taller than the 448px viewport); the
 // camera scrolls vertically along it.
-type Hole = { par: number; worldH: number; tee: Vec; basket: Vec; trees: Tree[]; water: Water[]; ob?: Water[] };
+type Hole = { par: number; worldH: number; tee: Vec; basket: Vec; trees: Tree[]; water: Water[]; ob?: Water[]; hazard?: Water[] };
 
 // Holes are authored in this old 448-tall frame, then stretched to a length
 // that scales with par (below).
@@ -56,7 +58,7 @@ const HOLE_TEMPLATES: Omit<Hole, "worldH">[] = [
   // 4 — par 3, 450ft. Guarded green, OB left + golf green right.
   { par: 3, tee: TEE, basket: { x: 150, y: 96 }, trees: [{ x: 150, y: 152, r: 14 }, { x: 118, y: 232, r: 12 }], water: [], ob: [{ x: 6, y: 60, w: 50, h: 332 }, { x: 250, y: 60, w: 64, h: 332 }] },
   // 5 — par 4, 910ft. Wide & open with sand hazards and a pond short of the pin.
-  { par: 4, tee: TEE, basket: { x: 160, y: 72 }, trees: [], water: [{ x: 132, y: 118, w: 56, h: 34 }], ob: [{ x: 6, y: 50, w: 40, h: 342 }, { x: 274, y: 50, w: 40, h: 342 }, { x: 116, y: 182, w: 30, h: 22 }, { x: 184, y: 202, w: 28, h: 20 }] },
+  { par: 4, tee: TEE, basket: { x: 160, y: 72 }, trees: [], water: [{ x: 132, y: 118, w: 56, h: 34 }], ob: [{ x: 6, y: 50, w: 40, h: 342 }, { x: 274, y: 50, w: 40, h: 342 }], hazard: [{ x: 116, y: 182, w: 30, h: 22 }, { x: 184, y: 202, w: 28, h: 20 }] },
   // 6 — par 3, 415ft. Mostly open, a couple trees, OB right (mando).
   { par: 3, tee: TEE, basket: { x: 168, y: 110 }, trees: [{ x: 132, y: 242, r: 13 }, { x: 196, y: 190, r: 13 }], water: [], ob: [{ x: 6, y: 60, w: 36, h: 332 }, { x: 250, y: 60, w: 64, h: 332 }] },
   // 7 — par 4, 710ft. Tree-lined dogleg left; OB right (mando).
@@ -64,10 +66,10 @@ const HOLE_TEMPLATES: Omit<Hole, "worldH">[] = [
   // 8 — par 3, 500ft. Straight tree-lined; OB right (mando) + golf fairway left.
   { par: 3, tee: TEE, basket: { x: 160, y: 90 }, trees: [{ x: 122, y: 242, r: 13 }, { x: 200, y: 242, r: 13 }, { x: 160, y: 162, r: 12 }], water: [], ob: [{ x: 6, y: 60, w: 58, h: 332 }, { x: 256, y: 60, w: 58, h: 332 }] },
   // 9 — par 4, 695ft. S-shaped tree-lined fairway; OB lines + a sand hazard.
-  { par: 4, tee: TEE, basket: { x: 150, y: 86 }, trees: [{ x: 206, y: 252, r: 13 }, { x: 120, y: 182, r: 13 }, { x: 196, y: 130, r: 12 }], water: [], ob: [{ x: 6, y: 60, w: 44, h: 332 }, { x: 262, y: 60, w: 52, h: 332 }, { x: 148, y: 202, w: 28, h: 20 }] },
+  { par: 4, tee: TEE, basket: { x: 150, y: 86 }, trees: [{ x: 206, y: 252, r: 13 }, { x: 120, y: 182, r: 13 }, { x: 196, y: 130, r: 12 }], water: [], ob: [{ x: 6, y: 60, w: 44, h: 332 }, { x: 262, y: 60, w: 52, h: 332 }], hazard: [{ x: 148, y: 202, w: 28, h: 20 }] },
   // ── Back nine (par 35) ──
   // 10 — par 4, 710ft. S-curve with sand hazards, OB both sides (mandos).
-  { par: 4, tee: TEE, basket: { x: 168, y: 84 }, trees: [{ x: 122, y: 252, r: 13 }, { x: 206, y: 252, r: 13 }, { x: 150, y: 172, r: 12 }], water: [], ob: [{ x: 6, y: 50, w: 46, h: 342 }, { x: 262, y: 50, w: 52, h: 342 }, { x: 176, y: 150, w: 30, h: 22 }, { x: 118, y: 112, w: 28, h: 20 }] },
+  { par: 4, tee: TEE, basket: { x: 168, y: 84 }, trees: [{ x: 122, y: 252, r: 13 }, { x: 206, y: 252, r: 13 }, { x: 150, y: 172, r: 12 }], water: [], ob: [{ x: 6, y: 50, w: 46, h: 342 }, { x: 262, y: 50, w: 52, h: 342 }], hazard: [{ x: 176, y: 150, w: 30, h: 22 }, { x: 118, y: 112, w: 28, h: 20 }] },
   // 11 — par 5, 1145ft. Long straight tree-lined corridor; OB connecting mandos.
   { par: 5, tee: TEE, basket: { x: 160, y: 56 }, trees: [{ x: 120, y: 292, r: 13 }, { x: 206, y: 232, r: 13 }, { x: 132, y: 172, r: 12 }, { x: 196, y: 120, r: 12 }], water: [], ob: [{ x: 6, y: 46, w: 50, h: 348 }, { x: 264, y: 46, w: 50, h: 348 }] },
   // 12 — par 3, 370ft. Dogleg right around trees; OB right (mando).
@@ -81,7 +83,7 @@ const HOLE_TEMPLATES: Omit<Hole, "worldH">[] = [
   // 16 — par 3, 410ft. Straight, but trees stand in the fairway; OB left/right.
   { par: 3, tee: TEE, basket: { x: 158, y: 110 }, trees: [{ x: 150, y: 300, r: 14 }, { x: 168, y: 232, r: 14 }, { x: 132, y: 182, r: 13 }, { x: 186, y: 160, r: 13 }], water: [], ob: [{ x: 6, y: 60, w: 36, h: 332 }, { x: 278, y: 60, w: 36, h: 332 }] },
   // 17 — par 4, 830ft. Tree-lined with mando gates both sides; sand hazard.
-  { par: 4, tee: TEE, basket: { x: 160, y: 80 }, trees: [{ x: 120, y: 252, r: 13 }, { x: 200, y: 252, r: 13 }, { x: 134, y: 160, r: 12 }, { x: 188, y: 160, r: 12 }], water: [], ob: [{ x: 6, y: 56, w: 50, h: 336 }, { x: 264, y: 56, w: 50, h: 336 }, { x: 82, y: 150, w: 28, h: 22 }] },
+  { par: 4, tee: TEE, basket: { x: 160, y: 80 }, trees: [{ x: 120, y: 252, r: 13 }, { x: 200, y: 252, r: 13 }, { x: 134, y: 160, r: 12 }, { x: 188, y: 160, r: 12 }], water: [], ob: [{ x: 6, y: 56, w: 50, h: 336 }, { x: 264, y: 56, w: 50, h: 336 }], hazard: [{ x: 82, y: 150, w: 28, h: 22 }] },
   // 18 — par 5, 1000ft. Long slight dogleg left with a pond in the fairway; OB right.
   { par: 5, tee: TEE, basket: { x: 168, y: 58 }, trees: [{ x: 120, y: 300, r: 13 }, { x: 206, y: 222, r: 13 }, { x: 140, y: 152, r: 12 }], water: [{ x: 150, y: 188, w: 70, h: 40 }], ob: [{ x: 6, y: 46, w: 44, h: 348 }, { x: 268, y: 46, w: 46, h: 348 }] },
 ];
@@ -105,6 +107,7 @@ const HOLES: Hole[] = HOLE_TEMPLATES.map((t) => {
     trees: t.trees.map((tr) => ({ x: tr.x, y: ty(tr.y), r: tr.r })),
     water: t.water.map((w) => ({ x: w.x, y: ty(w.y), w: w.w, h: w.h * scale })),
     ob: (t.ob ?? []).map((o) => ({ x: o.x, y: ty(o.y), w: o.w, h: o.h * scale })),
+    hazard: (t.hazard ?? []).map((o) => ({ x: o.x, y: ty(o.y), w: o.w, h: o.h * scale })),
   };
 });
 const TOTAL_PAR = HOLES.reduce((s, h) => s + h.par, 0);
@@ -304,7 +307,33 @@ class AudioEngine {
 // the on-screen trajectory preview matches the real flight exactly. Mutates the
 // passed flight object; returns what happened this frame.
 type Flight = { x: number; y: number; vx: number; vy: number; h: number; vh: number; fadeTurn: number };
-type StepStatus = "fly" | "stop" | "hole" | "oob" | "water" | "ob";
+type StepStatus = "fly" | "stop" | "hole" | "oob" | "ob";
+
+function inRect(r: Water, x: number, y: number) {
+  return x > r.x && x < r.x + r.w && y > r.y && y < r.y + r.h;
+}
+function inAnyOB(hole: Hole, x: number, y: number) {
+  if (x < 2 || x > W - 2 || y < 2 || y > hole.worldH - 2) return true;
+  for (const w of hole.water) if (inRect(w, x, y)) return true;
+  for (const o of hole.ob ?? []) if (inRect(o, x, y)) return true;
+  return false;
+}
+// Where the disc last crossed the OB line — step back along its travel
+// direction until just back in-bounds. Used so OB plays from the edge, not a
+// full rethrow.
+function obCrossingLie(f: Flight, hole: Hole): Vec {
+  const sp = Math.hypot(f.vx, f.vy) || 1;
+  const ux = f.vx / sp;
+  const uy = f.vy / sp;
+  let x = f.x;
+  let y = f.y;
+  for (let k = 0; k < 60; k++) {
+    x -= ux * 3;
+    y -= uy * 3;
+    if (!inAnyOB(hole, x, y)) return { x, y };
+  }
+  return { x: f.x, y: f.y };
+}
 
 function stepFlight(f: Flight, disc: Disc, fadeSign: number, hole: Hole): { status: StepStatus; treeHit: boolean } {
   f.x += f.vx;
@@ -350,15 +379,14 @@ function stepFlight(f: Flight, disc: Disc, fadeSign: number, hole: Hole): { stat
     }
   }
 
-  // The basket, water, and OB only interact when the disc is low (you carry them).
+  // The basket and OB only interact at ground level (you fly over them).
   if (!airborne) {
     if (Math.hypot(f.x - hole.basket.x, f.y - hole.basket.y) < CATCH_R) return { status: "hole", treeHit };
-    for (const wt of hole.water) {
-      if (f.x > wt.x && f.x < wt.x + wt.w && f.y > wt.y && f.y < wt.y + wt.h) return { status: "water", treeHit };
-    }
-    for (const ob of hole.ob ?? []) {
-      if (f.x > ob.x && f.x < ob.x + ob.w && f.y > ob.y && f.y < ob.y + ob.h) return { status: "ob", treeHit };
-    }
+    // Water + marked OB are out of bounds — caught the moment the disc is low in one.
+    for (const wt of hole.water) if (inRect(wt, f.x, f.y)) return { status: "ob", treeHit };
+    for (const o of hole.ob ?? []) if (inRect(o, f.x, f.y)) return { status: "ob", treeHit };
+    // Hazards (sand) don't stop the disc — they only cost a stroke if it comes
+    // to rest in one, handled where "stop" is processed.
     if (sp < STOP_SPEED) return { status: "stop", treeHit };
   }
   return { status: "fly", treeHit };
@@ -612,22 +640,32 @@ export function DiscGolfGame() {
           d.x = hole.basket.x;
           d.y = hole.basket.y;
           audioRef.current?.sfx("basket");
-        } else if (res.status === "oob" || res.status === "water" || res.status === "ob") {
-          audioRef.current?.sfx(res.status === "water" ? "water" : "tree");
+        } else if (res.status === "ob" || res.status === "oob") {
+          // OUT OF BOUNDS: +1 and play from where it crossed the line.
+          const inWater = hole.water.some((w) => inRect(w, f.x, f.y));
+          audioRef.current?.sfx(inWater ? "water" : "tree");
+          const lie = obCrossingLie(f, hole);
           g.throws += 1;
-          d.x = g.rest.x;
-          d.y = g.rest.y;
+          d.x = lie.x;
+          d.y = lie.y;
           d.vx = 0;
           d.vy = 0;
           g.h = 0;
           g.vh = 0;
+          g.rest = { x: lie.x, y: lie.y };
           g.angle = aimAt(g.rest, hole.basket);
           g.phase = "aim";
           syncHud();
         } else if (res.status === "stop") {
+          // Came to rest. If it's in a hazard (sand), +1 but play where it lies.
           d.vx = 0;
           d.vy = 0;
           g.rest = { x: d.x, y: d.y };
+          if ((hole.hazard ?? []).some((hz) => inRect(hz, d.x, d.y))) {
+            g.throws += 1;
+            audioRef.current?.sfx("tree");
+            syncHud();
+          }
           g.angle = aimAt(g.rest, hole.basket); // auto-aim at the basket
           g.phase = "aim";
         }
@@ -677,6 +715,18 @@ export function DiscGolfGame() {
         ctx.fillRect(wt.x, wy, wt.w, wt.h);
         ctx.fillStyle = "#5b8fc4";
         for (let i = 0; i < wt.h; i += 6) ctx.fillRect(wt.x + 2, wy + 3 + i, wt.w - 6, 1);
+      }
+
+      // Hazards (sand) — solid sandy ovals, no OB line.
+      for (const hz of hole.hazard ?? []) {
+        ctx.fillStyle = "#d9c089";
+        ctx.beginPath();
+        ctx.ellipse(hz.x + hz.w / 2, hz.y - cam + hz.h / 2, hz.w / 2, hz.h / 2, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#c4a96b";
+        ctx.beginPath();
+        ctx.ellipse(hz.x + hz.w / 2, hz.y - cam + hz.h / 2, hz.w / 2 - 2, hz.h / 2 - 2, 0, 0, Math.PI * 2);
+        ctx.fill();
       }
 
       // Tee pad
@@ -793,6 +843,8 @@ export function DiscGolfGame() {
         for (const ob of hole.ob ?? []) ctx.fillRect(ox + ob.x * s, oy + ob.y * s, ob.w * s, ob.h * s);
         ctx.fillStyle = "#3a6ea5";
         for (const wt of hole.water) ctx.fillRect(ox + wt.x * s, oy + wt.y * s, wt.w * s, wt.h * s);
+        ctx.fillStyle = "#d9c089";
+        for (const hz of hole.hazard ?? []) ctx.fillRect(ox + hz.x * s, oy + hz.y * s, hz.w * s, hz.h * s);
         ctx.fillStyle = "#234d1f";
         for (const tr of hole.trees) {
           ctx.beginPath();
