@@ -37,15 +37,15 @@ const TEE: Vec = { x: 160, y: 416 };
 
 // Fixed course — identical every play.
 const HOLES: Hole[] = [
-  { par: 3, tee: TEE, basket: { x: 160, y: 90 }, trees: [{ x: 118, y: 250, r: 12 }, { x: 202, y: 200, r: 12 }], water: [] },
-  { par: 3, tee: TEE, basket: { x: 96, y: 110 }, trees: [{ x: 170, y: 250, r: 12 }, { x: 120, y: 180, r: 12 }, { x: 210, y: 150, r: 11 }], water: [] },
-  { par: 2, tee: TEE, basket: { x: 160, y: 170 }, trees: [], water: [] },
-  { par: 4, tee: TEE, basket: { x: 230, y: 82 }, trees: [{ x: 150, y: 300, r: 12 }, { x: 120, y: 180, r: 13 }, { x: 222, y: 200, r: 12 }], water: [{ x: 40, y: 120, w: 90, h: 70 }] },
-  { par: 3, tee: TEE, basket: { x: 92, y: 130 }, trees: [{ x: 180, y: 260, r: 12 }, { x: 140, y: 180, r: 12 }], water: [] },
-  { par: 3, tee: TEE, basket: { x: 234, y: 140 }, trees: [{ x: 120, y: 260, r: 12 }, { x: 182, y: 190, r: 12 }], water: [] },
-  { par: 4, tee: TEE, basket: { x: 160, y: 72 }, trees: [{ x: 110, y: 220, r: 12 }, { x: 210, y: 220, r: 12 }, { x: 160, y: 150, r: 12 }], water: [{ x: 120, y: 300, w: 80, h: 58 }] },
-  { par: 3, tee: TEE, basket: { x: 110, y: 100 }, trees: [{ x: 184, y: 250, r: 12 }, { x: 150, y: 172, r: 11 }], water: [] },
-  { par: 3, tee: TEE, basket: { x: 220, y: 100 }, trees: [{ x: 120, y: 250, r: 12 }, { x: 182, y: 182, r: 12 }, { x: 250, y: 200, r: 11 }], water: [] },
+  { par: 3, tee: TEE, basket: { x: 160, y: 90 }, trees: [{ x: 110, y: 300, r: 14 }, { x: 210, y: 300, r: 14 }, { x: 160, y: 205, r: 15 }, { x: 112, y: 130, r: 13 }, { x: 208, y: 130, r: 13 }], water: [] },
+  { par: 3, tee: TEE, basket: { x: 96, y: 108 }, trees: [{ x: 178, y: 280, r: 14 }, { x: 124, y: 210, r: 14 }, { x: 214, y: 188, r: 13 }, { x: 70, y: 220, r: 13 }, { x: 156, y: 130, r: 13 }], water: [] },
+  { par: 2, tee: TEE, basket: { x: 160, y: 168 }, trees: [{ x: 108, y: 300, r: 14 }, { x: 212, y: 300, r: 14 }, { x: 160, y: 240, r: 13 }], water: [] },
+  { par: 4, tee: TEE, basket: { x: 232, y: 86 }, trees: [{ x: 150, y: 320, r: 14 }, { x: 118, y: 210, r: 14 }, { x: 214, y: 206, r: 14 }, { x: 268, y: 138, r: 13 }, { x: 176, y: 150, r: 13 }], water: [{ x: 38, y: 116, w: 86, h: 64 }] },
+  { par: 3, tee: TEE, basket: { x: 90, y: 128 }, trees: [{ x: 184, y: 286, r: 14 }, { x: 138, y: 214, r: 14 }, { x: 92, y: 250, r: 13 }, { x: 210, y: 196, r: 13 }, { x: 146, y: 122, r: 13 }], water: [] },
+  { par: 3, tee: TEE, basket: { x: 236, y: 138 }, trees: [{ x: 118, y: 286, r: 14 }, { x: 186, y: 214, r: 14 }, { x: 248, y: 252, r: 13 }, { x: 110, y: 196, r: 13 }, { x: 176, y: 120, r: 13 }], water: [] },
+  { par: 4, tee: TEE, basket: { x: 160, y: 70 }, trees: [{ x: 106, y: 246, r: 14 }, { x: 214, y: 246, r: 14 }, { x: 160, y: 168, r: 15 }, { x: 114, y: 116, r: 13 }, { x: 206, y: 116, r: 13 }], water: [{ x: 118, y: 322, w: 84, h: 50 }] },
+  { par: 3, tee: TEE, basket: { x: 108, y: 100 }, trees: [{ x: 190, y: 268, r: 14 }, { x: 150, y: 196, r: 14 }, { x: 86, y: 232, r: 13 }, { x: 214, y: 188, r: 13 }, { x: 158, y: 118, r: 13 }], water: [] },
+  { par: 4, tee: TEE, basket: { x: 222, y: 96 }, trees: [{ x: 120, y: 280, r: 14 }, { x: 188, y: 210, r: 14 }, { x: 252, y: 234, r: 13 }, { x: 150, y: 138, r: 13 }, { x: 240, y: 154, r: 13 }, { x: 100, y: 196, r: 13 }], water: [{ x: 54, y: 150, w: 66, h: 54 }] },
 ];
 const TOTAL_PAR = HOLES.reduce((s, h) => s + h.par, 0);
 
@@ -58,9 +58,9 @@ const DISCS: Disc[] = [
   // `arc` is the vertical launch per unit power. The putter flies flat so it
   // stays low and reaches the basket near the ground (high chance to catch);
   // the driver climbs to sail over hazards.
-  { key: "putter", name: "Putter", power: 0.82, arc: 1.2, fade: 0.004, friction: 0.971, color: "#36D7B7", blurb: "Flat, low fade" },
-  { key: "mid", name: "Mid", power: 1.0, arc: 2.2, fade: 0.008, friction: 0.980, color: "#f5d24a", blurb: "Balanced" },
-  { key: "driver", name: "Driver", power: 1.34, arc: 2.9, fade: 0.014, friction: 0.987, color: "#e23b3b", blurb: "Far, big fade" },
+  { key: "putter", name: "Putter", power: 0.82, arc: 1.2, fade: 0.004, friction: 0.975, color: "#36D7B7", blurb: "Flat, low fade" },
+  { key: "mid", name: "Mid", power: 1.0, arc: 2.2, fade: 0.008, friction: 0.984, color: "#f5d24a", blurb: "Balanced" },
+  { key: "driver", name: "Driver", power: 1.34, arc: 2.9, fade: 0.014, friction: 0.990, color: "#e23b3b", blurb: "Far, big fade" },
 ];
 // Most the flight path may bend over a single throw (~46°) — keeps fade
 // noticeable without ever curving back toward the thrower.
@@ -267,23 +267,26 @@ function stepFlight(f: Flight, disc: Disc, fadeSign: number, hole: Hole): { stat
 
   if (f.x < 2 || f.x > W - 2 || f.y < 2 || f.y > H - 2) return { status: "oob", treeHit: false };
 
+  // Trees are tall — they block at ANY height, so you must go around them.
   let treeHit = false;
+  for (const tr of hole.trees) {
+    const dist = Math.hypot(f.x - tr.x, f.y - tr.y);
+    const min = tr.r + DISC_R;
+    if (dist < min && dist > 0) {
+      const nx = (f.x - tr.x) / dist;
+      const ny = (f.y - tr.y) / dist;
+      f.x = tr.x + nx * min;
+      f.y = tr.y + ny * min;
+      const dot = f.vx * nx + f.vy * ny;
+      f.vx = (f.vx - 2 * dot * nx) * 0.45;
+      f.vy = (f.vy - 2 * dot * ny) * 0.45;
+      treeHit = true;
+    }
+  }
+
+  // The basket and water only interact when the disc is low (you carry water).
   if (!airborne) {
     if (Math.hypot(f.x - hole.basket.x, f.y - hole.basket.y) < CATCH_R) return { status: "hole", treeHit };
-    for (const tr of hole.trees) {
-      const dist = Math.hypot(f.x - tr.x, f.y - tr.y);
-      const min = tr.r + DISC_R;
-      if (dist < min && dist > 0) {
-        const nx = (f.x - tr.x) / dist;
-        const ny = (f.y - tr.y) / dist;
-        f.x = tr.x + nx * min;
-        f.y = tr.y + ny * min;
-        const dot = f.vx * nx + f.vy * ny;
-        f.vx = (f.vx - 2 * dot * nx) * 0.45;
-        f.vy = (f.vy - 2 * dot * ny) * 0.45;
-        treeHit = true;
-      }
-    }
     for (const wt of hole.water) {
       if (f.x > wt.x && f.x < wt.x + wt.w && f.y > wt.y && f.y < wt.y + wt.h) return { status: "water", treeHit };
     }
@@ -377,8 +380,8 @@ export function DiscGolfGame() {
     const g = stateRef.current;
     if (!g || g.phase !== "aim") return;
     const disc = DISCS[g.discIndex];
-    // A touch slower than before so the disc reads as gliding across, not zipping.
-    const speed = disc.power * (1.4 + g.power * 3.8);
+    // Slower launch + extra glide (disc friction) so it floats across the fairway.
+    const speed = disc.power * (1.2 + g.power * 3.35);
     g.disc.vx = Math.cos(g.angle) * speed;
     g.disc.vy = Math.sin(g.angle) * speed;
     g.rest = { x: g.disc.x, y: g.disc.y };
@@ -604,7 +607,7 @@ export function DiscGolfGame() {
         // Exact trajectory — simulate the real flight forward, draw it solid
         // early and fading out toward the end (so the precise landing is fuzzy).
         if (dr.active && power > 0.04) {
-          const speed = aimDisc.power * (1.4 + power * 3.8);
+          const speed = aimDisc.power * (1.2 + power * 3.35);
           const f: Flight = {
             x: g.disc.x, y: g.disc.y,
             vx: Math.cos(g.angle) * speed, vy: Math.sin(g.angle) * speed,
@@ -616,12 +619,14 @@ export function DiscGolfGame() {
             pts.push({ x: f.x, y: f.y });
             if (r.status !== "fly") break;
           }
-          const n = pts.length;
+          // Only reveal the first half of the flight, fading from solid to gone —
+          // so you commit to a line without seeing exactly where it lands.
+          const shown = Math.max(2, Math.floor(pts.length * 0.5));
           ctx.lineWidth = 2;
           ctx.strokeStyle = "#ffffff";
-          for (let i = 0; i < n - 1; i++) {
-            const t = i / (n - 1);
-            ctx.globalAlpha = Math.max(0.05, 0.92 * (1 - Math.pow(t, 1.7)));
+          for (let i = 0; i < shown - 1; i++) {
+            const t = i / (shown - 1);
+            ctx.globalAlpha = Math.max(0.04, 0.95 * (1 - Math.pow(t, 1.4)));
             ctx.beginPath();
             ctx.moveTo(pts[i].x, pts[i].y);
             ctx.lineTo(pts[i + 1].x, pts[i + 1].y);
@@ -704,49 +709,62 @@ export function DiscGolfGame() {
   }
 
   // ── Drag-to-throw (pointer) ────────────────────────────────────────────────
-  function canvasPoint(e: React.PointerEvent<HTMLCanvasElement>) {
+  const clientToCanvas = useCallback((clientX: number, clientY: number) => {
     const c = canvasRef.current;
     if (!c) return { x: 0, y: 0 };
     const r = c.getBoundingClientRect();
-    return { x: (e.clientX - r.left) * (W / r.width), y: (e.clientY - r.top) * (H / r.height) };
-  }
+    return { x: (clientX - r.left) * (W / r.width), y: (clientY - r.top) * (H / r.height) };
+  }, []);
   // Pull is measured from the disc itself, so the slider/knob stays attached to
   // it: drag the knob back, aim by its direction, release to throw the opposite way.
-  function applyDrag(g: GameState, px: number, py: number) {
+  const applyDrag = useCallback((g: GameState, px: number, py: number) => {
     const pullX = px - g.disc.x;
     const pullY = py - g.disc.y;
     const dist = Math.hypot(pullX, pullY);
     g.power = Math.min(1, dist / MAX_DRAG);
     if (dist > 4) g.angle = Math.atan2(-pullY, -pullX); // throw opposite the pull
-  }
+  }, []);
   function onCanvasDown(e: React.PointerEvent<HTMLCanvasElement>) {
     if (screenRef.current !== "playing") return;
     const g = stateRef.current;
     if (!g || g.phase !== "aim") return;
-    const p = canvasPoint(e);
+    const p = clientToCanvas(e.clientX, e.clientY);
     dragRef.current = { active: true, cx: p.x, cy: p.y };
     applyDrag(g, p.x, p.y);
-    try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* ignore */ }
   }
-  function onCanvasMove(e: React.PointerEvent<HTMLCanvasElement>) {
-    const dr = dragRef.current;
-    if (!dr.active) return;
-    const g = stateRef.current;
-    if (!g || g.phase !== "aim") return;
-    const p = canvasPoint(e);
-    dr.cx = p.x;
-    dr.cy = p.y;
-    applyDrag(g, p.x, p.y);
-  }
-  function onCanvasUp() {
-    const dr = dragRef.current;
-    if (!dr.active) return;
-    dr.active = false;
-    const g = stateRef.current;
-    if (!g) return;
-    if (g.phase === "aim" && g.power > 0.06) throwDisc();
-    else g.power = 0;
-  }
+
+  // Move/release are handled on the window so the throw still fires even when
+  // you drag far past the canvas edge (the old bug where a big pull-back
+  // sometimes did nothing on release).
+  useEffect(() => {
+    function move(e: PointerEvent) {
+      const dr = dragRef.current;
+      if (!dr.active) return;
+      const g = stateRef.current;
+      if (!g || g.phase !== "aim") return;
+      const p = clientToCanvas(e.clientX, e.clientY);
+      dr.cx = p.x;
+      dr.cy = p.y;
+      applyDrag(g, p.x, p.y);
+    }
+    function up() {
+      const dr = dragRef.current;
+      if (!dr.active) return;
+      dr.active = false;
+      const g = stateRef.current;
+      if (!g) return;
+      if (g.phase === "aim" && g.power > 0.06) throwDisc();
+      else g.power = 0;
+    }
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+    return () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+    };
+  }, [clientToCanvas, applyDrag, throwDisc]);
 
   const finalOver = finalTotal - TOTAL_PAR;
   const overStr = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
@@ -760,9 +778,6 @@ export function DiscGolfGame() {
           width={W}
           height={H}
           onPointerDown={onCanvasDown}
-          onPointerMove={onCanvasMove}
-          onPointerUp={onCanvasUp}
-          onPointerCancel={onCanvasUp}
           className="max-h-full max-w-full rounded-lg border border-white/10 bg-[#4a8a3a]"
           style={{ imageRendering: "pixelated", touchAction: "none" }}
         />
@@ -971,15 +986,21 @@ function Overlay({ children }: { children: React.ReactNode }) {
 }
 
 function drawTree(ctx: CanvasRenderingContext2D, tr: Tree) {
+  // Trunk (taller, to read as a full-height tree you can't throw over).
   ctx.fillStyle = "#5a3a1a";
-  ctx.fillRect(Math.round(tr.x) - 1, Math.round(tr.y), 3, tr.r + 4);
+  ctx.fillRect(Math.round(tr.x) - 1, Math.round(tr.y), 3, tr.r + 7);
+  // Dark base ring + a canopy lifted slightly for a touch of height.
+  ctx.fillStyle = "#225e1f";
+  ctx.beginPath();
+  ctx.arc(tr.x, tr.y + 1, tr.r + 1, 0, Math.PI * 2);
+  ctx.fill();
   ctx.fillStyle = "#2f6b2a";
   ctx.beginPath();
-  ctx.arc(tr.x, tr.y, tr.r, 0, Math.PI * 2);
+  ctx.arc(tr.x, tr.y - 2, tr.r, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = "#3f8a37";
   ctx.beginPath();
-  ctx.arc(tr.x - tr.r * 0.3, tr.y - tr.r * 0.3, tr.r * 0.5, 0, Math.PI * 2);
+  ctx.arc(tr.x - tr.r * 0.3, tr.y - tr.r * 0.45, tr.r * 0.5, 0, Math.PI * 2);
   ctx.fill();
 }
 
