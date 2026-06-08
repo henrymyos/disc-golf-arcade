@@ -18,7 +18,7 @@ const H = 448;
 const DISC_R = 3;
 const CATCH_R = 9;
 const STOP_SPEED = 0.35;
-const BEST_KEY = "discgolf.best";
+const BEST_KEY = "discgolf.best.glendoveer18"; // reset best for the 18-hole course
 
 // Height physics: a throw arcs up and comes back down. While airborne the disc
 // clears water and trees (throw over hazards); once it lands it brakes hard so
@@ -36,16 +36,30 @@ type Hole = { par: number; tee: Vec; basket: Vec; trees: Tree[]; water: Water[] 
 const TEE: Vec = { x: 160, y: 416 };
 
 // Fixed course — identical every play.
+// Glendoveer East–inspired: open, long fairways with sparse trees and the
+// occasional water/OB — an original homage in the style of the real course
+// (18 holes, par 66), not a copy of any map.
 const HOLES: Hole[] = [
-  { par: 3, tee: TEE, basket: { x: 160, y: 90 }, trees: [{ x: 110, y: 300, r: 14 }, { x: 210, y: 300, r: 14 }, { x: 160, y: 205, r: 15 }, { x: 112, y: 130, r: 13 }, { x: 208, y: 130, r: 13 }], water: [] },
-  { par: 3, tee: TEE, basket: { x: 96, y: 108 }, trees: [{ x: 178, y: 280, r: 14 }, { x: 124, y: 210, r: 14 }, { x: 214, y: 188, r: 13 }, { x: 70, y: 220, r: 13 }, { x: 156, y: 130, r: 13 }], water: [] },
-  { par: 2, tee: TEE, basket: { x: 160, y: 168 }, trees: [{ x: 108, y: 300, r: 14 }, { x: 212, y: 300, r: 14 }, { x: 160, y: 240, r: 13 }], water: [] },
-  { par: 4, tee: TEE, basket: { x: 232, y: 86 }, trees: [{ x: 150, y: 320, r: 14 }, { x: 118, y: 210, r: 14 }, { x: 214, y: 206, r: 14 }, { x: 268, y: 138, r: 13 }, { x: 176, y: 150, r: 13 }], water: [{ x: 38, y: 116, w: 86, h: 64 }] },
-  { par: 3, tee: TEE, basket: { x: 90, y: 128 }, trees: [{ x: 184, y: 286, r: 14 }, { x: 138, y: 214, r: 14 }, { x: 92, y: 250, r: 13 }, { x: 210, y: 196, r: 13 }, { x: 146, y: 122, r: 13 }], water: [] },
-  { par: 3, tee: TEE, basket: { x: 236, y: 138 }, trees: [{ x: 118, y: 286, r: 14 }, { x: 186, y: 214, r: 14 }, { x: 248, y: 252, r: 13 }, { x: 110, y: 196, r: 13 }, { x: 176, y: 120, r: 13 }], water: [] },
-  { par: 4, tee: TEE, basket: { x: 160, y: 70 }, trees: [{ x: 106, y: 246, r: 14 }, { x: 214, y: 246, r: 14 }, { x: 160, y: 168, r: 15 }, { x: 114, y: 116, r: 13 }, { x: 206, y: 116, r: 13 }], water: [{ x: 118, y: 322, w: 84, h: 50 }] },
-  { par: 3, tee: TEE, basket: { x: 108, y: 100 }, trees: [{ x: 190, y: 268, r: 14 }, { x: 150, y: 196, r: 14 }, { x: 86, y: 232, r: 13 }, { x: 214, y: 188, r: 13 }, { x: 158, y: 118, r: 13 }], water: [] },
-  { par: 4, tee: TEE, basket: { x: 222, y: 96 }, trees: [{ x: 120, y: 280, r: 14 }, { x: 188, y: 210, r: 14 }, { x: 252, y: 234, r: 13 }, { x: 150, y: 138, r: 13 }, { x: 240, y: 154, r: 13 }, { x: 100, y: 196, r: 13 }], water: [{ x: 54, y: 150, w: 66, h: 54 }] },
+  // ── Front nine (par 33) ──
+  { par: 3, tee: TEE, basket: { x: 160, y: 120 }, trees: [], water: [] },
+  { par: 4, tee: TEE, basket: { x: 110, y: 90 }, trees: [{ x: 182, y: 250, r: 13 }], water: [] },
+  { par: 3, tee: TEE, basket: { x: 212, y: 140 }, trees: [{ x: 140, y: 240, r: 13 }], water: [] },
+  { par: 4, tee: TEE, basket: { x: 160, y: 78 }, trees: [{ x: 110, y: 230, r: 13 }, { x: 210, y: 230, r: 13 }], water: [] },
+  { par: 5, tee: TEE, basket: { x: 150, y: 58 }, trees: [{ x: 120, y: 300, r: 13 }, { x: 212, y: 200, r: 13 }], water: [{ x: 58, y: 150, w: 80, h: 46 }] },
+  { par: 3, tee: TEE, basket: { x: 88, y: 130 }, trees: [], water: [] },
+  { par: 4, tee: TEE, basket: { x: 240, y: 100 }, trees: [{ x: 162, y: 232, r: 13 }], water: [{ x: 92, y: 118, w: 70, h: 50 }] },
+  { par: 4, tee: TEE, basket: { x: 160, y: 70 }, trees: [{ x: 120, y: 200, r: 13 }, { x: 206, y: 200, r: 13 }], water: [] },
+  { par: 3, tee: TEE, basket: { x: 202, y: 150 }, trees: [{ x: 128, y: 258, r: 13 }], water: [] },
+  // ── Back nine (par 33) ──
+  { par: 4, tee: TEE, basket: { x: 112, y: 96 }, trees: [{ x: 182, y: 240, r: 13 }], water: [] },
+  { par: 3, tee: TEE, basket: { x: 160, y: 132 }, trees: [], water: [] },
+  { par: 4, tee: TEE, basket: { x: 230, y: 90 }, trees: [{ x: 150, y: 230, r: 13 }, { x: 250, y: 168, r: 13 }], water: [] },
+  { par: 3, tee: TEE, basket: { x: 90, y: 140 }, trees: [{ x: 162, y: 250, r: 13 }], water: [] },
+  { par: 5, tee: TEE, basket: { x: 160, y: 56 }, trees: [{ x: 112, y: 290, r: 13 }, { x: 210, y: 208, r: 13 }], water: [{ x: 120, y: 150, w: 80, h: 46 }] },
+  { par: 3, tee: TEE, basket: { x: 210, y: 150 }, trees: [], water: [] },
+  { par: 4, tee: TEE, basket: { x: 150, y: 80 }, trees: [{ x: 100, y: 230, r: 13 }, { x: 210, y: 230, r: 13 }], water: [] },
+  { par: 4, tee: TEE, basket: { x: 240, y: 110 }, trees: [{ x: 150, y: 240, r: 13 }], water: [{ x: 78, y: 150, w: 70, h: 48 }] },
+  { par: 3, tee: TEE, basket: { x: 160, y: 110 }, trees: [{ x: 120, y: 212, r: 13 }, { x: 206, y: 212, r: 13 }], water: [] },
 ];
 const TOTAL_PAR = HOLES.reduce((s, h) => s + h.par, 0);
 
@@ -678,7 +692,7 @@ export function DiscGolfGame() {
       ctx.textBaseline = "middle";
       const over = g.scores.reduce((s, n) => s + n, 0) - HOLES.slice(0, g.holeIndex).reduce((s, h) => s + h.par, 0);
       const overStr = over === 0 ? "E" : over > 0 ? `+${over}` : `${over}`;
-      ctx.fillText(`H${g.holeIndex + 1}/9`, 6, 7);
+      ctx.fillText(`H${g.holeIndex + 1}/${HOLES.length}`, 6, 7);
       ctx.fillText(`PAR ${hole.par}`, 70, 7);
       ctx.fillText(`THR ${g.throws}`, 140, 7);
       ctx.fillText(`TOT ${overStr}`, 220, 7);
@@ -788,8 +802,8 @@ export function DiscGolfGame() {
               <span className="text-[#36D7B7]">DISC</span> GOLF
             </h1>
             <p className="text-gray-300 text-xs sm:text-sm max-w-xs">
-              9 holes. <span className="text-white font-semibold">Drag back</span> from the disc to aim &amp; set
-              power, then release to throw. The arrow shows your line and fade.
+              18 holes · Glendoveer-style open fairways. <span className="text-white font-semibold">Drag back</span>{" "}
+              from the disc to aim &amp; set power, then release to throw. The arrow shows your line and fade.
             </p>
             {bestScore != null && (
               <p className="text-[#36D7B7] text-xs font-semibold">
@@ -882,39 +896,54 @@ export function DiscGolfGame() {
               )}
             </div>
 
-            {/* Scorecard */}
-            <div className="bg-[#1a1d23] border border-white/5 rounded-2xl p-3 overflow-x-auto">
-              <table className="w-full text-center text-xs">
-                <thead>
-                  <tr className="text-gray-400">
-                    <th className="text-left font-semibold py-1 pr-2">Hole</th>
-                    {HOLES.map((_, i) => (
-                      <th key={i} className="font-semibold px-1">{i + 1}</th>
-                    ))}
-                    <th className="font-semibold pl-2">Σ</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr className="text-gray-400">
-                    <td className="text-left py-1 pr-2">Par</td>
-                    {HOLES.map((h, i) => (
-                      <td key={i} className="px-1">{h.par}</td>
-                    ))}
-                    <td className="pl-2 font-mono">{TOTAL_PAR}</td>
-                  </tr>
-                  <tr className="text-white font-semibold">
-                    <td className="text-left py-1 pr-2">You</td>
-                    {scorecard.map((s, i) => {
-                      const diff = s - HOLES[i].par;
-                      const color = diff < 0 ? "#36D7B7" : diff > 1 ? "#e23b3b" : diff === 1 ? "#f5d24a" : "#ffffff";
-                      return (
-                        <td key={i} className="px-1 font-mono" style={{ color }}>{s}</td>
-                      );
-                    })}
-                    <td className="pl-2 font-mono">{finalTotal}</td>
-                  </tr>
-                </tbody>
-              </table>
+            {/* Scorecard — front nine / back nine */}
+            <div className="bg-[#1a1d23] border border-white/5 rounded-2xl p-3 space-y-3 text-[11px]">
+              {([
+                { label: "Out", from: 0, to: 9 },
+                { label: "In", from: 9, to: 18 },
+              ] as const).map(({ label, from, to }) => {
+                const holes = HOLES.slice(from, to);
+                const parSum = holes.reduce((s, h) => s + h.par, 0);
+                const youSum = scorecard.slice(from, to).reduce((s, n) => s + (n ?? 0), 0);
+                return (
+                  <table key={label} className="w-full text-center tabular-nums">
+                    <thead>
+                      <tr className="text-gray-500">
+                        <th className="text-left font-semibold pr-1 w-7"></th>
+                        {holes.map((_, i) => (
+                          <th key={i} className="font-semibold px-0.5">{from + i + 1}</th>
+                        ))}
+                        <th className="font-bold pl-1 text-gray-300">{label}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="text-gray-400">
+                        <td className="text-left pr-1">Par</td>
+                        {holes.map((h, i) => (
+                          <td key={i} className="px-0.5">{h.par}</td>
+                        ))}
+                        <td className="pl-1 font-mono">{parSum}</td>
+                      </tr>
+                      <tr className="text-white font-semibold">
+                        <td className="text-left pr-1">You</td>
+                        {holes.map((h, i) => {
+                          const s = scorecard[from + i];
+                          const diff = (s ?? h.par) - h.par;
+                          const color = s == null ? "#6b7280" : diff < 0 ? "#36D7B7" : diff > 1 ? "#e23b3b" : diff === 1 ? "#f5d24a" : "#ffffff";
+                          return (
+                            <td key={i} className="px-0.5 font-mono" style={{ color }}>{s ?? "–"}</td>
+                          );
+                        })}
+                        <td className="pl-1 font-mono">{youSum}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                );
+              })}
+              <div className="flex justify-between border-t border-white/5 pt-2 text-white font-bold text-sm">
+                <span>Total</span>
+                <span className="font-mono">{finalTotal} · par {TOTAL_PAR}</span>
+              </div>
             </div>
 
             {/* Save score */}

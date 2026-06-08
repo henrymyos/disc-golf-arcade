@@ -3,10 +3,10 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { ArcadeScore } from "@/lib/arcade-types";
 
-// 9 holes, so the theoretical floor is 9 (an ace on every hole) and anything
-// past ~200 is junk. Names are clamped to keep the board tidy.
-const MIN_STROKES = 9;
-const MAX_STROKES = 200;
+// 18 holes, so the theoretical floor is 18 (an ace on every hole) and anything
+// past ~250 is junk. Names are clamped to keep the board tidy.
+const MIN_STROKES = 18;
+const MAX_STROKES = 250;
 
 export async function submitArcadeScore(name: string, strokes: number): Promise<{ ok: true }> {
   const s = Math.round(Number(strokes));
