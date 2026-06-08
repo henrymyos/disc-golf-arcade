@@ -31,13 +31,15 @@ const MAX_DRAG = 95; // pull-back distance (internal px) that maps to full power
 type Vec = { x: number; y: number };
 type Tree = { x: number; y: number; r: number };
 type Water = { x: number; y: number; w: number; h: number };
+// The fairway is a curved centerline (tee → green) with a width; anything
+// outside that ribbon is OUT OF BOUNDS — so doglegs and OB lines both curve.
 // Penalty regions (fly over them freely; only matter at ground level):
-//  • `ob` / `water` = OUT OF BOUNDS: +1 and play from where it crossed the line
-//    (so you only move back to the edge, never a full rethrow).
+//  • outside the fairway ribbon, or a `water` pond = OUT OF BOUNDS: +1 and play
+//    from where it crossed the line (so you only move back to the edge).
 //  • `hazard` = HAZARD (sand): +1 and play where it lies (the disc stays put).
 // `worldH` is the hole's full length (taller than the 448px viewport); the
 // camera scrolls vertically along it.
-type Hole = { par: number; worldH: number; tee: Vec; basket: Vec; trees: Tree[]; water: Water[]; ob?: Water[]; hazard?: Water[] };
+type Hole = { par: number; worldH: number; tee: Vec; basket: Vec; fairway: Vec[]; fwWidth: number; trees: Tree[]; water: Water[]; hazard?: Water[] };
 
 // Holes are authored in this old 448-tall frame, then stretched to a length
 // that scales with par (below).
@@ -48,44 +50,44 @@ const TEE: Vec = { x: 160, y: 416 };
 // the green, dogleg shape, OB lines, water and tree guards placed to match the
 // hole's actual character. Comments note the real par/distance.
 const HOLE_TEMPLATES: Omit<Hole, "worldH">[] = [
-  // ── Front nine (par 31) ──
+  // ── Front nine (par 31) ── (`fairway` = curved centerline tee→green; `fwWidth` = corridor width)
   // 1 — par 4, 670ft. Dogleg left around a pond to an upper-right green; mando tree short.
-  { par: 4, tee: TEE, basket: { x: 190, y: 98 }, trees: [{ x: 206, y: 152, r: 13 }, { x: 118, y: 124, r: 12 }], water: [{ x: 104, y: 206, w: 76, h: 58 }], ob: [{ x: 6, y: 60, w: 48, h: 332 }, { x: 266, y: 60, w: 48, h: 332 }] },
-  // 2 — par 3, 390ft. Tight tree-lined corridor bending right; cart-path OB hard left.
-  { par: 3, tee: TEE, basket: { x: 196, y: 122 }, trees: [{ x: 132, y: 252, r: 13 }, { x: 210, y: 208, r: 13 }, { x: 150, y: 170, r: 12 }], water: [], ob: [{ x: 6, y: 60, w: 72, h: 332 }, { x: 286, y: 60, w: 28, h: 332 }] },
-  // 3 — par 3, 370ft. Tree-lined, mando tree, green up the left.
-  { par: 3, tee: TEE, basket: { x: 150, y: 110 }, trees: [{ x: 196, y: 252, r: 13 }, { x: 120, y: 200, r: 13 }, { x: 202, y: 150, r: 12 }], water: [], ob: [{ x: 6, y: 60, w: 40, h: 332 }, { x: 274, y: 60, w: 40, h: 332 }] },
-  // 4 — par 3, 450ft. Guarded green, OB left + golf green right.
-  { par: 3, tee: TEE, basket: { x: 150, y: 96 }, trees: [{ x: 150, y: 152, r: 14 }, { x: 118, y: 232, r: 12 }], water: [], ob: [{ x: 6, y: 60, w: 50, h: 332 }, { x: 250, y: 60, w: 64, h: 332 }] },
+  { par: 4, tee: TEE, basket: { x: 190, y: 98 }, fairway: [{ x: 160, y: 416 }, { x: 150, y: 300 }, { x: 132, y: 215 }, { x: 168, y: 150 }, { x: 190, y: 98 }], fwWidth: 126, trees: [{ x: 206, y: 152, r: 13 }, { x: 118, y: 124, r: 12 }], water: [{ x: 104, y: 206, w: 76, h: 58 }] },
+  // 2 — par 3, 390ft. Corridor bending right; tight on the left.
+  { par: 3, tee: TEE, basket: { x: 196, y: 122 }, fairway: [{ x: 160, y: 416 }, { x: 168, y: 300 }, { x: 188, y: 200 }, { x: 196, y: 122 }], fwWidth: 112, trees: [{ x: 132, y: 252, r: 13 }, { x: 210, y: 208, r: 13 }, { x: 150, y: 170, r: 12 }], water: [] },
+  // 3 — par 3, 370ft. Tree-lined, green up the left.
+  { par: 3, tee: TEE, basket: { x: 150, y: 110 }, fairway: [{ x: 160, y: 416 }, { x: 156, y: 290 }, { x: 150, y: 180 }, { x: 150, y: 110 }], fwWidth: 116, trees: [{ x: 196, y: 252, r: 13 }, { x: 120, y: 200, r: 13 }, { x: 202, y: 150, r: 12 }], water: [] },
+  // 4 — par 3, 450ft. Slight left to a guarded green.
+  { par: 3, tee: TEE, basket: { x: 150, y: 96 }, fairway: [{ x: 160, y: 416 }, { x: 154, y: 260 }, { x: 150, y: 150 }, { x: 150, y: 96 }], fwWidth: 120, trees: [{ x: 150, y: 152, r: 14 }, { x: 118, y: 232, r: 12 }], water: [] },
   // 5 — par 4, 910ft. Wide & open with sand hazards and a pond short of the pin.
-  { par: 4, tee: TEE, basket: { x: 160, y: 72 }, trees: [], water: [{ x: 132, y: 118, w: 56, h: 34 }], ob: [{ x: 6, y: 50, w: 40, h: 342 }, { x: 274, y: 50, w: 40, h: 342 }], hazard: [{ x: 116, y: 182, w: 30, h: 22 }, { x: 184, y: 202, w: 28, h: 20 }] },
-  // 6 — par 3, 415ft. Mostly open, a couple trees, OB right (mando).
-  { par: 3, tee: TEE, basket: { x: 168, y: 110 }, trees: [{ x: 132, y: 242, r: 13 }, { x: 196, y: 190, r: 13 }], water: [], ob: [{ x: 6, y: 60, w: 36, h: 332 }, { x: 250, y: 60, w: 64, h: 332 }] },
-  // 7 — par 4, 710ft. Tree-lined dogleg left; OB right (mando).
-  { par: 4, tee: TEE, basket: { x: 132, y: 86 }, trees: [{ x: 196, y: 252, r: 13 }, { x: 150, y: 182, r: 13 }, { x: 206, y: 140, r: 12 }], water: [], ob: [{ x: 6, y: 60, w: 40, h: 332 }, { x: 256, y: 60, w: 58, h: 332 }] },
-  // 8 — par 3, 500ft. Straight tree-lined; OB right (mando) + golf fairway left.
-  { par: 3, tee: TEE, basket: { x: 160, y: 90 }, trees: [{ x: 122, y: 242, r: 13 }, { x: 200, y: 242, r: 13 }, { x: 160, y: 162, r: 12 }], water: [], ob: [{ x: 6, y: 60, w: 58, h: 332 }, { x: 256, y: 60, w: 58, h: 332 }] },
-  // 9 — par 4, 695ft. S-shaped tree-lined fairway; OB lines + a sand hazard.
-  { par: 4, tee: TEE, basket: { x: 150, y: 86 }, trees: [{ x: 206, y: 252, r: 13 }, { x: 120, y: 182, r: 13 }, { x: 196, y: 130, r: 12 }], water: [], ob: [{ x: 6, y: 60, w: 44, h: 332 }, { x: 262, y: 60, w: 52, h: 332 }], hazard: [{ x: 148, y: 202, w: 28, h: 20 }] },
+  { par: 4, tee: TEE, basket: { x: 160, y: 72 }, fairway: [{ x: 160, y: 416 }, { x: 160, y: 280 }, { x: 160, y: 170 }, { x: 160, y: 72 }], fwWidth: 150, trees: [], water: [{ x: 132, y: 118, w: 56, h: 34 }], hazard: [{ x: 116, y: 182, w: 30, h: 22 }, { x: 184, y: 202, w: 28, h: 20 }] },
+  // 6 — par 3, 415ft. Mostly open with a couple of guard trees.
+  { par: 3, tee: TEE, basket: { x: 168, y: 110 }, fairway: [{ x: 160, y: 416 }, { x: 164, y: 280 }, { x: 168, y: 160 }, { x: 168, y: 110 }], fwWidth: 128, trees: [{ x: 132, y: 242, r: 13 }, { x: 196, y: 190, r: 13 }], water: [] },
+  // 7 — par 4, 710ft. Tree-lined dogleg left.
+  { par: 4, tee: TEE, basket: { x: 132, y: 86 }, fairway: [{ x: 160, y: 416 }, { x: 160, y: 290 }, { x: 150, y: 190 }, { x: 132, y: 86 }], fwWidth: 120, trees: [{ x: 196, y: 252, r: 13 }, { x: 150, y: 182, r: 13 }, { x: 206, y: 140, r: 12 }], water: [] },
+  // 8 — par 3, 500ft. Straight tree-lined corridor.
+  { par: 3, tee: TEE, basket: { x: 160, y: 90 }, fairway: [{ x: 160, y: 416 }, { x: 160, y: 260 }, { x: 160, y: 150 }, { x: 160, y: 90 }], fwWidth: 116, trees: [{ x: 122, y: 242, r: 13 }, { x: 200, y: 242, r: 13 }, { x: 160, y: 162, r: 12 }], water: [] },
+  // 9 — par 4, 695ft. S-shaped fairway with a sand hazard.
+  { par: 4, tee: TEE, basket: { x: 150, y: 86 }, fairway: [{ x: 160, y: 416 }, { x: 172, y: 300 }, { x: 145, y: 205 }, { x: 162, y: 140 }, { x: 150, y: 86 }], fwWidth: 118, trees: [{ x: 206, y: 252, r: 13 }, { x: 120, y: 182, r: 13 }, { x: 196, y: 130, r: 12 }], water: [], hazard: [{ x: 148, y: 202, w: 28, h: 20 }] },
   // ── Back nine (par 35) ──
-  // 10 — par 4, 710ft. S-curve with sand hazards, OB both sides (mandos).
-  { par: 4, tee: TEE, basket: { x: 168, y: 84 }, trees: [{ x: 122, y: 252, r: 13 }, { x: 206, y: 252, r: 13 }, { x: 150, y: 172, r: 12 }], water: [], ob: [{ x: 6, y: 50, w: 46, h: 342 }, { x: 262, y: 50, w: 52, h: 342 }], hazard: [{ x: 176, y: 150, w: 30, h: 22 }, { x: 118, y: 112, w: 28, h: 20 }] },
-  // 11 — par 5, 1145ft. Long straight tree-lined corridor; OB connecting mandos.
-  { par: 5, tee: TEE, basket: { x: 160, y: 56 }, trees: [{ x: 120, y: 292, r: 13 }, { x: 206, y: 232, r: 13 }, { x: 132, y: 172, r: 12 }, { x: 196, y: 120, r: 12 }], water: [], ob: [{ x: 6, y: 46, w: 50, h: 348 }, { x: 264, y: 46, w: 50, h: 348 }] },
-  // 12 — par 3, 370ft. Dogleg right around trees; OB right (mando).
-  { par: 3, tee: TEE, basket: { x: 196, y: 110 }, trees: [{ x: 140, y: 232, r: 13 }, { x: 168, y: 162, r: 13 }], water: [], ob: [{ x: 6, y: 60, w: 64, h: 332 }, { x: 282, y: 60, w: 32, h: 332 }] },
-  // 13 — par 4, 775ft. Dogleg right, tree-lined; OB surrounding.
-  { par: 4, tee: TEE, basket: { x: 196, y: 84 }, trees: [{ x: 132, y: 252, r: 13 }, { x: 168, y: 182, r: 13 }, { x: 214, y: 140, r: 12 }], water: [], ob: [{ x: 6, y: 60, w: 56, h: 332 }, { x: 278, y: 60, w: 36, h: 332 }] },
-  // 14 — par 4, 845ft. Dogleg left to a guarded green; OB both sides + pond + sand.
-  { par: 4, tee: TEE, basket: { x: 138, y: 76 }, trees: [{ x: 196, y: 252, r: 13 }, { x: 150, y: 172, r: 13 }], water: [{ x: 120, y: 108, w: 50, h: 30 }], ob: [{ x: 6, y: 56, w: 44, h: 336 }, { x: 258, y: 56, w: 56, h: 336 }, { x: 176, y: 140, w: 26, h: 20 }] },
+  // 10 — par 4, 710ft. S-curve with sand hazards.
+  { par: 4, tee: TEE, basket: { x: 168, y: 84 }, fairway: [{ x: 160, y: 416 }, { x: 150, y: 300 }, { x: 182, y: 205 }, { x: 150, y: 140 }, { x: 168, y: 84 }], fwWidth: 120, trees: [{ x: 122, y: 252, r: 13 }, { x: 206, y: 252, r: 13 }, { x: 150, y: 172, r: 12 }], water: [], hazard: [{ x: 176, y: 150, w: 30, h: 22 }, { x: 118, y: 112, w: 28, h: 20 }] },
+  // 11 — par 5, 1145ft. Long straight tree-lined corridor.
+  { par: 5, tee: TEE, basket: { x: 160, y: 56 }, fairway: [{ x: 160, y: 416 }, { x: 160, y: 310 }, { x: 160, y: 200 }, { x: 160, y: 110 }, { x: 160, y: 56 }], fwWidth: 120, trees: [{ x: 120, y: 292, r: 13 }, { x: 206, y: 232, r: 13 }, { x: 132, y: 172, r: 12 }, { x: 196, y: 120, r: 12 }], water: [] },
+  // 12 — par 3, 370ft. Dogleg right around trees.
+  { par: 3, tee: TEE, basket: { x: 196, y: 110 }, fairway: [{ x: 160, y: 416 }, { x: 162, y: 270 }, { x: 185, y: 175 }, { x: 196, y: 110 }], fwWidth: 116, trees: [{ x: 140, y: 232, r: 13 }, { x: 168, y: 162, r: 13 }], water: [] },
+  // 13 — par 4, 775ft. Dogleg right, tree-lined.
+  { par: 4, tee: TEE, basket: { x: 196, y: 84 }, fairway: [{ x: 160, y: 416 }, { x: 166, y: 290 }, { x: 186, y: 185 }, { x: 196, y: 84 }], fwWidth: 120, trees: [{ x: 132, y: 252, r: 13 }, { x: 168, y: 182, r: 13 }, { x: 214, y: 140, r: 12 }], water: [] },
+  // 14 — par 4, 845ft. Dogleg left to a guarded green; pond + sand.
+  { par: 4, tee: TEE, basket: { x: 138, y: 76 }, fairway: [{ x: 160, y: 416 }, { x: 160, y: 290 }, { x: 150, y: 185 }, { x: 138, y: 76 }], fwWidth: 120, trees: [{ x: 196, y: 252, r: 13 }, { x: 150, y: 172, r: 13 }], water: [{ x: 120, y: 108, w: 50, h: 30 }] },
   // 15 — par 3, 335ft. Narrow tree-lined tunnel straight to the green.
-  { par: 3, tee: TEE, basket: { x: 158, y: 88 }, trees: [{ x: 108, y: 300, r: 14 }, { x: 212, y: 300, r: 14 }, { x: 104, y: 200, r: 14 }, { x: 216, y: 200, r: 14 }, { x: 110, y: 122, r: 13 }, { x: 210, y: 122, r: 13 }], water: [], ob: [{ x: 6, y: 60, w: 24, h: 332 }, { x: 290, y: 60, w: 24, h: 332 }] },
-  // 16 — par 3, 410ft. Straight, but trees stand in the fairway; OB left/right.
-  { par: 3, tee: TEE, basket: { x: 158, y: 110 }, trees: [{ x: 150, y: 300, r: 14 }, { x: 168, y: 232, r: 14 }, { x: 132, y: 182, r: 13 }, { x: 186, y: 160, r: 13 }], water: [], ob: [{ x: 6, y: 60, w: 36, h: 332 }, { x: 278, y: 60, w: 36, h: 332 }] },
-  // 17 — par 4, 830ft. Tree-lined with mando gates both sides; sand hazard.
-  { par: 4, tee: TEE, basket: { x: 160, y: 80 }, trees: [{ x: 120, y: 252, r: 13 }, { x: 200, y: 252, r: 13 }, { x: 134, y: 160, r: 12 }, { x: 188, y: 160, r: 12 }], water: [], ob: [{ x: 6, y: 56, w: 50, h: 336 }, { x: 264, y: 56, w: 50, h: 336 }], hazard: [{ x: 82, y: 150, w: 28, h: 22 }] },
-  // 18 — par 5, 1000ft. Long slight dogleg left with a pond in the fairway; OB right.
-  { par: 5, tee: TEE, basket: { x: 168, y: 58 }, trees: [{ x: 120, y: 300, r: 13 }, { x: 206, y: 222, r: 13 }, { x: 140, y: 152, r: 12 }], water: [{ x: 150, y: 188, w: 70, h: 40 }], ob: [{ x: 6, y: 46, w: 44, h: 348 }, { x: 268, y: 46, w: 46, h: 348 }] },
+  { par: 3, tee: TEE, basket: { x: 158, y: 88 }, fairway: [{ x: 160, y: 416 }, { x: 158, y: 260 }, { x: 158, y: 150 }, { x: 158, y: 88 }], fwWidth: 96, trees: [{ x: 108, y: 300, r: 14 }, { x: 212, y: 300, r: 14 }, { x: 104, y: 200, r: 14 }, { x: 216, y: 200, r: 14 }, { x: 110, y: 122, r: 13 }, { x: 210, y: 122, r: 13 }], water: [] },
+  // 16 — par 3, 410ft. Straight, but trees stand in the fairway.
+  { par: 3, tee: TEE, basket: { x: 158, y: 110 }, fairway: [{ x: 160, y: 416 }, { x: 158, y: 280 }, { x: 158, y: 170 }, { x: 158, y: 110 }], fwWidth: 108, trees: [{ x: 150, y: 300, r: 14 }, { x: 168, y: 232, r: 14 }, { x: 132, y: 182, r: 13 }, { x: 186, y: 160, r: 13 }], water: [] },
+  // 17 — par 4, 830ft. Tree-lined with gate trees; sand hazard.
+  { par: 4, tee: TEE, basket: { x: 160, y: 80 }, fairway: [{ x: 160, y: 416 }, { x: 160, y: 260 }, { x: 160, y: 160 }, { x: 160, y: 80 }], fwWidth: 118, trees: [{ x: 120, y: 252, r: 13 }, { x: 200, y: 252, r: 13 }, { x: 134, y: 160, r: 12 }, { x: 188, y: 160, r: 12 }], water: [], hazard: [{ x: 82, y: 150, w: 28, h: 22 }] },
+  // 18 — par 5, 1000ft. Long slight dogleg left with a pond in the fairway.
+  { par: 5, tee: TEE, basket: { x: 168, y: 58 }, fairway: [{ x: 160, y: 416 }, { x: 160, y: 310 }, { x: 156, y: 200 }, { x: 162, y: 120 }, { x: 168, y: 58 }], fwWidth: 124, trees: [{ x: 120, y: 300, r: 13 }, { x: 206, y: 222, r: 13 }, { x: 140, y: 152, r: 12 }], water: [{ x: 150, y: 188, w: 70, h: 40 }] },
 ];
 
 // A max drive carries ~DRIVE world px, so a hole's length is ~(par-2) drives:
@@ -104,9 +106,10 @@ const HOLES: Hole[] = HOLE_TEMPLATES.map((t) => {
     worldH,
     tee: { x: 160, y: worldH - TEE_BEHIND },
     basket: { x: t.basket.x, y: ty(t.basket.y) },
+    fairway: t.fairway.map((p) => ({ x: p.x, y: ty(p.y) })),
+    fwWidth: t.fwWidth,
     trees: t.trees.map((tr) => ({ x: tr.x, y: ty(tr.y), r: tr.r })),
     water: t.water.map((w) => ({ x: w.x, y: ty(w.y), w: w.w, h: w.h * scale })),
-    ob: (t.ob ?? []).map((o) => ({ x: o.x, y: ty(o.y), w: o.w, h: o.h * scale })),
     hazard: (t.hazard ?? []).map((o) => ({ x: o.x, y: ty(o.y), w: o.w, h: o.h * scale })),
   };
 });
@@ -312,10 +315,29 @@ type StepStatus = "fly" | "stop" | "hole" | "oob" | "ob";
 function inRect(r: Water, x: number, y: number) {
   return x > r.x && x < r.x + r.w && y > r.y && y < r.y + r.h;
 }
+// Distance from a point to a line segment.
+function distToSeg(px: number, py: number, ax: number, ay: number, bx: number, by: number) {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const l2 = dx * dx + dy * dy;
+  let t = l2 ? ((px - ax) * dx + (py - ay) * dy) / l2 : 0;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+}
+// Distance from a point to a polyline (the fairway centerline).
+function distToPath(px: number, py: number, pts: Vec[]) {
+  let m = Infinity;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const d = distToSeg(px, py, pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y);
+    if (d < m) m = d;
+  }
+  return m;
+}
 function inAnyOB(hole: Hole, x: number, y: number) {
   if (x < 2 || x > W - 2 || y < 2 || y > hole.worldH - 2) return true;
+  // Anything more than half the fairway width from the curved centerline is OB.
+  if (distToPath(x, y, hole.fairway) > hole.fwWidth / 2) return true;
   for (const w of hole.water) if (inRect(w, x, y)) return true;
-  for (const o of hole.ob ?? []) if (inRect(o, x, y)) return true;
   return false;
 }
 // Where the disc last crossed the OB line — step back along its travel
@@ -382,9 +404,10 @@ function stepFlight(f: Flight, disc: Disc, fadeSign: number, hole: Hole): { stat
   // The basket and OB only interact at ground level (you fly over them).
   if (!airborne) {
     if (Math.hypot(f.x - hole.basket.x, f.y - hole.basket.y) < CATCH_R) return { status: "hole", treeHit };
-    // Water + marked OB are out of bounds — caught the moment the disc is low in one.
+    // Off the curved fairway, or in water, is out of bounds — caught the moment
+    // the disc is low.
+    if (distToPath(f.x, f.y, hole.fairway) > hole.fwWidth / 2) return { status: "ob", treeHit };
     for (const wt of hole.water) if (inRect(wt, f.x, f.y)) return { status: "ob", treeHit };
-    for (const o of hole.ob ?? []) if (inRect(o, f.x, f.y)) return { status: "ob", treeHit };
     // Hazards (sand) don't stop the disc — they only cost a stroke if it comes
     // to rest in one, handled where "stop" is processed.
     if (sp < STOP_SPEED) return { status: "stop", treeHit };
@@ -684,30 +707,38 @@ export function DiscGolfGame() {
       const hole = HOLES[g.holeIndex];
       const cam = g.camY; // world→screen: screenY = worldY - cam
 
-      // Grass mowing stripes across the visible world slice.
-      const startY = Math.floor(cam / 14) * 14;
-      for (let y = startY; y < cam + H; y += 14) {
-        ctx.fillStyle = Math.round(y / 14) % 2 === 0 ? "#4a8a3a" : "#3f7e31";
-        ctx.fillRect(0, y - cam, W, 14);
-      }
-      // Side borders (screen-fixed) + world top/bottom edges when in view.
-      ctx.fillStyle = "#356b29";
-      ctx.fillRect(0, 0, 4, H);
-      ctx.fillRect(W - 4, 0, 4, H);
-      if (cam < 4) ctx.fillRect(0, -cam, W, 4);
-      if (hole.worldH - cam < H) ctx.fillRect(0, hole.worldH - cam - 4, W, 4);
+      // Everything outside the fairway is out-of-bounds rough.
+      ctx.fillStyle = "#2f5a26";
+      ctx.fillRect(0, 0, W, H);
+      // Darker rough mowing bands for a little texture.
+      const startY = Math.floor(cam / 16) * 16;
+      ctx.fillStyle = "#2b5323";
+      for (let y = startY; y < cam + H; y += 32) ctx.fillRect(0, y - cam, W, 16);
 
-      // Out-of-bounds rough — tan fill with a dashed white OB line.
-      for (const ob of hole.ob ?? []) {
-        const oy = ob.y - cam;
-        ctx.fillStyle = "rgba(120,104,70,0.55)";
-        ctx.fillRect(ob.x, oy, ob.w, ob.h);
-        ctx.strokeStyle = "rgba(255,255,255,0.85)";
-        ctx.lineWidth = 1;
-        ctx.setLineDash([3, 3]);
-        ctx.strokeRect(ob.x + 0.5, oy + 0.5, ob.w - 1, ob.h - 1);
-        ctx.setLineDash([]);
-      }
+      // The curved fairway, drawn as a thick ribbon along the centerline. The
+      // outer (white) stroke is the OB line; the green stroke inside is the
+      // fairway — so doglegs and bends give curved OB edges that follow the hole.
+      const fw = hole.fairway;
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(fw[0].x, fw[0].y - cam);
+      for (let i = 1; i < fw.length; i++) ctx.lineTo(fw[i].x, fw[i].y - cam);
+      ctx.strokeStyle = "#eef1e6"; // OB line (ribbon edge)
+      ctx.lineWidth = hole.fwWidth;
+      ctx.stroke();
+      ctx.strokeStyle = "#4d9a39"; // fairway
+      ctx.lineWidth = hole.fwWidth - 3;
+      ctx.stroke();
+      // Mowing stripes inside the fairway.
+      ctx.strokeStyle = "#56a541";
+      ctx.lineWidth = hole.fwWidth - 3;
+      ctx.setLineDash([10, 10]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.lineJoin = "miter";
+      ctx.lineCap = "butt";
+      ctx.lineWidth = 1;
 
       for (const wt of hole.water) {
         const wy = wt.y - cam;
@@ -837,10 +868,20 @@ export function DiscGolfGame() {
         const oy = 20;
         ctx.fillStyle = "rgba(0,0,0,0.45)";
         ctx.fillRect(ox - 2, oy - 2, mw + 4, mh + 4);
-        ctx.fillStyle = "#3a6f2c";
+        ctx.fillStyle = "#2f5a26"; // rough
         ctx.fillRect(ox, oy, mw, mh);
-        ctx.fillStyle = "rgba(120,104,70,0.7)";
-        for (const ob of hole.ob ?? []) ctx.fillRect(ox + ob.x * s, oy + ob.y * s, ob.w * s, ob.h * s);
+        // curved fairway ribbon
+        ctx.strokeStyle = "#4d9a39";
+        ctx.lineJoin = "round";
+        ctx.lineCap = "round";
+        ctx.lineWidth = Math.max(2, hole.fwWidth * s);
+        ctx.beginPath();
+        ctx.moveTo(ox + hole.fairway[0].x * s, oy + hole.fairway[0].y * s);
+        for (let i = 1; i < hole.fairway.length; i++) ctx.lineTo(ox + hole.fairway[i].x * s, oy + hole.fairway[i].y * s);
+        ctx.stroke();
+        ctx.lineJoin = "miter";
+        ctx.lineCap = "butt";
+        ctx.lineWidth = 1;
         ctx.fillStyle = "#3a6ea5";
         for (const wt of hole.water) ctx.fillRect(ox + wt.x * s, oy + wt.y * s, wt.w * s, wt.h * s);
         ctx.fillStyle = "#d9c089";
