@@ -26,7 +26,7 @@ const BEST_KEY = "discgolf.best";
 const GRAVITY = 0.08; // downward pull on height per frame (gentler = floatier flight)
 const AIRBORNE_H = 3; // above this height, hazards are cleared
 const GROUND_FRICTION = 0.8; // hard deceleration once on the ground
-const MAX_DRAG = 130; // pull-back distance (internal px) that maps to full power
+const MAX_DRAG = 95; // pull-back distance (internal px) that maps to full power
 
 type Vec = { x: number; y: number };
 type Tree = { x: number; y: number; r: number };
@@ -234,14 +234,70 @@ class AudioEngine {
   }
 }
 
+// Pure one-frame flight step — the single source of truth for disc physics, so
+// the on-screen trajectory preview matches the real flight exactly. Mutates the
+// passed flight object; returns what happened this frame.
+type Flight = { x: number; y: number; vx: number; vy: number; h: number; vh: number; fadeTurn: number };
+type StepStatus = "fly" | "stop" | "hole" | "oob" | "water";
+
+function stepFlight(f: Flight, disc: Disc, fadeSign: number, hole: Hole): { status: StepStatus; treeHit: boolean } {
+  f.x += f.vx;
+  f.y += f.vy;
+  f.h += f.vh;
+  f.vh -= GRAVITY;
+  if (f.h <= 0) {
+    f.h = 0;
+    f.vh = 0;
+  }
+  const airborne = f.h > AIRBORNE_H;
+  const sp = Math.hypot(f.vx, f.vy);
+  if (airborne && sp > 0.6 && Math.abs(f.fadeTurn) < MAX_FADE_TURN) {
+    const a = fadeSign * disc.fade;
+    const cos = Math.cos(a);
+    const sin = Math.sin(a);
+    const nvx = f.vx * cos - f.vy * sin;
+    const nvy = f.vx * sin + f.vy * cos;
+    f.vx = nvx;
+    f.vy = nvy;
+    f.fadeTurn += a;
+  }
+  const friction = airborne ? disc.friction : GROUND_FRICTION;
+  f.vx *= friction;
+  f.vy *= friction;
+
+  if (f.x < 2 || f.x > W - 2 || f.y < 2 || f.y > H - 2) return { status: "oob", treeHit: false };
+
+  let treeHit = false;
+  if (!airborne) {
+    if (Math.hypot(f.x - hole.basket.x, f.y - hole.basket.y) < CATCH_R) return { status: "hole", treeHit };
+    for (const tr of hole.trees) {
+      const dist = Math.hypot(f.x - tr.x, f.y - tr.y);
+      const min = tr.r + DISC_R;
+      if (dist < min && dist > 0) {
+        const nx = (f.x - tr.x) / dist;
+        const ny = (f.y - tr.y) / dist;
+        f.x = tr.x + nx * min;
+        f.y = tr.y + ny * min;
+        const dot = f.vx * nx + f.vy * ny;
+        f.vx = (f.vx - 2 * dot * nx) * 0.45;
+        f.vy = (f.vy - 2 * dot * ny) * 0.45;
+        treeHit = true;
+      }
+    }
+    for (const wt of hole.water) {
+      if (f.x > wt.x && f.x < wt.x + wt.w && f.y > wt.y && f.y < wt.y + wt.h) return { status: "water", treeHit };
+    }
+    if (sp < STOP_SPEED) return { status: "stop", treeHit };
+  }
+  return { status: "fly", treeHit };
+}
+
 export function DiscGolfGame() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const stateRef = useRef<GameState | null>(null);
   const keysRef = useRef<Set<string>>(new Set());
   // Drag-to-throw (Wii-golf style): pull back to set power + aim, release to throw.
-  const dragRef = useRef<{ active: boolean; sx: number; sy: number; cx: number; cy: number }>({
-    active: false, sx: 0, sy: 0, cx: 0, cy: 0,
-  });
+  const dragRef = useRef<{ active: boolean; cx: number; cy: number }>({ active: false, cx: 0, cy: 0 });
   const audioRef = useRef<AudioEngine | null>(null);
   const rafRef = useRef<number>(0);
 
@@ -439,41 +495,27 @@ export function DiscGolfGame() {
       } else if (g.phase === "fly") {
         const d = g.disc;
         const disc = DISCS[g.discIndex];
-        d.x += d.vx;
-        d.y += d.vy;
+        const f: Flight = { x: d.x, y: d.y, vx: d.vx, vy: d.vy, h: g.h, vh: g.vh, fadeTurn: g.fadeTurn };
+        const res = stepFlight(f, disc, g.fadeSign, hole);
+        d.x = f.x;
+        d.y = f.y;
+        d.vx = f.vx;
+        d.vy = f.vy;
+        g.h = f.h;
+        g.vh = f.vh;
+        g.fadeTurn = f.fadeTurn;
+        if (res.treeHit) audioRef.current?.sfx("tree");
 
-        // Height: arc up then down. Disc is "airborne" until it lands.
-        g.h += g.vh;
-        g.vh -= GRAVITY;
-        if (g.h <= 0) {
-          g.h = 0;
-          g.vh = 0;
-        }
-        const airborne = g.h > AIRBORNE_H;
-
-        const sp = Math.hypot(d.vx, d.vy);
-        // Fade by *rotating* the velocity (speed never increases → never a
-        // backward push), only while airborne and capped at MAX_FADE_TURN.
-        if (airborne && sp > 0.6 && Math.abs(g.fadeTurn) < MAX_FADE_TURN) {
-          const a = g.fadeSign * disc.fade;
-          const cos = Math.cos(a);
-          const sin = Math.sin(a);
-          const nvx = d.vx * cos - d.vy * sin;
-          const nvy = d.vx * sin + d.vy * cos;
-          d.vx = nvx;
-          d.vy = nvy;
-          g.fadeTurn += a;
-        }
-        // Glide through the air, but brake hard once on the ground so the disc
-        // plants soon after it lands instead of floating on.
-        const friction = airborne ? disc.friction : GROUND_FRICTION;
-        d.vx *= friction;
-        d.vy *= friction;
-
-        // Out of bounds always counts (can't fly off the course).
-        const oob = d.x < 2 || d.x > W - 2 || d.y < 2 || d.y > H - 2;
-        if (oob) {
-          audioRef.current?.sfx("tree");
+        if (res.status === "hole") {
+          g.phase = "holed";
+          g.holedAt = performance.now();
+          d.vx = 0;
+          d.vy = 0;
+          d.x = hole.basket.x;
+          d.y = hole.basket.y;
+          audioRef.current?.sfx("basket");
+        } else if (res.status === "oob" || res.status === "water") {
+          audioRef.current?.sfx(res.status === "water" ? "water" : "tree");
           g.throws += 1;
           d.x = g.rest.x;
           d.y = g.rest.y;
@@ -484,71 +526,12 @@ export function DiscGolfGame() {
           g.angle = aimAt(g.rest, hole.basket);
           g.phase = "aim";
           syncHud();
-          return;
-        }
-
-        // Hazards & the basket only interact when the disc is low enough —
-        // a high throw sails over water and trees.
-        if (!airborne) {
-          // Basket catch — chains grab the disc.
-          if (Math.hypot(d.x - hole.basket.x, d.y - hole.basket.y) < CATCH_R) {
-            g.phase = "holed";
-            g.holedAt = performance.now();
-            d.vx = 0;
-            d.vy = 0;
-            d.x = hole.basket.x;
-            d.y = hole.basket.y;
-            audioRef.current?.sfx("basket");
-            return;
-          }
-
-          // Tree bounce
-          for (const tr of hole.trees) {
-            const dist = Math.hypot(d.x - tr.x, d.y - tr.y);
-            const min = tr.r + DISC_R;
-            if (dist < min && dist > 0) {
-              const nx = (d.x - tr.x) / dist;
-              const ny = (d.y - tr.y) / dist;
-              d.x = tr.x + nx * min;
-              d.y = tr.y + ny * min;
-              const dot = d.vx * nx + d.vy * ny;
-              d.vx = (d.vx - 2 * dot * nx) * 0.45;
-              d.vy = (d.vy - 2 * dot * ny) * 0.45;
-              audioRef.current?.sfx("tree");
-            }
-          }
-
-          // Water → penalty stroke, reset to last lie
-          let penalized = false;
-          for (const wt of hole.water) {
-            if (d.x > wt.x && d.x < wt.x + wt.w && d.y > wt.y && d.y < wt.y + wt.h) {
-              penalized = true;
-              break;
-            }
-          }
-          if (penalized) {
-            audioRef.current?.sfx("water");
-            g.throws += 1;
-            d.x = g.rest.x;
-            d.y = g.rest.y;
-            d.vx = 0;
-            d.vy = 0;
-            g.h = 0;
-            g.vh = 0;
-            g.angle = aimAt(g.rest, hole.basket);
-            g.phase = "aim";
-            syncHud();
-            return;
-          }
-
-          // Came to rest on the ground.
-          if (sp < STOP_SPEED) {
-            d.vx = 0;
-            d.vy = 0;
-            g.rest = { x: d.x, y: d.y };
-            g.angle = aimAt(g.rest, hole.basket); // auto-aim at the basket
-            g.phase = "aim";
-          }
+        } else if (res.status === "stop") {
+          d.vx = 0;
+          d.vy = 0;
+          g.rest = { x: d.x, y: d.y };
+          g.angle = aimAt(g.rest, hole.basket); // auto-aim at the basket
+          g.phase = "aim";
         }
       } else if (g.phase === "holed") {
         if (g.holedAt && performance.now() - g.holedAt > 850) {
@@ -590,55 +573,78 @@ export function DiscGolfGame() {
       drawBasket(ctx, hole.basket.x, hole.basket.y);
       for (const tr of hole.trees) drawTree(ctx, tr);
 
-      // Aim preview: a curved arrow showing where the disc goes and how it
-      // fades, plus the pulled-back "slingshot" line while dragging.
+      // Aim: the exact predicted flight path (simulated with the real physics)
+      // plus a visible pull-back slider/knob on the disc.
       if (g.phase === "aim") {
         const dr = dragRef.current;
         const aimDisc = DISCS[g.discIndex];
         const sign = throwStyleRef.current === "BH" ? -1 : 1;
-        // Total bend shown, matched to the disc's fade and the chosen power, capped.
-        const totalCurve = sign * Math.min(MAX_FADE_TURN, aimDisc.fade * 70 * (0.4 + g.power));
-        const len = 18 + g.power * 70;
-        const steps = 16;
-        const segs: { x: number; y: number }[] = [{ x: g.disc.x, y: g.disc.y }];
-        let dir = g.angle;
-        let px = g.disc.x;
-        let py = g.disc.y;
-        for (let i = 0; i < steps; i++) {
-          dir += totalCurve / steps;
-          px += Math.cos(dir) * (len / steps);
-          py += Math.sin(dir) * (len / steps);
-          segs.push({ x: px, y: py });
-        }
-        // Backswing line (where you've pulled to).
+
+        // Knob position: where you've pulled to (clamped), or a resting handle
+        // just below the disc inviting a pull.
+        let kx: number;
+        let ky: number;
+        let power: number;
         if (dr.active) {
-          ctx.strokeStyle = "rgba(255,255,255,0.35)";
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.moveTo(g.disc.x, g.disc.y);
-          ctx.lineTo(g.disc.x + (dr.cx - dr.sx), g.disc.y + (dr.cy - dr.sy));
-          ctx.stroke();
+          let pullX = dr.cx - g.disc.x;
+          let pullY = dr.cy - g.disc.y;
+          const dist = Math.hypot(pullX, pullY) || 0.0001;
+          const cl = Math.min(dist, MAX_DRAG);
+          pullX = (pullX / dist) * cl;
+          pullY = (pullY / dist) * cl;
+          kx = g.disc.x + pullX;
+          ky = g.disc.y + pullY;
+          power = cl / MAX_DRAG;
+        } else {
+          kx = g.disc.x;
+          ky = g.disc.y + 26;
+          power = 0;
         }
-        // Forward curved arrow.
-        ctx.strokeStyle = g.power > 0.85 ? "#e23b3b" : "#ffffff";
-        ctx.globalAlpha = dr.active ? 0.95 : 0.5;
-        ctx.lineWidth = 1.5;
+
+        // Exact trajectory — simulate the real flight forward, draw it solid
+        // early and fading out toward the end (so the precise landing is fuzzy).
+        if (dr.active && power > 0.04) {
+          const speed = aimDisc.power * (1.4 + power * 3.8);
+          const f: Flight = {
+            x: g.disc.x, y: g.disc.y,
+            vx: Math.cos(g.angle) * speed, vy: Math.sin(g.angle) * speed,
+            h: 0, vh: power * aimDisc.arc, fadeTurn: 0,
+          };
+          const pts: { x: number; y: number }[] = [{ x: f.x, y: f.y }];
+          for (let i = 0; i < 360; i++) {
+            const r = stepFlight(f, aimDisc, sign, hole);
+            pts.push({ x: f.x, y: f.y });
+            if (r.status !== "fly") break;
+          }
+          const n = pts.length;
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = "#ffffff";
+          for (let i = 0; i < n - 1; i++) {
+            const t = i / (n - 1);
+            ctx.globalAlpha = Math.max(0.05, 0.92 * (1 - Math.pow(t, 1.7)));
+            ctx.beginPath();
+            ctx.moveTo(pts[i].x, pts[i].y);
+            ctx.lineTo(pts[i + 1].x, pts[i + 1].y);
+            ctx.stroke();
+          }
+          ctx.globalAlpha = 1;
+        }
+
+        // Slider track + knob (the pull-back handle), colored by power.
+        ctx.strokeStyle = "rgba(255,255,255,0.55)";
+        ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.moveTo(segs[0].x, segs[0].y);
-        for (const s of segs) ctx.lineTo(s.x, s.y);
+        ctx.moveTo(g.disc.x, g.disc.y);
+        ctx.lineTo(kx, ky);
         ctx.stroke();
-        // Arrowhead.
-        const tip = segs[segs.length - 1];
-        const prev = segs[segs.length - 2];
-        const ah = Math.atan2(tip.y - prev.y, tip.x - prev.x);
+        const pc = power < 0.5 ? "#36D7B7" : power < 0.85 ? "#f5d24a" : "#e23b3b";
+        ctx.fillStyle = dr.active ? pc : "rgba(255,255,255,0.7)";
         ctx.beginPath();
-        ctx.moveTo(tip.x, tip.y);
-        ctx.lineTo(tip.x - Math.cos(ah - 0.5) * 5, tip.y - Math.sin(ah - 0.5) * 5);
-        ctx.lineTo(tip.x - Math.cos(ah + 0.5) * 5, tip.y - Math.sin(ah + 0.5) * 5);
-        ctx.closePath();
-        ctx.fillStyle = ctx.strokeStyle;
+        ctx.arc(kx, ky, dr.active ? 5 : 4, 0, Math.PI * 2);
         ctx.fill();
-        ctx.globalAlpha = 1;
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = "rgba(0,0,0,0.55)";
+        ctx.stroke();
         ctx.lineWidth = 1;
       }
 
@@ -704,13 +710,22 @@ export function DiscGolfGame() {
     const r = c.getBoundingClientRect();
     return { x: (e.clientX - r.left) * (W / r.width), y: (e.clientY - r.top) * (H / r.height) };
   }
+  // Pull is measured from the disc itself, so the slider/knob stays attached to
+  // it: drag the knob back, aim by its direction, release to throw the opposite way.
+  function applyDrag(g: GameState, px: number, py: number) {
+    const pullX = px - g.disc.x;
+    const pullY = py - g.disc.y;
+    const dist = Math.hypot(pullX, pullY);
+    g.power = Math.min(1, dist / MAX_DRAG);
+    if (dist > 4) g.angle = Math.atan2(-pullY, -pullX); // throw opposite the pull
+  }
   function onCanvasDown(e: React.PointerEvent<HTMLCanvasElement>) {
     if (screenRef.current !== "playing") return;
     const g = stateRef.current;
     if (!g || g.phase !== "aim") return;
     const p = canvasPoint(e);
-    dragRef.current = { active: true, sx: p.x, sy: p.y, cx: p.x, cy: p.y };
-    g.power = 0;
+    dragRef.current = { active: true, cx: p.x, cy: p.y };
+    applyDrag(g, p.x, p.y);
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* ignore */ }
   }
   function onCanvasMove(e: React.PointerEvent<HTMLCanvasElement>) {
@@ -721,12 +736,7 @@ export function DiscGolfGame() {
     const p = canvasPoint(e);
     dr.cx = p.x;
     dr.cy = p.y;
-    const pullX = p.x - dr.sx;
-    const pullY = p.y - dr.sy;
-    const dist = Math.hypot(pullX, pullY);
-    g.power = Math.min(1, dist / MAX_DRAG);
-    // Throw opposite the pull (slingshot). Ignore tiny jitters.
-    if (dist > 4) g.angle = Math.atan2(-pullY, -pullX);
+    applyDrag(g, p.x, p.y);
   }
   function onCanvasUp() {
     const dr = dragRef.current;
