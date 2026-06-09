@@ -6,9 +6,10 @@ import type { ArcadeScore } from "@/lib/arcade-types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Retro pixel disc-golf game. You throw from the bottom of the screen toward
-// the top across a fixed 9-hole course. Pick a disc (power/fade trade-offs),
-// aim with ◄ ►, time the power meter. Scores persist: a personal best in
-// localStorage + a saved-by-name leaderboard in Supabase.
+// the top across the 18-hole Glendoveer East course (or a seeded Daily
+// Challenge). Drag back to aim/power; pick a disc + flight shape; mind wind,
+// elevation and OB. Scores persist: a personal best + per-hole bests +
+// achievements in localStorage, and a saved-by-name leaderboard in Supabase.
 // Everything renders to a small portrait canvas upscaled with image-rendering:
 // pixelated for the crunchy old-school look.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -19,6 +20,10 @@ const DISC_R = 3;
 const CATCH_R = 9;
 const STOP_SPEED = 0.35;
 const BEST_KEY = "discgolf.best.glendoveer18"; // reset best for the 18-hole course
+const HOLEBEST_KEY = "discgolf.holebest.glendoveer18"; // best strokes per hole
+const SETTINGS_KEY = "discgolf.settings.v1";
+const ACH_KEY = "discgolf.achievements.v1";
+const HIST_KEY = "discgolf.history.v1";
 
 // Height physics: a throw arcs up and comes back down. While airborne the disc
 // clears water and trees (throw over hazards); once it lands it brakes hard so
@@ -41,7 +46,10 @@ type Water = { x: number; y: number; w: number; h: number };
 //  • `hazard` = HAZARD (sand): +1 and play where it lies (the disc stays put).
 // `worldH` is the hole's full length (taller than the 448px viewport); the
 // camera scrolls vertically along it.
-type Hole = { par: number; worldH: number; tee: Vec; basket: Vec; fairway: Vec[]; fwWidth: number; trees: Tree[]; water: Water[]; hazard?: Water[] };
+// Per-round flavor (set by `buildRound`): `wind` is a tiny per-frame push on the
+// disc while it's airborne; `elev` is the hole's slope (+uphill shortens carry,
+// −downhill lengthens it). Both render as indicators on the HUD/minimap.
+type Hole = { par: number; worldH: number; tee: Vec; basket: Vec; fairway: Vec[]; fwWidth: number; trees: Tree[]; water: Water[]; hazard?: Water[]; wind?: Vec; windMag?: number; elev?: number };
 
 // Holes are authored in this old 448-tall frame, then stretched to a length
 // that scales with par (below).
@@ -117,6 +125,43 @@ const HOLES: Hole[] = HOLE_TEMPLATES.map((t) => {
 });
 const TOTAL_PAR = HOLES.reduce((s, h) => s + h.par, 0);
 
+// Fixed per-hole elevation (course identity, not random): + uphill / − downhill,
+// roughly −2..+2. Affects how far a throw carries; shown on the minimap as ▲/▼.
+const HOLE_ELEV = [0, 1, -1, 2, 0, -1, 1, 0, -1, 1, 0, 1, -2, 2, 0, -1, 1, -1];
+
+type Mode = "daily" | "course";
+
+// Achievements — evaluated from a finished round's per-hole scores.
+type Achievement = { id: string; name: string; emoji: string; desc: string };
+const ACHIEVEMENTS: Achievement[] = [
+  { id: "ace", name: "Ace!", emoji: "🎯", desc: "Hole out in a single throw" },
+  { id: "eagle", name: "Eagle Eye", emoji: "🦅", desc: "Score an eagle or better" },
+  { id: "birdie", name: "First Birdie", emoji: "🐦", desc: "Score a birdie" },
+  { id: "bogeyfree9", name: "Bogey-Free Nine", emoji: "✨", desc: "Play a front or back nine with no bogeys" },
+  { id: "underpar", name: "Under Par", emoji: "🏆", desc: "Finish a round under par" },
+  { id: "evenpar", name: "Par the Course", emoji: "🟢", desc: "Finish a round at par or better" },
+  { id: "regular", name: "Glendoveer Regular", emoji: "📅", desc: "Finish 5 rounds" },
+  { id: "daily", name: "Daily Grinder", emoji: "🔥", desc: "Complete a Daily Challenge" },
+];
+// Which achievement ids this round earns (a superset is fine — newly-unlocked is
+// the diff against what's already saved).
+function earnedAchievements(scores: number[], pars: number[], mode: Mode, roundsPlayed: number): string[] {
+  const out: string[] = [];
+  const total = scores.reduce((s, n) => s + (n ?? 0), 0);
+  const parTotal = pars.reduce((s, n) => s + n, 0);
+  if (scores.some((s) => s === 1)) out.push("ace");
+  if (scores.some((s, i) => s != null && s - pars[i] <= -2)) out.push("eagle");
+  if (scores.some((s, i) => s != null && s - pars[i] === -1)) out.push("birdie");
+  const nineClean = (from: number, to: number) =>
+    scores.slice(from, to).every((s, i) => s != null && s - pars[from + i] <= 0) && to - from === 9;
+  if (nineClean(0, 9) || nineClean(9, 18)) out.push("bogeyfree9");
+  if (total < parTotal) out.push("underpar");
+  if (total <= parTotal) out.push("evenpar");
+  if (mode === "daily") out.push("daily");
+  if (roundsPlayed >= 5) out.push("regular");
+  return out;
+}
+
 // The exact name for a hole score relative to par (a 1-throw hole is always an
 // "Ace"). `tone` drives the color shown on the hole-complete screen.
 const BOGEY_PREFIX = ["", "", "Double ", "Triple ", "Quadruple ", "Quintuple ", "Sextuple ", "Septuple "];
@@ -167,6 +212,9 @@ type Screen = "title" | "playing" | "holeComplete" | "gameComplete";
 type GameState = {
   holeIndex: number;
   phase: Phase;
+  mode: Mode; // daily challenge vs the full course
+  seed: number; // round seed (drives wind + pins)
+  roundHoles: Hole[]; // this round's holes (wind/pins baked in)
   disc: { x: number; y: number; vx: number; vy: number };
   rest: Vec;
   angle: number;
@@ -175,6 +223,7 @@ type GameState = {
   throws: number;
   discIndex: number;
   scores: number[];
+  lies: Vec[]; // where each shot on the current hole came to rest (ghost trail)
   holedAt: number | null;
   fadeTurn: number; // radians the current flight has curved so far
   fadeSign: number; // -1 backhand (left), +1 forehand (right)
@@ -191,8 +240,7 @@ function aimAt(from: Vec, basket: Vec): number {
   return Math.atan2(basket.y - from.y, basket.x - from.x);
 }
 
-function freshHole(holeIndex: number) {
-  const hole = HOLES[holeIndex];
+function freshHole(hole: Hole) {
   const tee = hole.tee;
   return {
     phase: "intro" as Phase, // basket → tee fly-over before the tee shot
@@ -202,6 +250,7 @@ function freshHole(holeIndex: number) {
     powerT: 0,
     power: 0,
     throws: 0,
+    lies: [{ x: tee.x, y: tee.y }] as Vec[], // start of the ghost trail
     holedAt: null as number | null,
     fadeTurn: 0,
     fadeSign: -1,
@@ -292,12 +341,24 @@ class AudioEngine {
     this.master.gain.value = muted ? 0 : 0.5;
   }
 
+  // Music volume relative to the SFX bus (0..1).
+  setMusicVolume(v: number) {
+    this.musicGain.gain.value = 0.34 * Math.max(0, Math.min(1, v));
+  }
+
   resume() {
     if (this.ctx.state === "suspended") void this.ctx.resume();
   }
 
-  sfx(name: "throw" | "tree" | "water" | "basket" | "win") {
+  sfx(name: "throw" | "tree" | "water" | "basket" | "win" | "chains") {
     switch (name) {
+      case "chains": {
+        // Metallic rattle for a near-miss off the chains.
+        for (let i = 0; i < 5; i++) {
+          setTimeout(() => this.note(900 + Math.random() * 700, 0.05, "square", 0.18, this.master), i * 38);
+        }
+        break;
+      }
       case "throw": {
         const t = this.ctx.currentTime;
         const osc = this.ctx.createOscillator();
@@ -372,6 +433,57 @@ function inAnyOB(hole: Hole, x: number, y: number) {
   for (const w of hole.water) if (inRect(w, x, y)) return true;
   return false;
 }
+
+// Deterministic RNG so the Daily Challenge is identical for everyone that day.
+function mulberry32(seed: number) {
+  let a = seed >>> 0;
+  return () => {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+// The day's seed (UTC) — everyone gets the same daily course.
+function dailySeed() {
+  return Math.floor(Date.now() / 86_400_000);
+}
+// Pull a candidate pin back toward the (on-centerline) base until it sits safely
+// inside the fairway ribbon, so a moved pin is always reachable and in-bounds.
+function clampPin(p: Vec, fairway: Vec[], maxOff: number, base: Vec): Vec {
+  let q = { ...p };
+  for (let k = 0; k < 10 && distToPath(q.x, q.y, fairway) > maxOff; k++) {
+    q = { x: q.x + (base.x - q.x) * 0.35, y: q.y + (base.y - q.y) * 0.35 };
+  }
+  return q;
+}
+// Build one playable round: every hole gets a seeded wind + a jittered pin, plus
+// its fixed elevation. Same seed ⇒ same round (the Daily Challenge).
+function buildRound(seed: number): Hole[] {
+  const rng = mulberry32(seed);
+  return HOLES.map((h, i) => {
+    const ang = rng() * Math.PI * 2;
+    const mag = 0.004 + rng() * 0.014; // per-frame airborne push (gentle)
+    const wind = { x: Math.cos(ang) * mag, y: Math.sin(ang) * mag };
+    const base = h.basket;
+    const pin = clampPin(
+      { x: base.x + (rng() * 2 - 1) * 22, y: base.y + (rng() * 2 - 1) * 16 },
+      h.fairway,
+      h.fwWidth / 2 - 9,
+      base,
+    );
+    return { ...h, basket: pin, wind, windMag: mag, elev: HOLE_ELEV[i] ?? 0 };
+  });
+}
+// Carry multiplier from elevation: uphill (+) shortens, downhill (−) lengthens.
+function elevMul(elev: number | undefined) {
+  return 1 - (elev ?? 0) * 0.05;
+}
+// Best-effort haptics on mobile (no-op where unsupported).
+function vibrate(pattern: number | number[]) {
+  try { navigator.vibrate?.(pattern); } catch { /* ignore */ }
+}
 // Where the disc last crossed the OB line — step back along its travel
 // direction until just back in-bounds. Used so OB plays from the edge, not a
 // full rethrow.
@@ -415,6 +527,11 @@ function stepFlight(f: Flight, disc: Disc, fadeSign: number, path: FlightPath, h
     f.vx = nvx;
     f.vy = nvy;
     f.fadeTurn += a;
+  }
+  // Wind catches the disc while it's in the air (not once it's on the ground).
+  if (airborne && hole.wind) {
+    f.vx += hole.wind.x;
+    f.vy += hole.wind.y;
   }
   const friction = airborne ? disc.friction : GROUND_FRICTION;
   f.vx *= friction;
@@ -501,40 +618,89 @@ export function DiscGolfGame() {
     flightPathRef.current = flightPath;
   }, [flightPath]);
 
-  // Load personal best once, after mount. Done in an effect (not a lazy
-  // initializer) so server and first client render agree — avoids a hydration
-  // mismatch on the "Your best" line.
+  // ── Settings (persisted) ──
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [musicVolume, setMusicVolume] = useState(0.7);
+  const [leftHanded, setLeftHanded] = useState(false);
+  const leftHandedRef = useRef(false);
+  useEffect(() => { leftHandedRef.current = leftHanded; }, [leftHanded]);
+  const modeRef = useRef<Mode>("course");
+
+  // Best-per-hole, achievements, round history (all persisted).
+  const holeBestRef = useRef<(number | null)[]>(Array(18).fill(null));
+  const [holeBestNote, setHoleBestNote] = useState<{ best: number; isNew: boolean } | null>(null);
+  const [unlocked, setUnlocked] = useState<string[]>([]);
+  const unlockedRef = useRef<string[]>([]);
+  const [newAchievements, setNewAchievements] = useState<Achievement[]>([]);
+  const [roundsPlayed, setRoundsPlayed] = useState(0);
+  const roundsPlayedRef = useRef(0);
+
+  // Load all persisted state once, after mount (keeps SSR/CSR markup identical).
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(BEST_KEY);
-      if (raw) {
-        const n = Number(raw);
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        if (Number.isFinite(n)) setBestScore(n);
+      const best = localStorage.getItem(BEST_KEY);
+      if (best && Number.isFinite(Number(best))) setBestScore(Number(best));
+
+      const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
+      if (s.throwStyle === "BH" || s.throwStyle === "FH") setThrowStyle(s.throwStyle);
+      if (s.flightPath === "overstable" || s.flightPath === "straight") setFlightPath(s.flightPath);
+      if (typeof s.musicVolume === "number") setMusicVolume(s.musicVolume);
+      if (typeof s.leftHanded === "boolean") setLeftHanded(s.leftHanded);
+
+      const hb = JSON.parse(localStorage.getItem(HOLEBEST_KEY) || "null");
+      if (Array.isArray(hb)) {
+        holeBestRef.current = Array(18).fill(null).map((_, i) => (typeof hb[i] === "number" ? hb[i] : null));
       }
+      const ach = JSON.parse(localStorage.getItem(ACH_KEY) || "[]");
+      if (Array.isArray(ach)) { unlockedRef.current = ach; setUnlocked(ach); }
+      const hist = JSON.parse(localStorage.getItem(HIST_KEY) || "[]");
+      if (Array.isArray(hist)) { roundsPlayedRef.current = hist.length; setRoundsPlayed(hist.length); }
     } catch {
       /* ignore */
     }
   }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  // Persist settings + push the music volume to the live engine.
+  useEffect(() => {
+    audioRef.current?.setMusicVolume(musicVolume);
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ throwStyle, flightPath, musicVolume, leftHanded }));
+    } catch { /* ignore */ }
+  }, [throwStyle, flightPath, musicVolume, leftHanded]);
 
   const syncHud = useCallback(() => {
     const g = stateRef.current;
     if (!g) return;
-    setHud({ hole: g.holeIndex + 1, par: HOLES[g.holeIndex].par, throws: g.throws });
+    setHud({ hole: g.holeIndex + 1, par: g.roundHoles[g.holeIndex].par, throws: g.throws });
   }, []);
 
-  const startGame = useCallback(() => {
-    if (!audioRef.current) audioRef.current = new AudioEngine();
+  const startGame = useCallback((mode?: Mode) => {
+    const m = mode ?? modeRef.current;
+    modeRef.current = m;
+    if (!audioRef.current) {
+      audioRef.current = new AudioEngine();
+      audioRef.current.setMusicVolume(musicVolume);
+    }
     audioRef.current.resume();
     audioRef.current.setMuted(muted);
     audioRef.current.startMusic();
-    stateRef.current = { holeIndex: 0, scores: [], discIndex: discIndexRef.current, ...freshHole(0) };
+    const seed = m === "daily" ? dailySeed() : (Math.random() * 1e9) | 0;
+    const roundHoles = buildRound(seed);
+    stateRef.current = {
+      holeIndex: 0, scores: [], discIndex: discIndexRef.current,
+      mode: m, seed, roundHoles, ...freshHole(roundHoles[0]),
+    };
     setSaved(false);
     setSaveErr(null);
     setIsNewBest(false);
+    setNewAchievements([]);
+    setHoleBestNote(null);
+    setSettingsOpen(false);
     setScreen("playing");
     syncHud();
-  }, [muted, syncHud]);
+  }, [muted, musicVolume, syncHud]);
 
   const selectDisc = useCallback((i: number) => {
     setDiscIndex(i);
@@ -544,17 +710,19 @@ export function DiscGolfGame() {
   const throwDisc = useCallback(() => {
     const g = stateRef.current;
     if (!g || g.phase !== "aim") return;
+    const hole = g.roundHoles[g.holeIndex];
     const disc = DISCS[g.discIndex];
     g.path = flightPathRef.current;
     // Slower launch + extra glide (disc friction) so it floats across the
-    // fairway. Straight throws carry farther than overstable ones.
+    // fairway. Straight throws carry farther; uphill (+elev) shortens carry.
     const pathMul = g.path === "straight" ? STRAIGHT_SPEED_MUL : 1;
-    const speed = disc.power * (1.2 + g.power * 3.35) * pathMul;
+    const speed = disc.power * (1.2 + g.power * 3.35) * pathMul * elevMul(hole.elev);
     g.disc.vx = Math.cos(g.angle) * speed;
     g.disc.vy = Math.sin(g.angle) * speed;
     g.rest = { x: g.disc.x, y: g.disc.y };
-    // Backhand fades left, forehand fades right (relative to "up the screen").
-    g.fadeSign = throwStyleRef.current === "BH" ? -1 : 1;
+    // Backhand fades left, forehand fades right — mirrored for a lefty.
+    const lh = leftHandedRef.current ? -1 : 1;
+    g.fadeSign = (throwStyleRef.current === "BH" ? -1 : 1) * lh;
     g.fadeTurn = 0;
     // Launch upward — height scales with power and the disc's arc, so a putter
     // stays low (lands near the basket to catch) while a driver climbs to clear
@@ -564,6 +732,7 @@ export function DiscGolfGame() {
     g.throws += 1;
     g.phase = "fly";
     audioRef.current?.sfx("throw");
+    vibrate(12);
     syncHud();
   }, [syncHud]);
 
@@ -589,7 +758,29 @@ export function DiscGolfGame() {
     }
     setBestScore(best);
     setIsNewBest(newBest);
+
+    // Round history (drives "rounds played" + the Regular achievement).
+    let hist: { mode: Mode; total: number; date: number }[] = [];
+    try { hist = JSON.parse(localStorage.getItem(HIST_KEY) || "[]"); } catch { /* ignore */ }
+    hist.push({ mode: modeRef.current, total, date: Date.now() });
+    try { localStorage.setItem(HIST_KEY, JSON.stringify(hist.slice(-100))); } catch { /* ignore */ }
+    roundsPlayedRef.current = hist.length;
+    setRoundsPlayed(hist.length);
+
+    // Achievements — unlock any newly-earned ones.
+    const pars = HOLES.map((h) => h.par);
+    const earned = earnedAchievements(scores, pars, modeRef.current, hist.length);
+    const fresh = earned.filter((id) => !unlockedRef.current.includes(id));
+    if (fresh.length) {
+      const all = [...unlockedRef.current, ...fresh];
+      unlockedRef.current = all;
+      setUnlocked(all);
+      try { localStorage.setItem(ACH_KEY, JSON.stringify(all)); } catch { /* ignore */ }
+    }
+    setNewAchievements(fresh.map((id) => ACHIEVEMENTS.find((a) => a.id === id)!).filter(Boolean));
+
     audioRef.current?.sfx("win");
+    vibrate([20, 40, 20]);
     setScreen("gameComplete");
     void getArcadeLeaderboard().then(setLeaderboard).catch(() => {});
   }, []);
@@ -597,12 +788,12 @@ export function DiscGolfGame() {
   const nextHole = useCallback(() => {
     const g = stateRef.current;
     if (!g) return;
-    if (g.holeIndex + 1 >= HOLES.length) {
+    if (g.holeIndex + 1 >= g.roundHoles.length) {
       finishGame(g.scores.slice());
       return;
     }
     g.holeIndex += 1;
-    Object.assign(g, freshHole(g.holeIndex));
+    Object.assign(g, freshHole(g.roundHoles[g.holeIndex]));
     g.discIndex = discIndexRef.current;
     setScreen("playing");
     syncHud();
@@ -623,6 +814,97 @@ export function DiscGolfGame() {
       setSaving(false);
     }
   }, [saving, saved, nameInput, finalTotal]);
+
+  // Render the finished round to an image and share it (or download as fallback).
+  const shareCard = useCallback(async () => {
+    const total = finalTotal;
+    const over = total - TOTAL_PAR;
+    const os = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
+    const cv = document.createElement("canvas");
+    cv.width = 600;
+    cv.height = 320;
+    const c = cv.getContext("2d");
+    if (!c) return;
+    c.fillStyle = "#0f1117";
+    c.fillRect(0, 0, 600, 320);
+    c.textAlign = "left";
+    c.fillStyle = "#36D7B7";
+    c.font = "bold 32px ui-monospace, monospace";
+    c.fillText("DISC GOLF", 28, 52);
+    c.fillStyle = "#9aa";
+    c.font = "15px ui-monospace, monospace";
+    c.fillText("Glendoveer East · 18 holes · par 66", 28, 78);
+    c.fillStyle = "#fff";
+    c.font = "bold 56px ui-monospace, monospace";
+    c.fillText(`${total}`, 28, 150);
+    c.fillStyle = over <= 0 ? "#36D7B7" : "#e08a3b";
+    c.font = "bold 26px ui-monospace, monospace";
+    c.fillText(over === 0 ? "Even par" : os(over), 120, 150);
+    // 18-hole strip
+    const cellW = 30;
+    const x0 = 28;
+    const y0 = 196;
+    for (let i = 0; i < 18; i++) {
+      const x = x0 + (i % 9) * cellW;
+      const y = y0 + Math.floor(i / 9) * 54;
+      const s = scorecard[i];
+      const diff = (s ?? HOLES[i].par) - HOLES[i].par;
+      c.fillStyle = "#9aa";
+      c.font = "11px ui-monospace, monospace";
+      c.textAlign = "center";
+      c.fillText(`${i + 1}`, x + cellW / 2, y);
+      c.fillStyle = s == null ? "#555" : diff < 0 ? "#36D7B7" : diff > 1 ? "#e23b3b" : diff === 1 ? "#f5d24a" : "#fff";
+      c.font = "bold 18px ui-monospace, monospace";
+      c.fillText(s != null ? `${s}` : "–", x + cellW / 2, y + 22);
+    }
+    c.textAlign = "left";
+    c.fillStyle = "#667";
+    c.font = "12px ui-monospace, monospace";
+    c.fillText("play it yourself · disc-golf-arcade.vercel.app", 28, 308);
+
+    await new Promise<void>((resolve) => {
+      cv.toBlob(async (blob) => {
+        if (!blob) return resolve();
+        const file = new File([blob], "discgolf-scorecard.png", { type: "image/png" });
+        try {
+          const nav = navigator as Navigator & { canShare?: (d: { files: File[] }) => boolean };
+          if (nav.canShare?.({ files: [file] })) {
+            await nav.share({ files: [file], title: "Disc Golf", text: `I shot ${total} (${os(over)}) at Glendoveer East!` });
+            return resolve();
+          }
+        } catch {
+          /* fall through to download */
+        }
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "discgolf-scorecard.png";
+        a.click();
+        URL.revokeObjectURL(url);
+        resolve();
+      }, "image/png");
+    });
+  }, [finalTotal, scorecard]);
+
+  // When a hole finishes, record/show the best-ever strokes for that hole.
+  useEffect(() => {
+    if (screen !== "holeComplete") return;
+    const g = stateRef.current;
+    if (!g) return;
+    const idx = g.holeIndex;
+    const s = g.scores[idx];
+    if (typeof s !== "number") return;
+    const prev = holeBestRef.current[idx];
+    const isNew = prev == null || s < prev;
+    const best = isNew ? s : prev;
+    if (isNew) {
+      const arr = holeBestRef.current.slice();
+      arr[idx] = s;
+      holeBestRef.current = arr;
+      try { localStorage.setItem(HOLEBEST_KEY, JSON.stringify(arr)); } catch { /* ignore */ }
+    }
+    setHoleBestNote({ best: best as number, isNew });
+  }, [screen]);
 
   // Keyboard
   useEffect(() => {
@@ -659,7 +941,7 @@ export function DiscGolfGame() {
     function update() {
       const g = stateRef.current;
       if (!g || screenRef.current !== "playing") return;
-      const hole = HOLES[g.holeIndex];
+      const hole = g.roundHoles[g.holeIndex];
       const maxCam = Math.max(0, hole.worldH - H);
 
       // Intro fly-over: hold on the basket, then pan down to the tee, then play.
@@ -710,10 +992,12 @@ export function DiscGolfGame() {
           d.x = hole.basket.x;
           d.y = hole.basket.y;
           audioRef.current?.sfx("basket");
+          vibrate([15, 30, 15]);
         } else if (res.status === "ob" || res.status === "oob") {
           // OUT OF BOUNDS: +1 and play from where it crossed the line.
           const inWater = hole.water.some((w) => inRect(w, f.x, f.y));
           audioRef.current?.sfx(inWater ? "water" : "tree");
+          vibrate(60);
           const lie = obCrossingLie(f, hole);
           g.throws += 1;
           g.flash = { text: "OUT OF BOUNDS", at: performance.now() };
@@ -724,6 +1008,7 @@ export function DiscGolfGame() {
           g.h = 0;
           g.vh = 0;
           g.rest = { x: lie.x, y: lie.y };
+          g.lies.push({ x: lie.x, y: lie.y });
           g.angle = aimAt(g.rest, hole.basket);
           g.phase = "aim";
           syncHud();
@@ -732,12 +1017,17 @@ export function DiscGolfGame() {
           d.vx = 0;
           d.vy = 0;
           g.rest = { x: d.x, y: d.y };
+          // Chains rattle when it stops just short of the basket (a near miss).
+          const distPin = Math.hypot(d.x - hole.basket.x, d.y - hole.basket.y);
+          if (distPin < CATCH_R * 2.4) audioRef.current?.sfx("chains");
           if ((hole.hazard ?? []).some((hz) => inRect(hz, d.x, d.y))) {
             g.throws += 1;
             g.flash = { text: "HAZARD", at: performance.now() };
             audioRef.current?.sfx("tree");
+            vibrate(60);
             syncHud();
           }
+          g.lies.push({ x: d.x, y: d.y });
           g.angle = aimAt(g.rest, hole.basket); // auto-aim at the basket
           g.phase = "aim";
         }
@@ -753,7 +1043,7 @@ export function DiscGolfGame() {
     function draw() {
       const g = stateRef.current;
       if (!g) return;
-      const hole = HOLES[g.holeIndex];
+      const hole = g.roundHoles[g.holeIndex];
       const cam = g.camY; // world→screen: screenY = worldY - cam
 
       // Everything outside the fairway is out-of-bounds rough.
@@ -814,6 +1104,25 @@ export function DiscGolfGame() {
       ctx.fillRect(hole.tee.x - 7, hole.tee.y - cam - 5, 14, 10);
       ctx.fillStyle = "#8a6a3a";
       ctx.fillRect(hole.tee.x - 7, hole.tee.y - cam - 5, 14, 2);
+
+      // Ghost trail: where earlier shots on this hole came to rest, with a faint
+      // line joining them so you can see your line developing.
+      if (g.lies.length > 1) {
+        ctx.strokeStyle = "rgba(255,255,255,0.28)";
+        ctx.setLineDash([2, 3]);
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(g.lies[0].x, g.lies[0].y - cam);
+        for (let i = 1; i < g.lies.length; i++) ctx.lineTo(g.lies[i].x, g.lies[i].y - cam);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        for (let i = 0; i < g.lies.length - 1; i++) {
+          ctx.fillStyle = "rgba(255,255,255,0.4)";
+          ctx.beginPath();
+          ctx.arc(g.lies[i].x, g.lies[i].y - cam, 1.6, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
 
       drawBasket(ctx, hole.basket.x, hole.basket.y - cam);
       for (const tr of hole.trees) drawTree(ctx, { x: tr.x, y: tr.y - cam, r: tr.r });
@@ -876,7 +1185,7 @@ export function DiscGolfGame() {
 
         if (dr.active && power > 0.04 && !inCancel) {
           const pathMul = path === "straight" ? STRAIGHT_SPEED_MUL : 1;
-          const speed = aimDisc.power * (1.2 + power * 3.35) * pathMul;
+          const speed = aimDisc.power * (1.2 + power * 3.35) * pathMul * elevMul(hole.elev);
           const f: Flight = {
             x: g.disc.x, y: g.disc.y,
             vx: Math.cos(g.angle) * speed, vy: Math.sin(g.angle) * speed,
@@ -983,6 +1292,38 @@ export function DiscGolfGame() {
         ctx.beginPath();
         ctx.arc(ox + g.disc.x * s, oy + g.disc.y * s, 1.6, 0, Math.PI * 2);
         ctx.fill();
+
+        // Wind + elevation read-out, under the minimap.
+        const py = oy + mh + 8;
+        const cx = ox + mw / 2;
+        const mag = hole.windMag ?? 0;
+        const mph = Math.round((mag / 0.018) * 15);
+        // wind arrow (points the way the wind blows)
+        const wa = Math.atan2(hole.wind?.y ?? 0, hole.wind?.x ?? 0);
+        const al = 7;
+        const ax = cx - 16;
+        ctx.strokeStyle = mph > 9 ? "#e08a3b" : "#bcd";
+        ctx.fillStyle = ctx.strokeStyle;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(ax - Math.cos(wa) * al, py - Math.sin(wa) * al);
+        ctx.lineTo(ax + Math.cos(wa) * al, py + Math.sin(wa) * al);
+        ctx.stroke();
+        ctx.beginPath(); // arrowhead
+        ctx.arc(ax + Math.cos(wa) * al, py + Math.sin(wa) * al, 1.8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.font = "7px monospace";
+        ctx.textAlign = "left";
+        ctx.textBaseline = "middle";
+        ctx.fillStyle = "#cfe";
+        ctx.fillText(`${mph}mph`, cx - 6, py);
+        // elevation
+        const elev = hole.elev ?? 0;
+        const eTxt = elev > 0 ? `▲${elev}` : elev < 0 ? `▼${-elev}` : "flat";
+        ctx.fillStyle = elev > 0 ? "#e0b070" : elev < 0 ? "#7fd1e0" : "#9ab";
+        ctx.textAlign = "center";
+        ctx.fillText(eTxt, cx, py + 9);
+        ctx.textAlign = "left";
       }
 
       // HUD (screen-fixed)
@@ -992,12 +1333,20 @@ export function DiscGolfGame() {
       ctx.font = "8px monospace";
       ctx.textBaseline = "middle";
       ctx.textAlign = "left";
-      const over = g.scores.reduce((s, n) => s + n, 0) - HOLES.slice(0, g.holeIndex).reduce((s, h) => s + h.par, 0);
+      // Live "to par": completed holes plus the current hole once you've thrown.
+      const holesIn = g.holeIndex + (g.throws > 0 ? 1 : 0);
+      const strokesIn = g.scores.reduce((s, n) => s + (n ?? 0), 0) + (g.throws > 0 ? g.throws : 0);
+      const over = strokesIn - g.roundHoles.slice(0, holesIn).reduce((s, h) => s + h.par, 0);
       const overStr = over === 0 ? "E" : over > 0 ? `+${over}` : `${over}`;
-      ctx.fillText(`H${g.holeIndex + 1}/${HOLES.length}`, 6, 7);
-      ctx.fillText(`PAR ${hole.par}`, 64, 7);
-      ctx.fillText(`THR ${g.throws}`, 128, 7);
-      ctx.fillText(`TOT ${overStr}`, 196, 7);
+      ctx.fillText(`H${g.holeIndex + 1}/${g.roundHoles.length}`, 6, 7);
+      ctx.fillText(`PAR ${hole.par}`, 60, 7);
+      ctx.fillText(`THR ${g.throws}`, 116, 7);
+      ctx.fillStyle = over < 0 ? "#36D7B7" : over > 0 ? "#e08a3b" : "#fff";
+      ctx.fillText(`TOT ${overStr}`, 176, 7);
+      if (g.mode === "daily") {
+        ctx.fillStyle = "#f5d24a";
+        ctx.fillText("DAILY", 250, 7);
+      }
 
       // Intro caption
       if (g.phase === "intro") {
@@ -1147,14 +1496,25 @@ export function DiscGolfGame() {
             </h1>
             <p className="text-gray-300 text-xs sm:text-sm max-w-xs">
               Glendoveer East · 18 holes · par 66. <span className="text-white font-semibold">Drag back</span>{" "}
-              from the disc to aim &amp; set power, then release to throw. Mind the OB lines.
+              from the disc to aim &amp; set power, then release. Mind the wind, hills &amp; OB lines.
             </p>
             {bestScore != null && (
               <p className="text-[#36D7B7] text-xs font-semibold">
                 Your best: {bestScore} ({overStr(bestScore - TOTAL_PAR)})
+                {roundsPlayed > 0 && <span className="text-gray-400"> · {roundsPlayed} rounds played</span>}
               </p>
             )}
-            <button type="button" onClick={startGame} className={btn}>▶ Start</button>
+            <div className="flex flex-col gap-2 w-56">
+              <button type="button" onClick={() => startGame("daily")} className={`${btn} mt-0 bg-[#36D7B7] text-[#0f1117] hover:bg-[#2bc4a6]`}>
+                🔥 Daily Challenge
+              </button>
+              <button type="button" onClick={() => startGame("course")} className={`${btn} mt-0`}>
+                ▶ Play Glendoveer
+              </button>
+              <button type="button" onClick={() => setSettingsOpen(true)} className="text-gray-300 hover:text-white text-sm font-semibold py-1.5">
+                ⚙ Settings &amp; achievements
+              </button>
+            </div>
           </Overlay>
         )}
 
@@ -1171,12 +1531,30 @@ export function DiscGolfGame() {
                 {sl.emoji && `${sl.emoji} `}{sl.name}
               </p>
               <p className="text-gray-300 text-sm">{hud.throws} throws · par {hud.par}</p>
+              {holeBestNote && (
+                <p className="text-xs font-semibold">
+                  {holeBestNote.isNew
+                    ? <span className="text-[#f5d24a]">★ New best for this hole!</span>
+                    : <span className="text-gray-400">Your best here: {holeBestNote.best}</span>}
+                </p>
+              )}
               <button type="button" onClick={nextHole} className={btn}>
                 {hud.hole >= HOLES.length ? "See results ▶" : "Next hole ▶"}
               </button>
             </Overlay>
           );
         })()}
+
+        {settingsOpen && (
+          <SettingsPanel
+            onClose={() => setSettingsOpen(false)}
+            throwStyle={throwStyle} setThrowStyle={setThrowStyle}
+            flightPath={flightPath} setFlightPath={setFlightPath}
+            musicVolume={musicVolume} setMusicVolume={setMusicVolume}
+            leftHanded={leftHanded} setLeftHanded={setLeftHanded}
+            unlocked={unlocked}
+          />
+        )}
       </div>
 
       {/* Compact footer: disc + stance + mute (hidden on the results screen) */}
@@ -1265,6 +1643,22 @@ export function DiscGolfGame() {
                 <p className="text-gray-400 text-xs mt-0.5">Your best: {bestScore} ({overStr(bestScore - TOTAL_PAR)})</p>
               )}
             </div>
+
+            {/* Newly-unlocked achievements */}
+            {newAchievements.length > 0 && (
+              <div className="bg-[#f5d24a]/10 border border-[#f5d24a]/30 rounded-2xl p-3">
+                <p className="text-[#f5d24a] font-bold text-sm mb-2">🏅 Achievement{newAchievements.length > 1 ? "s" : ""} unlocked!</p>
+                <div className="flex flex-col gap-1.5">
+                  {newAchievements.map((a) => (
+                    <div key={a.id} className="flex items-center gap-2 text-sm">
+                      <span className="text-lg">{a.emoji}</span>
+                      <span className="text-white font-semibold">{a.name}</span>
+                      <span className="text-gray-400 text-xs">— {a.desc}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Scorecard — front nine / back nine */}
             <div className="bg-[#1a1d23] border border-white/5 rounded-2xl p-3 space-y-3 text-[11px]">
@@ -1363,8 +1757,11 @@ export function DiscGolfGame() {
               )}
             </div>
 
-            <div className="flex justify-center gap-2">
-              <button type="button" onClick={startGame} className={btn}>↻ Play again</button>
+            <div className="flex flex-wrap justify-center gap-2">
+              <button type="button" onClick={() => startGame()} className={btn}>↻ Play again</button>
+              <button type="button" onClick={shareCard} className="mt-1 bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white font-bold px-6 py-3 rounded-lg transition">
+                📤 Share card
+              </button>
             </div>
           </div>
         </div>
@@ -1380,6 +1777,87 @@ function Overlay({ children }: { children: React.ReactNode }) {
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/55 rounded-lg text-center px-4">
       {children}
+    </div>
+  );
+}
+
+function SettingsPanel(props: {
+  onClose: () => void;
+  throwStyle: "BH" | "FH";
+  setThrowStyle: (s: "BH" | "FH") => void;
+  flightPath: FlightPath;
+  setFlightPath: (p: FlightPath) => void;
+  musicVolume: number;
+  setMusicVolume: (v: number) => void;
+  leftHanded: boolean;
+  setLeftHanded: (b: boolean) => void;
+  unlocked: string[];
+}) {
+  const { onClose, throwStyle, setThrowStyle, flightPath, setFlightPath, musicVolume, setMusicVolume, leftHanded, setLeftHanded, unlocked } = props;
+  const seg = (active: boolean) =>
+    `flex-1 rounded-md px-2 py-2 text-xs font-bold transition ${active ? "bg-[#4B3DFF] text-white" : "text-gray-400 hover:text-white"}`;
+  return (
+    <div className="absolute inset-0 z-20 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm p-4 flex items-start justify-center rounded-lg">
+      <div className="w-full max-w-xs space-y-4 my-auto text-left">
+        <div className="flex items-center justify-between">
+          <h2 className="text-white font-black text-xl">Settings</h2>
+          <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
+        </div>
+
+        <div>
+          <p className="text-gray-400 text-xs font-semibold mb-1">Default stance</p>
+          <div className="flex gap-1 bg-[#1a1d23] border border-white/10 rounded-lg p-1">
+            <button type="button" onClick={() => setThrowStyle("BH")} className={seg(throwStyle === "BH")}>Backhand</button>
+            <button type="button" onClick={() => setThrowStyle("FH")} className={seg(throwStyle === "FH")}>Forehand</button>
+          </div>
+        </div>
+
+        <div>
+          <p className="text-gray-400 text-xs font-semibold mb-1">Default flight</p>
+          <div className="flex gap-1 bg-[#1a1d23] border border-white/10 rounded-lg p-1">
+            <button type="button" onClick={() => setFlightPath("overstable")} className={seg(flightPath === "overstable")}>Overstable</button>
+            <button type="button" onClick={() => setFlightPath("straight")} className={seg(flightPath === "straight")}>Straight</button>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setLeftHanded(!leftHanded)}
+          className="w-full flex items-center justify-between bg-[#1a1d23] border border-white/10 rounded-lg px-3 py-2.5"
+        >
+          <span className="text-white text-sm font-semibold">Left-handed</span>
+          <span className={`text-xs font-bold px-2 py-0.5 rounded ${leftHanded ? "bg-[#36D7B7] text-[#0f1117]" : "bg-white/10 text-gray-400"}`}>
+            {leftHanded ? "ON" : "OFF"}
+          </span>
+        </button>
+
+        <div>
+          <p className="text-gray-400 text-xs font-semibold mb-1">Music volume</p>
+          <input
+            type="range" min={0} max={1} step={0.05} value={musicVolume}
+            onChange={(e) => setMusicVolume(Number(e.target.value))}
+            className="w-full accent-[#36D7B7]"
+          />
+        </div>
+
+        <div>
+          <p className="text-gray-400 text-xs font-semibold mb-2">Achievements ({unlocked.length}/{ACHIEVEMENTS.length})</p>
+          <div className="space-y-1.5">
+            {ACHIEVEMENTS.map((a) => {
+              const got = unlocked.includes(a.id);
+              return (
+                <div key={a.id} className={`flex items-center gap-2 text-sm ${got ? "" : "opacity-40"}`}>
+                  <span className="text-lg">{got ? a.emoji : "🔒"}</span>
+                  <span className="text-white font-semibold">{a.name}</span>
+                  <span className="text-gray-500 text-xs truncate">— {a.desc}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <button type="button" onClick={onClose} className={`${btn} w-full`}>Done</button>
+      </div>
     </div>
   );
 }
