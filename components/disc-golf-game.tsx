@@ -224,6 +224,8 @@ type GameState = {
   discIndex: number;
   scores: number[];
   lies: Vec[]; // where each shot on the current hole came to rest (ghost trail)
+  shotPaths: Vec[][]; // the actual flight path of each completed shot this hole
+  trailBuf: Vec[]; // path of the shot currently in the air
   holedAt: number | null;
   fadeTurn: number; // radians the current flight has curved so far
   fadeSign: number; // -1 backhand (left), +1 forehand (right)
@@ -251,6 +253,8 @@ function freshHole(hole: Hole) {
     power: 0,
     throws: 0,
     lies: [{ x: tee.x, y: tee.y }] as Vec[], // start of the ghost trail
+    shotPaths: [] as Vec[][],
+    trailBuf: [] as Vec[],
     holedAt: null as number | null,
     fadeTurn: 0,
     fadeSign: -1,
@@ -720,6 +724,7 @@ export function DiscGolfGame() {
     g.disc.vx = Math.cos(g.angle) * speed;
     g.disc.vy = Math.sin(g.angle) * speed;
     g.rest = { x: g.disc.x, y: g.disc.y };
+    g.trailBuf = [{ x: g.disc.x, y: g.disc.y }]; // start recording the flight path
     // Backhand fades left, forehand fades right — mirrored for a lefty.
     const lh = leftHandedRef.current ? -1 : 1;
     g.fadeSign = (throwStyleRef.current === "BH" ? -1 : 1) * lh;
@@ -982,6 +987,7 @@ export function DiscGolfGame() {
         g.h = f.h;
         g.vh = f.vh;
         g.fadeTurn = f.fadeTurn;
+        g.trailBuf.push({ x: d.x, y: d.y }); // record the real flight curve
         if (res.treeHit) audioRef.current?.sfx("tree");
 
         if (res.status === "hole") {
@@ -991,6 +997,9 @@ export function DiscGolfGame() {
           d.vy = 0;
           d.x = hole.basket.x;
           d.y = hole.basket.y;
+          g.trailBuf.push({ x: hole.basket.x, y: hole.basket.y });
+          g.shotPaths.push(g.trailBuf);
+          g.trailBuf = [];
           audioRef.current?.sfx("basket");
           vibrate([15, 30, 15]);
         } else if (res.status === "ob" || res.status === "oob") {
@@ -1009,6 +1018,8 @@ export function DiscGolfGame() {
           g.vh = 0;
           g.rest = { x: lie.x, y: lie.y };
           g.lies.push({ x: lie.x, y: lie.y });
+          g.shotPaths.push(g.trailBuf); // the curve out to where it crossed OB
+          g.trailBuf = [];
           g.angle = aimAt(g.rest, hole.basket);
           g.phase = "aim";
           syncHud();
@@ -1028,6 +1039,8 @@ export function DiscGolfGame() {
             syncHud();
           }
           g.lies.push({ x: d.x, y: d.y });
+          g.shotPaths.push(g.trailBuf);
+          g.trailBuf = [];
           g.angle = aimAt(g.rest, hole.basket); // auto-aim at the basket
           g.phase = "aim";
         }
@@ -1105,23 +1118,25 @@ export function DiscGolfGame() {
       ctx.fillStyle = "#8a6a3a";
       ctx.fillRect(hole.tee.x - 7, hole.tee.y - cam - 5, 14, 2);
 
-      // Ghost trail: where earlier shots on this hole came to rest, with a faint
-      // line joining them so you can see your line developing.
-      if (g.lies.length > 1) {
-        ctx.strokeStyle = "rgba(255,255,255,0.28)";
-        ctx.setLineDash([2, 3]);
-        ctx.lineWidth = 1;
+      // Ghost trail: the actual curved flight path of each earlier shot on this
+      // hole, with a dot where each came to rest.
+      for (const path of g.shotPaths) {
+        if (path.length < 2) continue;
+        ctx.strokeStyle = "rgba(255,255,255,0.3)";
+        ctx.setLineDash([3, 3]);
+        ctx.lineWidth = 1.25;
+        ctx.lineJoin = "round";
         ctx.beginPath();
-        ctx.moveTo(g.lies[0].x, g.lies[0].y - cam);
-        for (let i = 1; i < g.lies.length; i++) ctx.lineTo(g.lies[i].x, g.lies[i].y - cam);
+        ctx.moveTo(path[0].x, path[0].y - cam);
+        for (let i = 1; i < path.length; i++) ctx.lineTo(path[i].x, path[i].y - cam);
         ctx.stroke();
         ctx.setLineDash([]);
-        for (let i = 0; i < g.lies.length - 1; i++) {
-          ctx.fillStyle = "rgba(255,255,255,0.4)";
-          ctx.beginPath();
-          ctx.arc(g.lies[i].x, g.lies[i].y - cam, 1.6, 0, Math.PI * 2);
-          ctx.fill();
-        }
+        ctx.lineJoin = "miter";
+        const end = path[path.length - 1];
+        ctx.fillStyle = "rgba(255,255,255,0.5)";
+        ctx.beginPath();
+        ctx.arc(end.x, end.y - cam, 1.8, 0, Math.PI * 2);
+        ctx.fill();
       }
 
       drawBasket(ctx, hole.basket.x, hole.basket.y - cam);
@@ -1248,20 +1263,20 @@ export function DiscGolfGame() {
 
       // ── Mini-map (screen-fixed, top-right) ──
       {
-        const s = Math.min(40 / W, (H - 34) / hole.worldH);
+        const s = Math.min(60 / W, (H - 90) / hole.worldH);
         const mw = W * s;
         const mh = hole.worldH * s;
-        const ox = W - 8 - mw;
+        const ox = W - 7 - mw;
         const oy = 20;
-        ctx.fillStyle = "rgba(0,0,0,0.45)";
-        ctx.fillRect(ox - 2, oy - 2, mw + 4, mh + 4);
+        ctx.fillStyle = "rgba(0,0,0,0.5)";
+        ctx.fillRect(ox - 3, oy - 3, mw + 6, mh + 6);
         ctx.fillStyle = "#2f5a26"; // rough
         ctx.fillRect(ox, oy, mw, mh);
         // curved fairway ribbon
         ctx.strokeStyle = "#4d9a39";
         ctx.lineJoin = "round";
         ctx.lineCap = "round";
-        ctx.lineWidth = Math.max(2, hole.fwWidth * s);
+        ctx.lineWidth = Math.max(3, hole.fwWidth * s);
         ctx.beginPath();
         ctx.moveTo(ox + hole.fairway[0].x * s, oy + hole.fairway[0].y * s);
         for (let i = 1; i < hole.fairway.length; i++) ctx.lineTo(ox + hole.fairway[i].x * s, oy + hole.fairway[i].y * s);
@@ -1276,7 +1291,7 @@ export function DiscGolfGame() {
         ctx.fillStyle = "#234d1f";
         for (const tr of hole.trees) {
           ctx.beginPath();
-          ctx.arc(ox + tr.x * s, oy + tr.y * s, Math.max(1, tr.r * s), 0, Math.PI * 2);
+          ctx.arc(ox + tr.x * s, oy + tr.y * s, Math.max(1.4, tr.r * s), 0, Math.PI * 2);
           ctx.fill();
         }
         // viewport window
@@ -1286,44 +1301,57 @@ export function DiscGolfGame() {
         // basket + disc
         ctx.fillStyle = "#fff";
         ctx.beginPath();
-        ctx.arc(ox + hole.basket.x * s, oy + hole.basket.y * s, 1.6, 0, Math.PI * 2);
+        ctx.arc(ox + hole.basket.x * s, oy + hole.basket.y * s, 2.4, 0, Math.PI * 2);
         ctx.fill();
         ctx.fillStyle = disc.color;
         ctx.beginPath();
-        ctx.arc(ox + g.disc.x * s, oy + g.disc.y * s, 1.6, 0, Math.PI * 2);
+        ctx.arc(ox + g.disc.x * s, oy + g.disc.y * s, 2.4, 0, Math.PI * 2);
         ctx.fill();
 
-        // Wind + elevation read-out, under the minimap.
-        const py = oy + mh + 8;
-        const cx = ox + mw / 2;
+        // ── Wind + elevation panel, under the minimap ──
         const mag = hole.windMag ?? 0;
         const mph = Math.round((mag / 0.018) * 15);
-        // wind arrow (points the way the wind blows)
         const wa = Math.atan2(hole.wind?.y ?? 0, hole.wind?.x ?? 0);
-        const al = 7;
-        const ax = cx - 16;
-        ctx.strokeStyle = mph > 9 ? "#e08a3b" : "#bcd";
-        ctx.fillStyle = ctx.strokeStyle;
-        ctx.lineWidth = 1.5;
+        const elev = hole.elev ?? 0;
+        const panY = oy + mh + 5;
+        const panH = 34;
+        ctx.fillStyle = "rgba(0,0,0,0.5)";
+        ctx.fillRect(ox - 3, panY, mw + 6, panH);
+        // wind compass on the left
+        const cxw = ox + 13;
+        const cyw = panY + panH / 2;
+        ctx.strokeStyle = "rgba(255,255,255,0.25)";
+        ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.moveTo(ax - Math.cos(wa) * al, py - Math.sin(wa) * al);
-        ctx.lineTo(ax + Math.cos(wa) * al, py + Math.sin(wa) * al);
+        ctx.arc(cxw, cyw, 11, 0, Math.PI * 2);
         ctx.stroke();
-        ctx.beginPath(); // arrowhead
-        ctx.arc(ax + Math.cos(wa) * al, py + Math.sin(wa) * al, 1.8, 0, Math.PI * 2);
+        const windCol = mph >= 10 ? "#e08a3b" : mph >= 5 ? "#f5d24a" : "#9fd4e8";
+        const al = 10;
+        const hx = cxw + Math.cos(wa) * al;
+        const hy = cyw + Math.sin(wa) * al;
+        ctx.strokeStyle = windCol;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(cxw - Math.cos(wa) * al, cyw - Math.sin(wa) * al);
+        ctx.lineTo(hx, hy);
+        ctx.stroke();
+        ctx.fillStyle = windCol; // triangular arrowhead
+        ctx.beginPath();
+        ctx.moveTo(hx + Math.cos(wa) * 4, hy + Math.sin(wa) * 4);
+        ctx.lineTo(hx + Math.cos(wa + 2.4) * 4, hy + Math.sin(wa + 2.4) * 4);
+        ctx.lineTo(hx + Math.cos(wa - 2.4) * 4, hy + Math.sin(wa - 2.4) * 4);
+        ctx.closePath();
         ctx.fill();
-        ctx.font = "7px monospace";
+        // labels on the right
         ctx.textAlign = "left";
         ctx.textBaseline = "middle";
-        ctx.fillStyle = "#cfe";
-        ctx.fillText(`${mph}mph`, cx - 6, py);
-        // elevation
-        const elev = hole.elev ?? 0;
-        const eTxt = elev > 0 ? `▲${elev}` : elev < 0 ? `▼${-elev}` : "flat";
+        ctx.font = "bold 9px monospace";
+        ctx.fillStyle = windCol;
+        ctx.fillText(`${mph} mph`, ox + 27, panY + 11);
+        const eTxt = elev > 0 ? `▲ ${elev}` : elev < 0 ? `▼ ${-elev}` : "flat";
         ctx.fillStyle = elev > 0 ? "#e0b070" : elev < 0 ? "#7fd1e0" : "#9ab";
-        ctx.textAlign = "center";
-        ctx.fillText(eTxt, cx, py + 9);
-        ctx.textAlign = "left";
+        ctx.font = "bold 9px monospace";
+        ctx.fillText(eTxt, ox + 27, panY + 24);
       }
 
       // HUD (screen-fixed)
