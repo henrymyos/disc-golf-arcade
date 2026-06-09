@@ -168,6 +168,7 @@ type GameState = {
   vh: number; // vertical velocity (height units per frame)
   camY: number; // top of the viewport in world coords (vertical scroll)
   introT: number; // frames elapsed in the intro fly-over
+  flash: { text: string; at: number } | null; // big centered penalty banner (OB / hazard)
 };
 
 // Aim straight at the basket from a given lie.
@@ -194,6 +195,7 @@ function freshHole(holeIndex: number) {
     vh: 0,
     camY: 0, // start showing the basket (top), then pan down
     introT: 0,
+    flash: null as { text: string; at: number } | null,
   };
 }
 
@@ -699,6 +701,7 @@ export function DiscGolfGame() {
           audioRef.current?.sfx(inWater ? "water" : "tree");
           const lie = obCrossingLie(f, hole);
           g.throws += 1;
+          g.flash = { text: "OUT OF BOUNDS", at: performance.now() };
           d.x = lie.x;
           d.y = lie.y;
           d.vx = 0;
@@ -716,6 +719,7 @@ export function DiscGolfGame() {
           g.rest = { x: d.x, y: d.y };
           if ((hole.hazard ?? []).some((hz) => inRect(hz, d.x, d.y))) {
             g.throws += 1;
+            g.flash = { text: "HAZARD", at: performance.now() };
             audioRef.current?.sfx("tree");
             syncHud();
           }
@@ -989,6 +993,36 @@ export function DiscGolfGame() {
         ctx.textAlign = "center";
         ctx.fillText(`HOLE ${g.holeIndex + 1}  ·  PAR ${hole.par}`, W / 2, H / 2);
         ctx.textAlign = "left";
+      }
+
+      // Penalty banner — big red "OUT OF BOUNDS / HAZARD" + "+1", centered.
+      if (g.flash) {
+        const FLASH_MS = 1500;
+        const t = (performance.now() - g.flash.at) / FLASH_MS;
+        if (t >= 1) {
+          g.flash = null;
+        } else {
+          const alpha = t > 0.7 ? Math.max(0, 1 - (t - 0.7) / 0.3) : 1; // hold, then fade
+          const cy = H / 2;
+          ctx.save();
+          ctx.globalAlpha = alpha;
+          ctx.fillStyle = "rgba(0,0,0,0.5)";
+          ctx.fillRect(0, cy - 24, W, 48);
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.lineWidth = 3;
+          ctx.strokeStyle = "rgba(0,0,0,0.85)";
+          ctx.fillStyle = "#ff2e2e";
+          ctx.font = "bold 22px ui-monospace, monospace";
+          ctx.strokeText(g.flash.text, W / 2, cy - 7);
+          ctx.fillText(g.flash.text, W / 2, cy - 7);
+          ctx.font = "bold 18px ui-monospace, monospace";
+          ctx.strokeText("+1", W / 2, cy + 14);
+          ctx.fillText("+1", W / 2, cy + 14);
+          ctx.restore();
+          ctx.textAlign = "left";
+          ctx.textBaseline = "middle";
+        }
       }
     }
 
