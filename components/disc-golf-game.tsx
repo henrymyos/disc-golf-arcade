@@ -27,6 +27,8 @@ const GRAVITY = 0.08; // downward pull on height per frame (gentler = floatier f
 const AIRBORNE_H = 3; // above this height, hazards are cleared
 const GROUND_FRICTION = 0.8; // hard deceleration once on the ground
 const MAX_DRAG = 95; // pull-back distance (internal px) that maps to full power
+const CANCEL_R = 18; // pull the knob back inside this radius (around the disc) and release to cancel
+const CANCEL_POWER = CANCEL_R / MAX_DRAG; // below this power, releasing cancels the throw
 
 type Vec = { x: number; y: number };
 type Tree = { x: number; y: number; r: number };
@@ -826,7 +828,34 @@ export function DiscGolfGame() {
           power = 0;
         }
 
-        if (dr.active && power > 0.04) {
+        // Once pulling back, show a "cancel" area around the disc: release the
+        // knob inside it to abort the throw.
+        const inCancel = power < CANCEL_POWER;
+        if (dr.active) {
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([3, 3]);
+          ctx.beginPath();
+          ctx.arc(dsx, dsy, CANCEL_R, 0, Math.PI * 2);
+          if (inCancel) {
+            ctx.fillStyle = "rgba(226,59,59,0.22)";
+            ctx.fill();
+            ctx.strokeStyle = "rgba(226,59,59,0.95)";
+          } else {
+            ctx.strokeStyle = "rgba(255,255,255,0.45)";
+          }
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.lineWidth = 1;
+          if (inCancel) {
+            ctx.fillStyle = "rgba(226,59,59,0.95)";
+            ctx.font = "bold 7px ui-monospace, monospace";
+            ctx.textAlign = "center";
+            ctx.fillText("CANCEL", dsx, dsy - CANCEL_R - 3);
+            ctx.textAlign = "left";
+          }
+        }
+
+        if (dr.active && power > 0.04 && !inCancel) {
           const pathMul = path === "straight" ? STRAIGHT_SPEED_MUL : 1;
           const speed = aimDisc.power * (1.2 + power * 3.35) * pathMul;
           const f: Flight = {
@@ -862,7 +891,7 @@ export function DiscGolfGame() {
         ctx.moveTo(dsx, dsy);
         ctx.lineTo(kx, ky);
         ctx.stroke();
-        const pc = power < 0.5 ? "#36D7B7" : power < 0.85 ? "#f5d24a" : "#e23b3b";
+        const pc = inCancel ? "#e23b3b" : power < 0.5 ? "#36D7B7" : power < 0.85 ? "#f5d24a" : "#e23b3b";
         ctx.fillStyle = dr.active ? pc : "rgba(255,255,255,0.7)";
         ctx.beginPath();
         ctx.arc(kx, ky, dr.active ? 5 : 4, 0, Math.PI * 2);
@@ -1032,7 +1061,8 @@ export function DiscGolfGame() {
       dr.active = false;
       const g = stateRef.current;
       if (!g) return;
-      if (g.phase === "aim" && g.power > 0.06) throwDisc();
+      // Released inside the cancel ring (or barely pulled) → abort the throw.
+      if (g.phase === "aim" && g.power > CANCEL_POWER) throwDisc();
       else g.power = 0;
     }
     window.addEventListener("pointermove", move);
