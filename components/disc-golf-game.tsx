@@ -117,6 +117,21 @@ const HOLES: Hole[] = HOLE_TEMPLATES.map((t) => {
 });
 const TOTAL_PAR = HOLES.reduce((s, h) => s + h.par, 0);
 
+// The exact name for a hole score relative to par (a 1-throw hole is always an
+// "Ace"). `tone` drives the color shown on the hole-complete screen.
+const BOGEY_PREFIX = ["", "", "Double ", "Triple ", "Quadruple ", "Quintuple ", "Sextuple ", "Septuple "];
+function scoreLabel(throws: number, par: number): { name: string; emoji: string; tone: "great" | "good" | "even" | "bad" } {
+  if (throws === 1) return { name: "Ace!", emoji: "🎯", tone: "great" };
+  const d = throws - par;
+  if (d <= -4) return { name: "Condor", emoji: "🦅", tone: "great" };
+  if (d === -3) return { name: "Albatross", emoji: "🦅", tone: "great" };
+  if (d === -2) return { name: "Eagle", emoji: "🦅", tone: "great" };
+  if (d === -1) return { name: "Birdie", emoji: "🐦", tone: "good" };
+  if (d === 0) return { name: "Par", emoji: "", tone: "even" };
+  const pre = BOGEY_PREFIX[d];
+  return { name: pre ? `${pre}Bogey` : `+${d}`, emoji: "", tone: "bad" };
+}
+
 // The two flight shapes you can pick per throw:
 //  • "overstable" — bends steadily one way the whole flight (uses `fade`).
 //  • "straight"   — flies straighter and FARTHER. On the climb it `turn`s the
@@ -1143,18 +1158,25 @@ export function DiscGolfGame() {
           </Overlay>
         )}
 
-        {screen === "holeComplete" && (
-          <Overlay>
-            <p className="text-[#36D7B7] font-bold text-xl">Hole {hud.hole} complete</p>
-            <p className="text-white text-sm">
-              {hud.throws} throws · par {hud.par}{" "}
-              {hud.throws < hud.par ? "🐦 birdie!" : hud.throws === hud.par ? "par" : "bogey"}
-            </p>
-            <button type="button" onClick={nextHole} className={btn}>
-              {hud.hole >= HOLES.length ? "See results ▶" : "Next hole ▶"}
-            </button>
-          </Overlay>
-        )}
+        {screen === "holeComplete" && (() => {
+          const sl = scoreLabel(hud.throws, hud.par);
+          const tone =
+            sl.tone === "great" ? "text-[#f5d24a]" :
+            sl.tone === "good" ? "text-[#36D7B7]" :
+            sl.tone === "even" ? "text-white" : "text-[#e08a3b]";
+          return (
+            <Overlay>
+              <p className="text-[#36D7B7] font-bold text-xl">Hole {hud.hole} complete</p>
+              <p className={`${tone} font-black text-3xl leading-tight`}>
+                {sl.emoji && `${sl.emoji} `}{sl.name}
+              </p>
+              <p className="text-gray-300 text-sm">{hud.throws} throws · par {hud.par}</p>
+              <button type="button" onClick={nextHole} className={btn}>
+                {hud.hole >= HOLES.length ? "See results ▶" : "Next hole ▶"}
+              </button>
+            </Overlay>
+          );
+        })()}
       </div>
 
       {/* Compact footer: disc + stance + mute (hidden on the results screen) */}
