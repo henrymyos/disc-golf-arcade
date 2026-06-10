@@ -1430,29 +1430,35 @@ export function DiscGolfGame() {
         const dsx = g.disc.x;
         const dsy = g.disc.y - cam; // disc screen position
 
-        // Full-power reach line for the selected disc — brighter just after a
-        // switch so you can compare how far each disc carries.
+        // Full-power reach for the selected disc: a short tick placed up the
+        // line toward the basket (along the current aim), crossing the path so
+        // you can see how far each disc carries. Brighter just after a switch.
         {
           const range = fullPowerRange(aimDisc, hole.elev);
-          const ly = g.disc.y - range - cam;
-          if (ly > 16 && ly < H - 2) {
+          const ang = g.angle; // throw direction (auto-aims at the basket)
+          const rx = g.disc.x + Math.cos(ang) * range;
+          const ry = g.disc.y + Math.sin(ang) * range - cam;
+          const half = 2 * CATCH_R; // full length = 2 basket diameters
+          const px = -Math.sin(ang); // unit perpendicular to the throw line
+          const py = Math.cos(ang);
+          if (ry > 14 && ry < H - 2 && rx > 2 && rx < W - 2) {
             const since = performance.now() - rangeFlashRef.current;
-            const a = since < 1200 ? 0.9 - 0.55 * (since / 1200) : 0.35;
+            const a = since < 1200 ? 0.95 - 0.5 * (since / 1200) : 0.4;
             ctx.save();
             ctx.globalAlpha = a;
             ctx.strokeStyle = aimDisc.color;
-            ctx.setLineDash([5, 4]);
-            ctx.lineWidth = 1;
+            ctx.lineWidth = 1.5;
+            ctx.lineCap = "round";
             ctx.beginPath();
-            ctx.moveTo(0, ly);
-            ctx.lineTo(W, ly);
+            ctx.moveTo(rx - px * half, ry - py * half);
+            ctx.lineTo(rx + px * half, ry + py * half);
             ctx.stroke();
-            ctx.setLineDash([]);
+            ctx.lineCap = "butt";
             ctx.fillStyle = aimDisc.color;
             ctx.font = "7px monospace";
-            ctx.textAlign = "left";
+            ctx.textAlign = "center";
             ctx.textBaseline = "bottom";
-            ctx.fillText(`${aimDisc.name} max`, 4, ly - 1);
+            ctx.fillText(`${aimDisc.name} max`, rx, ry - half - 2);
             ctx.textBaseline = "middle";
             ctx.restore();
           }
@@ -1573,7 +1579,7 @@ export function DiscGolfGame() {
         const mw = W * s;
         const mh = hole.worldH * s;
         const ox = W - 7 - mw;
-        const oy = 20;
+        const oy = 25; // below the HUD pill
         ctx.fillStyle = "rgba(0,0,0,0.5)";
         ctx.fillRect(ox - 3, oy - 3, mw + 6, mh + 6);
         ctx.fillStyle = "#2f5a26"; // rough
@@ -1676,26 +1682,50 @@ export function DiscGolfGame() {
         ctx.fillText(elev === 0 ? "even carry" : `${pct > 0 ? "+" : ""}${pct}% carry`, ox, panY + 45);
       }
 
-      // HUD (screen-fixed)
-      ctx.fillStyle = "rgba(0,0,0,0.45)";
-      ctx.fillRect(0, 0, W, 14);
-      ctx.fillStyle = "#fff";
-      ctx.font = "8px monospace";
+      // HUD (screen-fixed) — a clean labeled status pill across the top.
+      const hudH = 17;
+      ctx.fillStyle = "rgba(13,15,20,0.82)";
+      ctx.strokeStyle = "rgba(255,255,255,0.08)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(4, 4, W - 8, hudH, 5);
+      ctx.fill();
+      ctx.stroke();
       ctx.textBaseline = "middle";
       ctx.textAlign = "left";
+      const hcy = 4 + hudH / 2 + 0.5;
       // Live "to par": completed holes plus the current hole once you've thrown.
       const holesIn = g.holeIndex + (g.throws > 0 ? 1 : 0);
       const strokesIn = g.scores.reduce((s, n) => s + (n ?? 0), 0) + (g.throws > 0 ? g.throws : 0);
       const over = strokesIn - g.roundHoles.slice(0, holesIn).reduce((s, h) => s + h.par, 0);
       const overStr = over === 0 ? "E" : over > 0 ? `+${over}` : `${over}`;
-      ctx.fillText(`H${g.holeIndex + 1}/${g.roundHoles.length}`, 6, 7);
-      ctx.fillText(`PAR ${hole.par}`, 60, 7);
-      ctx.fillText(`THR ${g.throws}`, 116, 7);
-      ctx.fillStyle = over < 0 ? "#36D7B7" : over > 0 ? "#e08a3b" : "#fff";
-      ctx.fillText(`TOT ${overStr}`, 176, 7);
+      let hx = 11;
+      const hudItem = (label: string, value: string, valColor: string) => {
+        ctx.font = "bold 6px ui-monospace, monospace";
+        ctx.fillStyle = "#6b7280";
+        ctx.fillText(label, hx, hcy);
+        hx += ctx.measureText(label).width + 3;
+        ctx.font = "bold 9px ui-monospace, monospace";
+        ctx.fillStyle = valColor;
+        ctx.fillText(value, hx, hcy);
+        hx += ctx.measureText(value).width + 9;
+      };
+      hudItem("HOLE", `${g.holeIndex + 1}/${g.roundHoles.length}`, "#ffffff");
+      hudItem("PAR", `${hole.par}`, "#ffffff");
+      hudItem("THR", `${g.throws}`, "#ffffff");
+      hudItem("TO PAR", overStr, over < 0 ? "#36D7B7" : over > 0 ? "#e08a3b" : "#cbd5e1");
       if (g.mode === "daily") {
+        ctx.font = "bold 7px ui-monospace, monospace";
+        const dw = ctx.measureText("DAILY").width + 8;
+        const dx = W - 10 - dw;
+        ctx.fillStyle = "rgba(245,210,74,0.18)";
+        ctx.beginPath();
+        ctx.roundRect(dx, hcy - 6, dw, 12, 3);
+        ctx.fill();
         ctx.fillStyle = "#f5d24a";
-        ctx.fillText("DAILY", 250, 7);
+        ctx.textAlign = "center";
+        ctx.fillText("DAILY", dx + dw / 2, hcy);
+        ctx.textAlign = "left";
       }
 
       // Intro caption — hole, par, and the slope (so elevation is read up front).
@@ -1854,38 +1884,73 @@ export function DiscGolfGame() {
         />
 
         {screen === "title" && (
-          <Overlay>
-            <h1 className="text-white font-black text-3xl sm:text-4xl tracking-tight">
-              <span className="text-[#36D7B7]">DISC</span> GOLF
-            </h1>
-            <p className="text-gray-300 text-xs sm:text-sm max-w-xs">
-              <span className="text-white font-semibold">Drag back</span> from the disc to aim &amp; set
-              power, then release. Mind the wind, hills &amp; OB lines.
-            </p>
-            {(bestScore != null || roundsPlayed > 0) && (
-              <p className="text-[#36D7B7] text-xs font-semibold">
-                {bestScore != null && <>Glendoveer best: {bestScore} ({overStr(bestScore - TOTAL_PAR)})</>}
-                {roundsPlayed > 0 && <span className="text-gray-400">{bestScore != null ? " · " : ""}{roundsPlayed} rounds played</span>}
+          <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-gradient-to-b from-black/55 via-black/70 to-black/85 px-5">
+            <div className="w-full max-w-[290px] flex flex-col items-center text-center">
+              {/* Logo */}
+              <div className="flex items-center gap-2.5">
+                <svg width="34" height="34" viewBox="0 0 32 32" aria-hidden className="drop-shadow">
+                  <g stroke="#2a7d70" strokeWidth="2" strokeLinecap="round">
+                    <line x1="2" y1="12.5" x2="8" y2="12.5" /><line x1="1" y1="18" x2="7" y2="18" />
+                  </g>
+                  <ellipse cx="18.5" cy="16.5" rx="11" ry="5" fill="#1f9e8c" />
+                  <ellipse cx="18.5" cy="14.8" rx="11" ry="5" fill="#36D7B7" />
+                  <ellipse cx="18.5" cy="14" rx="6.5" ry="2.4" fill="#5fe6d2" />
+                </svg>
+                <h1 className="text-white font-black text-[28px] leading-none tracking-tight">
+                  DISC <span className="text-[#36D7B7]">GOLF</span>
+                </h1>
+              </div>
+              <p className="text-gray-400 text-[11px] mt-2 leading-snug">
+                <span className="text-gray-200 font-semibold">Drag back</span> from the disc to aim &amp; set power,
+                then release. Mind the wind, hills &amp; OB.
               </p>
-            )}
-            <div className="flex flex-col gap-1.5 w-60">
-              <button type="button" onClick={() => startGame("daily")} className={`${btn} mt-0 bg-[#36D7B7] text-[#0f1117] hover:bg-[#2bc4a6]`}>
-                🔥 Daily Challenge
-              </button>
-              <p className="text-gray-400 text-[11px] -mt-0.5">A fresh 9-hole course every day</p>
-              <button type="button" onClick={() => startGame("course")} className={`${btn} mt-1`}>
-                ▶ Play Glendoveer (18)
-              </button>
-              <button type="button" onClick={() => setSettingsOpen(true)} className="text-gray-300 hover:text-white text-sm font-semibold py-1">
-                ⚙ Settings &amp; achievements
-              </button>
-              {supa && (
-                <button type="button" onClick={() => { setAuthErr(null); setAuthMsg(null); setAuthOpen(true); }} className="text-gray-300 hover:text-white text-sm font-semibold py-1">
-                  {user ? `👤 ${user.email}` : "👤 Log in to save progress"}
-                </button>
+
+              {/* Stat pills */}
+              {(bestScore != null || roundsPlayed > 0) && (
+                <div className="flex gap-2 mt-3">
+                  {bestScore != null && (
+                    <div className="rounded-lg bg-white/5 border border-white/10 px-3 py-1.5">
+                      <p className="text-[#36D7B7] font-bold text-sm leading-none">{bestScore}</p>
+                      <p className="text-gray-500 text-[9px] mt-0.5 uppercase tracking-wide">Best ({overStr(bestScore - TOTAL_PAR)})</p>
+                    </div>
+                  )}
+                  {roundsPlayed > 0 && (
+                    <div className="rounded-lg bg-white/5 border border-white/10 px-3 py-1.5">
+                      <p className="text-white font-bold text-sm leading-none">{roundsPlayed}</p>
+                      <p className="text-gray-500 text-[9px] mt-0.5 uppercase tracking-wide">Rounds</p>
+                    </div>
+                  )}
+                </div>
               )}
+
+              {/* Primary actions */}
+              <div className="w-full flex flex-col gap-2 mt-5">
+                <button type="button" onClick={() => startGame("daily")}
+                  className="w-full rounded-xl bg-[#36D7B7] hover:bg-[#2bc4a6] active:scale-[0.99] text-[#0f1117] font-bold py-3 transition flex items-center justify-center gap-2">
+                  <span>🔥 Daily Challenge</span>
+                </button>
+                <button type="button" onClick={() => startGame("course")}
+                  className="w-full rounded-xl bg-[#4B3DFF] hover:bg-[#3a2ee0] active:scale-[0.99] text-white font-bold py-3 transition">
+                  ▶ Play Glendoveer · 18
+                </button>
+              </div>
+              <p className="text-gray-500 text-[10px] mt-1.5">Daily = a fresh 9-hole course, same for everyone</p>
+
+              {/* Secondary actions */}
+              <div className="w-full flex gap-2 mt-4">
+                <button type="button" onClick={() => setSettingsOpen(true)}
+                  className="flex-1 rounded-lg border border-white/10 hover:border-white/25 text-gray-300 hover:text-white text-xs font-semibold py-2 transition">
+                  ⚙ Settings
+                </button>
+                {supa && (
+                  <button type="button" onClick={() => { setAuthErr(null); setAuthMsg(null); setAuthOpen(true); }}
+                    className="flex-1 rounded-lg border border-white/10 hover:border-white/25 text-gray-300 hover:text-white text-xs font-semibold py-2 transition truncate px-2">
+                    {user ? `👤 ${user.email}` : "👤 Log in"}
+                  </button>
+                )}
+              </div>
             </div>
-          </Overlay>
+          </div>
         )}
 
         {screen === "holeComplete" && (() => {
@@ -1939,35 +2004,38 @@ export function DiscGolfGame() {
         )}
       </div>
 
-      {/* Compact footer: disc + stance + mute (hidden on the results screen) */}
+      {/* Control panel: disc rack + flight/stance/mute (hidden on results) */}
       {screen !== "gameComplete" && (
-        <div className="shrink-0 w-full max-w-[480px] mx-auto px-3 pb-[max(env(safe-area-inset-bottom),0.6rem)] pt-1 flex flex-col gap-2">
-          <p className="text-center text-[11px] text-gray-400 leading-none">
-            {advanced ? "Advanced bag · speed / glide / turn / fade" : "Drag back to aim & throw"}
-          </p>
-          {advanced ? (
-            // Scrollable row of real discs (no overstable/straight toggle).
-            <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" style={{ scrollbarWidth: "thin" }}>
-              {ADV_DISCS.map((d, i) => (
-                <button
-                  key={d.key}
-                  type="button"
-                  onClick={() => selectDisc(i)}
-                  className={`shrink-0 w-[88px] rounded-lg border px-2 py-1.5 text-left transition ${
-                    i === discIndex ? "border-white/40 bg-white/10" : "border-white/10 hover:border-white/25"
-                  }`}
-                >
-                  <span className="flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: d.color }} />
-                    <span className={`text-xs font-bold truncate ${i === discIndex ? "text-white" : "text-gray-300"}`}>{d.name}</span>
-                  </span>
-                  <span className="block text-[9px] text-gray-500 mt-0.5">{d.brand}</span>
-                  <span className="block text-[9px] font-mono text-gray-400 leading-tight">{d.blurb.split("· ")[1]}</span>
-                </button>
-              ))}
+        <div className="shrink-0 w-full border-t border-white/10 bg-[#13161b]">
+          <div className="mx-auto w-full max-w-[480px] px-3 pt-2 pb-[max(env(safe-area-inset-bottom),0.55rem)] flex flex-col gap-2">
+            {/* Disc selector */}
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-gray-500">Disc</span>
+              <span className="text-[10px] text-gray-400 font-medium truncate ml-2">
+                {advanced ? `${ADV_DISCS[discIndex]?.brand ?? ""} ${ADV_DISCS[discIndex]?.name ?? ""}` : "Drag back from the disc to throw"}
+              </span>
             </div>
-          ) : (
-            <>
+            {advanced ? (
+              <div className="flex gap-2 overflow-x-auto pb-0.5 -mx-1 px-1" style={{ scrollbarWidth: "thin" }}>
+                {ADV_DISCS.map((d, i) => (
+                  <button
+                    key={d.key}
+                    type="button"
+                    onClick={() => selectDisc(i)}
+                    className={`shrink-0 w-[90px] rounded-lg border px-2 py-1.5 text-left transition ${
+                      i === discIndex ? "border-[#36D7B7]/70 bg-[#36D7B7]/10" : "border-white/10 hover:border-white/25 bg-white/[0.02]"
+                    }`}
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: d.color }} />
+                      <span className={`text-xs font-bold truncate ${i === discIndex ? "text-white" : "text-gray-300"}`}>{d.name}</span>
+                    </span>
+                    <span className="block text-[9px] text-gray-500 mt-0.5">{d.brand}</span>
+                    <span className="block text-[9px] font-mono text-gray-400 leading-tight">{d.blurb.split("· ")[1]}</span>
+                  </button>
+                ))}
+              </div>
+            ) : (
               <div className="grid grid-cols-3 gap-2">
                 {DISCS.map((d, i) => (
                   <button
@@ -1976,64 +2044,72 @@ export function DiscGolfGame() {
                     onClick={() => selectDisc(i)}
                     title={d.blurb}
                     className={`rounded-lg border px-2 py-2 flex items-center gap-1.5 text-xs font-bold transition ${
-                      i === discIndex ? "border-white/40 bg-white/10 text-white" : "border-white/10 text-gray-300 hover:border-white/25"
+                      i === discIndex ? "border-[#36D7B7]/70 bg-[#36D7B7]/10 text-white" : "border-white/10 text-gray-300 hover:border-white/25 bg-white/[0.02]"
                     }`}
                   >
                     <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: d.color }} />
                     <span className="truncate">{d.name}</span>
-                    <span className="ml-auto text-[10px] text-gray-500">{i + 1}</span>
+                    <span className="ml-auto text-[10px] text-gray-600">{i + 1}</span>
                   </button>
                 ))}
               </div>
+            )}
 
-              <div className="flex gap-1 bg-[#1a1d23] border border-white/10 rounded-lg p-1">
+            {/* Flight (simple mode only) */}
+            {!advanced && (
+              <div className="flex items-center gap-2">
+                <span className="w-12 shrink-0 text-[10px] font-bold uppercase tracking-[0.1em] text-gray-500">Flight</span>
+                <div className="flex-1 flex gap-1 bg-[#0f1117] border border-white/10 rounded-lg p-1">
+                  {([
+                    { key: "overstable", label: "Overstable" },
+                    { key: "straight", label: "Straight" },
+                  ] as const).map((p) => (
+                    <button
+                      key={p.key}
+                      type="button"
+                      onClick={() => setFlightPath(p.key)}
+                      aria-pressed={flightPath === p.key}
+                      className={`flex-1 rounded-md px-2 py-1.5 text-xs font-bold transition ${
+                        flightPath === p.key ? "bg-[#36D7B7] text-[#0f1117] shadow" : "text-gray-400 hover:text-white"
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Stance + mute */}
+            <div className="flex items-center gap-2">
+              <span className="w-12 shrink-0 text-[10px] font-bold uppercase tracking-[0.1em] text-gray-500">Stance</span>
+              <div className="flex-1 flex gap-1 bg-[#0f1117] border border-white/10 rounded-lg p-1">
                 {([
-                  { key: "overstable", label: "Overstable" },
-                  { key: "straight", label: "Straight" },
-                ] as const).map((p) => (
+                  { key: "BH", label: "Backhand ◄" },
+                  { key: "FH", label: "► Forehand" },
+                ] as const).map((s) => (
                   <button
-                    key={p.key}
+                    key={s.key}
                     type="button"
-                    onClick={() => setFlightPath(p.key)}
-                    aria-pressed={flightPath === p.key}
-                    className={`flex-1 rounded-md px-2 py-2 text-xs font-bold transition ${
-                      flightPath === p.key ? "bg-[#36D7B7] text-[#0f1117]" : "text-gray-400 hover:text-white"
+                    onClick={() => setThrowStyle(s.key)}
+                    aria-pressed={throwStyle === s.key}
+                    className={`flex-1 rounded-md px-2 py-1.5 text-xs font-bold transition ${
+                      throwStyle === s.key ? "bg-[#4B3DFF] text-white shadow" : "text-gray-400 hover:text-white"
                     }`}
                   >
-                    {p.label}
+                    {s.label}
                   </button>
                 ))}
               </div>
-            </>
-          )}
-
-          <div className="flex items-stretch gap-2">
-            <div className="flex-1 flex gap-1 bg-[#1a1d23] border border-white/10 rounded-lg p-1">
-              {([
-                { key: "BH", label: "Backhand ◄" },
-                { key: "FH", label: "► Forehand" },
-              ] as const).map((s) => (
-                <button
-                  key={s.key}
-                  type="button"
-                  onClick={() => setThrowStyle(s.key)}
-                  aria-pressed={throwStyle === s.key}
-                  className={`flex-1 rounded-md px-2 py-2 text-xs font-bold transition ${
-                    throwStyle === s.key ? "bg-[#4B3DFF] text-white" : "text-gray-400 hover:text-white"
-                  }`}
-                >
-                  {s.label}
-                </button>
-              ))}
+              <button
+                type="button"
+                onClick={toggleMute}
+                aria-label={muted ? "Unmute" : "Mute"}
+                className="shrink-0 w-10 h-[34px] flex items-center justify-center bg-[#0f1117] border border-white/10 hover:border-white/25 text-white rounded-lg active:bg-white/10 transition"
+              >
+                {muted ? "🔇" : "🔊"}
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={toggleMute}
-              aria-label={muted ? "Unmute" : "Mute"}
-              className="bg-[#1a1d23] border border-white/10 text-white w-12 rounded-lg active:bg-white/10"
-            >
-              {muted ? "🔇" : "🔊"}
-            </button>
           </div>
         </div>
       )}

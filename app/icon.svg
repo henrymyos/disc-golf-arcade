@@ -1,0 +1,12 @@
+<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <rect width="32" height="32" rx="7" fill="#0f1117"/>
+  <!-- motion lines trailing the disc -->
+  <g stroke="#2a7d70" stroke-width="2" stroke-linecap="round">
+    <line x1="3" y1="12.5" x2="9" y2="12.5"/>
+    <line x1="2" y1="18" x2="8" y2="18"/>
+  </g>
+  <!-- flying disc (side view): darker underside + lighter top rim -->
+  <ellipse cx="18.5" cy="16.5" rx="11" ry="5" fill="#1f9e8c"/>
+  <ellipse cx="18.5" cy="14.8" rx="11" ry="5" fill="#36D7B7"/>
+  <ellipse cx="18.5" cy="14" rx="6.5" ry="2.4" fill="#5fe6d2"/>
+</svg>
