@@ -107,7 +107,9 @@ const HOLE_TEMPLATES: Omit<Hole, "worldH">[] = [
 const DRIVE = 330;
 const TEE_BEHIND = 120;
 const worldHForPar = (par: number) => (par - 2) * DRIVE + 60 + TEE_BEHIND;
-const HOLES: Hole[] = HOLE_TEMPLATES.map((t) => {
+// Stretch an authored template (tee y≈416, basket near the top) into a full hole
+// whose length scales with par. Shared by Glendoveer and the procedural daily.
+function materializeHole(t: Omit<Hole, "worldH">): Hole {
   const worldH = worldHForPar(t.par);
   const scale = (worldH - 60 - TEE_BEHIND) / (416 - 50); // template y[50..416] → world[60..tee]
   const ty = (y: number) => 60 + (y - 50) * scale;
@@ -121,8 +123,10 @@ const HOLES: Hole[] = HOLE_TEMPLATES.map((t) => {
     trees: t.trees.map((tr) => ({ x: tr.x, y: ty(tr.y), r: tr.r })),
     water: t.water.map((w) => ({ x: w.x, y: ty(w.y), w: w.w, h: w.h * scale })),
     hazard: (t.hazard ?? []).map((o) => ({ x: o.x, y: ty(o.y), w: o.w, h: o.h * scale })),
+    elev: t.elev,
   };
-});
+}
+const HOLES: Hole[] = HOLE_TEMPLATES.map(materializeHole);
 const TOTAL_PAR = HOLES.reduce((s, h) => s + h.par, 0);
 
 // Fixed per-hole elevation (course identity, not random): + uphill / − downhill,
@@ -152,8 +156,10 @@ function earnedAchievements(scores: number[], pars: number[], mode: Mode, rounds
   if (scores.some((s) => s === 1)) out.push("ace");
   if (scores.some((s, i) => s != null && s - pars[i] <= -2)) out.push("eagle");
   if (scores.some((s, i) => s != null && s - pars[i] === -1)) out.push("birdie");
-  const nineClean = (from: number, to: number) =>
-    scores.slice(from, to).every((s, i) => s != null && s - pars[from + i] <= 0) && to - from === 9;
+  const nineClean = (from: number, to: number) => {
+    const slice = scores.slice(from, to);
+    return slice.length === 9 && slice.every((s, i) => s != null && s - pars[from + i] <= 0);
+  };
   if (nineClean(0, 9) || nineClean(9, 18)) out.push("bogeyfree9");
   if (total < parTotal) out.push("underpar");
   if (total <= parTotal) out.push("evenpar");
@@ -462,14 +468,97 @@ function clampPin(p: Vec, fairway: Vec[], maxOff: number, base: Vec): Vec {
   }
   return q;
 }
-// Build one playable round: every hole gets a seeded wind + a jittered pin, plus
-// its fixed elevation. Same seed ⇒ same round (the Daily Challenge).
-function buildRound(seed: number): Hole[] {
+// A gentle, seeded wind vector for one hole.
+function seededWind(rng: () => number): { wind: Vec; windMag: number } {
+  const ang = rng() * Math.PI * 2;
+  const mag = 0.004 + rng() * 0.014; // per-frame airborne push (gentle)
+  return { wind: { x: Math.cos(ang) * mag, y: Math.sin(ang) * mag }, windMag: mag };
+}
+// A point a fraction `t` along a polyline (by arc length).
+function pointOnPath(pts: Vec[], t: number): Vec {
+  const segs: number[] = [];
+  let total = 0;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const d = Math.hypot(pts[i + 1].x - pts[i].x, pts[i + 1].y - pts[i].y);
+    segs.push(d);
+    total += d;
+  }
+  let target = t * total;
+  for (let i = 0; i < segs.length; i++) {
+    if (target <= segs[i] || i === segs.length - 1) {
+      const f = segs[i] ? target / segs[i] : 0;
+      return { x: pts[i].x + (pts[i + 1].x - pts[i].x) * f, y: pts[i].y + (pts[i + 1].y - pts[i].y) * f };
+    }
+    target -= segs[i];
+  }
+  return pts[pts.length - 1];
+}
+// Procedurally author one hole (template space) from the RNG: a forward-running
+// curved fairway with doglegs, guard trees, and the odd pond/sand.
+function genDailyHole(rng: () => number): Hole {
+  const r = (a: number, b: number) => a + rng() * (b - a);
+  const pickN = (arr: number[]) => arr[Math.floor(rng() * arr.length)];
+  const par = pickN([3, 3, 3, 4, 4, 4, 4, 5, 5]);
+  const basketX = Math.round(r(74, 246));
+  const basketY = Math.round(r(72, 138));
+  const nBends = par <= 3 ? 1 : par === 4 ? (rng() < 0.5 ? 1 : 2) : 2;
+  const pts: Vec[] = [{ x: 160, y: 416 }];
+  let prevX = 160;
+  for (let i = 1; i <= nBends; i++) {
+    const t = i / (nBends + 1);
+    const y = Math.round(416 + (basketY - 416) * t);
+    prevX = Math.round(Math.max(64, Math.min(248, prevX + r(-72, 72))));
+    pts.push({ x: prevX, y });
+  }
+  pts.push({ x: basketX, y: basketY });
+  let fwWidth = Math.round(par <= 3 ? r(104, 124) : par === 4 ? r(112, 140) : r(122, 150));
+  if (rng() < 0.2) fwWidth = Math.round(fwWidth * 0.82); // occasional tunnel
+  const elev = pickN([-2, -1, -1, 0, 0, 1, 1, 2]);
+
+  const trees: Tree[] = [];
+  const addTree = (p: Vec, side: number, extra: number) => {
+    const tx = Math.round(p.x + side * (fwWidth / 2 + extra));
+    if (tx < 16 || tx > 304 || p.y > 348 || p.y < 96) return;
+    trees.push({ x: tx, y: Math.round(p.y), r: Math.round(r(12, 14)) });
+  };
+  for (let i = 1; i <= nBends; i++) {
+    const p = pts[i];
+    const turn = Math.sign((pts[i + 1].x - p.x) - (p.x - pts[i - 1].x)) || (rng() < 0.5 ? 1 : -1);
+    addTree(p, -turn, r(0, 10)); // guard the inside of the dogleg
+  }
+  const nExtra = Math.floor(r(1, 3));
+  for (let k = 0; k < nExtra; k++) addTree(pointOnPath(pts, r(0.25, 0.8)), rng() < 0.5 ? 1 : -1, r(2, 16));
+
+  const sideBox = (p: Vec, wMin: number, wMax: number, hMin: number, hMax: number, inset: number): Water => {
+    const side = rng() < 0.5 ? 1 : -1;
+    const w = Math.round(r(wMin, wMax));
+    const h = Math.round(r(hMin, hMax));
+    const cxp = p.x + side * (fwWidth / 2 - inset);
+    const x = Math.round(Math.max(8, Math.min(300 - w, cxp - (side < 0 ? w : 0))));
+    return { x, y: Math.round(p.y - h / 2), w, h };
+  };
+  const water: Water[] = rng() < 0.35 ? [sideBox(pointOnPath(pts, r(0.4, 0.72)), 46, 74, 26, 44, 6)] : [];
+  const hazard: Water[] = rng() < 0.32 ? [sideBox(pointOnPath(pts, r(0.3, 0.78)), 24, 36, 18, 26, 10)] : [];
+
+  return materializeHole({ par, tee: TEE, basket: { x: basketX, y: basketY }, fairway: pts, fwWidth, trees, water, hazard, elev });
+}
+// A fresh, seeded 9-hole course — different every day (the Daily Challenge).
+function generateDailyCourse(rng: () => number): Hole[] {
+  const holes: Hole[] = [];
+  for (let i = 0; i < 9; i++) {
+    const h = genDailyHole(rng);
+    const { wind, windMag } = seededWind(rng);
+    holes.push({ ...h, wind, windMag });
+  }
+  return holes;
+}
+// Build one playable round. Daily = a new 9-hole course; course = the 18 fixed
+// Glendoveer holes with seeded wind + a jittered pin. Same seed ⇒ same round.
+function buildRound(seed: number, mode: Mode): Hole[] {
   const rng = mulberry32(seed);
+  if (mode === "daily") return generateDailyCourse(rng);
   return HOLES.map((h, i) => {
-    const ang = rng() * Math.PI * 2;
-    const mag = 0.004 + rng() * 0.014; // per-frame airborne push (gentle)
-    const wind = { x: Math.cos(ang) * mag, y: Math.sin(ang) * mag };
+    const { wind, windMag } = seededWind(rng);
     const base = h.basket;
     const pin = clampPin(
       { x: base.x + (rng() * 2 - 1) * 22, y: base.y + (rng() * 2 - 1) * 16 },
@@ -477,7 +566,7 @@ function buildRound(seed: number): Hole[] {
       h.fwWidth / 2 - 9,
       base,
     );
-    return { ...h, basket: pin, wind, windMag: mag, elev: HOLE_ELEV[i] ?? 0 };
+    return { ...h, basket: pin, wind, windMag, elev: HOLE_ELEV[i] ?? 0 };
   });
 }
 // Carry multiplier from elevation: uphill (+) shortens, downhill (−) lengthens.
@@ -595,11 +684,13 @@ export function DiscGolfGame() {
   const [discIndex, setDiscIndex] = useState(1); // Mid by default
   const [throwStyle, setThrowStyle] = useState<"BH" | "FH">("BH");
   const [flightPath, setFlightPath] = useState<FlightPath>("overstable");
-  const [hud, setHud] = useState({ hole: 1, par: 3, throws: 0 });
+  const [hud, setHud] = useState({ hole: 1, par: 3, throws: 0, holes: 18 });
 
   // End-of-round state
   const [scorecard, setScorecard] = useState<number[]>([]);
   const [finalTotal, setFinalTotal] = useState(0);
+  const [finalPars, setFinalPars] = useState<number[]>(HOLES.map((h) => h.par));
+  const [finalMode, setFinalMode] = useState<Mode>("course");
   const [bestScore, setBestScore] = useState<number | null>(null);
   const [isNewBest, setIsNewBest] = useState(false);
   const [leaderboard, setLeaderboard] = useState<ArcadeScore[]>([]);
@@ -683,7 +774,7 @@ export function DiscGolfGame() {
   const syncHud = useCallback(() => {
     const g = stateRef.current;
     if (!g) return;
-    setHud({ hole: g.holeIndex + 1, par: g.roundHoles[g.holeIndex].par, throws: g.throws });
+    setHud({ hole: g.holeIndex + 1, par: g.roundHoles[g.holeIndex].par, throws: g.throws, holes: g.roundHoles.length });
   }, []);
 
   const startGame = useCallback((mode?: Mode) => {
@@ -697,7 +788,7 @@ export function DiscGolfGame() {
     audioRef.current.setMuted(muted);
     audioRef.current.startMusic();
     const seed = m === "daily" ? dailySeed() : (Math.random() * 1e9) | 0;
-    const roundHoles = buildRound(seed);
+    const roundHoles = buildRound(seed, m);
     stateRef.current = {
       holeIndex: 0, scores: [], discIndex: discIndexRef.current,
       mode: m, seed, roundHoles, ...freshHole(roundHoles[0]),
@@ -748,39 +839,45 @@ export function DiscGolfGame() {
   }, [syncHud]);
 
   const finishGame = useCallback((scores: number[]) => {
+    const g = stateRef.current;
+    const mode = g?.mode ?? modeRef.current;
+    const pars = g ? g.roundHoles.map((h) => h.par) : HOLES.map((h) => h.par);
     const total = scores.reduce((s, n) => s + n, 0);
     setScorecard(scores);
     setFinalTotal(total);
-    // Personal best
-    let prior: number | null = null;
-    try {
-      const raw = localStorage.getItem(BEST_KEY);
-      prior = raw ? Number(raw) : null;
-      if (prior != null && !Number.isFinite(prior)) prior = null;
-    } catch {
-      /* ignore */
+    setFinalPars(pars);
+    setFinalMode(mode);
+
+    // Personal best is only tracked for the fixed 18-hole Glendoveer course
+    // (the daily course is different every day, so an all-time best is moot).
+    if (mode === "course") {
+      let prior: number | null = null;
+      try {
+        const raw = localStorage.getItem(BEST_KEY);
+        prior = raw ? Number(raw) : null;
+        if (prior != null && !Number.isFinite(prior)) prior = null;
+      } catch {
+        /* ignore */
+      }
+      const newBest = prior == null || total < prior;
+      const best = newBest ? total : prior!;
+      try { localStorage.setItem(BEST_KEY, String(best)); } catch { /* ignore */ }
+      setBestScore(best);
+      setIsNewBest(newBest);
+    } else {
+      setIsNewBest(false);
     }
-    const newBest = prior == null || total < prior;
-    const best = newBest ? total : prior!;
-    try {
-      localStorage.setItem(BEST_KEY, String(best));
-    } catch {
-      /* ignore */
-    }
-    setBestScore(best);
-    setIsNewBest(newBest);
 
     // Round history (drives "rounds played" + the Regular achievement).
     let hist: { mode: Mode; total: number; date: number }[] = [];
     try { hist = JSON.parse(localStorage.getItem(HIST_KEY) || "[]"); } catch { /* ignore */ }
-    hist.push({ mode: modeRef.current, total, date: Date.now() });
+    hist.push({ mode, total, date: Date.now() });
     try { localStorage.setItem(HIST_KEY, JSON.stringify(hist.slice(-100))); } catch { /* ignore */ }
     roundsPlayedRef.current = hist.length;
     setRoundsPlayed(hist.length);
 
-    // Achievements — unlock any newly-earned ones.
-    const pars = HOLES.map((h) => h.par);
-    const earned = earnedAchievements(scores, pars, modeRef.current, hist.length);
+    // Achievements — unlock any newly-earned ones (judged against this round's pars).
+    const earned = earnedAchievements(scores, pars, mode, hist.length);
     const fresh = earned.filter((id) => !unlockedRef.current.includes(id));
     if (fresh.length) {
       const all = [...unlockedRef.current, ...fresh];
@@ -793,7 +890,8 @@ export function DiscGolfGame() {
     audioRef.current?.sfx("win");
     vibrate([20, 40, 20]);
     setScreen("gameComplete");
-    void getArcadeLeaderboard().then(setLeaderboard).catch(() => {});
+    if (mode === "course") void getArcadeLeaderboard().then(setLeaderboard).catch(() => {});
+    else setLeaderboard([]);
   }, []);
 
   const nextHole = useCallback(() => {
@@ -829,7 +927,11 @@ export function DiscGolfGame() {
   // Render the finished round to an image and share it (or download as fallback).
   const shareCard = useCallback(async () => {
     const total = finalTotal;
-    const over = total - TOTAL_PAR;
+    const parTotal = finalPars.reduce((s, n) => s + n, 0);
+    const over = total - parTotal;
+    const nHoles = finalPars.length;
+    const isDaily = finalMode === "daily";
+    const courseName = isDaily ? `Daily Challenge · ${nHoles} holes · par ${parTotal}` : `Glendoveer East · ${nHoles} holes · par ${parTotal}`;
     const os = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
     const cv = document.createElement("canvas");
     cv.width = 600;
@@ -844,22 +946,23 @@ export function DiscGolfGame() {
     c.fillText("DISC GOLF", 28, 52);
     c.fillStyle = "#9aa";
     c.font = "15px ui-monospace, monospace";
-    c.fillText("Glendoveer East · 18 holes · par 66", 28, 78);
+    c.fillText(courseName, 28, 78);
     c.fillStyle = "#fff";
     c.font = "bold 56px ui-monospace, monospace";
     c.fillText(`${total}`, 28, 150);
     c.fillStyle = over <= 0 ? "#36D7B7" : "#e08a3b";
     c.font = "bold 26px ui-monospace, monospace";
     c.fillText(over === 0 ? "Even par" : os(over), 120, 150);
-    // 18-hole strip
-    const cellW = 30;
+    // hole strip (up to 9 per row)
+    const perRow = Math.min(9, nHoles);
+    const cellW = Math.min(48, Math.floor(540 / perRow));
     const x0 = 28;
     const y0 = 196;
-    for (let i = 0; i < 18; i++) {
-      const x = x0 + (i % 9) * cellW;
-      const y = y0 + Math.floor(i / 9) * 54;
+    for (let i = 0; i < nHoles; i++) {
+      const x = x0 + (i % perRow) * cellW;
+      const y = y0 + Math.floor(i / perRow) * 54;
       const s = scorecard[i];
-      const diff = (s ?? HOLES[i].par) - HOLES[i].par;
+      const diff = (s ?? finalPars[i]) - finalPars[i];
       c.fillStyle = "#9aa";
       c.font = "11px ui-monospace, monospace";
       c.textAlign = "center";
@@ -877,10 +980,11 @@ export function DiscGolfGame() {
       cv.toBlob(async (blob) => {
         if (!blob) return resolve();
         const file = new File([blob], "discgolf-scorecard.png", { type: "image/png" });
+        const where = isDaily ? "today's Daily Challenge" : "Glendoveer East";
         try {
           const nav = navigator as Navigator & { canShare?: (d: { files: File[] }) => boolean };
           if (nav.canShare?.({ files: [file] })) {
-            await nav.share({ files: [file], title: "Disc Golf", text: `I shot ${total} (${os(over)}) at Glendoveer East!` });
+            await nav.share({ files: [file], title: "Disc Golf", text: `I shot ${total} (${os(over)}) on ${where}!` });
             return resolve();
           }
         } catch {
@@ -895,13 +999,14 @@ export function DiscGolfGame() {
         resolve();
       }, "image/png");
     });
-  }, [finalTotal, scorecard]);
+  }, [finalTotal, finalPars, finalMode, scorecard]);
 
   // When a hole finishes, record/show the best-ever strokes for that hole.
+  // Only for Glendoveer — the daily course's holes change every day.
   useEffect(() => {
     if (screen !== "holeComplete") return;
     const g = stateRef.current;
-    if (!g) return;
+    if (!g || g.mode !== "course") { setHoleBestNote(null); return; }
     const idx = g.holeIndex;
     const s = g.scores[idx];
     if (typeof s !== "number") return;
@@ -1535,7 +1640,9 @@ export function DiscGolfGame() {
     };
   }, [clientToCanvas, applyDrag, throwDisc]);
 
-  const finalOver = finalTotal - TOTAL_PAR;
+  const finalParTotal = finalPars.reduce((s, n) => s + n, 0);
+  const finalOver = finalTotal - finalParTotal;
+  const finalIsDaily = finalMode === "daily";
   const overStr = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
 
   return (
@@ -1557,21 +1664,22 @@ export function DiscGolfGame() {
               <span className="text-[#36D7B7]">DISC</span> GOLF
             </h1>
             <p className="text-gray-300 text-xs sm:text-sm max-w-xs">
-              Glendoveer East · 18 holes · par 66. <span className="text-white font-semibold">Drag back</span>{" "}
-              from the disc to aim &amp; set power, then release. Mind the wind, hills &amp; OB lines.
+              <span className="text-white font-semibold">Drag back</span> from the disc to aim &amp; set
+              power, then release. Mind the wind, hills &amp; OB lines.
             </p>
-            {bestScore != null && (
+            {(bestScore != null || roundsPlayed > 0) && (
               <p className="text-[#36D7B7] text-xs font-semibold">
-                Your best: {bestScore} ({overStr(bestScore - TOTAL_PAR)})
-                {roundsPlayed > 0 && <span className="text-gray-400"> · {roundsPlayed} rounds played</span>}
+                {bestScore != null && <>Glendoveer best: {bestScore} ({overStr(bestScore - TOTAL_PAR)})</>}
+                {roundsPlayed > 0 && <span className="text-gray-400">{bestScore != null ? " · " : ""}{roundsPlayed} rounds played</span>}
               </p>
             )}
-            <div className="flex flex-col gap-2 w-56">
+            <div className="flex flex-col gap-1.5 w-60">
               <button type="button" onClick={() => startGame("daily")} className={`${btn} mt-0 bg-[#36D7B7] text-[#0f1117] hover:bg-[#2bc4a6]`}>
                 🔥 Daily Challenge
               </button>
-              <button type="button" onClick={() => startGame("course")} className={`${btn} mt-0`}>
-                ▶ Play Glendoveer
+              <p className="text-gray-400 text-[11px] -mt-0.5">A fresh 9-hole course every day</p>
+              <button type="button" onClick={() => startGame("course")} className={`${btn} mt-1`}>
+                ▶ Play Glendoveer (18)
               </button>
               <button type="button" onClick={() => setSettingsOpen(true)} className="text-gray-300 hover:text-white text-sm font-semibold py-1.5">
                 ⚙ Settings &amp; achievements
@@ -1601,7 +1709,7 @@ export function DiscGolfGame() {
                 </p>
               )}
               <button type="button" onClick={nextHole} className={btn}>
-                {hud.hole >= HOLES.length ? "See results ▶" : "Next hole ▶"}
+                {hud.hole >= hud.holes ? "See results ▶" : "Next hole ▶"}
               </button>
             </Overlay>
           );
@@ -1696,12 +1804,15 @@ export function DiscGolfGame() {
         <div className="fixed inset-0 z-50 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm p-4 flex items-start sm:items-center justify-center">
           <div className="w-full max-w-lg space-y-4 my-auto">
             <div className="text-center">
-              <h2 className="text-white font-black text-2xl">Round complete!</h2>
-              <p className="text-[#36D7B7] font-bold text-lg">
+              <h2 className="text-white font-black text-2xl">{finalIsDaily ? "Daily Challenge complete!" : "Round complete!"}</h2>
+              <p className="text-gray-400 text-xs">
+                {finalIsDaily ? `Today's course · ${finalPars.length} holes · par ${finalParTotal}` : `Glendoveer East · 18 holes · par ${finalParTotal}`}
+              </p>
+              <p className="text-[#36D7B7] font-bold text-lg mt-1">
                 {finalTotal} throws · {finalOver === 0 ? "Even par" : overStr(finalOver)}
                 {isNewBest && <span className="ml-2 text-[#f5d24a]">★ New best!</span>}
               </p>
-              {bestScore != null && !isNewBest && (
+              {!finalIsDaily && bestScore != null && !isNewBest && (
                 <p className="text-gray-400 text-xs mt-0.5">Your best: {bestScore} ({overStr(bestScore - TOTAL_PAR)})</p>
               )}
             </div>
@@ -1722,21 +1833,21 @@ export function DiscGolfGame() {
               </div>
             )}
 
-            {/* Scorecard — front nine / back nine */}
+            {/* Scorecard — one row per nine */}
             <div className="bg-[#1a1d23] border border-white/5 rounded-2xl p-3 space-y-3 text-[11px]">
-              {([
-                { label: "Out", from: 0, to: 9 },
-                { label: "In", from: 9, to: 18 },
-              ] as const).map(({ label, from, to }) => {
-                const holes = HOLES.slice(from, to);
-                const parSum = holes.reduce((s, h) => s + h.par, 0);
+              {(finalPars.length > 9
+                ? [{ label: "Out", from: 0, to: 9 }, { label: "In", from: 9, to: 18 }]
+                : [{ label: "Tot", from: 0, to: finalPars.length }]
+              ).map(({ label, from, to }) => {
+                const pars = finalPars.slice(from, to);
+                const parSum = pars.reduce((s, n) => s + n, 0);
                 const youSum = scorecard.slice(from, to).reduce((s, n) => s + (n ?? 0), 0);
                 return (
                   <table key={label} className="w-full text-center tabular-nums">
                     <thead>
                       <tr className="text-gray-500">
                         <th className="text-left font-semibold pr-1 w-7"></th>
-                        {holes.map((_, i) => (
+                        {pars.map((_, i) => (
                           <th key={i} className="font-semibold px-0.5">{from + i + 1}</th>
                         ))}
                         <th className="font-bold pl-1 text-gray-300">{label}</th>
@@ -1745,16 +1856,16 @@ export function DiscGolfGame() {
                     <tbody>
                       <tr className="text-gray-400">
                         <td className="text-left pr-1">Par</td>
-                        {holes.map((h, i) => (
-                          <td key={i} className="px-0.5">{h.par}</td>
+                        {pars.map((p, i) => (
+                          <td key={i} className="px-0.5">{p}</td>
                         ))}
                         <td className="pl-1 font-mono">{parSum}</td>
                       </tr>
                       <tr className="text-white font-semibold">
                         <td className="text-left pr-1">You</td>
-                        {holes.map((h, i) => {
+                        {pars.map((p, i) => {
                           const s = scorecard[from + i];
-                          const diff = (s ?? h.par) - h.par;
+                          const diff = (s ?? p) - p;
                           const color = s == null ? "#6b7280" : diff < 0 ? "#36D7B7" : diff > 1 ? "#e23b3b" : diff === 1 ? "#f5d24a" : "#ffffff";
                           return (
                             <td key={i} className="px-0.5 font-mono" style={{ color }}>{s ?? "–"}</td>
@@ -1768,56 +1879,63 @@ export function DiscGolfGame() {
               })}
               <div className="flex justify-between border-t border-white/5 pt-2 text-white font-bold text-sm">
                 <span>Total</span>
-                <span className="font-mono">{finalTotal} · par {TOTAL_PAR}</span>
+                <span className="font-mono">{finalTotal} · par {finalParTotal}</span>
               </div>
             </div>
 
-            {/* Save score */}
-            {saved ? (
-              <p className="text-center text-[#36D7B7] text-sm font-semibold">Saved to the leaderboard ✓</p>
+            {/* Save + leaderboard are for the shared Glendoveer course only. */}
+            {finalIsDaily ? (
+              <p className="text-center text-gray-400 text-sm">
+                Everyone plays the same course today — share your card to compare with friends.
+              </p>
             ) : (
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={nameInput}
-                  onChange={(e) => setNameInput(e.target.value)}
-                  placeholder="Your name"
-                  maxLength={16}
-                  className="flex-1 bg-[#1a1d23] border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-[#4B3DFF]"
-                />
-                <button
-                  type="button"
-                  onClick={saveScore}
-                  disabled={saving}
-                  className="bg-[#36D7B7] hover:bg-[#2bc4a6] text-black font-bold text-sm px-4 py-2 rounded-lg transition disabled:opacity-50"
-                >
-                  {saving ? "Saving…" : "Save score"}
-                </button>
-              </div>
-            )}
-            {saveErr && <p className="text-red-400 text-xs text-center">{saveErr}</p>}
-
-            {/* Leaderboard */}
-            <div className="bg-[#1a1d23] border border-white/5 rounded-2xl overflow-hidden">
-              <p className="text-white font-bold text-sm px-4 py-2.5 border-b border-white/5">🏆 Leaderboard</p>
-              {leaderboard.length === 0 ? (
-                <p className="text-gray-400 text-sm text-center py-6">No scores yet — be the first!</p>
-              ) : (
-                <ol>
-                  {leaderboard.map((row, i) => (
-                    <li
-                      key={`${row.name}-${row.created_at}`}
-                      className={`flex items-center gap-3 px-4 py-2 text-sm ${i !== 0 ? "border-t border-white/5" : ""}`}
+              <>
+                {saved ? (
+                  <p className="text-center text-[#36D7B7] text-sm font-semibold">Saved to the leaderboard ✓</p>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={nameInput}
+                      onChange={(e) => setNameInput(e.target.value)}
+                      placeholder="Your name"
+                      maxLength={16}
+                      className="flex-1 bg-[#1a1d23] border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-[#4B3DFF]"
+                    />
+                    <button
+                      type="button"
+                      onClick={saveScore}
+                      disabled={saving}
+                      className="bg-[#36D7B7] hover:bg-[#2bc4a6] text-black font-bold text-sm px-4 py-2 rounded-lg transition disabled:opacity-50"
                     >
-                      <span className="text-gray-400 font-mono w-6 text-right">{i + 1}</span>
-                      <span className="text-white flex-1 truncate">{row.name}</span>
-                      <span className="text-gray-400 font-mono">{overStr(row.strokes - TOTAL_PAR)}</span>
-                      <span className="text-white font-mono font-bold w-8 text-right">{row.strokes}</span>
-                    </li>
-                  ))}
-                </ol>
-              )}
-            </div>
+                      {saving ? "Saving…" : "Save score"}
+                    </button>
+                  </div>
+                )}
+                {saveErr && <p className="text-red-400 text-xs text-center">{saveErr}</p>}
+
+                <div className="bg-[#1a1d23] border border-white/5 rounded-2xl overflow-hidden">
+                  <p className="text-white font-bold text-sm px-4 py-2.5 border-b border-white/5">🏆 Leaderboard</p>
+                  {leaderboard.length === 0 ? (
+                    <p className="text-gray-400 text-sm text-center py-6">No scores yet — be the first!</p>
+                  ) : (
+                    <ol>
+                      {leaderboard.map((row, i) => (
+                        <li
+                          key={`${row.name}-${row.created_at}`}
+                          className={`flex items-center gap-3 px-4 py-2 text-sm ${i !== 0 ? "border-t border-white/5" : ""}`}
+                        >
+                          <span className="text-gray-400 font-mono w-6 text-right">{i + 1}</span>
+                          <span className="text-white flex-1 truncate">{row.name}</span>
+                          <span className="text-gray-400 font-mono">{overStr(row.strokes - TOTAL_PAR)}</span>
+                          <span className="text-white font-mono font-bold w-8 text-right">{row.strokes}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                </div>
+              </>
+            )}
 
             <div className="flex flex-wrap justify-center gap-2">
               <button type="button" onClick={() => startGame()} className={btn}>↻ Play again</button>
