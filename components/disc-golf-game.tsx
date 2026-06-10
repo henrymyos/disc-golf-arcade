@@ -583,6 +583,25 @@ function elevGroundFriction(elev: number | undefined) {
 function vibrate(pattern: number | number[]) {
   try { navigator.vibrate?.(pattern); } catch { /* ignore */ }
 }
+// Forward carry of a full-power throw with this disc (obstacle-free, straight),
+// in world px — used to draw the "reach" line. Mirrors the real flight physics
+// including the hole's elevation.
+function fullPowerRange(disc: Disc, elev: number | undefined): number {
+  let y = 0;
+  let vy = disc.power * (1.2 + 3.35) * elevMul(elev); // power = 1
+  let h = 0;
+  let vh = disc.arc; // power = 1
+  for (let i = 0; i < 600; i++) {
+    y += vy;
+    h += vh;
+    vh -= GRAVITY;
+    if (h <= 0) { h = 0; vh = 0; }
+    const airborne = h > AIRBORNE_H;
+    vy *= airborne ? disc.friction : elevGroundFriction(elev);
+    if (!airborne && vy < STOP_SPEED) break;
+  }
+  return y;
+}
 // Where the disc last crossed the OB line — step back along its travel
 // direction until just back in-bounds. Used so OB plays from the edge, not a
 // full rethrow.
@@ -655,13 +674,18 @@ function stepFlight(f: Flight, disc: Disc, fadeSign: number, path: FlightPath, h
     }
   }
 
-  // The basket and OB only interact at ground level (you fly over them).
+  // The basket and OB only interact at ground level (you fly over them). A disc
+  // only "lands" while descending or grounded (vh <= 0) — so on takeoff it can
+  // climb up and OVER water/OB right next to the lie instead of instantly going
+  // OB before it has gained any height.
   if (!airborne) {
-    if (Math.hypot(f.x - hole.basket.x, f.y - hole.basket.y) < CATCH_R) return { status: "hole", treeHit };
-    // Off the curved fairway, or in water, is out of bounds — caught the moment
-    // the disc is low.
-    if (distToPath(f.x, f.y, hole.fairway) > hole.fwWidth / 2) return { status: "ob", treeHit };
-    for (const wt of hole.water) if (inRect(wt, f.x, f.y)) return { status: "ob", treeHit };
+    const settling = f.vh <= 0;
+    if (settling) {
+      if (Math.hypot(f.x - hole.basket.x, f.y - hole.basket.y) < CATCH_R) return { status: "hole", treeHit };
+      // Off the curved fairway, or in water, is out of bounds.
+      if (distToPath(f.x, f.y, hole.fairway) > hole.fwWidth / 2) return { status: "ob", treeHit };
+      for (const wt of hole.water) if (inRect(wt, f.x, f.y)) return { status: "ob", treeHit };
+    }
     // Hazards (sand) don't stop the disc — they only cost a stroke if it comes
     // to rest in one, handled where "stop" is processed.
     if (sp < STOP_SPEED) return { status: "stop", treeHit };
@@ -676,6 +700,7 @@ export function DiscGolfGame() {
   // Drag-to-throw (Wii-golf style): pull back to set power + aim, release to throw.
   const dragRef = useRef<{ active: boolean; cx: number; cy: number }>({ active: false, cx: 0, cy: 0 });
   const camRef = useRef(0); // current camera scroll, mirrored for the pointer handlers
+  const rangeFlashRef = useRef(0); // when a disc was last switched (brightens the reach line)
   const audioRef = useRef<AudioEngine | null>(null);
   const rafRef = useRef<number>(0);
 
@@ -806,6 +831,7 @@ export function DiscGolfGame() {
   const selectDisc = useCallback((i: number) => {
     setDiscIndex(i);
     if (stateRef.current) stateRef.current.discIndex = i;
+    rangeFlashRef.current = performance.now(); // emphasize the reach line briefly
   }, []);
 
   const throwDisc = useCallback(() => {
@@ -1262,6 +1288,34 @@ export function DiscGolfGame() {
         const path = flightPathRef.current;
         const dsx = g.disc.x;
         const dsy = g.disc.y - cam; // disc screen position
+
+        // Full-power reach line for the selected disc — brighter just after a
+        // switch so you can compare how far each disc carries.
+        {
+          const range = fullPowerRange(aimDisc, hole.elev);
+          const ly = g.disc.y - range - cam;
+          if (ly > 16 && ly < H - 2) {
+            const since = performance.now() - rangeFlashRef.current;
+            const a = since < 1200 ? 0.9 - 0.55 * (since / 1200) : 0.35;
+            ctx.save();
+            ctx.globalAlpha = a;
+            ctx.strokeStyle = aimDisc.color;
+            ctx.setLineDash([5, 4]);
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(0, ly);
+            ctx.lineTo(W, ly);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.fillStyle = aimDisc.color;
+            ctx.font = "7px monospace";
+            ctx.textAlign = "left";
+            ctx.textBaseline = "bottom";
+            ctx.fillText(`${aimDisc.name} max`, 4, ly - 1);
+            ctx.textBaseline = "middle";
+            ctx.restore();
+          }
+        }
 
         let kx: number;
         let ky: number;
