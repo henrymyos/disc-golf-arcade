@@ -229,15 +229,15 @@ const ADV_DISCS: Disc[] = [
   // Putt & approach
   discFromNumbers("aviar", "Aviar", "Innova", "#36D7B7", 2, 3, 0, 1),
   discFromNumbers("zone", "Zone", "Discraft", "#e07b3b", 4, 3, 0, 3),
-  // Midrange
-  discFromNumbers("buzzz", "Buzzz", "Discraft", "#f5d24a", 5, 4, -1, 1),
-  discFromNumbers("mako3", "Mako3", "Innova", "#4ad0c0", 5, 5, 0, 0),
+  // Midrange — straight Buzzz vs overstable Swarm
+  discFromNumbers("buzzz", "Buzzz", "Discraft", "#f5d24a", 5, 4, 0, 1),
+  discFromNumbers("swarm", "Swarm", "Discraft", "#b85cd6", 5, 4, 0, 3),
   // Fairway / control
   discFromNumbers("teebird", "Teebird", "Innova", "#5fb0e8", 7, 5, 0, 2),
   discFromNumbers("firebird", "Firebird", "Innova", "#e2453b", 9, 3, 0, 4),
-  // Distance
-  discFromNumbers("undertaker", "Undertaker", "Discraft", "#9fd14a", 9, 5, -1, 2),
-  discFromNumbers("nuke", "Nuke", "Discraft", "#3b7de2", 13, 5, -1, 3),
+  // Distance — overstable Nuke OS vs straighter Destroyer
+  discFromNumbers("nukeos", "Nuke OS", "Discraft", "#2f6fe0", 13, 5, 0, 4),
+  discFromNumbers("destroyer", "Destroyer", "Innova", "#e23b7b", 12, 5, -1, 3),
 ];
 function activeDiscs(advanced: boolean): Disc[] {
   return advanced ? ADV_DISCS : DISCS;
