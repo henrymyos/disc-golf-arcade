@@ -32,7 +32,7 @@ const GRAVITY = 0.08; // downward pull on height per frame (gentler = floatier f
 const AIRBORNE_H = 3; // above this height, hazards are cleared
 const GROUND_FRICTION = 0.8; // hard deceleration once on the ground
 const MAX_DRAG = 95; // pull-back distance (internal px) that maps to full power
-const CANCEL_R = 18; // pull the knob back inside this radius (around the disc) and release to cancel
+const CANCEL_R = 13; // pull the knob back inside this radius (around the disc) and release to cancel
 const CANCEL_POWER = CANCEL_R / MAX_DRAG; // below this power, releasing cancels the throw
 
 type Vec = { x: number; y: number };
@@ -602,21 +602,15 @@ function fullPowerRange(disc: Disc, elev: number | undefined): number {
   }
   return y;
 }
-// Where the disc last crossed the OB line — step back along its travel
-// direction until just back in-bounds. Used so OB plays from the edge, not a
-// full rethrow.
-function obCrossingLie(f: Flight, hole: Hole): Vec {
-  const sp = Math.hypot(f.vx, f.vy) || 1;
-  const ux = f.vx / sp;
-  const uy = f.vy / sp;
-  let x = f.x;
-  let y = f.y;
-  for (let k = 0; k < 60; k++) {
-    x -= ux * 3;
-    y -= uy * 3;
-    if (!inAnyOB(hole, x, y)) return { x, y };
+// Where the disc was last in bounds. Walk the disc's recorded flight path
+// backward and return the last point that's in bounds — so OB plays from where
+// it crossed, never a full rethrow. `trail[0]` is the launch point (always in
+// bounds), so this always finds a valid lie; `fallback` is a final safety net.
+function lastInBoundsLie(trail: Vec[], hole: Hole, fallback: Vec): Vec {
+  for (let i = trail.length - 1; i >= 0; i--) {
+    if (!inAnyOB(hole, trail[i].x, trail[i].y)) return { x: trail[i].x, y: trail[i].y };
   }
-  return { x: f.x, y: f.y };
+  return { x: fallback.x, y: fallback.y };
 }
 
 function stepFlight(f: Flight, disc: Disc, fadeSign: number, path: FlightPath, hole: Hole): { status: StepStatus; treeHit: boolean } {
@@ -1144,7 +1138,9 @@ export function DiscGolfGame() {
           const inWater = hole.water.some((w) => inRect(w, f.x, f.y));
           audioRef.current?.sfx(inWater ? "water" : "tree");
           vibrate(60);
-          const lie = obCrossingLie(f, hole);
+          // Replay from the last point the disc was actually in bounds (walk the
+          // recorded flight path back), falling back to this throw's start.
+          const lie = lastInBoundsLie(g.trailBuf, hole, g.rest);
           g.throws += 1;
           g.flash = { text: "OUT OF BOUNDS", at: performance.now() };
           d.x = lie.x;
