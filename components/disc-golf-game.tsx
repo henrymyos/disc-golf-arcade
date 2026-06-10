@@ -228,20 +228,16 @@ function discFromNumbers(key: string, name: string, brand: string, color: string
 const ADV_DISCS: Disc[] = [
   // Putt & approach
   discFromNumbers("aviar", "Aviar", "Innova", "#36D7B7", 2, 3, 0, 1),
-  discFromNumbers("luna", "Luna", "Discraft", "#7c5cff", 3, 3, 0, 3),
   discFromNumbers("zone", "Zone", "Discraft", "#e07b3b", 4, 3, 0, 3),
   // Midrange
   discFromNumbers("buzzz", "Buzzz", "Discraft", "#f5d24a", 5, 4, -1, 1),
   discFromNumbers("mako3", "Mako3", "Innova", "#4ad0c0", 5, 5, 0, 0),
-  discFromNumbers("roc3", "Roc3", "Innova", "#c98b4a", 5, 4, 0, 3),
   // Fairway / control
   discFromNumbers("teebird", "Teebird", "Innova", "#5fb0e8", 7, 5, 0, 2),
-  discFromNumbers("undertaker", "Undertaker", "Discraft", "#9fd14a", 9, 5, -1, 2),
   discFromNumbers("firebird", "Firebird", "Innova", "#e2453b", 9, 3, 0, 4),
   // Distance
-  discFromNumbers("wraith", "Wraith", "Innova", "#b06be0", 11, 5, -1, 3),
+  discFromNumbers("undertaker", "Undertaker", "Discraft", "#9fd14a", 9, 5, -1, 2),
   discFromNumbers("nuke", "Nuke", "Discraft", "#3b7de2", 13, 5, -1, 3),
-  discFromNumbers("destroyer", "Destroyer", "Innova", "#e23b7b", 12, 5, -1, 3),
 ];
 function activeDiscs(advanced: boolean): Disc[] {
   return advanced ? ADV_DISCS : DISCS;
@@ -960,7 +956,7 @@ export function DiscGolfGame() {
   // line up index-for-index).
   const handleSetAdvanced = useCallback((v: boolean) => {
     setAdvanced(v);
-    const def = v ? 6 : 1; // Teebird / Mid
+    const def = v ? 4 : 1; // Teebird / Mid
     setDiscIndex(def);
     if (stateRef.current) stateRef.current.discIndex = Math.min(def, activeDiscs(v).length - 1);
   }, []);
