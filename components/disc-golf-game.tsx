@@ -3,6 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { submitArcadeScore, getArcadeLeaderboard } from "@/actions/arcade";
 import type { ArcadeScore } from "@/lib/arcade-types";
+import { getSupabase } from "@/lib/supabase/browser";
+import {
+  BEST_KEY, HOLEBEST_KEY, SETTINGS_KEY, ACH_KEY, HIST_KEY,
+  readLocalProgress, applyProgress, mergeProgress, type Progress,
+} from "@/lib/progress";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Retro pixel disc-golf game. You throw from the bottom of the screen toward
@@ -19,11 +24,7 @@ const H = 448;
 const DISC_R = 3;
 const CATCH_R = 9;
 const STOP_SPEED = 0.35;
-const BEST_KEY = "discgolf.best.glendoveer18"; // reset best for the 18-hole course
-const HOLEBEST_KEY = "discgolf.holebest.glendoveer18"; // best strokes per hole
-const SETTINGS_KEY = "discgolf.settings.v1";
-const ACH_KEY = "discgolf.achievements.v1";
-const HIST_KEY = "discgolf.history.v1";
+// Persistence keys (BEST_KEY, HOLEBEST_KEY, ...) come from @/lib/progress.
 
 // Height physics: a throw arcs up and comes back down. While airborne the disc
 // clears water and trees (throw over hazards); once it lands it brakes hard so
@@ -797,12 +798,12 @@ export function DiscGolfGame() {
   const [roundsPlayed, setRoundsPlayed] = useState(0);
   const roundsPlayedRef = useRef(0);
 
-  // Load all persisted state once, after mount (keeps SSR/CSR markup identical).
-  /* eslint-disable react-hooks/set-state-in-effect */
-  useEffect(() => {
+  // Read all persisted progress from localStorage into state/refs. Runs once on
+  // mount and again after a cloud sync overwrites localStorage.
+  const loadLocal = useCallback(() => {
     try {
       const best = localStorage.getItem(BEST_KEY);
-      if (best && Number.isFinite(Number(best))) setBestScore(Number(best));
+      setBestScore(best && Number.isFinite(Number(best)) ? Number(best) : null);
 
       const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
       if (s.throwStyle === "BH" || s.throwStyle === "FH") setThrowStyle(s.throwStyle);
@@ -812,9 +813,7 @@ export function DiscGolfGame() {
       if (typeof s.advanced === "boolean") setAdvanced(s.advanced);
 
       const hb = JSON.parse(localStorage.getItem(HOLEBEST_KEY) || "null");
-      if (Array.isArray(hb)) {
-        holeBestRef.current = Array(18).fill(null).map((_, i) => (typeof hb[i] === "number" ? hb[i] : null));
-      }
+      holeBestRef.current = Array(18).fill(null).map((_, i) => (Array.isArray(hb) && typeof hb[i] === "number" ? hb[i] : null));
       const ach = JSON.parse(localStorage.getItem(ACH_KEY) || "[]");
       if (Array.isArray(ach)) { unlockedRef.current = ach; setUnlocked(ach); }
       const hist = JSON.parse(localStorage.getItem(HIST_KEY) || "[]");
@@ -823,7 +822,90 @@ export function DiscGolfGame() {
       /* ignore */
     }
   }, []);
+
+  // Load once after mount (keeps SSR/CSR markup identical).
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => { loadLocal(); }, [loadLocal]);
   /* eslint-enable react-hooks/set-state-in-effect */
+
+  // ── Optional login + cloud progress (Supabase auth user_metadata) ──
+  const supa = getSupabase();
+  const [user, setUser] = useState<{ email: string } | null>(null);
+  const [authOpen, setAuthOpen] = useState(false);
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authBusy, setAuthBusy] = useState(false);
+  const [authErr, setAuthErr] = useState<string | null>(null);
+  const [authMsg, setAuthMsg] = useState<string | null>(null);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Push the current local progress up to the signed-in user's metadata.
+  const pushCloud = useCallback(async (p?: Progress) => {
+    if (!supa) return;
+    try {
+      const { data } = await supa.auth.getUser();
+      if (!data.user) return;
+      await supa.auth.updateUser({ data: { arcade_progress: p ?? readLocalProgress() } });
+    } catch { /* ignore */ }
+  }, [supa]);
+
+  // Debounced cloud save (called after rounds, hole bests, settings changes).
+  const saveProgress = useCallback(() => {
+    if (!supa || !user) return;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => { void pushCloud(); }, 1200);
+  }, [supa, user, pushCloud]);
+
+  // On sign-in (and at startup if already signed in), merge cloud progress with
+  // local so nothing is lost, then write the union back.
+  useEffect(() => {
+    if (!supa) return;
+    let active = true;
+    const onSession = async (sessUser: { email?: string; user_metadata?: { arcade_progress?: Progress } } | null) => {
+      if (!active) return;
+      if (!sessUser) { setUser(null); return; }
+      setUser({ email: sessUser.email ?? "player" });
+      const cloud = sessUser.user_metadata?.arcade_progress;
+      const merged = cloud ? mergeProgress(readLocalProgress(), cloud) : readLocalProgress();
+      if (cloud) { applyProgress(merged); loadLocal(); }
+      await pushCloud(merged);
+    };
+    const { data: sub } = supa.auth.onAuthStateChange((event, session) => {
+      if (event === "INITIAL_SESSION" || event === "SIGNED_IN") void onSession(session?.user ?? null);
+      else if (event === "SIGNED_OUT") setUser(null);
+      // ignore TOKEN_REFRESHED / USER_UPDATED to avoid update loops
+    });
+    return () => { active = false; sub.subscription.unsubscribe(); };
+  }, [supa, loadLocal, pushCloud]);
+
+  const signIn = useCallback(async () => {
+    if (!supa) return;
+    setAuthBusy(true); setAuthErr(null); setAuthMsg(null);
+    const { error } = await supa.auth.signInWithPassword({ email: authEmail.trim(), password: authPassword });
+    if (error) setAuthErr(error.message);
+    else { setAuthOpen(false); setAuthPassword(""); }
+    setAuthBusy(false);
+  }, [supa, authEmail, authPassword]);
+
+  const signUp = useCallback(async () => {
+    if (!supa) return;
+    setAuthBusy(true); setAuthErr(null); setAuthMsg(null);
+    const { data, error } = await supa.auth.signUp({
+      email: authEmail.trim(),
+      password: authPassword,
+      options: { emailRedirectTo: typeof location !== "undefined" ? location.origin : undefined },
+    });
+    if (error) setAuthErr(error.message);
+    else if (!data.session) setAuthMsg("Account created — check your email to confirm, then log in.");
+    else { setAuthOpen(false); setAuthPassword(""); }
+    setAuthBusy(false);
+  }, [supa, authEmail, authPassword]);
+
+  const signOut = useCallback(async () => {
+    if (!supa) return;
+    await supa.auth.signOut();
+    setUser(null);
+  }, [supa]);
 
   // Persist settings + push the music volume to the live engine.
   useEffect(() => {
@@ -831,7 +913,8 @@ export function DiscGolfGame() {
     try {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify({ throwStyle, flightPath, musicVolume, leftHanded, advanced }));
     } catch { /* ignore */ }
-  }, [throwStyle, flightPath, musicVolume, leftHanded, advanced]);
+    saveProgress();
+  }, [throwStyle, flightPath, musicVolume, leftHanded, advanced, saveProgress]);
 
   const syncHud = useCallback(() => {
     const g = stateRef.current;
@@ -968,7 +1051,8 @@ export function DiscGolfGame() {
     setScreen("gameComplete");
     if (mode === "course") void getArcadeLeaderboard().then(setLeaderboard).catch(() => {});
     else setLeaderboard([]);
-  }, []);
+    saveProgress(); // sync best/achievements/history to the cloud if signed in
+  }, [saveProgress]);
 
   const nextHole = useCallback(() => {
     const g = stateRef.current;
@@ -1094,9 +1178,10 @@ export function DiscGolfGame() {
       arr[idx] = s;
       holeBestRef.current = arr;
       try { localStorage.setItem(HOLEBEST_KEY, JSON.stringify(arr)); } catch { /* ignore */ }
+      saveProgress();
     }
     setHoleBestNote({ best: best as number, isNew });
-  }, [screen]);
+  }, [screen, saveProgress]);
 
   // Keyboard
   useEffect(() => {
@@ -1791,9 +1876,14 @@ export function DiscGolfGame() {
               <button type="button" onClick={() => startGame("course")} className={`${btn} mt-1`}>
                 ▶ Play Glendoveer (18)
               </button>
-              <button type="button" onClick={() => setSettingsOpen(true)} className="text-gray-300 hover:text-white text-sm font-semibold py-1.5">
+              <button type="button" onClick={() => setSettingsOpen(true)} className="text-gray-300 hover:text-white text-sm font-semibold py-1">
                 ⚙ Settings &amp; achievements
               </button>
+              {supa && (
+                <button type="button" onClick={() => { setAuthErr(null); setAuthMsg(null); setAuthOpen(true); }} className="text-gray-300 hover:text-white text-sm font-semibold py-1">
+                  {user ? `👤 ${user.email}` : "👤 Log in to save progress"}
+                </button>
+              )}
             </div>
           </Overlay>
         )}
@@ -1834,6 +1924,17 @@ export function DiscGolfGame() {
             leftHanded={leftHanded} setLeftHanded={setLeftHanded}
             advanced={advanced} setAdvanced={handleSetAdvanced}
             unlocked={unlocked}
+          />
+        )}
+
+        {authOpen && (
+          <AuthPanel
+            onClose={() => setAuthOpen(false)}
+            user={user}
+            email={authEmail} setEmail={setAuthEmail}
+            password={authPassword} setPassword={setAuthPassword}
+            busy={authBusy} error={authErr} message={authMsg}
+            onSignIn={signIn} onSignUp={signUp} onSignOut={signOut}
           />
         )}
       </div>
@@ -2193,6 +2294,53 @@ function SettingsPanel(props: {
         </div>
 
         <button type="button" onClick={onClose} className={`${btn} w-full`}>Done</button>
+      </div>
+    </div>
+  );
+}
+
+function AuthPanel(props: {
+  onClose: () => void;
+  user: { email: string } | null;
+  email: string; setEmail: (v: string) => void;
+  password: string; setPassword: (v: string) => void;
+  busy: boolean; error: string | null; message: string | null;
+  onSignIn: () => void; onSignUp: () => void; onSignOut: () => void;
+}) {
+  const { onClose, user, email, setEmail, password, setPassword, busy, error, message, onSignIn, onSignUp, onSignOut } = props;
+  const input = "w-full bg-[#0f1117] border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-[#4B3DFF]";
+  return (
+    <div className="absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm p-4 flex items-start justify-center rounded-lg">
+      <div className="w-full max-w-xs space-y-4 my-auto text-left">
+        <div className="flex items-center justify-between">
+          <h2 className="text-white font-black text-xl">{user ? "Account" : "Log in"}</h2>
+          <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
+        </div>
+
+        {user ? (
+          <>
+            <p className="text-gray-300 text-sm">Signed in as <span className="text-white font-semibold break-all">{user.email}</span>.</p>
+            <p className="text-[#36D7B7] text-xs font-semibold">✓ Your best scores, hole bests &amp; achievements sync automatically.</p>
+            <button type="button" onClick={onSignOut} className="w-full bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white font-bold py-2.5 rounded-lg transition">Log out</button>
+          </>
+        ) : (
+          <>
+            <p className="text-gray-400 text-xs">Log in (or create an account) to save your progress and pick it back up on any device.</p>
+            <input type="email" inputMode="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" className={input} />
+            <input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password (min 6 chars)" className={input} />
+            {error && <p className="text-red-400 text-xs">{error}</p>}
+            {message && <p className="text-[#36D7B7] text-xs">{message}</p>}
+            <div className="flex gap-2">
+              <button type="button" onClick={onSignIn} disabled={busy || !email || !password} className="flex-1 bg-[#4B3DFF] hover:bg-[#3a2ee0] text-white font-bold py-2.5 rounded-lg transition disabled:opacity-50">
+                {busy ? "…" : "Log in"}
+              </button>
+              <button type="button" onClick={onSignUp} disabled={busy || !email || !password} className="flex-1 bg-[#36D7B7] hover:bg-[#2bc4a6] text-[#0f1117] font-bold py-2.5 rounded-lg transition disabled:opacity-50">
+                {busy ? "…" : "Sign up"}
+              </button>
+            </div>
+            <p className="text-gray-600 text-[11px]">Your scores are also saved on this device without logging in.</p>
+          </>
+        )}
       </div>
     </div>
   );
