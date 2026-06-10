@@ -1887,8 +1887,8 @@ export function DiscGolfGame() {
           <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-gradient-to-b from-black/55 via-black/70 to-black/85 px-5">
             <div className="w-full max-w-[290px] flex flex-col items-center text-center">
               {/* Logo */}
-              <div className="flex items-center gap-2.5">
-                <svg width="34" height="34" viewBox="0 0 32 32" aria-hidden className="drop-shadow">
+              <div className="flex flex-col items-center gap-2">
+                <svg width="44" height="44" viewBox="0 0 32 32" aria-hidden className="drop-shadow">
                   <g stroke="#2a7d70" strokeWidth="2" strokeLinecap="round">
                     <line x1="2" y1="12.5" x2="8" y2="12.5" /><line x1="1" y1="18" x2="7" y2="18" />
                   </g>
@@ -1896,14 +1896,12 @@ export function DiscGolfGame() {
                   <ellipse cx="18.5" cy="14.8" rx="11" ry="5" fill="#36D7B7" />
                   <ellipse cx="18.5" cy="14" rx="6.5" ry="2.4" fill="#5fe6d2" />
                 </svg>
-                <h1 className="text-white font-black text-[28px] leading-none tracking-tight">
-                  DISC <span className="text-[#36D7B7]">GOLF</span>
+                <h1 className="text-white font-black text-[26px] leading-none tracking-tight">
+                  Disc Golf <span className="text-[#36D7B7]">Arcade</span>
                 </h1>
               </div>
-              <p className="text-gray-400 text-[11px] mt-2 leading-snug">
-                <span className="text-gray-200 font-semibold">Drag back</span> from the disc to aim &amp; set power,
-                then release. Mind the wind, hills &amp; OB.
-              </p>
+              <p className="text-gray-300 text-xs mt-2.5 font-medium">Pixel disc golf — wind, hills &amp; water.</p>
+              <p className="text-gray-500 text-[11px] mt-1">Drag back from the disc to aim &amp; throw.</p>
 
               {/* Stat pills */}
               {(bestScore != null || roundsPlayed > 0) && (

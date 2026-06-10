@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Pixel Disc Golf",
-  description: "A retro pixel-art disc golf game — 9 holes, discs, music, and a leaderboard.",
+  title: "Disc Golf Arcade",
+  description: "A retro pixel-art disc golf game — 18 holes, a daily challenge, real discs, and a leaderboard.",
 };
 
 export const viewport = {
