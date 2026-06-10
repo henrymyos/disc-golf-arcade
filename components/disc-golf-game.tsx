@@ -133,6 +133,80 @@ const TOTAL_PAR = HOLES.reduce((s, h) => s + h.par, 0);
 // roughly −2..+2. Affects how far a throw carries; shown on the minimap as ▲/▼.
 const HOLE_ELEV = [0, 1, -1, 2, 0, -1, 1, 0, -1, 1, 0, 1, -2, 2, 0, -1, 1, -1];
 
+// Savanna Dunes @ Bunker Hills (Andover, MN), 18 holes / par 60. A technical
+// course winding through glacial sand dunes and oak-savanna (oaks + pines), with
+// a few new lake hazards and slight elevation on most holes. Each hole is an
+// original pixel interpretation: sand `hazard`s are the course's signature
+// (dunes everywhere), narrow tree tunnels alternate with open dune flats, and
+// the long 9th plays to a broad, well-defined fairway. Comments note the real
+// par and an approximate distance.
+const SAVANNA_TEMPLATES: Omit<Hole, "worldH">[] = [
+  // ── Front nine (par 30) ──
+  // 1 — par 3, 216ft. Short technical opener up a narrow oak chute; dune short-right.
+  { par: 3, tee: TEE, basket: { x: 168, y: 120 }, fairway: [{ x: 160, y: 416 }, { x: 162, y: 300 }, { x: 166, y: 190 }, { x: 168, y: 120 }], fwWidth: 104, trees: [{ x: 124, y: 300, r: 14 }, { x: 200, y: 250, r: 13 }, { x: 140, y: 170, r: 13 }], water: [], hazard: [{ x: 196, y: 300, w: 26, h: 20 }] },
+  // 2 — par 3, 305ft. Open dune flat bending slightly left; sand guards front-left.
+  { par: 3, tee: TEE, basket: { x: 150, y: 112 }, fairway: [{ x: 160, y: 416 }, { x: 156, y: 290 }, { x: 150, y: 180 }, { x: 150, y: 112 }], fwWidth: 120, trees: [{ x: 206, y: 240, r: 13 }, { x: 118, y: 170, r: 12 }], water: [], hazard: [{ x: 124, y: 250, w: 30, h: 22 }] },
+  // 3 — par 4, 615ft. Placement two-shotter; dogleg right around oaks with sand at the corner.
+  { par: 4, tee: TEE, basket: { x: 196, y: 92 }, fairway: [{ x: 160, y: 416 }, { x: 162, y: 300 }, { x: 182, y: 200 }, { x: 196, y: 92 }], fwWidth: 122, trees: [{ x: 140, y: 250, r: 13 }, { x: 170, y: 175, r: 13 }, { x: 214, y: 140, r: 12 }], water: [], hazard: [{ x: 150, y: 205, w: 28, h: 20 }] },
+  // 4 — par 3, 280ft. Tight oak-and-pine tunnel, dead straight.
+  { par: 3, tee: TEE, basket: { x: 160, y: 108 }, fairway: [{ x: 160, y: 416 }, { x: 160, y: 290 }, { x: 160, y: 180 }, { x: 160, y: 108 }], fwWidth: 96, trees: [{ x: 110, y: 300, r: 14 }, { x: 210, y: 300, r: 14 }, { x: 106, y: 200, r: 14 }, { x: 214, y: 200, r: 14 }, { x: 150, y: 148, r: 12 }], water: [], hazard: [] },
+  // 5 — par 3, 340ft. A new lake guards the front-right of the green; throw over or around.
+  { par: 3, tee: TEE, basket: { x: 148, y: 104 }, fairway: [{ x: 160, y: 416 }, { x: 154, y: 290 }, { x: 150, y: 180 }, { x: 148, y: 104 }], fwWidth: 118, trees: [{ x: 200, y: 250, r: 13 }], water: [{ x: 170, y: 150, w: 64, h: 44 }], hazard: [] },
+  // 6 — par 4, 640ft. Dogleg left with dunes running the right side.
+  { par: 4, tee: TEE, basket: { x: 134, y: 84 }, fairway: [{ x: 160, y: 416 }, { x: 158, y: 300 }, { x: 146, y: 195 }, { x: 134, y: 84 }], fwWidth: 124, trees: [{ x: 198, y: 250, r: 13 }, { x: 150, y: 175, r: 13 }, { x: 116, y: 130, r: 12 }], water: [], hazard: [{ x: 188, y: 300, w: 30, h: 24 }, { x: 172, y: 195, w: 28, h: 20 }] },
+  // 7 — par 3, 295ft. Open savanna; a lone oak stands guard over the pin.
+  { par: 3, tee: TEE, basket: { x: 172, y: 114 }, fairway: [{ x: 160, y: 416 }, { x: 166, y: 290 }, { x: 170, y: 185 }, { x: 172, y: 114 }], fwWidth: 128, trees: [{ x: 172, y: 165, r: 14 }, { x: 128, y: 250, r: 12 }], water: [], hazard: [{ x: 118, y: 300, w: 28, h: 20 }] },
+  // 8 — par 3, 380ft. Long, narrowing tunnel with gate pines; sand short-left.
+  { par: 3, tee: TEE, basket: { x: 158, y: 96 }, fairway: [{ x: 160, y: 416 }, { x: 158, y: 280 }, { x: 158, y: 170 }, { x: 158, y: 96 }], fwWidth: 106, trees: [{ x: 120, y: 260, r: 13 }, { x: 200, y: 260, r: 13 }, { x: 132, y: 165, r: 13 }, { x: 188, y: 150, r: 12 }], water: [], hazard: [{ x: 120, y: 180, w: 26, h: 20 }] },
+  // 9 — par 4, 700ft. The long one: a broad, well-defined fairway bending gently right — merciful after all the tight holes.
+  { par: 4, tee: TEE, basket: { x: 182, y: 80 }, fairway: [{ x: 160, y: 416 }, { x: 162, y: 300 }, { x: 176, y: 190 }, { x: 182, y: 80 }], fwWidth: 145, trees: [{ x: 120, y: 300, r: 13 }, { x: 210, y: 220, r: 12 }], water: [], hazard: [{ x: 150, y: 210, w: 34, h: 24 }] },
+  // ── Back nine (par 30) ──
+  // 10 — par 3, 330ft. Sand dunes flank both sides of a straight corridor.
+  { par: 3, tee: TEE, basket: { x: 160, y: 106 }, fairway: [{ x: 160, y: 416 }, { x: 160, y: 290 }, { x: 160, y: 180 }, { x: 160, y: 106 }], fwWidth: 114, trees: [{ x: 124, y: 240, r: 13 }, { x: 198, y: 200, r: 12 }], water: [], hazard: [{ x: 120, y: 260, w: 28, h: 22 }, { x: 182, y: 180, w: 28, h: 20 }] },
+  // 11 — par 3, 260ft. Short ace-run, open — but a lake lurks short-right.
+  { par: 3, tee: TEE, basket: { x: 152, y: 118 }, fairway: [{ x: 160, y: 416 }, { x: 156, y: 300 }, { x: 152, y: 190 }, { x: 152, y: 118 }], fwWidth: 120, trees: [{ x: 198, y: 230, r: 12 }], water: [{ x: 172, y: 170, w: 52, h: 36 }], hazard: [] },
+  // 12 — par 4, 660ft. S-curve through pines with sand at the second bend.
+  { par: 4, tee: TEE, basket: { x: 166, y: 82 }, fairway: [{ x: 160, y: 416 }, { x: 172, y: 300 }, { x: 146, y: 200 }, { x: 166, y: 82 }], fwWidth: 120, trees: [{ x: 206, y: 250, r: 13 }, { x: 120, y: 185, r: 13 }, { x: 196, y: 125, r: 12 }], water: [], hazard: [{ x: 150, y: 200, w: 28, h: 20 }] },
+  // 13 — par 3, 360ft. Tree-lined dogleg right.
+  { par: 3, tee: TEE, basket: { x: 192, y: 108 }, fairway: [{ x: 160, y: 416 }, { x: 164, y: 290 }, { x: 184, y: 190 }, { x: 192, y: 108 }], fwWidth: 112, trees: [{ x: 138, y: 250, r: 13 }, { x: 168, y: 170, r: 13 }], water: [], hazard: [] },
+  // 14 — par 3, 315ft. Dunes everywhere — open, but a big sandy waste fronts the green.
+  { par: 3, tee: TEE, basket: { x: 160, y: 110 }, fairway: [{ x: 160, y: 416 }, { x: 160, y: 290 }, { x: 160, y: 180 }, { x: 160, y: 110 }], fwWidth: 122, trees: [{ x: 122, y: 240, r: 12 }], water: [], hazard: [{ x: 132, y: 260, w: 34, h: 24 }, { x: 176, y: 190, w: 30, h: 22 }] },
+  // 15 — par 4, 630ft. Dogleg left around a lake; oaks guard the green.
+  { par: 4, tee: TEE, basket: { x: 138, y: 82 }, fairway: [{ x: 160, y: 416 }, { x: 158, y: 300 }, { x: 148, y: 190 }, { x: 138, y: 82 }], fwWidth: 120, trees: [{ x: 198, y: 250, r: 13 }, { x: 150, y: 165, r: 13 }], water: [{ x: 120, y: 200, w: 54, h: 36 }], hazard: [] },
+  // 16 — par 3, 390ft. Long, narrow pine tunnel straight to the pin; sand short-right.
+  { par: 3, tee: TEE, basket: { x: 160, y: 96 }, fairway: [{ x: 160, y: 416 }, { x: 160, y: 280 }, { x: 160, y: 170 }, { x: 160, y: 96 }], fwWidth: 100, trees: [{ x: 112, y: 290, r: 14 }, { x: 208, y: 290, r: 14 }, { x: 116, y: 190, r: 13 }, { x: 204, y: 190, r: 13 }, { x: 150, y: 140, r: 12 }], water: [], hazard: [{ x: 196, y: 200, w: 26, h: 20 }] },
+  // 17 — par 3, 365ft. Long technical par 3: gate pines, then a dune-fronted green.
+  { par: 3, tee: TEE, basket: { x: 160, y: 80 }, fairway: [{ x: 160, y: 416 }, { x: 160, y: 290 }, { x: 160, y: 180 }, { x: 160, y: 80 }], fwWidth: 112, trees: [{ x: 120, y: 260, r: 13 }, { x: 200, y: 260, r: 13 }, { x: 134, y: 160, r: 12 }, { x: 188, y: 160, r: 12 }], water: [], hazard: [{ x: 180, y: 150, w: 28, h: 22 }] },
+  // 18 — par 4, 690ft. Finisher: gentle dogleg right with a lake in the fairway and dunes by the green.
+  { par: 4, tee: TEE, basket: { x: 170, y: 78 }, fairway: [{ x: 160, y: 416 }, { x: 162, y: 300 }, { x: 166, y: 190 }, { x: 170, y: 78 }], fwWidth: 124, trees: [{ x: 124, y: 290, r: 13 }, { x: 206, y: 210, r: 12 }, { x: 146, y: 150, r: 12 }], water: [{ x: 150, y: 200, w: 60, h: 38 }], hazard: [{ x: 188, y: 120, w: 28, h: 20 }] },
+];
+const SAVANNA_HOLES: Hole[] = SAVANNA_TEMPLATES.map(materializeHole);
+const SAVANNA_PAR = SAVANNA_HOLES.reduce((s, h) => s + h.par, 0);
+const SAVANNA_ELEV = [1, -1, 1, 0, -1, 1, -1, 1, 0, 1, 0, 1, -1, 1, -1, 1, -1, 1];
+
+// The catalog of fixed (non-daily) courses you can pick from the title screen.
+// Each tracks its own personal-best + per-hole-best in localStorage. The shared
+// Supabase leaderboard is Glendoveer-only (it's a single global table), so other
+// courses keep local stats and share-cards instead.
+type CourseId = "glendoveer" | "savanna";
+type FixedCourse = {
+  id: CourseId;
+  name: string;
+  tag: string; // 4-char HUD label shown while playing
+  subtitle: string;
+  holes: Hole[];
+  elev: number[];
+  totalPar: number;
+  bestKey: string;
+  holeBestKey: string;
+  leaderboard: boolean; // submit/show the shared Supabase leaderboard?
+};
+const COURSES: Record<CourseId, FixedCourse> = {
+  glendoveer: { id: "glendoveer", name: "Glendoveer East", tag: "GLEN", subtitle: "2026 Northwest Championship", holes: HOLES, elev: HOLE_ELEV, totalPar: TOTAL_PAR, bestKey: BEST_KEY, holeBestKey: HOLEBEST_KEY, leaderboard: true },
+  savanna: { id: "savanna", name: "Savanna Dunes", tag: "DUNE", subtitle: "Bunker Hills · Andover, MN", holes: SAVANNA_HOLES, elev: SAVANNA_ELEV, totalPar: SAVANNA_PAR, bestKey: "discgolf.best.savanna18", holeBestKey: "discgolf.holebest.savanna18", leaderboard: false },
+};
+const COURSE_ORDER: CourseId[] = ["glendoveer", "savanna"];
+
 type Mode = "daily" | "course";
 
 // Achievements — evaluated from a finished round's per-hole scores.
@@ -219,6 +293,7 @@ type GameState = {
   holeIndex: number;
   phase: Phase;
   mode: Mode; // daily challenge vs the full course
+  courseId: CourseId; // which fixed course (when mode === "course")
   seed: number; // round seed (drives wind + pins)
   roundHoles: Hole[]; // this round's holes (wind/pins baked in)
   disc: { x: number; y: number; vx: number; vy: number };
@@ -553,11 +628,13 @@ function generateDailyCourse(rng: () => number): Hole[] {
   return holes;
 }
 // Build one playable round. Daily = a new 9-hole course; course = the 18 fixed
-// Glendoveer holes with seeded wind + a jittered pin. Same seed ⇒ same round.
-function buildRound(seed: number, mode: Mode): Hole[] {
+// holes of the chosen fixed course with seeded wind + a jittered pin. Same seed
+// (and course) ⇒ same round.
+function buildRound(seed: number, mode: Mode, courseId: CourseId = "glendoveer"): Hole[] {
   const rng = mulberry32(seed);
   if (mode === "daily") return generateDailyCourse(rng);
-  return HOLES.map((h, i) => {
+  const course = COURSES[courseId];
+  return course.holes.map((h, i) => {
     const { wind, windMag } = seededWind(rng);
     const base = h.basket;
     const pin = clampPin(
@@ -566,7 +643,7 @@ function buildRound(seed: number, mode: Mode): Hole[] {
       h.fwWidth / 2 - 9,
       base,
     );
-    return { ...h, basket: pin, wind, windMag, elev: HOLE_ELEV[i] ?? 0 };
+    return { ...h, basket: pin, wind, windMag, elev: course.elev[i] ?? 0 };
   });
 }
 // Carry multiplier from elevation: uphill (+) shortens, downhill (−) lengthens.
@@ -710,7 +787,8 @@ export function DiscGolfGame() {
   const [finalTotal, setFinalTotal] = useState(0);
   const [finalPars, setFinalPars] = useState<number[]>(HOLES.map((h) => h.par));
   const [finalMode, setFinalMode] = useState<Mode>("course");
-  const [bestScore, setBestScore] = useState<number | null>(null);
+  const [finalCourseId, setFinalCourseId] = useState<CourseId>("glendoveer");
+  const [bestByCourse, setBestByCourse] = useState<Record<CourseId, number | null>>({ glendoveer: null, savanna: null });
   const [isNewBest, setIsNewBest] = useState(false);
   const [leaderboard, setLeaderboard] = useState<ArcadeScore[]>([]);
   const [nameInput, setNameInput] = useState("");
@@ -745,6 +823,7 @@ export function DiscGolfGame() {
   const leftHandedRef = useRef(false);
   useEffect(() => { leftHandedRef.current = leftHanded; }, [leftHanded]);
   const modeRef = useRef<Mode>("course");
+  const courseIdRef = useRef<CourseId>("glendoveer");
 
   // Best-per-hole, achievements, round history (all persisted).
   const holeBestRef = useRef<(number | null)[]>(Array(18).fill(null));
@@ -759,8 +838,12 @@ export function DiscGolfGame() {
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     try {
-      const best = localStorage.getItem(BEST_KEY);
-      if (best && Number.isFinite(Number(best))) setBestScore(Number(best));
+      const bests: Record<CourseId, number | null> = { glendoveer: null, savanna: null };
+      for (const cid of COURSE_ORDER) {
+        const raw = localStorage.getItem(COURSES[cid].bestKey);
+        if (raw && Number.isFinite(Number(raw))) bests[cid] = Number(raw);
+      }
+      setBestByCourse(bests);
 
       const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
       if (s.throwStyle === "BH" || s.throwStyle === "FH") setThrowStyle(s.throwStyle);
@@ -796,9 +879,11 @@ export function DiscGolfGame() {
     setHud({ hole: g.holeIndex + 1, par: g.roundHoles[g.holeIndex].par, throws: g.throws, holes: g.roundHoles.length });
   }, []);
 
-  const startGame = useCallback((mode?: Mode) => {
+  const startGame = useCallback((mode?: Mode, courseId?: CourseId) => {
     const m = mode ?? modeRef.current;
     modeRef.current = m;
+    const cid = courseId ?? courseIdRef.current;
+    courseIdRef.current = cid;
     if (!audioRef.current) {
       audioRef.current = new AudioEngine();
       audioRef.current.setMusicVolume(musicVolume);
@@ -806,11 +891,21 @@ export function DiscGolfGame() {
     audioRef.current.resume();
     audioRef.current.setMuted(muted);
     audioRef.current.startMusic();
+    // Load this fixed course's per-hole bests so the hole-complete screen and
+    // saves target the right course (the daily course keeps no per-hole bests).
+    if (m === "course") {
+      try {
+        const hb = JSON.parse(localStorage.getItem(COURSES[cid].holeBestKey) || "null");
+        holeBestRef.current = Array(18).fill(null).map((_, i) => (Array.isArray(hb) && typeof hb[i] === "number" ? hb[i] : null));
+      } catch {
+        holeBestRef.current = Array(18).fill(null);
+      }
+    }
     const seed = m === "daily" ? dailySeed() : (Math.random() * 1e9) | 0;
-    const roundHoles = buildRound(seed, m);
+    const roundHoles = buildRound(seed, m, cid);
     stateRef.current = {
       holeIndex: 0, scores: [], discIndex: discIndexRef.current,
-      mode: m, seed, roundHoles, ...freshHole(roundHoles[0]),
+      mode: m, courseId: cid, seed, roundHoles, ...freshHole(roundHoles[0]),
     };
     setSaved(false);
     setSaveErr(null);
@@ -861,19 +956,22 @@ export function DiscGolfGame() {
   const finishGame = useCallback((scores: number[]) => {
     const g = stateRef.current;
     const mode = g?.mode ?? modeRef.current;
-    const pars = g ? g.roundHoles.map((h) => h.par) : HOLES.map((h) => h.par);
+    const courseId = g?.courseId ?? courseIdRef.current;
+    const pars = g ? g.roundHoles.map((h) => h.par) : COURSES[courseId].holes.map((h) => h.par);
     const total = scores.reduce((s, n) => s + n, 0);
     setScorecard(scores);
     setFinalTotal(total);
     setFinalPars(pars);
     setFinalMode(mode);
+    setFinalCourseId(courseId);
 
-    // Personal best is only tracked for the fixed 18-hole Glendoveer course
-    // (the daily course is different every day, so an all-time best is moot).
+    // Personal best is tracked per fixed course (the daily course is different
+    // every day, so an all-time best is moot).
     if (mode === "course") {
+      const { bestKey } = COURSES[courseId];
       let prior: number | null = null;
       try {
-        const raw = localStorage.getItem(BEST_KEY);
+        const raw = localStorage.getItem(bestKey);
         prior = raw ? Number(raw) : null;
         if (prior != null && !Number.isFinite(prior)) prior = null;
       } catch {
@@ -881,8 +979,8 @@ export function DiscGolfGame() {
       }
       const newBest = prior == null || total < prior;
       const best = newBest ? total : prior!;
-      try { localStorage.setItem(BEST_KEY, String(best)); } catch { /* ignore */ }
-      setBestScore(best);
+      try { localStorage.setItem(bestKey, String(best)); } catch { /* ignore */ }
+      setBestByCourse((b) => ({ ...b, [courseId]: best }));
       setIsNewBest(newBest);
     } else {
       setIsNewBest(false);
@@ -910,7 +1008,7 @@ export function DiscGolfGame() {
     audioRef.current?.sfx("win");
     vibrate([20, 40, 20]);
     setScreen("gameComplete");
-    if (mode === "course") void getArcadeLeaderboard().then(setLeaderboard).catch(() => {});
+    if (mode === "course" && COURSES[courseId].leaderboard) void getArcadeLeaderboard().then(setLeaderboard).catch(() => {});
     else setLeaderboard([]);
   }, []);
 
@@ -951,7 +1049,7 @@ export function DiscGolfGame() {
     const over = total - parTotal;
     const nHoles = finalPars.length;
     const isDaily = finalMode === "daily";
-    const courseName = isDaily ? `Daily Challenge · ${nHoles} holes · par ${parTotal}` : `Glendoveer East · ${nHoles} holes · par ${parTotal}`;
+    const courseName = isDaily ? `Daily Challenge · ${nHoles} holes · par ${parTotal}` : `${COURSES[finalCourseId].name} · ${nHoles} holes · par ${parTotal}`;
     const os = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
     const cv = document.createElement("canvas");
     cv.width = 600;
@@ -1000,7 +1098,7 @@ export function DiscGolfGame() {
       cv.toBlob(async (blob) => {
         if (!blob) return resolve();
         const file = new File([blob], "discgolf-scorecard.png", { type: "image/png" });
-        const where = isDaily ? "today's Daily Challenge" : "Glendoveer East";
+        const where = isDaily ? "today's Daily Challenge" : COURSES[finalCourseId].name;
         try {
           const nav = navigator as Navigator & { canShare?: (d: { files: File[] }) => boolean };
           if (nav.canShare?.({ files: [file] })) {
@@ -1019,7 +1117,7 @@ export function DiscGolfGame() {
         resolve();
       }, "image/png");
     });
-  }, [finalTotal, finalPars, finalMode, scorecard]);
+  }, [finalTotal, finalPars, finalMode, finalCourseId, scorecard]);
 
   // When a hole finishes, record/show the best-ever strokes for that hole.
   // Only for Glendoveer — the daily course's holes change every day.
@@ -1037,7 +1135,7 @@ export function DiscGolfGame() {
       const arr = holeBestRef.current.slice();
       arr[idx] = s;
       holeBestRef.current = arr;
-      try { localStorage.setItem(HOLEBEST_KEY, JSON.stringify(arr)); } catch { /* ignore */ }
+      try { localStorage.setItem(COURSES[g.courseId].holeBestKey, JSON.stringify(arr)); } catch { /* ignore */ }
     }
     setHoleBestNote({ best: best as number, isNew });
   }, [screen]);
@@ -1551,6 +1649,9 @@ export function DiscGolfGame() {
       if (g.mode === "daily") {
         ctx.fillStyle = "#f5d24a";
         ctx.fillText("DAILY", 250, 7);
+      } else {
+        ctx.fillStyle = "#9ad4ff";
+        ctx.fillText(COURSES[g.courseId].tag, 250, 7);
       }
 
       // Intro caption — hole, par, and the slope (so elevation is read up front).
@@ -1693,6 +1794,9 @@ export function DiscGolfGame() {
   const finalParTotal = finalPars.reduce((s, n) => s + n, 0);
   const finalOver = finalTotal - finalParTotal;
   const finalIsDaily = finalMode === "daily";
+  const finalCourse = COURSES[finalCourseId];
+  const finalBest = bestByCourse[finalCourseId];
+  const finalHasLeaderboard = finalMode === "course" && finalCourse.leaderboard;
   const overStr = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
 
   return (
@@ -1717,20 +1821,28 @@ export function DiscGolfGame() {
               <span className="text-white font-semibold">Drag back</span> from the disc to aim &amp; set
               power, then release. Mind the wind, hills &amp; OB lines.
             </p>
-            {(bestScore != null || roundsPlayed > 0) && (
-              <p className="text-[#36D7B7] text-xs font-semibold">
-                {bestScore != null && <>Glendoveer best: {bestScore} ({overStr(bestScore - TOTAL_PAR)})</>}
-                {roundsPlayed > 0 && <span className="text-gray-400">{bestScore != null ? " · " : ""}{roundsPlayed} rounds played</span>}
-              </p>
+            {roundsPlayed > 0 && (
+              <p className="text-gray-400 text-xs font-semibold">{roundsPlayed} rounds played</p>
             )}
             <div className="flex flex-col gap-1.5 w-60">
               <button type="button" onClick={() => startGame("daily")} className={`${btn} mt-0 bg-[#36D7B7] text-[#0f1117] hover:bg-[#2bc4a6]`}>
                 🔥 Daily Challenge
               </button>
               <p className="text-gray-400 text-[11px] -mt-0.5">A fresh 9-hole course every day</p>
-              <button type="button" onClick={() => startGame("course")} className={`${btn} mt-1`}>
-                ▶ Play Glendoveer (18)
-              </button>
+              {COURSE_ORDER.map((cid) => {
+                const c = COURSES[cid];
+                const b = bestByCourse[cid];
+                return (
+                  <div key={cid} className="mt-1">
+                    <button type="button" onClick={() => startGame("course", cid)} className={btn}>
+                      ▶ Play {c.name} ({c.holes.length})
+                    </button>
+                    <p className="text-gray-400 text-[11px] -mt-0.5">
+                      {c.subtitle} · {b != null ? <span className="text-[#36D7B7] font-semibold">best {b} ({overStr(b - c.totalPar)})</span> : `par ${c.totalPar}`}
+                    </p>
+                  </div>
+                );
+              })}
               <button type="button" onClick={() => setSettingsOpen(true)} className="text-gray-300 hover:text-white text-sm font-semibold py-1.5">
                 ⚙ Settings &amp; achievements
               </button>
@@ -1856,14 +1968,14 @@ export function DiscGolfGame() {
             <div className="text-center">
               <h2 className="text-white font-black text-2xl">{finalIsDaily ? "Daily Challenge complete!" : "Round complete!"}</h2>
               <p className="text-gray-400 text-xs">
-                {finalIsDaily ? `Today's course · ${finalPars.length} holes · par ${finalParTotal}` : `Glendoveer East · 18 holes · par ${finalParTotal}`}
+                {finalIsDaily ? `Today's course · ${finalPars.length} holes · par ${finalParTotal}` : `${finalCourse.name} · ${finalPars.length} holes · par ${finalParTotal}`}
               </p>
               <p className="text-[#36D7B7] font-bold text-lg mt-1">
                 {finalTotal} throws · {finalOver === 0 ? "Even par" : overStr(finalOver)}
                 {isNewBest && <span className="ml-2 text-[#f5d24a]">★ New best!</span>}
               </p>
-              {!finalIsDaily && bestScore != null && !isNewBest && (
-                <p className="text-gray-400 text-xs mt-0.5">Your best: {bestScore} ({overStr(bestScore - TOTAL_PAR)})</p>
+              {!finalIsDaily && finalBest != null && !isNewBest && (
+                <p className="text-gray-400 text-xs mt-0.5">Your best: {finalBest} ({overStr(finalBest - finalCourse.totalPar)})</p>
               )}
             </div>
 
@@ -1934,9 +2046,11 @@ export function DiscGolfGame() {
             </div>
 
             {/* Save + leaderboard are for the shared Glendoveer course only. */}
-            {finalIsDaily ? (
+            {!finalHasLeaderboard ? (
               <p className="text-center text-gray-400 text-sm">
-                Everyone plays the same course today — share your card to compare with friends.
+                {finalIsDaily
+                  ? "Everyone plays the same course today — share your card to compare with friends."
+                  : "Local stats only on this course — share your card to compare with friends."}
               </p>
             ) : (
               <>
