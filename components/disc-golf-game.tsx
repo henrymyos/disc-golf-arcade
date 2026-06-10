@@ -198,7 +198,7 @@ const STRAIGHT_SPEED_MUL = 1.13;
 // the climb-turn / descent-fade for a straight flight; friction is glide
 // (higher = floats/rolls farther). Curving is capped per throw (MAX_FADE_TURN)
 // so a disc can never loop or fade backward.
-type Disc = { key: string; name: string; power: number; arc: number; fade: number; turn: number; sFade: number; friction: number; color: string; blurb: string };
+type Disc = { key: string; name: string; brand?: string; power: number; arc: number; fade: number; turn: number; sFade: number; friction: number; color: string; blurb: string };
 const DISCS: Disc[] = [
   // `arc` is the vertical launch per unit power. The putter flies flat so it
   // stays low and reaches the basket near the ground (high chance to catch);
@@ -207,6 +207,44 @@ const DISCS: Disc[] = [
   { key: "mid", name: "Mid", power: 1.0, arc: 2.2, fade: 0.008, turn: 0.0, sFade: 0.002, friction: 0.984, color: "#f5d24a", blurb: "Balanced" },
   { key: "driver", name: "Driver", power: 1.34, arc: 2.9, fade: 0.014, turn: 0.011, sFade: 0.015, friction: 0.990, color: "#e23b3b", blurb: "Far, S-flight" },
 ];
+
+// Advanced bag — real discs translated from their flight numbers
+// (speed/glide/turn/fade). Speed → power + launch arc, glide → float, a negative
+// turn → high-speed turn (understable), fade → low-speed fade. In advanced mode
+// each disc flies its own S-shaped line (no overstable/straight toggle).
+function discFromNumbers(key: string, name: string, brand: string, color: string, speed: number, glide: number, turnN: number, fadeN: number): Disc {
+  return {
+    key, name, brand, color,
+    power: 0.74 + speed * 0.05,
+    arc: 1.0 + speed * 0.14,
+    friction: 0.964 + glide * 0.0045,
+    fade: fadeN * 0.005,
+    turn: Math.max(0, -turnN) * 0.008, // understable high-speed turn
+    sFade: fadeN * 0.006, // low-speed fade
+    blurb: `${brand} · ${speed} / ${glide} / ${turnN} / ${fadeN}`,
+  };
+}
+const ADV_DISCS: Disc[] = [
+  // Putt & approach
+  discFromNumbers("aviar", "Aviar", "Innova", "#36D7B7", 2, 3, 0, 1),
+  discFromNumbers("luna", "Luna", "Discraft", "#7c5cff", 3, 3, 0, 3),
+  discFromNumbers("zone", "Zone", "Discraft", "#e07b3b", 4, 3, 0, 3),
+  // Midrange
+  discFromNumbers("buzzz", "Buzzz", "Discraft", "#f5d24a", 5, 4, -1, 1),
+  discFromNumbers("mako3", "Mako3", "Innova", "#4ad0c0", 5, 5, 0, 0),
+  discFromNumbers("roc3", "Roc3", "Innova", "#c98b4a", 5, 4, 0, 3),
+  // Fairway / control
+  discFromNumbers("teebird", "Teebird", "Innova", "#5fb0e8", 7, 5, 0, 2),
+  discFromNumbers("undertaker", "Undertaker", "Discraft", "#9fd14a", 9, 5, -1, 2),
+  discFromNumbers("firebird", "Firebird", "Innova", "#e2453b", 9, 3, 0, 4),
+  // Distance
+  discFromNumbers("wraith", "Wraith", "Innova", "#b06be0", 11, 5, -1, 3),
+  discFromNumbers("nuke", "Nuke", "Discraft", "#3b7de2", 13, 5, -1, 3),
+  discFromNumbers("destroyer", "Destroyer", "Innova", "#e23b7b", 12, 5, -1, 3),
+];
+function activeDiscs(advanced: boolean): Disc[] {
+  return advanced ? ADV_DISCS : DISCS;
+}
 // Most the flight path may bend over a single throw (~46°) — keeps fade
 // noticeable without ever curving back toward the thrower.
 const MAX_FADE_TURN = 0.8;
@@ -219,6 +257,7 @@ type GameState = {
   holeIndex: number;
   phase: Phase;
   mode: Mode; // daily challenge vs the full course
+  advanced: boolean; // advanced bag (real discs) vs simple (putter/mid/driver)
   seed: number; // round seed (drives wind + pins)
   roundHoles: Hole[]; // this round's holes (wind/pins baked in)
   disc: { x: number; y: number; vx: number; vy: number };
@@ -744,6 +783,9 @@ export function DiscGolfGame() {
   const [leftHanded, setLeftHanded] = useState(false);
   const leftHandedRef = useRef(false);
   useEffect(() => { leftHandedRef.current = leftHanded; }, [leftHanded]);
+  const [advanced, setAdvanced] = useState(false);
+  const advancedRef = useRef(false);
+  useEffect(() => { advancedRef.current = advanced; }, [advanced]);
   const modeRef = useRef<Mode>("course");
 
   // Best-per-hole, achievements, round history (all persisted).
@@ -767,6 +809,7 @@ export function DiscGolfGame() {
       if (s.flightPath === "overstable" || s.flightPath === "straight") setFlightPath(s.flightPath);
       if (typeof s.musicVolume === "number") setMusicVolume(s.musicVolume);
       if (typeof s.leftHanded === "boolean") setLeftHanded(s.leftHanded);
+      if (typeof s.advanced === "boolean") setAdvanced(s.advanced);
 
       const hb = JSON.parse(localStorage.getItem(HOLEBEST_KEY) || "null");
       if (Array.isArray(hb)) {
@@ -786,9 +829,9 @@ export function DiscGolfGame() {
   useEffect(() => {
     audioRef.current?.setMusicVolume(musicVolume);
     try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ throwStyle, flightPath, musicVolume, leftHanded }));
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ throwStyle, flightPath, musicVolume, leftHanded, advanced }));
     } catch { /* ignore */ }
-  }, [throwStyle, flightPath, musicVolume, leftHanded]);
+  }, [throwStyle, flightPath, musicVolume, leftHanded, advanced]);
 
   const syncHud = useCallback(() => {
     const g = stateRef.current;
@@ -808,9 +851,11 @@ export function DiscGolfGame() {
     audioRef.current.startMusic();
     const seed = m === "daily" ? dailySeed() : (Math.random() * 1e9) | 0;
     const roundHoles = buildRound(seed, m);
+    const adv = advancedRef.current;
+    const discIndex = Math.min(discIndexRef.current, activeDiscs(adv).length - 1);
     stateRef.current = {
-      holeIndex: 0, scores: [], discIndex: discIndexRef.current,
-      mode: m, seed, roundHoles, ...freshHole(roundHoles[0]),
+      holeIndex: 0, scores: [], discIndex,
+      mode: m, advanced: adv, seed, roundHoles, ...freshHole(roundHoles[0]),
     };
     setSaved(false);
     setSaveErr(null);
@@ -828,15 +873,26 @@ export function DiscGolfGame() {
     rangeFlashRef.current = performance.now(); // emphasize the reach line briefly
   }, []);
 
+  // Toggling the advanced bag resets to a sensible default disc (the bags don't
+  // line up index-for-index).
+  const handleSetAdvanced = useCallback((v: boolean) => {
+    setAdvanced(v);
+    const def = v ? 6 : 1; // Teebird / Mid
+    setDiscIndex(def);
+    if (stateRef.current) stateRef.current.discIndex = Math.min(def, activeDiscs(v).length - 1);
+  }, []);
+
   const throwDisc = useCallback(() => {
     const g = stateRef.current;
     if (!g || g.phase !== "aim") return;
     const hole = g.roundHoles[g.holeIndex];
-    const disc = DISCS[g.discIndex];
-    g.path = flightPathRef.current;
+    const disc = activeDiscs(g.advanced)[g.discIndex];
+    // Advanced discs fly their own S-line (turn → fade) with no distance boost;
+    // simple mode uses the overstable/straight toggle.
+    g.path = g.advanced ? "straight" : flightPathRef.current;
     // Slower launch + extra glide (disc friction) so it floats across the
     // fairway. Straight throws carry farther; uphill (+elev) shortens carry.
-    const pathMul = g.path === "straight" ? STRAIGHT_SPEED_MUL : 1;
+    const pathMul = !g.advanced && g.path === "straight" ? STRAIGHT_SPEED_MUL : 1;
     const speed = disc.power * (1.2 + g.power * 3.35) * pathMul * elevMul(hole.elev);
     g.disc.vx = Math.cos(g.angle) * speed;
     g.disc.vy = Math.sin(g.angle) * speed;
@@ -1047,7 +1103,10 @@ export function DiscGolfGame() {
     function onDown(e: KeyboardEvent) {
       if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " ", "Enter"].includes(e.key)) e.preventDefault();
       keysRef.current.add(e.key);
-      if (e.key >= "1" && e.key <= "3") selectDisc(Number(e.key) - 1);
+      if (e.key >= "1" && e.key <= "9") {
+        const n = Number(e.key) - 1;
+        if (n < activeDiscs(advancedRef.current).length) selectDisc(n);
+      }
       if (e.key === "b" || e.key === "B") setThrowStyle("BH");
       if (e.key === "f" || e.key === "F") setThrowStyle("FH");
       if (e.key === " " || e.key === "Enter") {
@@ -1108,7 +1167,7 @@ export function DiscGolfGame() {
         // Aim + power are driven by the pointer drag handlers; nothing to do here.
       } else if (g.phase === "fly") {
         const d = g.disc;
-        const disc = DISCS[g.discIndex];
+        const disc = activeDiscs(g.advanced)[g.discIndex];
         const f: Flight = { x: d.x, y: d.y, vx: d.vx, vy: d.vy, h: g.h, vh: g.vh, fadeTurn: g.fadeTurn };
         const res = stepFlight(f, disc, g.fadeSign, g.path, hole);
         d.x = f.x;
@@ -1279,9 +1338,10 @@ export function DiscGolfGame() {
       // plus a visible pull-back slider/knob on the disc.
       if (g.phase === "aim") {
         const dr = dragRef.current;
-        const aimDisc = DISCS[g.discIndex];
-        const sign = throwStyleRef.current === "BH" ? -1 : 1;
-        const path = flightPathRef.current;
+        const aimDisc = activeDiscs(g.advanced)[g.discIndex];
+        const lh2 = leftHandedRef.current ? -1 : 1;
+        const sign = (throwStyleRef.current === "BH" ? -1 : 1) * lh2;
+        const path: FlightPath = g.advanced ? "straight" : flightPathRef.current;
         const dsx = g.disc.x;
         const dsy = g.disc.y - cam; // disc screen position
 
@@ -1360,7 +1420,7 @@ export function DiscGolfGame() {
         }
 
         if (dr.active && power > 0.04 && !inCancel) {
-          const pathMul = path === "straight" ? STRAIGHT_SPEED_MUL : 1;
+          const pathMul = !g.advanced && path === "straight" ? STRAIGHT_SPEED_MUL : 1;
           const speed = aimDisc.power * (1.2 + power * 3.35) * pathMul * elevMul(hole.elev);
           const f: Flight = {
             x: g.disc.x, y: g.disc.y,
@@ -1407,7 +1467,7 @@ export function DiscGolfGame() {
       }
 
       // Shadow on the ground + disc lifted by its height.
-      const disc = DISCS[g.discIndex];
+      const disc = activeDiscs(g.advanced)[g.discIndex];
       const dscreenY = g.disc.y - cam;
       const shadowR = Math.max(1.5, DISC_R - g.h * 0.03);
       ctx.fillStyle = "rgba(0,0,0,0.28)";
@@ -1772,6 +1832,7 @@ export function DiscGolfGame() {
             flightPath={flightPath} setFlightPath={setFlightPath}
             musicVolume={musicVolume} setMusicVolume={setMusicVolume}
             leftHanded={leftHanded} setLeftHanded={setLeftHanded}
+            advanced={advanced} setAdvanced={handleSetAdvanced}
             unlocked={unlocked}
           />
         )}
@@ -1780,43 +1841,70 @@ export function DiscGolfGame() {
       {/* Compact footer: disc + stance + mute (hidden on the results screen) */}
       {screen !== "gameComplete" && (
         <div className="shrink-0 w-full max-w-[480px] mx-auto px-3 pb-[max(env(safe-area-inset-bottom),0.6rem)] pt-1 flex flex-col gap-2">
-          <p className="text-center text-[11px] text-gray-400 leading-none">Drag back to aim &amp; throw</p>
-          <div className="grid grid-cols-3 gap-2">
-            {DISCS.map((d, i) => (
-              <button
-                key={d.key}
-                type="button"
-                onClick={() => selectDisc(i)}
-                title={d.blurb}
-                className={`rounded-lg border px-2 py-2 flex items-center gap-1.5 text-xs font-bold transition ${
-                  i === discIndex ? "border-white/40 bg-white/10 text-white" : "border-white/10 text-gray-300 hover:border-white/25"
-                }`}
-              >
-                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: d.color }} />
-                <span className="truncate">{d.name}</span>
-                <span className="ml-auto text-[10px] text-gray-500">{i + 1}</span>
-              </button>
-            ))}
-          </div>
+          <p className="text-center text-[11px] text-gray-400 leading-none">
+            {advanced ? "Advanced bag · speed / glide / turn / fade" : "Drag back to aim & throw"}
+          </p>
+          {advanced ? (
+            // Scrollable row of real discs (no overstable/straight toggle).
+            <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" style={{ scrollbarWidth: "thin" }}>
+              {ADV_DISCS.map((d, i) => (
+                <button
+                  key={d.key}
+                  type="button"
+                  onClick={() => selectDisc(i)}
+                  className={`shrink-0 w-[88px] rounded-lg border px-2 py-1.5 text-left transition ${
+                    i === discIndex ? "border-white/40 bg-white/10" : "border-white/10 hover:border-white/25"
+                  }`}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: d.color }} />
+                    <span className={`text-xs font-bold truncate ${i === discIndex ? "text-white" : "text-gray-300"}`}>{d.name}</span>
+                  </span>
+                  <span className="block text-[9px] text-gray-500 mt-0.5">{d.brand}</span>
+                  <span className="block text-[9px] font-mono text-gray-400 leading-tight">{d.blurb.split("· ")[1]}</span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-3 gap-2">
+                {DISCS.map((d, i) => (
+                  <button
+                    key={d.key}
+                    type="button"
+                    onClick={() => selectDisc(i)}
+                    title={d.blurb}
+                    className={`rounded-lg border px-2 py-2 flex items-center gap-1.5 text-xs font-bold transition ${
+                      i === discIndex ? "border-white/40 bg-white/10 text-white" : "border-white/10 text-gray-300 hover:border-white/25"
+                    }`}
+                  >
+                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: d.color }} />
+                    <span className="truncate">{d.name}</span>
+                    <span className="ml-auto text-[10px] text-gray-500">{i + 1}</span>
+                  </button>
+                ))}
+              </div>
 
-          <div className="flex gap-1 bg-[#1a1d23] border border-white/10 rounded-lg p-1">
-            {([
-              { key: "overstable", label: "Overstable" },
-              { key: "straight", label: "Straight" },
-            ] as const).map((p) => (
-              <button
-                key={p.key}
-                type="button"
-                onClick={() => setFlightPath(p.key)}
-                aria-pressed={flightPath === p.key}
-                className={`flex-1 rounded-md px-2 py-2 text-xs font-bold transition ${
-                  flightPath === p.key ? "bg-[#36D7B7] text-[#0f1117]" : "text-gray-400 hover:text-white"
-                }`}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
+              <div className="flex gap-1 bg-[#1a1d23] border border-white/10 rounded-lg p-1">
+                {([
+                  { key: "overstable", label: "Overstable" },
+                  { key: "straight", label: "Straight" },
+                ] as const).map((p) => (
+                  <button
+                    key={p.key}
+                    type="button"
+                    onClick={() => setFlightPath(p.key)}
+                    aria-pressed={flightPath === p.key}
+                    className={`flex-1 rounded-md px-2 py-2 text-xs font-bold transition ${
+                      flightPath === p.key ? "bg-[#36D7B7] text-[#0f1117]" : "text-gray-400 hover:text-white"
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
 
           <div className="flex items-stretch gap-2">
             <div className="flex-1 flex gap-1 bg-[#1a1d23] border border-white/10 rounded-lg p-1">
@@ -2021,9 +2109,11 @@ function SettingsPanel(props: {
   setMusicVolume: (v: number) => void;
   leftHanded: boolean;
   setLeftHanded: (b: boolean) => void;
+  advanced: boolean;
+  setAdvanced: (b: boolean) => void;
   unlocked: string[];
 }) {
-  const { onClose, throwStyle, setThrowStyle, flightPath, setFlightPath, musicVolume, setMusicVolume, leftHanded, setLeftHanded, unlocked } = props;
+  const { onClose, throwStyle, setThrowStyle, flightPath, setFlightPath, musicVolume, setMusicVolume, leftHanded, setLeftHanded, advanced, setAdvanced, unlocked } = props;
   const seg = (active: boolean) =>
     `flex-1 rounded-md px-2 py-2 text-xs font-bold transition ${active ? "bg-[#4B3DFF] text-white" : "text-gray-400 hover:text-white"}`;
   return (
@@ -2042,13 +2132,29 @@ function SettingsPanel(props: {
           </div>
         </div>
 
-        <div>
-          <p className="text-gray-400 text-xs font-semibold mb-1">Default flight</p>
-          <div className="flex gap-1 bg-[#1a1d23] border border-white/10 rounded-lg p-1">
-            <button type="button" onClick={() => setFlightPath("overstable")} className={seg(flightPath === "overstable")}>Overstable</button>
-            <button type="button" onClick={() => setFlightPath("straight")} className={seg(flightPath === "straight")}>Straight</button>
+        {!advanced && (
+          <div>
+            <p className="text-gray-400 text-xs font-semibold mb-1">Default flight</p>
+            <div className="flex gap-1 bg-[#1a1d23] border border-white/10 rounded-lg p-1">
+              <button type="button" onClick={() => setFlightPath("overstable")} className={seg(flightPath === "overstable")}>Overstable</button>
+              <button type="button" onClick={() => setFlightPath("straight")} className={seg(flightPath === "straight")}>Straight</button>
+            </div>
           </div>
-        </div>
+        )}
+
+        <button
+          type="button"
+          onClick={() => setAdvanced(!advanced)}
+          className="w-full flex items-center justify-between bg-[#1a1d23] border border-white/10 rounded-lg px-3 py-2.5"
+        >
+          <span className="text-left">
+            <span className="block text-white text-sm font-semibold">Advanced discs</span>
+            <span className="block text-gray-500 text-[11px]">Throw real Innova / Discraft discs by their flight numbers</span>
+          </span>
+          <span className={`shrink-0 text-xs font-bold px-2 py-0.5 rounded ${advanced ? "bg-[#36D7B7] text-[#0f1117]" : "bg-white/10 text-gray-400"}`}>
+            {advanced ? "ON" : "OFF"}
+          </span>
+        </button>
 
         <button
           type="button"
