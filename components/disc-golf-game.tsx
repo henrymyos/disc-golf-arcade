@@ -481,8 +481,14 @@ function buildRound(seed: number): Hole[] {
   });
 }
 // Carry multiplier from elevation: uphill (+) shortens, downhill (−) lengthens.
+// Strong enough to clearly change where a throw lands (±~20% at ±2).
 function elevMul(elev: number | undefined) {
-  return 1 - (elev ?? 0) * 0.05;
+  return 1 - (elev ?? 0) * 0.1;
+}
+// Ground roll-out also depends on slope: downhill rolls farther, uphill checks
+// up quickly. Higher friction value = less deceleration = more roll.
+function elevGroundFriction(elev: number | undefined) {
+  return Math.max(0.7, Math.min(0.92, GROUND_FRICTION - (elev ?? 0) * 0.025));
 }
 // Best-effort haptics on mobile (no-op where unsupported).
 function vibrate(pattern: number | number[]) {
@@ -537,7 +543,7 @@ function stepFlight(f: Flight, disc: Disc, fadeSign: number, path: FlightPath, h
     f.vx += hole.wind.x;
     f.vy += hole.wind.y;
   }
-  const friction = airborne ? disc.friction : GROUND_FRICTION;
+  const friction = airborne ? disc.friction : elevGroundFriction(hole.elev);
   f.vx *= friction;
   f.vy *= friction;
 
@@ -1314,19 +1320,20 @@ export function DiscGolfGame() {
         const wa = Math.atan2(hole.wind?.y ?? 0, hole.wind?.x ?? 0);
         const elev = hole.elev ?? 0;
         const panY = oy + mh + 5;
-        const panH = 34;
-        ctx.fillStyle = "rgba(0,0,0,0.5)";
+        const panH = 48;
+        ctx.fillStyle = "rgba(0,0,0,0.55)";
         ctx.fillRect(ox - 3, panY, mw + 6, panH);
-        // wind compass on the left
-        const cxw = ox + 13;
-        const cyw = panY + panH / 2;
+
+        // — Wind (top) —
+        const cxw = ox + 12;
+        const cyw = panY + 13;
         ctx.strokeStyle = "rgba(255,255,255,0.25)";
         ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.arc(cxw, cyw, 11, 0, Math.PI * 2);
+        ctx.arc(cxw, cyw, 9, 0, Math.PI * 2);
         ctx.stroke();
         const windCol = mph >= 10 ? "#e08a3b" : mph >= 5 ? "#f5d24a" : "#9fd4e8";
-        const al = 10;
+        const al = 9;
         const hx = cxw + Math.cos(wa) * al;
         const hy = cyw + Math.sin(wa) * al;
         ctx.strokeStyle = windCol;
@@ -1342,16 +1349,31 @@ export function DiscGolfGame() {
         ctx.lineTo(hx + Math.cos(wa - 2.4) * 4, hy + Math.sin(wa - 2.4) * 4);
         ctx.closePath();
         ctx.fill();
-        // labels on the right
         ctx.textAlign = "left";
         ctx.textBaseline = "middle";
         ctx.font = "bold 9px monospace";
         ctx.fillStyle = windCol;
-        ctx.fillText(`${mph} mph`, ox + 27, panY + 11);
-        const eTxt = elev > 0 ? `▲ ${elev}` : elev < 0 ? `▼ ${-elev}` : "flat";
-        ctx.fillStyle = elev > 0 ? "#e0b070" : elev < 0 ? "#7fd1e0" : "#9ab";
+        ctx.fillText(`${mph}mph`, ox + 25, cyw);
+
+        // divider
+        ctx.strokeStyle = "rgba(255,255,255,0.14)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(ox, panY + 25);
+        ctx.lineTo(ox + mw, panY + 25);
+        ctx.stroke();
+
+        // — Elevation (bottom): word + a carry % so its effect is explicit —
+        const eCol = elev > 0 ? "#e89a4a" : elev < 0 ? "#5fc8e8" : "#9ab";
+        const eWord = elev > 0 ? "UPHILL" : elev < 0 ? "DOWNHILL" : "FLAT";
+        const chev = (elev > 0 ? "▲" : elev < 0 ? "▼" : "—").repeat(Math.max(1, Math.min(3, Math.abs(elev))));
+        ctx.fillStyle = eCol;
         ctx.font = "bold 9px monospace";
-        ctx.fillText(eTxt, ox + 27, panY + 24);
+        ctx.fillText(`${chev} ${eWord}`, ox, panY + 35);
+        const pct = Math.round(-elev * 10); // carry change vs. flat
+        ctx.font = "8px monospace";
+        ctx.fillStyle = elev === 0 ? "#9ab" : pct > 0 ? "#36D7B7" : "#e08a3b";
+        ctx.fillText(elev === 0 ? "even carry" : `${pct > 0 ? "+" : ""}${pct}% carry`, ox, panY + 45);
       }
 
       // HUD (screen-fixed)
@@ -1376,14 +1398,26 @@ export function DiscGolfGame() {
         ctx.fillText("DAILY", 250, 7);
       }
 
-      // Intro caption
+      // Intro caption — hole, par, and the slope (so elevation is read up front).
       if (g.phase === "intro") {
+        const elev = hole.elev ?? 0;
         ctx.fillStyle = "rgba(0,0,0,0.55)";
-        ctx.fillRect(0, H / 2 - 10, W, 20);
+        ctx.fillRect(0, H / 2 - 20, W, 40);
         ctx.fillStyle = "#fff";
         ctx.font = "10px monospace";
         ctx.textAlign = "center";
-        ctx.fillText(`HOLE ${g.holeIndex + 1}  ·  PAR ${hole.par}`, W / 2, H / 2);
+        ctx.fillText(`HOLE ${g.holeIndex + 1}  ·  PAR ${hole.par}`, W / 2, H / 2 - 6);
+        if (elev !== 0) {
+          ctx.fillStyle = elev > 0 ? "#e89a4a" : "#5fc8e8";
+          ctx.font = "bold 11px monospace";
+          const word = elev > 0 ? "UPHILL" : "DOWNHILL";
+          const arr = (elev > 0 ? "▲" : "▼").repeat(Math.min(3, Math.abs(elev)));
+          ctx.fillText(`${arr} ${word} — throws play ${elev > 0 ? "shorter" : "longer"}`, W / 2, H / 2 + 8);
+        } else {
+          ctx.fillStyle = "#9ab";
+          ctx.font = "9px monospace";
+          ctx.fillText("flat", W / 2, H / 2 + 8);
+        }
         ctx.textAlign = "left";
       }
 
