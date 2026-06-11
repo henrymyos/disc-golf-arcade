@@ -2441,6 +2441,13 @@ export function DiscGolfGame() {
               <button type="button" onClick={shareCard} className="mt-1 bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white font-bold px-6 py-3 rounded-lg transition">
                 📤 Share card
               </button>
+              <button
+                type="button"
+                onClick={() => { audioRef.current?.stopMusic(); setScreen("title"); }}
+                className="mt-1 bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white font-bold px-6 py-3 rounded-lg transition"
+              >
+                🏠 Home
+              </button>
             </div>
           </div>
         </div>
