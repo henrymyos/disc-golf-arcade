@@ -217,11 +217,22 @@ const TOTAL_PAR = HOLES.reduce((s, h) => s + h.par, 0);
 // the front stretch, the middle is rope-hazard golf across open park, and the
 // finish climbs back along the water. Flat terrain (no elev).
 const WINTHROP_TEMPLATES: Omit<Hole, "worldH">[] = [
-  // 1 — par 4, 701ft. Lake all down the left, road right; long and straightish.
-  { par: 4, tee: TEE, basket: { x: 162, y: 96 }, fairway: [{ x: 160, y: 416 }, { x: 155, y: 330 }, { x: 150, y: 250 }, { x: 158, y: 160 }, { x: 162, y: 96 }], fwWidth: 116, trees: [{ x: 110, y: 330, r: 9 }, { x: 210, y: 300, r: 9 }, { x: 205, y: 210, r: 9 }, { x: 208, y: 130, r: 9 }, { x: 126, y: 80, r: 9 }, { x: 198, y: 86, r: 9 }], water: [{ x: 96, y: 260, w: 26, h: 30 }, { x: 92, y: 150, w: 26, h: 26 }] },
-  // 2 — par 3, 389ft. The signature water carry: the lake fills the mid-left
-  // and the green sits across it top-left; bail right around the big tree.
-  { par: 3, tee: TEE, basket: { x: 120, y: 98 }, fairway: [{ x: 160, y: 416 }, { x: 150, y: 330 }, { x: 135, y: 230 }, { x: 120, y: 150 }, { x: 120, y: 98 }], fwWidth: 112, trees: [{ x: 172, y: 166, r: 11 }], water: [{ x: 60, y: 180, w: 110, h: 80 }, { x: 64, y: 270, w: 80, h: 36 }] },
+  // 1 — par 4, 701ft. The lake runs the ENTIRE left side while the fairway
+  // bends steadily right away from it to a green up the right (caddie book).
+  { par: 4, tee: TEE, basket: { x: 205, y: 96 }, fairway: [{ x: 160, y: 416 }, { x: 152, y: 330 }, { x: 150, y: 250 }, { x: 170, y: 175 }, { x: 195, y: 120 }, { x: 205, y: 96 }], fwWidth: 116, trees: [{ x: 120, y: 290, r: 9 }, { x: 200, y: 310, r: 9 }, { x: 205, y: 210, r: 9 }, { x: 238, y: 140, r: 9 }, { x: 172, y: 80, r: 9 }, { x: 240, y: 86, r: 9 }], water: [
+    // Continuous shoreline hugging the left OB edge, tee to green
+    { x: 86, y: 330, w: 26, h: 40 }, { x: 84, y: 260, w: 28, h: 40 }, { x: 88, y: 200, w: 30, h: 36 }, { x: 104, y: 150, w: 30, h: 30 }, { x: 124, y: 110, w: 28, h: 24 },
+  ] },
+  // 2 — par 3, 389ft. The signature water hole: the lake fills everything
+  // between tee and basket on the left, creeps to the pin and wraps BEHIND it.
+  // The in-bounds bail is the right side — but a tree cluster guards it, so
+  // going around rarely leaves a birdie look.
+  { par: 3, tee: TEE, basket: { x: 120, y: 98 }, fairway: [{ x: 160, y: 416 }, { x: 165, y: 330 }, { x: 160, y: 240 }, { x: 140, y: 160 }, { x: 120, y: 98 }], fwWidth: 112, trees: [
+    { x: 172, y: 166, r: 11 }, { x: 190, y: 150, r: 9 }, { x: 182, y: 196, r: 9 }, { x: 200, y: 186, r: 9 },
+  ], water: [
+    { x: 60, y: 278, w: 88, h: 42 }, { x: 52, y: 158, w: 96, h: 112 }, // the lake, tee to mid
+    { x: 58, y: 84, w: 38, h: 62 }, { x: 88, y: 52, w: 80, h: 28 }, // creeping to the pin + wrapping behind it
+  ] },
   // 3 — par 3, 371ft. Hugs the shoreline, bending left to a beachside green.
   { par: 3, tee: TEE, basket: { x: 118, y: 104 }, fairway: [{ x: 160, y: 416 }, { x: 152, y: 300 }, { x: 138, y: 200 }, { x: 122, y: 140 }, { x: 118, y: 104 }], fwWidth: 108, trees: [{ x: 190, y: 260, r: 10 }, { x: 170, y: 180, r: 9 }, { x: 162, y: 144, r: 9 }], water: [{ x: 70, y: 170, w: 34, h: 90 }], hazard: [{ x: 138, y: 124, w: 26, h: 16 }] },
   // 4 — par 3, 284ft. Open, but a fence wall crosses short of the green with
