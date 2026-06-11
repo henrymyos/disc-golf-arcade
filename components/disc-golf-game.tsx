@@ -132,11 +132,12 @@ const HOLE_TEMPLATES: Omit<Hole, "worldH">[] = [
   // 12 — par 3, 370ft. Straight up the middle through scattered guards to a
   // tree-ringed green.
   { par: 3, tee: TEE, basket: { x: 162, y: 112 }, fairway: [{ x: 160, y: 416 }, { x: 162, y: 300 }, { x: 162, y: 200 }, { x: 162, y: 112 }], fwWidth: 114, trees: [{ x: 150, y: 250, r: 9 }, { x: 130, y: 200, r: 9 }, { x: 185, y: 165, r: 9 }, { x: 126, y: 128, r: 9 }, { x: 198, y: 124, r: 9 }, { x: 160, y: 78, r: 9 }], water: [] },
-  // 13 — par 4, 775ft. The fairway starts up-LEFT of the tee, so the drive
-  // carries OB ground to reach it (as the caddie book shows), then the hole
-  // doglegs RIGHT at the top to a green ringed in trees — 400 wide.
-  { par: 4, worldW: 400, tee: { x: 200, y: 416 }, basket: { x: 260, y: 92 }, fairway: [{ x: 150, y: 310 }, { x: 150, y: 250 }, { x: 170, y: 175 }, { x: 230, y: 120 }, { x: 260, y: 92 }], fwWidth: 118, trees: [
-    { x: 205, y: 250, r: 9 }, { x: 110, y: 200, r: 9 },
+  // 13 — par 4, 775ft. The tee pad is in bounds, but straight ahead is an OB
+  // gap: rip a full drive over it to the upper fairway, or take the safe,
+  // narrow in-bounds strip that snakes around the LEFT. Then the hole doglegs
+  // RIGHT at the top to a green ringed in trees — 400 wide.
+  { par: 4, worldW: 400, tee: { x: 200, y: 416 }, basket: { x: 260, y: 92 }, fairway: [{ x: 200, y: 416 }, { x: 118, y: 370 }, { x: 118, y: 295 }, { x: 145, y: 270 }, { x: 170, y: 175 }, { x: 230, y: 120 }, { x: 260, y: 92 }], fwWidth: 90, trees: [
+    { x: 185, y: 235, r: 9 }, { x: 125, y: 205, r: 9 },
     // Green ring
     { x: 226, y: 108, r: 9 }, { x: 296, y: 104, r: 9 }, { x: 256, y: 64, r: 9 }, { x: 226, y: 64, r: 9 }, { x: 292, y: 68, r: 9 },
   ], water: [] },
