@@ -170,11 +170,11 @@ const HOLE_TEMPLATES: Omit<Hole, "worldH">[] = [
   // 18 — par 5, 1000ft. The fairway pond sits right where a full DRIVE lands —
   // lay up short or thread past it — then a wood of trees shapes the second
   // shot on the way to the finishing green up right (caddie book).
-  { par: 5, tee: TEE, basket: { x: 180, y: 60 }, fairway: [{ x: 160, y: 416 }, { x: 162, y: 330 }, { x: 158, y: 240 }, { x: 164, y: 150 }, { x: 180, y: 60 }], fwWidth: 124, trees: [
+  { par: 5, tee: TEE, basket: { x: 180, y: 90 }, fairway: [{ x: 160, y: 416 }, { x: 162, y: 330 }, { x: 158, y: 240 }, { x: 164, y: 150 }, { x: 180, y: 90 }], fwWidth: 124, trees: [
     { x: 165, y: 340, r: 9 },
     // Second-shot wood (between the pond and the green approach)
     { x: 150, y: 250, r: 9 }, { x: 190, y: 225, r: 9 }, { x: 130, y: 200, r: 9 }, { x: 175, y: 178, r: 9 },
-    { x: 120, y: 130, r: 9 }, { x: 142, y: 80, r: 9 }, { x: 212, y: 72, r: 9 },
+    { x: 120, y: 130, r: 9 }, { x: 142, y: 110, r: 9 }, { x: 212, y: 102, r: 9 },
   ], water: [{ x: 120, y: 280, w: 74, h: 30 }] },
 ];
 
