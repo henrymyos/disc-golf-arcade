@@ -50,7 +50,9 @@ type Water = { x: number; y: number; w: number; h: number };
 // Per-round flavor (set by `buildRound`): `wind` is a tiny per-frame push on the
 // disc while it's airborne; `elev` is the hole's slope (+uphill shortens carry,
 // −downhill lengthens it). Both render as indicators on the HUD/minimap.
-type Hole = { par: number; worldH: number; tee: Vec; basket: Vec; fairway: Vec[]; fwWidth: number; trees: Tree[]; water: Water[]; hazard?: Water[]; wind?: Vec; windMag?: number; elev?: number };
+// `worldW` (optional, default W) makes the hole wider than the viewport; the
+// camera pans horizontally following the disc, so big doglegs get full room.
+type Hole = { par: number; worldH: number; worldW?: number; tee: Vec; basket: Vec; fairway: Vec[]; fwWidth: number; trees: Tree[]; water: Water[]; hazard?: Water[]; wind?: Vec; windMag?: number; elev?: number };
 
 // Holes are authored in this old 448-tall frame, then stretched to a length
 // that scales with par (below).
@@ -62,10 +64,10 @@ const TEE: Vec = { x: 160, y: 416 };
 // hole's actual character. Comments note the real par/distance.
 const HOLE_TEMPLATES: Omit<Hole, "worldH">[] = [
   // ── Front nine (par 31) ── (`fairway` = curved centerline tee→green; `fwWidth` = corridor width)
-  // 1 — par 4, 670ft. Tees off far LEFT and runs straight over a center-left
-  // pond, then doglegs hard right and keeps sweeping right across the whole
-  // width to a green tucked top-right behind a tree gate (per the caddie book).
-  { par: 4, tee: { x: 84, y: 416 }, basket: { x: 252, y: 96 }, fairway: [{ x: 84, y: 416 }, { x: 86, y: 330 }, { x: 100, y: 260 }, { x: 140, y: 195 }, { x: 195, y: 140 }, { x: 240, y: 110 }, { x: 252, y: 96 }], fwWidth: 126, trees: [{ x: 198, y: 130, r: 9 }, { x: 238, y: 126, r: 9 }, { x: 216, y: 84, r: 9 }, { x: 286, y: 104, r: 9 }], water: [{ x: 48, y: 272, w: 64, h: 44 }], hazard: [{ x: 124, y: 232, w: 30, h: 22 }] },
+  // 1 — par 4, 670ft. A 480-wide world: the tee view opens centered, the hole
+  // runs straight over a center-left pond, then doglegs hard right and the
+  // camera pans with it to a green far right behind a tree gate (caddie book).
+  { par: 4, worldW: 480, tee: { x: 160, y: 416 }, basket: { x: 328, y: 96 }, fairway: [{ x: 160, y: 416 }, { x: 162, y: 330 }, { x: 176, y: 260 }, { x: 216, y: 195 }, { x: 271, y: 140 }, { x: 316, y: 110 }, { x: 328, y: 96 }], fwWidth: 126, trees: [{ x: 274, y: 130, r: 9 }, { x: 314, y: 126, r: 9 }, { x: 292, y: 84, r: 9 }, { x: 362, y: 104, r: 9 }], water: [{ x: 124, y: 272, w: 64, h: 44 }], hazard: [{ x: 200, y: 232, w: 30, h: 22 }] },
   // 2 — par 3, 390ft. Long corridor swinging hard right, a wall of trees down
   // the whole right side, and a sand bunker just short of the green.
   { par: 3, tee: TEE, basket: { x: 218, y: 104 }, fairway: [{ x: 160, y: 416 }, { x: 172, y: 310 }, { x: 196, y: 215 }, { x: 214, y: 140 }, { x: 218, y: 104 }], fwWidth: 112, trees: [
@@ -138,6 +140,7 @@ function materializeHole(t: Omit<Hole, "worldH">): Hole {
   return {
     par: t.par,
     worldH,
+    worldW: t.worldW,
     tee: { x: t.tee.x, y: worldH - TEE_BEHIND },
     basket: { x: t.basket.x, y: ty(t.basket.y) },
     fairway: t.fairway.map((p) => ({ x: p.x, y: ty(p.y) })),
@@ -291,6 +294,7 @@ type GameState = {
   h: number; // current height above the ground
   vh: number; // vertical velocity (height units per frame)
   camY: number; // top of the viewport in world coords (vertical scroll)
+  camX: number; // left of the viewport in world coords (horizontal pan on wide holes)
   introT: number; // frames elapsed in the intro fly-over
   flash: { text: string; at: number } | null; // big centered penalty banner (OB / hazard)
 };
@@ -298,6 +302,11 @@ type GameState = {
 // Aim straight at the basket from a given lie.
 function aimAt(from: Vec, basket: Vec): number {
   return Math.atan2(basket.y - from.y, basket.x - from.x);
+}
+
+// Horizontal camera position that centers `x` inside a hole's world width.
+function camXFor(hole: Hole, x: number) {
+  return Math.max(0, Math.min((hole.worldW ?? W) - W, x - W / 2));
 }
 
 function freshHole(hole: Hole) {
@@ -320,6 +329,7 @@ function freshHole(hole: Hole) {
     h: 0,
     vh: 0,
     camY: 0, // start showing the basket (top), then pan down
+    camX: camXFor(hole, hole.basket.x), // intro looks at the basket first
     introT: 0,
     flash: null as { text: string; at: number } | null,
   };
@@ -489,7 +499,7 @@ function distToPath(px: number, py: number, pts: Vec[]) {
   return m;
 }
 function inAnyOB(hole: Hole, x: number, y: number) {
-  if (x < 2 || x > W - 2 || y < 2 || y > hole.worldH - 2) return true;
+  if (x < 2 || x > (hole.worldW ?? W) - 2 || y < 2 || y > hole.worldH - 2) return true;
   // Anything more than half the fairway width from the curved centerline is OB.
   if (distToPath(x, y, hole.fairway) > hole.fwWidth / 2) return true;
   for (const w of hole.water) if (inRect(w, x, y)) return true;
@@ -706,7 +716,7 @@ function stepFlight(f: Flight, disc: Disc, fadeSign: number, path: FlightPath, h
   f.vx *= friction;
   f.vy *= friction;
 
-  if (f.x < 2 || f.x > W - 2 || f.y < 2 || f.y > hole.worldH - 2) return { status: "oob", treeHit: false };
+  if (f.x < 2 || f.x > (hole.worldW ?? W) - 2 || f.y < 2 || f.y > hole.worldH - 2) return { status: "oob", treeHit: false };
 
   // Trees are tall — they block at ANY height, so you must go around them.
   let treeHit = false;
@@ -750,7 +760,7 @@ export function DiscGolfGame() {
   const keysRef = useRef<Set<string>>(new Set());
   // Drag-to-throw (Wii-golf style): pull back to set power + aim, release to throw.
   const dragRef = useRef<{ active: boolean; cx: number; cy: number }>({ active: false, cx: 0, cy: 0 });
-  const camRef = useRef(0); // current camera scroll, mirrored for the pointer handlers
+  const camRef = useRef({ x: 0, y: 0 }); // current camera scroll, mirrored for the pointer handlers
   const rangeFlashRef = useRef(0); // when a disc was last switched (brightens the reach line)
   const audioRef = useRef<AudioEngine | null>(null);
   const rafRef = useRef<number>(0);
@@ -986,7 +996,6 @@ export function DiscGolfGame() {
   const throwDisc = useCallback(() => {
     const g = stateRef.current;
     if (!g || g.phase !== "aim") return;
-    const hole = g.roundHoles[g.holeIndex];
     const disc = activeDiscs(g.advanced)[g.discIndex];
     // Advanced discs fly their baked-in shape (e.g. Nuke OS overstable,
     // Destroyer straight); simple mode uses the overstable/straight toggle.
@@ -1242,6 +1251,8 @@ export function DiscGolfGame() {
       if (!g || screenRef.current !== "playing") return;
       const hole = g.roundHoles[g.holeIndex];
       const maxCam = Math.max(0, hole.worldH - H);
+      const basketCamX = camXFor(hole, hole.basket.x);
+      const teeCamX = camXFor(hole, hole.tee.x);
 
       // Intro fly-over: hold on the basket, then pan down to the tee, then play.
       if (g.phase === "intro") {
@@ -1250,22 +1261,28 @@ export function DiscGolfGame() {
         g.introT += 1;
         if (g.introT <= HOLD) {
           g.camY = 0;
+          g.camX = basketCamX;
         } else {
           const p = Math.min(1, (g.introT - HOLD) / PAN);
-          g.camY = p * p * (3 - 2 * p) * maxCam; // smoothstep
+          const sp = p * p * (3 - 2 * p); // smoothstep
+          g.camY = sp * maxCam;
+          g.camX = basketCamX + sp * (teeCamX - basketCamX);
         }
         if (g.introT >= HOLD + PAN) {
           g.camY = maxCam;
+          g.camX = teeCamX;
           g.phase = "aim";
         }
-        camRef.current = g.camY;
+        camRef.current = { x: g.camX, y: g.camY };
         return;
       }
 
-      // Camera follows the disc, keeping it ~66% down so the fairway ahead shows.
+      // Camera follows the disc, keeping it ~66% down so the fairway ahead shows
+      // — and centered horizontally on wide holes, panning as the hole curves.
       const camTarget = Math.min(maxCam, Math.max(0, g.disc.y - H * 0.66));
       g.camY += (camTarget - g.camY) * 0.16;
-      camRef.current = g.camY;
+      g.camX += (camXFor(hole, g.disc.x) - g.camX) * 0.16;
+      camRef.current = { x: g.camX, y: g.camY };
 
       if (g.phase === "aim") {
         // Aim + power are driven by the pointer drag handlers; nothing to do here.
@@ -1354,6 +1371,7 @@ export function DiscGolfGame() {
       if (!g) return;
       const hole = g.roundHoles[g.holeIndex];
       const cam = g.camY; // world→screen: screenY = worldY - cam
+      const camX = g.camX; // world→screen: screenX = worldX - camX
 
       // Everything outside the fairway is out-of-bounds rough.
       ctx.fillStyle = "#2f5a26";
@@ -1362,6 +1380,11 @@ export function DiscGolfGame() {
       const startY = Math.floor(cam / 16) * 16;
       ctx.fillStyle = "#2b5323";
       for (let y = startY; y < cam + H; y += 32) ctx.fillRect(0, y - cam, W, 16);
+
+      // All world-space drawing below is shifted by the horizontal camera; the
+      // screen-fixed UI (minimap, HUD, banners) restores afterwards.
+      ctx.save();
+      ctx.translate(-camX, 0);
 
       // The curved fairway, drawn as a thick ribbon along the centerline. The
       // outer (white) stroke is the OB line; the green stroke inside is the
@@ -1477,14 +1500,15 @@ export function DiscGolfGame() {
           if (!dr.active && since < SHOW_MS) {
             const range = fullPowerRange(aimDisc, hole.elev, path === "straight" ? STRAIGHT_SPEED_MUL : 1);
             const bsy = hole.basket.y - cam;
-            const basketVisible = bsy >= 0 && bsy <= H && hole.basket.x >= 0 && hole.basket.x <= W;
+            const bsx = hole.basket.x - camX;
+            const basketVisible = bsy >= 0 && bsy <= H && bsx >= 0 && bsx <= W;
             const ang = basketVisible ? g.angle : -Math.PI / 2; // straight up if off-screen
             const rx = g.disc.x + Math.cos(ang) * range;
             const ry = g.disc.y + Math.sin(ang) * range - cam;
             const half = 2 * CATCH_R; // full length = 2 basket diameters
             const px = -Math.sin(ang); // unit perpendicular to the throw line
             const py = Math.cos(ang);
-            if (ry > 14 && ry < H - 2 && rx > 2 && rx < W - 2) {
+            if (ry > 14 && ry < H - 2 && rx - camX > 2 && rx - camX < W - 2) {
               const a = Math.max(0, 0.9 * (1 - since / SHOW_MS)); // fade out
               ctx.save();
               ctx.globalAlpha = a;
@@ -1511,7 +1535,8 @@ export function DiscGolfGame() {
         let ky: number;
         let power: number;
         if (dr.active) {
-          let pullX = dr.cx - dsx;
+          // dr.cx/cy are screen coords; dsx is world-x (drawn under translate).
+          let pullX = dr.cx + camX - dsx;
           let pullY = dr.cy - dsy;
           const dist = Math.hypot(pullX, pullY) || 0.0001;
           const cl = Math.min(dist, MAX_DRAG);
@@ -1616,15 +1641,18 @@ export function DiscGolfGame() {
       ctx.fillStyle = disc.color;
       ctx.fillRect(Math.round(g.disc.x) - 1, Math.round(discY) - 1, 2, 2);
 
+      ctx.restore(); // end of world-space (horizontally panned) drawing
+
       // ── Mini-map (screen-fixed) — sits on the side AWAY from the hole's
       // upper half, so a dogleg toward one corner is never hidden under it. ──
       {
-        const s = Math.min(60 / W, (H - 90) / hole.worldH);
-        const mw = W * s;
+        const ww = hole.worldW ?? W;
+        const s = Math.min(60 / ww, (H - 90) / hole.worldH);
+        const mw = ww * s;
         const mh = hole.worldH * s;
         const upper = hole.fairway.filter((p) => p.y < hole.worldH * 0.5);
         const leanX = [...upper, hole.basket].reduce((sum, p) => sum + p.x, 0) / (upper.length + 1);
-        const ox = leanX > W / 2 ? 7 : W - 7 - mw;
+        const ox = leanX > ww / 2 ? 7 : W - 7 - mw;
         const oy = 25; // below the HUD pill
         ctx.fillStyle = "rgba(0,0,0,0.5)";
         ctx.fillRect(ox - 3, oy - 3, mw + 6, mh + 6);
@@ -1656,10 +1684,10 @@ export function DiscGolfGame() {
           ctx.arc(ox + tr.x * s, oy + tr.y * s, Math.max(1.4, tr.r * s), 0, Math.PI * 2);
           ctx.fill();
         }
-        // viewport window
+        // viewport window (tracks both camera axes)
         ctx.strokeStyle = "rgba(255,255,255,0.7)";
         ctx.lineWidth = 1;
-        ctx.strokeRect(ox + 0.5, oy + cam * s + 0.5, mw - 1, Math.min(mh, H * s) - 1);
+        ctx.strokeRect(ox + camX * s + 0.5, oy + cam * s + 0.5, Math.min(mw, W * s) - 1, Math.min(mh, H * s) - 1);
         // basket + disc
         ctx.fillStyle = "#fff";
         ctx.beginPath();
@@ -1884,8 +1912,8 @@ export function DiscGolfGame() {
   // Pull is measured from the disc itself, so the slider/knob stays attached to
   // it: drag the knob back, aim by its direction, release to throw the opposite way.
   const applyDrag = useCallback((g: GameState, px: number, py: number) => {
-    const pullX = px - g.disc.x;
-    const pullY = py - (g.disc.y - camRef.current); // disc's on-screen Y
+    const pullX = px - (g.disc.x - camRef.current.x); // disc's on-screen X
+    const pullY = py - (g.disc.y - camRef.current.y); // disc's on-screen Y
     const dist = Math.hypot(pullX, pullY);
     g.power = Math.min(1, dist / MAX_DRAG);
     if (dist > 4) g.angle = Math.atan2(-pullY, -pullX); // throw opposite the pull
