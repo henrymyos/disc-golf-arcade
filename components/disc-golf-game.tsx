@@ -769,6 +769,7 @@ export function DiscGolfGame() {
 
   // ── Settings (persisted) ──
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [tutorialOpen, setTutorialOpen] = useState(false);
   const [musicVolume, setMusicVolume] = useState(0.7);
   const [leftHanded, setLeftHanded] = useState(false);
   const leftHandedRef = useRef(false);
@@ -1944,6 +1945,10 @@ export function DiscGolfGame() {
                   className="w-full rounded-xl bg-[#4B3DFF] hover:bg-[#3a2ee0] active:scale-[0.99] text-white font-bold py-3 transition">
                   ▶ Play Glendoveer · 18
                 </button>
+                <button type="button" onClick={() => setTutorialOpen(true)}
+                  className="w-full rounded-xl border border-white/15 bg-white/5 hover:bg-white/10 active:scale-[0.99] text-white font-bold py-3 transition">
+                  📖 How to Play
+                </button>
               </div>
               <p className="text-gray-500 text-[10px] mt-1.5">Daily = a fresh 9-hole course, same for everyone</p>
 
@@ -1990,6 +1995,8 @@ export function DiscGolfGame() {
             </Overlay>
           );
         })()}
+
+        {tutorialOpen && <TutorialPanel onClose={() => setTutorialOpen(false)} />}
 
         {settingsOpen && (
           <SettingsPanel
@@ -2283,6 +2290,130 @@ function Overlay({ children }: { children: React.ReactNode }) {
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/55 rounded-lg text-center px-4">
       {children}
+    </div>
+  );
+}
+
+// Paginated how-to-play walkthrough: throw, disc choice, flight shape, stance.
+// Each step pairs a small looping SVG animation with a short caption.
+function TutorialPanel({ onClose }: { onClose: () => void }) {
+  const [step, setStep] = useState(0);
+  const illo = "w-full rounded-lg border border-white/10 bg-[#10141a]";
+  // Knob pull-back loop shared by the line + knob in step 1.
+  const pull = { dur: "2.6s", keyTimes: "0;0.45;0.6;1", repeatCount: "indefinite" } as const;
+  const steps: { title: string; caption: string; art: React.ReactNode }[] = [
+    {
+      title: "Pull back & throw",
+      caption: "Press on your disc and drag back — the farther you pull, the more power. Release to throw the opposite way. Pulled back but changed your mind? Bring the knob back inside the red ring to cancel.",
+      art: (
+        <svg viewBox="0 0 220 130" className={illo}>
+          <rect x="60" y="0" width="100" height="130" fill="#16331f" />
+          <line x1="110" y1="14" x2="110" y2="30" stroke="#cfd8dc" strokeWidth="2" />
+          <rect x="102" y="16" width="16" height="9" fill="none" stroke="#cfd8dc" strokeWidth="2" />
+          <path d="M110 92 C 104 70, 116 48, 110 30" fill="none" stroke="#36D7B7" strokeWidth="2" strokeDasharray="4 4">
+            <animate attributeName="stroke-dashoffset" from="32" to="0" dur="1.2s" repeatCount="indefinite" />
+          </path>
+          <text x="122" y="62" fill="#36D7B7" fontSize="9">throw</text>
+          <circle cx="110" cy="92" r="6" fill="#36D7B7" />
+          <line x1="110" y1="92" stroke="rgba(255,255,255,0.7)" strokeWidth="2">
+            <animate attributeName="x2" values="110;134;134;110" {...pull} />
+            <animate attributeName="y2" values="92;118;118;92" {...pull} />
+          </line>
+          <circle r="5" fill="#fff">
+            <animate attributeName="cx" values="110;134;134;110" {...pull} />
+            <animate attributeName="cy" values="92;118;118;92" {...pull} />
+          </circle>
+          <text x="144" y="122" fill="#9aa4b2" fontSize="9">pull back</text>
+        </svg>
+      ),
+    },
+    {
+      title: "Pick your disc",
+      caption: "Tap a disc in the rack below the screen — any time, even mid-hole. Putters are short but controlled, mids are balanced, drivers fly farthest. When you switch, a tick flashes on the fairway showing that disc's max reach.",
+      art: (
+        <svg viewBox="0 0 220 130" className={illo}>
+          {([
+            { name: "Putter", color: "#36D7B7", len: 55, y: 30 },
+            { name: "Mid", color: "#f5d24a", len: 82, y: 65 },
+            { name: "Driver", color: "#e23b3b", len: 120, y: 100 },
+          ] as const).map((d) => (
+            <g key={d.name}>
+              <circle cx="24" cy={d.y} r="8" fill={d.color} />
+              <text x="38" y={d.y + 3} fill="#e7ebf0" fontSize="10" fontWeight="bold">{d.name}</text>
+              <rect x="86" y={d.y - 3.5} height="7" rx="3.5" fill={d.color} opacity="0.85">
+                <animate attributeName="width" values={`0;${d.len};${d.len}`} keyTimes="0;0.55;1" dur="2.8s" repeatCount="indefinite" />
+              </rect>
+              <line x1={86 + d.len} y1={d.y - 7} x2={86 + d.len} y2={d.y + 7} stroke={d.color} strokeWidth="2" />
+            </g>
+          ))}
+        </svg>
+      ),
+    },
+    {
+      title: "Flight shape",
+      caption: "Overstable bends steadily one way — reliable in wind. Straight holds its line and carries farther. Toggle it next to the disc rack. (Advanced bag: each real disc has its own baked-in shape instead.)",
+      art: (
+        <svg viewBox="0 0 220 130" className={illo}>
+          <path d="M70 112 C 70 85, 56 55, 42 32" fill="none" stroke="#e08a3b" strokeWidth="2.5" strokeDasharray="5 4">
+            <animate attributeName="stroke-dashoffset" from="36" to="0" dur="1.3s" repeatCount="indefinite" />
+          </path>
+          <circle cx="70" cy="112" r="5" fill="#e08a3b" />
+          <text x="50" y="124" fill="#e08a3b" fontSize="9">Overstable</text>
+          <path d="M150 112 C 158 85, 146 50, 145 20" fill="none" stroke="#36D7B7" strokeWidth="2.5" strokeDasharray="5 4">
+            <animate attributeName="stroke-dashoffset" from="36" to="0" dur="1.3s" repeatCount="indefinite" />
+          </path>
+          <circle cx="150" cy="112" r="5" fill="#36D7B7" />
+          <text x="132" y="124" fill="#36D7B7" fontSize="9">Straight</text>
+          <text x="158" y="30" fill="#9aa4b2" fontSize="8">farther</text>
+        </svg>
+      ),
+    },
+    {
+      title: "Stance",
+      caption: "Backhand (BH) fades left at the end of the flight; forehand (FH) fades right. Pick per throw next to the disc rack to shape shots around trees and doglegs. Left-handed? Flip it in Settings and everything mirrors.",
+      art: (
+        <svg viewBox="0 0 220 130" className={illo}>
+          <path d="M110 110 C 104 75, 86 45, 68 28" fill="none" stroke="#36D7B7" strokeWidth="2.5" strokeDasharray="5 4">
+            <animate attributeName="stroke-dashoffset" from="36" to="0" dur="1.3s" repeatCount="indefinite" />
+          </path>
+          <path d="M110 110 C 116 75, 134 45, 152 28" fill="none" stroke="#f5d24a" strokeWidth="2.5" strokeDasharray="5 4">
+            <animate attributeName="stroke-dashoffset" from="36" to="0" dur="1.3s" repeatCount="indefinite" />
+          </path>
+          <circle cx="110" cy="110" r="6" fill="#fff" />
+          <text x="42" y="20" fill="#36D7B7" fontSize="9">BH fades left</text>
+          <text x="128" y="20" fill="#f5d24a" fontSize="9">FH fades right</text>
+        </svg>
+      ),
+    },
+  ];
+  const last = step === steps.length - 1;
+  const nav = "rounded-lg px-4 py-2 text-xs font-bold transition";
+  return (
+    <div className="absolute inset-0 z-20 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm p-4 flex items-start justify-center rounded-lg">
+      <div className="w-full max-w-xs space-y-3 my-auto text-left">
+        <div className="flex items-center justify-between">
+          <h2 className="text-white font-black text-xl">How to Play</h2>
+          <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
+        </div>
+        <p className="text-[#36D7B7] text-sm font-bold">{step + 1}. {steps[step].title}</p>
+        {steps[step].art}
+        <p className="text-gray-300 text-xs leading-relaxed min-h-[72px]">{steps[step].caption}</p>
+        <div className="flex items-center justify-between pt-1">
+          <button type="button" onClick={() => setStep(step - 1)} disabled={step === 0}
+            className={`${nav} border border-white/10 text-gray-300 hover:text-white disabled:opacity-30 disabled:hover:text-gray-300`}>
+            ◀ Back
+          </button>
+          <div className="flex gap-1.5">
+            {steps.map((_, i) => (
+              <span key={i} className={`w-1.5 h-1.5 rounded-full ${i === step ? "bg-[#36D7B7]" : "bg-white/15"}`} />
+            ))}
+          </div>
+          <button type="button" onClick={() => (last ? onClose() : setStep(step + 1))}
+            className={`${nav} ${last ? "bg-[#36D7B7] hover:bg-[#2bc4a6] text-[#0f1117]" : "bg-[#4B3DFF] hover:bg-[#3a2ee0] text-white"}`}>
+            {last ? "Got it ✓" : "Next ▶"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
