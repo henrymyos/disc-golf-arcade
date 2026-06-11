@@ -59,7 +59,9 @@ type Water = { x: number; y: number; w: number; h: number };
 // width — e.g. an island tee pad separated from the main fairway by OB.
 // `dropZone` (optional): OB throws play from this spot (+1) instead of from
 // where the disc crossed the line — like the marked DZs on tournament holes.
-type Hole = { par: number; worldH: number; worldW?: number; tee: Vec; basket: Vec; fairway: Vec[]; fairways?: Vec[][]; fwWidth: number; trees: Tree[]; water: Water[]; hazard?: Water[]; dropZone?: Vec; wind?: Vec; windMag?: number; elev?: number; elevZones?: { to: number; elev: number }[] };
+// `walls` (optional): horizontal wooden fences that block at ANY height (like
+// trees) — leave a gap between segments to make a gate/arch to throw through.
+type Hole = { par: number; worldH: number; worldW?: number; tee: Vec; basket: Vec; fairway: Vec[]; fairways?: Vec[][]; fwWidth: number; trees: Tree[]; water: Water[]; hazard?: Water[]; dropZone?: Vec; walls?: { x: number; y: number; w: number }[]; wind?: Vec; windMag?: number; elev?: number; elevZones?: { to: number; elev: number }[] };
 
 // Holes are authored in this old 448-tall frame, then stretched to a length
 // that scales with par (below).
@@ -208,6 +210,7 @@ function materializeHole(t: Omit<Hole, "worldH">): Hole {
     water: t.water.map((w) => ({ x: w.x, y: ty(w.y), w: w.w, h: w.h * scale })),
     hazard: (t.hazard ?? []).map((o) => ({ x: o.x, y: ty(o.y), w: o.w, h: o.h * scale })),
     dropZone: t.dropZone ? { x: t.dropZone.x, y: ty(t.dropZone.y) } : undefined,
+    walls: t.walls?.map((wl) => ({ x: wl.x, y: ty(wl.y), w: wl.w })),
     elev: t.elev,
     elevZones: t.elevZones, // fractions of tee→basket, so no rescaling needed
   };
@@ -244,12 +247,12 @@ const WINTHROP_TEMPLATES: Omit<Hole, "worldH">[] = [
     // Continuous shoreline down the whole left side, running past the green
     { x: 92, y: 330, w: 26, h: 50 }, { x: 88, y: 282, w: 28, h: 50 }, { x: 82, y: 232, w: 28, h: 52 }, { x: 74, y: 180, w: 30, h: 54 }, { x: 64, y: 134, w: 30, h: 48 }, { x: 56, y: 88, w: 32, h: 48 },
   ], dropZone: { x: 160, y: 142 } },
-  // 4 — par 3, 284ft. Open, but a fence wall crosses short of the green with
-  // only a center gate to throw through; water lurks top-left.
-  { par: 3, tee: TEE, basket: { x: 160, y: 100 }, fairway: [{ x: 160, y: 416 }, { x: 160, y: 300 }, { x: 160, y: 180 }, { x: 160, y: 100 }], dropZone: { x: 120, y: 182 }, fwWidth: 120, trees: [{ x: 110, y: 150, r: 8 }, { x: 132, y: 150, r: 8 }, { x: 188, y: 150, r: 8 }, { x: 210, y: 150, r: 8 }], water: [{ x: 66, y: 86, w: 36, h: 30 }] },
-  // 5 — par 4, 697ft. Narrow wooded corridor with a creek left and rope
-  // hazards down the right.
-  { par: 4, tee: TEE, basket: { x: 165, y: 90 }, fairway: [{ x: 160, y: 416 }, { x: 162, y: 320 }, { x: 160, y: 220 }, { x: 165, y: 150 }, { x: 165, y: 90 }], dropZone: { x: 196, y: 172 }, fwWidth: 106, trees: [{ x: 115, y: 330, r: 9 }, { x: 212, y: 300, r: 9 }, { x: 118, y: 250, r: 10 }, { x: 210, y: 220, r: 9 }, { x: 120, y: 170, r: 9 }, { x: 205, y: 150, r: 9 }, { x: 130, y: 106, r: 9 }, { x: 202, y: 98, r: 9 }], water: [{ x: 96, y: 230, w: 18, h: 30 }], hazard: [{ x: 196, y: 260, w: 24, h: 18 }, { x: 200, y: 190, w: 24, h: 18 }] },
+  // 4 — par 3, 284ft. Open, but a wooden fence crosses the fairway short of
+  // the green with a square arch in the middle — thread it or bounce off.
+  { par: 3, tee: TEE, basket: { x: 160, y: 100 }, fairway: [{ x: 160, y: 416 }, { x: 160, y: 300 }, { x: 160, y: 180 }, { x: 160, y: 100 }], dropZone: { x: 120, y: 182 }, fwWidth: 120, trees: [], walls: [{ x: 100, y: 150, w: 46 }, { x: 174, y: 150, w: 46 }], water: [] },
+  // 5 — par 4, 697ft. Narrow wooded corridor easing LEFT, then cutting back
+  // RIGHT at the very end into the green.
+  { par: 4, tee: TEE, basket: { x: 172, y: 90 }, fairway: [{ x: 160, y: 416 }, { x: 150, y: 320 }, { x: 142, y: 230 }, { x: 142, y: 160 }, { x: 158, y: 115 }, { x: 172, y: 90 }], fwWidth: 106, trees: [{ x: 115, y: 330, r: 9 }, { x: 198, y: 300, r: 9 }, { x: 118, y: 250, r: 10 }, { x: 192, y: 220, r: 9 }, { x: 120, y: 170, r: 9 }, { x: 195, y: 150, r: 9 }, { x: 130, y: 106, r: 9 }, { x: 210, y: 102, r: 9 }], water: [] },
   // 6 — par 3, 395ft. Straight up the strip, then hooks LEFT at the top to a
   // green by the clubhouse; road left, parking right — OB everywhere.
   { par: 3, tee: TEE, basket: { x: 120, y: 106 }, fairway: [{ x: 160, y: 416 }, { x: 166, y: 300 }, { x: 168, y: 200 }, { x: 150, y: 140 }, { x: 120, y: 106 }], fwWidth: 110, trees: [{ x: 120, y: 300, r: 9 }, { x: 205, y: 250, r: 9 }, { x: 165, y: 130, r: 9 }, { x: 86, y: 134, r: 9 }, { x: 116, y: 70, r: 9 }], water: [] },
@@ -884,6 +887,17 @@ function stepFlight(f: Flight, disc: Disc, fadeSign: number, path: FlightPath, h
       const dot = f.vx * nx + f.vy * ny;
       f.vx = (f.vx - 2 * dot * nx) * 0.45;
       f.vy = (f.vy - 2 * dot * ny) * 0.45;
+      treeHit = true;
+    }
+  }
+
+  // Wooden walls block at any height (like trees) — thread the gap between
+  // segments or bounce off the planks.
+  for (const wl of hole.walls ?? []) {
+    if (f.x > wl.x - DISC_R && f.x < wl.x + wl.w + DISC_R && Math.abs(f.y - wl.y) < 4 + DISC_R) {
+      f.y = wl.y + Math.sign(f.y - wl.y || 1) * (4 + DISC_R);
+      f.vy = -f.vy * 0.45;
+      f.vx *= 0.6;
       treeHit = true;
     }
   }
@@ -1611,6 +1625,33 @@ export function DiscGolfGame() {
         ctx.textBaseline = "alphabetic";
       }
 
+      // Wooden walls (mando fences): plank rails with posts; consecutive
+      // segments at the same height get an orange arch framing the gap.
+      const walls = hole.walls ?? [];
+      for (const wl of walls) {
+        const wy = wl.y - cam;
+        ctx.fillStyle = "#8a6a3a";
+        ctx.fillRect(wl.x, wy - 3, wl.w, 6);
+        ctx.fillStyle = "#5f451f";
+        for (let px = wl.x; px <= wl.x + wl.w - 2; px += 12) ctx.fillRect(px, wy - 4, 2, 8);
+        ctx.fillRect(wl.x + wl.w - 2, wy - 4, 2, 8);
+      }
+      for (let i = 0; i + 1 < walls.length; i++) {
+        if (walls[i].y !== walls[i + 1].y) continue;
+        const wy = walls[i].y - cam;
+        const gx1 = walls[i].x + walls[i].w;
+        const gx2 = walls[i + 1].x;
+        ctx.strokeStyle = "#e0923b";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(gx1, wy + 4);
+        ctx.lineTo(gx1, wy - 10);
+        ctx.lineTo(gx2, wy - 10);
+        ctx.lineTo(gx2, wy + 4);
+        ctx.stroke();
+        ctx.lineWidth = 1;
+      }
+
       // Drop zone — where OB throws play from on holes that have one.
       if (hole.dropZone) {
         const dzy = hole.dropZone.y - cam;
@@ -1866,6 +1907,13 @@ export function DiscGolfGame() {
           ctx.beginPath();
           ctx.arc(ox + hole.dropZone.x * s, oy + hole.dropZone.y * s, 1.6, 0, Math.PI * 2);
           ctx.fill();
+        }
+        ctx.strokeStyle = "#8a6a3a";
+        for (const wl of hole.walls ?? []) {
+          ctx.beginPath();
+          ctx.moveTo(ox + wl.x * s, oy + wl.y * s);
+          ctx.lineTo(ox + (wl.x + wl.w) * s, oy + wl.y * s);
+          ctx.stroke();
         }
         ctx.fillStyle = "#234d1f";
         for (const tr of hole.trees) {
