@@ -426,6 +426,8 @@ type GameState = {
   holeIndex: number;
   phase: Phase;
   mode: Mode; // daily challenge vs the full course
+  practice?: boolean; // single-hole practice (no bests/history/leaderboard)
+  practiceHole?: number; // 1-based hole number being practiced
   advanced: boolean; // advanced bag (real discs) vs simple (putter/mid/driver)
   seed: number; // round seed (drives wind + pins)
   roundHoles: Hole[]; // this round's holes (wind/pins baked in)
@@ -960,6 +962,8 @@ export function DiscGolfGame() {
   const [scorecard, setScorecard] = useState<number[]>([]);
   const [finalTotal, setFinalTotal] = useState(0);
   const [finalSeed, setFinalSeed] = useState(0);
+  const [finalPracticeHole, setFinalPracticeHole] = useState<number | null>(null);
+  const [practiceOpen, setPracticeOpen] = useState(false);
 
   // ── Challenge links: ?ch=<mode>.<seed>.<score>.<name> replays the exact
   // same round (same pins + wind) so two players can compare fairly. ──
@@ -1190,6 +1194,35 @@ export function DiscGolfGame() {
     syncHud();
   }, [muted, musicVolume, syncHud]);
 
+  // Practice a single hole: same engine, but nothing counts (no bests,
+  // history, achievements, or leaderboard) — pure reps.
+  const startPractice = useCallback((m: Mode, holeIdx: number) => {
+    modeRef.current = m;
+    if (!audioRef.current) {
+      audioRef.current = new AudioEngine();
+      audioRef.current.setMusicVolume(musicVolume);
+    }
+    audioRef.current.resume();
+    audioRef.current.setMuted(muted);
+    audioRef.current.startMusic();
+    challengePlayRef.current = false;
+    const seed = (Math.random() * 1e9) | 0;
+    const roundHoles = [buildRound(seed, m)[holeIdx]];
+    const adv = advancedRef.current;
+    stateRef.current = {
+      holeIndex: 0, scores: [], discIndex: Math.min(discIndexRef.current, activeDiscs(adv).length - 1),
+      mode: m, advanced: adv, seed, roundHoles, practice: true, practiceHole: holeIdx + 1, ...freshHole(roundHoles[0]),
+    };
+    setSaved(false);
+    setSaveErr(null);
+    setIsNewBest(false);
+    setNewAchievements([]);
+    setHoleBestNote(null);
+    setSettingsOpen(false);
+    setScreen("playing");
+    syncHud();
+  }, [muted, musicVolume, syncHud]);
+
   const selectDisc = useCallback((i: number) => {
     setDiscIndex(i);
     if (stateRef.current) stateRef.current.discIndex = i;
@@ -1240,16 +1273,18 @@ export function DiscGolfGame() {
   const finishGame = useCallback((scores: number[]) => {
     const g = stateRef.current;
     const mode = g?.mode ?? modeRef.current;
+    const practice = g?.practice ?? false;
     const pars = g ? g.roundHoles.map((h) => h.par) : HOLES.map((h) => h.par);
     const total = scores.reduce((s, n) => s + n, 0);
     setScorecard(scores);
     setFinalTotal(total);
     setFinalPars(pars);
     setFinalMode(mode);
+    setFinalPracticeHole(practice ? g?.practiceHole ?? null : null);
 
     // Personal bests are tracked per fixed course — Glendoveer and Winthrop
     // each have their own key (the daily course changes every day).
-    if (mode === "course" || mode === "winthrop") {
+    if (!practice && (mode === "course" || mode === "winthrop")) {
       const key = mode === "course" ? BEST_KEY : WBEST_KEY;
       let prior: number | null = null;
       try {
@@ -1269,24 +1304,27 @@ export function DiscGolfGame() {
       setIsNewBest(false);
     }
 
-    // Round history (drives "rounds played" + the Regular achievement).
-    let hist: { mode: Mode; total: number; date: number }[] = [];
-    try { hist = JSON.parse(localStorage.getItem(HIST_KEY) || "[]"); } catch { /* ignore */ }
-    hist.push({ mode, total, date: Date.now() });
-    try { localStorage.setItem(HIST_KEY, JSON.stringify(hist.slice(-100))); } catch { /* ignore */ }
-    roundsPlayedRef.current = hist.length;
-    setRoundsPlayed(hist.length);
+    // Round history + achievements only count for full rounds, not practice.
+    if (!practice) {
+      let hist: { mode: Mode; total: number; date: number }[] = [];
+      try { hist = JSON.parse(localStorage.getItem(HIST_KEY) || "[]"); } catch { /* ignore */ }
+      hist.push({ mode, total, date: Date.now() });
+      try { localStorage.setItem(HIST_KEY, JSON.stringify(hist.slice(-100))); } catch { /* ignore */ }
+      roundsPlayedRef.current = hist.length;
+      setRoundsPlayed(hist.length);
 
-    // Achievements — unlock any newly-earned ones (judged against this round's pars).
-    const earned = earnedAchievements(scores, pars, mode, hist.length);
-    const fresh = earned.filter((id) => !unlockedRef.current.includes(id));
-    if (fresh.length) {
-      const all = [...unlockedRef.current, ...fresh];
-      unlockedRef.current = all;
-      setUnlocked(all);
-      try { localStorage.setItem(ACH_KEY, JSON.stringify(all)); } catch { /* ignore */ }
+      const earned = earnedAchievements(scores, pars, mode, hist.length);
+      const fresh = earned.filter((id) => !unlockedRef.current.includes(id));
+      if (fresh.length) {
+        const all = [...unlockedRef.current, ...fresh];
+        unlockedRef.current = all;
+        setUnlocked(all);
+        try { localStorage.setItem(ACH_KEY, JSON.stringify(all)); } catch { /* ignore */ }
+      }
+      setNewAchievements(fresh.map((id) => ACHIEVEMENTS.find((a) => a.id === id)!).filter(Boolean));
+    } else {
+      setNewAchievements([]);
     }
-    setNewAchievements(fresh.map((id) => ACHIEVEMENTS.find((a) => a.id === id)!).filter(Boolean));
 
     audioRef.current?.sfx("win");
     vibrate([20, 40, 20]);
@@ -1295,8 +1333,8 @@ export function DiscGolfGame() {
     setFinalChallenge(challengePlayRef.current ? challengeRef.current : null);
     setChallengeCopied(false);
     setLeaderboard([]);
-    void getArcadeLeaderboard(leaderboardCourse(mode, g?.seed ?? 0)).then(setLeaderboard).catch(() => {});
-    saveProgress(); // sync best/achievements/history to the cloud if signed in
+    if (!practice) void getArcadeLeaderboard(leaderboardCourse(mode, g?.seed ?? 0)).then(setLeaderboard).catch(() => {});
+    if (!practice) saveProgress(); // sync best/achievements/history to the cloud if signed in
   }, [saveProgress]);
 
   const nextHole = useCallback(() => {
@@ -1430,7 +1468,7 @@ export function DiscGolfGame() {
   useEffect(() => {
     if (screen !== "holeComplete") return;
     const g = stateRef.current;
-    if (!g || g.mode !== "course") { setHoleBestNote(null); return; }
+    if (!g || g.mode !== "course" || g.practice) { setHoleBestNote(null); return; }
     const idx = g.holeIndex;
     const s = g.scores[idx];
     if (typeof s !== "number") return;
@@ -2120,7 +2158,7 @@ export function DiscGolfGame() {
         ctx.fillText(value, hx, hcy);
         hx += ctx.measureText(value).width + 9;
       };
-      hudItem("HOLE", `${g.holeIndex + 1}/${g.roundHoles.length}`, "#ffffff");
+      hudItem("HOLE", g.practice ? `P${g.practiceHole}` : `${g.holeIndex + 1}/${g.roundHoles.length}`, "#ffffff");
       hudItem("PAR", `${hole.par}`, "#ffffff");
       hudItem("THR", `${g.throws}`, "#ffffff");
       hudItem("TO PAR", overStr, over < 0 ? "#36D7B7" : over > 0 ? "#e08a3b" : "#cbd5e1");
@@ -2146,7 +2184,7 @@ export function DiscGolfGame() {
         ctx.fillStyle = "#fff";
         ctx.font = "10px monospace";
         ctx.textAlign = "center";
-        ctx.fillText(`HOLE ${g.holeIndex + 1}  ·  PAR ${hole.par}`, W / 2, H / 2 - 6);
+        ctx.fillText(`HOLE ${g.practiceHole ?? g.holeIndex + 1}  ·  PAR ${hole.par}${g.practice ? "  ·  PRACTICE" : ""}`, W / 2, H / 2 - 6);
         if (hole.elevZones?.length) {
           // Changing slope, e.g. "▼ DOWNHILL EARLY — UPHILL LATE ▲"
           const first = hole.elevZones[0].elev;
@@ -2400,6 +2438,10 @@ export function DiscGolfGame() {
 
               {/* Secondary actions */}
               <div className="w-full flex gap-2 mt-4">
+                <button type="button" onClick={() => setPracticeOpen(true)}
+                  className="flex-1 rounded-lg border border-white/10 hover:border-white/25 text-gray-300 hover:text-white text-xs font-semibold py-2 transition">
+                  🎯 Practice
+                </button>
                 <button type="button" onClick={() => setSettingsOpen(true)}
                   className="flex-1 rounded-lg border border-white/10 hover:border-white/25 text-gray-300 hover:text-white text-xs font-semibold py-2 transition">
                   ⚙ Settings
@@ -2443,6 +2485,14 @@ export function DiscGolfGame() {
         })()}
 
         {tutorialOpen && <TutorialPanel onClose={() => setTutorialOpen(false)} />}
+
+        {practiceOpen && (
+          <PracticePanel
+            onClose={() => setPracticeOpen(false)}
+            onPick={(m, i) => { setPracticeOpen(false); startPractice(m, i); }}
+            holeBest={holeBestRef.current}
+          />
+        )}
 
         {settingsOpen && (
           <SettingsPanel
@@ -2583,11 +2633,15 @@ export function DiscGolfGame() {
         <div className="fixed inset-0 z-50 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm p-4 flex items-start sm:items-center justify-center">
           <div className="w-full max-w-lg space-y-4 my-auto">
             <div className="text-center">
-              <h2 className="text-white font-black text-2xl">{finalIsDaily ? "Daily Challenge complete!" : "Round complete!"}</h2>
+              <h2 className="text-white font-black text-2xl">
+                {finalPracticeHole != null ? "Practice complete!" : finalIsDaily ? "Daily Challenge complete!" : "Round complete!"}
+              </h2>
               <p className="text-gray-400 text-xs">
-                {finalIsDaily
-                  ? `Today's course · ${finalPars.length} holes · par ${finalParTotal}`
-                  : `${finalMode === "winthrop" ? "Winthrop Lake" : "Glendoveer East"} · 18 holes · par ${finalParTotal}`}
+                {finalPracticeHole != null
+                  ? `${finalMode === "winthrop" ? "Winthrop Lake" : "Glendoveer East"} · hole ${finalPracticeHole} · par ${finalParTotal}`
+                  : finalIsDaily
+                    ? `Today's course · ${finalPars.length} holes · par ${finalParTotal}`
+                    : `${finalMode === "winthrop" ? "Winthrop Lake" : "Glendoveer East"} · 18 holes · par ${finalParTotal}`}
               </p>
               <p className="text-[#36D7B7] font-bold text-lg mt-1">
                 {finalTotal} throws · {finalOver === 0 ? "Even par" : overStr(finalOver)}
@@ -2670,7 +2724,9 @@ export function DiscGolfGame() {
               </div>
             </div>
 
-            {/* Save + per-course leaderboard (the daily board resets each day). */}
+            {/* Save + per-course leaderboard (the daily board resets each day);
+                practice rounds skip all of it. */}
+            {finalPracticeHole == null && (<>
             {saved ? (
               <p className="text-center text-[#36D7B7] text-sm font-semibold">Saved to the leaderboard ✓</p>
             ) : (
@@ -2717,15 +2773,22 @@ export function DiscGolfGame() {
                 </ol>
               )}
             </div>
+            </>)}
 
             <div className="flex flex-wrap justify-center gap-2">
-              <button type="button" onClick={() => startGame()} className={btn}>↻ Play again</button>
+              {finalPracticeHole != null ? (
+                <button type="button" onClick={() => startPractice(finalMode, finalPracticeHole - 1)} className={btn}>↻ Retry hole</button>
+              ) : (
+                <button type="button" onClick={() => startGame()} className={btn}>↻ Play again</button>
+              )}
               <button type="button" onClick={shareCard} className="mt-1 bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white font-bold px-6 py-3 rounded-lg transition">
                 📤 Share card
               </button>
-              <button type="button" onClick={shareChallenge} className="mt-1 bg-[#1a1d23] border border-[#e0923b]/40 hover:border-[#e0923b]/80 text-white font-bold px-6 py-3 rounded-lg transition">
-                {challengeCopied ? "✓ Link copied" : "⚔ Challenge"}
-              </button>
+              {finalPracticeHole == null && (
+                <button type="button" onClick={shareChallenge} className="mt-1 bg-[#1a1d23] border border-[#e0923b]/40 hover:border-[#e0923b]/80 text-white font-bold px-6 py-3 rounded-lg transition">
+                  {challengeCopied ? "✓ Link copied" : "⚔ Challenge"}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => { audioRef.current?.stopMusic(); setScreen("title"); }}
@@ -2870,6 +2933,52 @@ function TutorialPanel({ onClose }: { onClose: () => void }) {
             className={`${nav} ${last ? "bg-[#36D7B7] hover:bg-[#2bc4a6] text-[#0f1117]" : "bg-[#4B3DFF] hover:bg-[#3a2ee0] text-white"}`}>
             {last ? "Got it ✓" : "Next ▶"}
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Pick any hole on either course and grind it — practice rounds don't count
+// toward bests, history, achievements, or leaderboards.
+function PracticePanel({ onClose, onPick, holeBest }: {
+  onClose: () => void;
+  onPick: (m: Mode, holeIdx: number) => void;
+  holeBest: (number | null)[];
+}) {
+  const [course, setCourse] = useState<Mode>("course");
+  const holes = course === "winthrop" ? WINTHROP_HOLES : HOLES;
+  const seg = (active: boolean) =>
+    `flex-1 rounded-md px-2 py-2 text-xs font-bold transition ${active ? "bg-[#4B3DFF] text-white" : "text-gray-400 hover:text-white"}`;
+  return (
+    <div className="absolute inset-0 z-20 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm p-4 flex items-start justify-center rounded-lg">
+      <div className="w-full max-w-xs space-y-3 my-auto text-left">
+        <div className="flex items-center justify-between">
+          <h2 className="text-white font-black text-xl">Practice</h2>
+          <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
+        </div>
+        <div className="flex gap-1 bg-[#1a1d23] border border-white/10 rounded-lg p-1">
+          <button type="button" onClick={() => setCourse("course")} className={seg(course === "course")}>Glendoveer</button>
+          <button type="button" onClick={() => setCourse("winthrop")} className={seg(course === "winthrop")}>Winthrop</button>
+        </div>
+        <p className="text-gray-500 text-[11px]">Pick a hole — practice doesn&apos;t count toward bests or boards.</p>
+        <div className="grid grid-cols-3 gap-1.5">
+          {holes.map((h, i) => {
+            const best = course === "course" ? holeBest[i] : null;
+            return (
+              <button
+                key={i}
+                type="button"
+                onClick={() => onPick(course, i)}
+                className="rounded-lg bg-[#1a1d23] border border-white/10 hover:border-[#36D7B7]/60 px-2 py-2 text-left transition"
+              >
+                <span className="block text-white font-bold text-sm leading-none">{i + 1}</span>
+                <span className="block text-gray-500 text-[10px] mt-1">
+                  par {h.par}{best != null ? ` · best ${best}` : ""}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>
