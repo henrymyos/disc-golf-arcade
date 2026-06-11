@@ -74,10 +74,21 @@ const HOLE_TEMPLATES: Omit<Hole, "worldH">[] = [
     // Left guards keeping the inside line honest
     { x: 132, y: 252, r: 9 }, { x: 150, y: 170, r: 8 },
   ], water: [], hazard: [{ x: 200, y: 124, w: 36, h: 18 }] },
-  // 3 — par 3, 370ft. Tree-lined, green up the left.
-  { par: 3, tee: TEE, basket: { x: 150, y: 110 }, fairway: [{ x: 160, y: 416 }, { x: 156, y: 290 }, { x: 150, y: 180 }, { x: 150, y: 110 }], fwWidth: 116, trees: [{ x: 196, y: 252, r: 10 }, { x: 120, y: 200, r: 10 }, { x: 202, y: 150, r: 9 }], water: [] },
-  // 4 — par 3, 450ft. Slight left to a guarded green.
-  { par: 3, tee: TEE, basket: { x: 150, y: 96 }, fairway: [{ x: 160, y: 416 }, { x: 154, y: 260 }, { x: 150, y: 150 }, { x: 150, y: 96 }], fwWidth: 120, trees: [{ x: 150, y: 152, r: 11 }, { x: 118, y: 232, r: 9 }], water: [] },
+  // 3 — par 3, 370ft. Tree-lined, with a cluster dead in front of the green —
+  // pick a side, left or right, then come back to the pin.
+  { par: 3, tee: TEE, basket: { x: 150, y: 110 }, fairway: [{ x: 160, y: 416 }, { x: 156, y: 290 }, { x: 150, y: 180 }, { x: 150, y: 110 }], fwWidth: 116, trees: [
+    { x: 196, y: 252, r: 10 }, { x: 120, y: 200, r: 10 },
+    // The guard cluster in front of the basket (gaps left and right of it)
+    { x: 136, y: 152, r: 9 }, { x: 154, y: 147, r: 8 }, { x: 171, y: 155, r: 9 },
+  ], water: [] },
+  // 4 — par 3, 450ft. A wall of trees seals the fairway just past the tee —
+  // the play is out LEFT over the OB line, staying airborne until you're back
+  // in bounds past the wall.
+  { par: 3, tee: TEE, basket: { x: 150, y: 96 }, fairway: [{ x: 160, y: 416 }, { x: 154, y: 260 }, { x: 150, y: 150 }, { x: 150, y: 96 }], fwWidth: 120, trees: [
+    // Tee-shot wall spanning the corridor (and a bit beyond on the right)
+    { x: 108, y: 338, r: 9 }, { x: 132, y: 332, r: 10 }, { x: 158, y: 328, r: 10 }, { x: 184, y: 332, r: 10 }, { x: 210, y: 338, r: 9 }, { x: 234, y: 344, r: 9 },
+    { x: 118, y: 232, r: 9 }, { x: 150, y: 152, r: 11 },
+  ], water: [] },
   // 5 — par 4, 910ft. Wide & open with sand hazards and a pond short of the pin.
   { par: 4, tee: TEE, basket: { x: 160, y: 72 }, fairway: [{ x: 160, y: 416 }, { x: 160, y: 280 }, { x: 160, y: 170 }, { x: 160, y: 72 }], fwWidth: 150, trees: [], water: [{ x: 132, y: 118, w: 56, h: 34 }], hazard: [{ x: 116, y: 182, w: 30, h: 22 }, { x: 184, y: 202, w: 28, h: 20 }] },
   // 6 — par 3, 415ft. Mostly open with a couple of guard trees.
