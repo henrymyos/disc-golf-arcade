@@ -2490,7 +2490,6 @@ export function DiscGolfGame() {
           <PracticePanel
             onClose={() => setPracticeOpen(false)}
             onPick={(m, i) => { setPracticeOpen(false); startPractice(m, i); }}
-            holeBest={holeBestRef.current}
           />
         )}
 
@@ -2941,12 +2940,18 @@ function TutorialPanel({ onClose }: { onClose: () => void }) {
 
 // Pick any hole on either course and grind it — practice rounds don't count
 // toward bests, history, achievements, or leaderboards.
-function PracticePanel({ onClose, onPick, holeBest }: {
+function PracticePanel({ onClose, onPick }: {
   onClose: () => void;
   onPick: (m: Mode, holeIdx: number) => void;
-  holeBest: (number | null)[];
 }) {
   const [course, setCourse] = useState<Mode>("course");
+  // Glendoveer per-hole bests, read once when the panel opens.
+  const [holeBest] = useState<(number | null)[]>(() => {
+    try {
+      const hb = JSON.parse(localStorage.getItem(HOLEBEST_KEY) || "null");
+      return Array.isArray(hb) ? hb : [];
+    } catch { return []; }
+  });
   const holes = course === "winthrop" ? WINTHROP_HOLES : HOLES;
   const seg = (active: boolean) =>
     `flex-1 rounded-md px-2 py-2 text-xs font-bold transition ${active ? "bg-[#4B3DFF] text-white" : "text-gray-400 hover:text-white"}`;
