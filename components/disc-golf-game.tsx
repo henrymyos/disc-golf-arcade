@@ -240,7 +240,10 @@ const WINTHROP_TEMPLATES: Omit<Hole, "worldH">[] = [
   ] },
   // 3 — par 3, 371ft. Hugs the shoreline, bending left to a beachside green.
   // No sand here — OB plays from the marked drop zone short of the green.
-  { par: 3, tee: TEE, basket: { x: 118, y: 104 }, fairway: [{ x: 160, y: 416 }, { x: 152, y: 300 }, { x: 138, y: 200 }, { x: 122, y: 140 }, { x: 118, y: 104 }], fwWidth: 108, trees: [{ x: 190, y: 260, r: 10 }, { x: 170, y: 180, r: 9 }, { x: 178, y: 150, r: 9 }], water: [{ x: 70, y: 170, w: 34, h: 90 }], dropZone: { x: 160, y: 142 } },
+  { par: 3, tee: TEE, basket: { x: 118, y: 104 }, fairway: [{ x: 160, y: 416 }, { x: 152, y: 300 }, { x: 138, y: 200 }, { x: 122, y: 140 }, { x: 118, y: 104 }], fwWidth: 108, trees: [{ x: 190, y: 260, r: 10 }, { x: 170, y: 180, r: 9 }, { x: 178, y: 150, r: 9 }], water: [
+    // Continuous shoreline down the whole left side, running past the green
+    { x: 92, y: 330, w: 26, h: 50 }, { x: 88, y: 282, w: 28, h: 50 }, { x: 82, y: 232, w: 28, h: 52 }, { x: 74, y: 180, w: 30, h: 54 }, { x: 64, y: 134, w: 30, h: 48 }, { x: 56, y: 88, w: 32, h: 48 },
+  ], dropZone: { x: 160, y: 142 } },
   // 4 — par 3, 284ft. Open, but a fence wall crosses short of the green with
   // only a center gate to throw through; water lurks top-left.
   { par: 3, tee: TEE, basket: { x: 160, y: 100 }, fairway: [{ x: 160, y: 416 }, { x: 160, y: 300 }, { x: 160, y: 180 }, { x: 160, y: 100 }], dropZone: { x: 120, y: 182 }, fwWidth: 120, trees: [{ x: 110, y: 150, r: 8 }, { x: 132, y: 150, r: 8 }, { x: 188, y: 150, r: 8 }, { x: 210, y: 150, r: 8 }], water: [{ x: 66, y: 86, w: 36, h: 30 }] },
