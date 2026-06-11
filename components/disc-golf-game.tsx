@@ -960,6 +960,29 @@ export function DiscGolfGame() {
   const [scorecard, setScorecard] = useState<number[]>([]);
   const [finalTotal, setFinalTotal] = useState(0);
   const [finalSeed, setFinalSeed] = useState(0);
+
+  // ── Challenge links: ?ch=<mode>.<seed>.<score>.<name> replays the exact
+  // same round (same pins + wind) so two players can compare fairly. ──
+  type Challenge = { mode: Mode; seed: number; score: number; name: string };
+  const [challenge, setChallenge] = useState<Challenge | null>(null);
+  const challengePlayRef = useRef(false); // current round IS the challenge round
+  const [finalChallenge, setFinalChallenge] = useState<Challenge | null>(null);
+  const [challengeCopied, setChallengeCopied] = useState(false);
+  useEffect(() => {
+    try {
+      const raw = new URLSearchParams(location.search).get("ch");
+      if (!raw) return;
+      const [m, seedS, scoreS, nameS] = raw.split(".");
+      const seed = Number(seedS);
+      const score = Number(scoreS);
+      if ((m === "course" || m === "winthrop" || m === "daily") && Number.isInteger(seed) && Number.isInteger(score) && score > 0) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setChallenge({ mode: m, seed, score, name: decodeURIComponent(nameS ?? "").slice(0, 16) || "A friend" });
+      }
+    } catch { /* ignore malformed links */ }
+  }, []);
+  const challengeRef = useRef<Challenge | null>(null);
+  useEffect(() => { challengeRef.current = challenge; }, [challenge]);
   const [finalPars, setFinalPars] = useState<number[]>(HOLES.map((h) => h.par));
   const [finalMode, setFinalMode] = useState<Mode>("course");
   const [bestScore, setBestScore] = useState<number | null>(null);
@@ -1138,7 +1161,7 @@ export function DiscGolfGame() {
     setHud({ hole: g.holeIndex + 1, par: g.roundHoles[g.holeIndex].par, throws: g.throws, holes: g.roundHoles.length });
   }, []);
 
-  const startGame = useCallback((mode?: Mode) => {
+  const startGame = useCallback((mode?: Mode, seedOverride?: number) => {
     const m = mode ?? modeRef.current;
     modeRef.current = m;
     if (!audioRef.current) {
@@ -1148,7 +1171,8 @@ export function DiscGolfGame() {
     audioRef.current.resume();
     audioRef.current.setMuted(muted);
     audioRef.current.startMusic();
-    const seed = m === "daily" ? dailySeed() : (Math.random() * 1e9) | 0;
+    challengePlayRef.current = false; // the challenge button re-arms this after calling
+    const seed = seedOverride ?? (m === "daily" ? dailySeed() : (Math.random() * 1e9) | 0);
     const roundHoles = buildRound(seed, m);
     const adv = advancedRef.current;
     const discIndex = Math.min(discIndexRef.current, activeDiscs(adv).length - 1);
@@ -1268,6 +1292,8 @@ export function DiscGolfGame() {
     vibrate([20, 40, 20]);
     setScreen("gameComplete");
     setFinalSeed(g?.seed ?? 0);
+    setFinalChallenge(challengePlayRef.current ? challengeRef.current : null);
+    setChallengeCopied(false);
     setLeaderboard([]);
     void getArcadeLeaderboard(leaderboardCourse(mode, g?.seed ?? 0)).then(setLeaderboard).catch(() => {});
     saveProgress(); // sync best/achievements/history to the cloud if signed in
@@ -1303,6 +1329,23 @@ export function DiscGolfGame() {
       setSaving(false);
     }
   }, [saving, saved, nameInput, finalTotal, finalMode, finalSeed]);
+
+  // Share a challenge link that replays this exact round (mode + seed).
+  const shareChallenge = useCallback(async () => {
+    const who = encodeURIComponent(nameInput.trim() || "A friend");
+    const url = `${location.origin}/?ch=${finalMode}.${finalSeed}.${finalTotal}.${who}`;
+    const text = `I shot ${finalTotal} — play the exact same round and beat me!`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: "Disc Golf Arcade challenge", text, url });
+        return;
+      }
+    } catch { /* fall through to clipboard */ }
+    try {
+      await navigator.clipboard.writeText(url);
+      setChallengeCopied(true);
+    } catch { /* ignore */ }
+  }, [finalMode, finalSeed, finalTotal, nameInput]);
 
   // Render the finished round to an image and share it (or download as fallback).
   const shareCard = useCallback(async () => {
@@ -2322,8 +2365,20 @@ export function DiscGolfGame() {
                 </div>
               )}
 
+              {/* A pending challenge from a shared link */}
+              {challenge && (
+                <button
+                  type="button"
+                  onClick={() => { startGame(challenge.mode, challenge.seed); challengePlayRef.current = true; }}
+                  className="w-full rounded-xl border border-[#e0923b]/60 bg-[#e0923b]/15 hover:bg-[#e0923b]/25 text-white font-bold py-3 px-3 mt-4 transition text-sm"
+                >
+                  ⚔ {challenge.name} challenged you: {challenge.score} on{" "}
+                  {challenge.mode === "course" ? "Glendoveer" : challenge.mode === "winthrop" ? "Winthrop Lake" : "a Daily course"} — play it!
+                </button>
+              )}
+
               {/* Primary actions */}
-              <div className="w-full flex flex-col gap-2 mt-5">
+              <div className={`w-full flex flex-col gap-2 ${challenge ? "mt-2" : "mt-5"}`}>
                 <button type="button" onClick={() => startGame("daily")}
                   className="w-full rounded-xl bg-[#36D7B7] hover:bg-[#2bc4a6] active:scale-[0.99] text-[#0f1117] font-bold py-3 transition flex items-center justify-center gap-2">
                   <span>🔥 Daily Challenge</span>
@@ -2541,6 +2596,12 @@ export function DiscGolfGame() {
               {finalBest != null && !isNewBest && (
                 <p className="text-gray-400 text-xs mt-0.5">Your best: {finalBest} ({overStr(finalBest - finalParTotal)})</p>
               )}
+              {finalChallenge && (
+                <p className={`text-sm font-bold mt-1.5 ${finalTotal < finalChallenge.score ? "text-[#36D7B7]" : finalTotal === finalChallenge.score ? "text-gray-300" : "text-[#e08a3b]"}`}>
+                  ⚔ vs {finalChallenge.name} ({finalChallenge.score}):{" "}
+                  {finalTotal < finalChallenge.score ? "You win!" : finalTotal === finalChallenge.score ? "Tied!" : "They got you."}
+                </p>
+              )}
             </div>
 
             {/* Newly-unlocked achievements */}
@@ -2661,6 +2722,9 @@ export function DiscGolfGame() {
               <button type="button" onClick={() => startGame()} className={btn}>↻ Play again</button>
               <button type="button" onClick={shareCard} className="mt-1 bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white font-bold px-6 py-3 rounded-lg transition">
                 📤 Share card
+              </button>
+              <button type="button" onClick={shareChallenge} className="mt-1 bg-[#1a1d23] border border-[#e0923b]/40 hover:border-[#e0923b]/80 text-white font-bold px-6 py-3 rounded-lg transition">
+                {challengeCopied ? "✓ Link copied" : "⚔ Challenge"}
               </button>
               <button
                 type="button"
