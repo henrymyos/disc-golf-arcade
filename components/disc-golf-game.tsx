@@ -219,10 +219,11 @@ const TOTAL_PAR = HOLES.reduce((s, h) => s + h.par, 0);
 const WINTHROP_TEMPLATES: Omit<Hole, "worldH">[] = [
   // 1 — par 4, 701ft. The lake runs the ENTIRE left side while the fairway
   // bends steadily right away from it to a green up the right (caddie book).
-  { par: 4, tee: TEE, basket: { x: 205, y: 96 }, fairway: [{ x: 160, y: 416 }, { x: 152, y: 330 }, { x: 150, y: 250 }, { x: 170, y: 175 }, { x: 195, y: 120 }, { x: 205, y: 96 }], fwWidth: 116, trees: [{ x: 120, y: 290, r: 9 }, { x: 200, y: 310, r: 9 }, { x: 205, y: 210, r: 9 }, { x: 238, y: 140, r: 9 }, { x: 172, y: 80, r: 9 }, { x: 240, y: 86, r: 9 }], water: [
+  { par: 4, tee: TEE, basket: { x: 205, y: 96 }, fairway: [{ x: 160, y: 416 }, { x: 152, y: 330 }, { x: 150, y: 250 }, { x: 170, y: 175 }, { x: 195, y: 120 }, { x: 205, y: 96 }], fwWidth: 116, trees: [{ x: 120, y: 290, r: 9 }, { x: 200, y: 310, r: 9 }, { x: 205, y: 210, r: 9 }, { x: 238, y: 140, r: 9 }, { x: 240, y: 86, r: 9 }], water: [
     // Continuous shoreline hugging the left OB edge, tee to green — each slab
-    // overlaps the next so the lake reads as one body of water
-    { x: 86, y: 330, w: 26, h: 48 }, { x: 84, y: 282, w: 28, h: 50 }, { x: 88, y: 232, w: 30, h: 52 }, { x: 96, y: 180, w: 30, h: 54 }, { x: 110, y: 138, w: 30, h: 44 }, { x: 124, y: 106, w: 28, h: 34 },
+    // overlaps the next so the lake reads as one body of water, running a
+    // little past the basket on the left
+    { x: 86, y: 330, w: 26, h: 48 }, { x: 84, y: 282, w: 28, h: 50 }, { x: 88, y: 232, w: 30, h: 52 }, { x: 96, y: 180, w: 30, h: 54 }, { x: 110, y: 138, w: 30, h: 44 }, { x: 124, y: 84, w: 28, h: 56 },
   ] },
   // 2 — par 3, 389ft. The signature water hole: the lake fills everything
   // between tee and basket on the left, creeps to the pin and wraps BEHIND it.
