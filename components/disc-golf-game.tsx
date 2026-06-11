@@ -212,6 +212,66 @@ function materializeHole(t: Omit<Hole, "worldH">): Hole {
 const HOLES: Hole[] = HOLE_TEMPLATES.map(materializeHole);
 const TOTAL_PAR = HOLES.reduce((s, h) => s + h.par, 0);
 
+// ── Winthrop Lake (College Disc Golf National Championships), 18 holes / par
+// 61. Authored from the official caddie book: the lake guards the left side of
+// the front stretch, the middle is rope-hazard golf across open park, and the
+// finish climbs back along the water. Flat terrain (no elev).
+const WINTHROP_TEMPLATES: Omit<Hole, "worldH">[] = [
+  // 1 — par 4, 701ft. Lake all down the left, road right; long and straightish.
+  { par: 4, tee: TEE, basket: { x: 162, y: 96 }, fairway: [{ x: 160, y: 416 }, { x: 155, y: 330 }, { x: 150, y: 250 }, { x: 158, y: 160 }, { x: 162, y: 96 }], fwWidth: 116, trees: [{ x: 110, y: 330, r: 9 }, { x: 210, y: 300, r: 9 }, { x: 205, y: 210, r: 9 }, { x: 208, y: 130, r: 9 }, { x: 126, y: 80, r: 9 }, { x: 198, y: 86, r: 9 }], water: [{ x: 96, y: 260, w: 26, h: 30 }, { x: 92, y: 150, w: 26, h: 26 }] },
+  // 2 — par 3, 389ft. The signature water carry: the lake fills the mid-left
+  // and the green sits across it top-left; bail right around the big tree.
+  { par: 3, tee: TEE, basket: { x: 120, y: 98 }, fairway: [{ x: 160, y: 416 }, { x: 150, y: 330 }, { x: 135, y: 230 }, { x: 120, y: 150 }, { x: 120, y: 98 }], fwWidth: 112, trees: [{ x: 172, y: 166, r: 11 }], water: [{ x: 60, y: 180, w: 110, h: 80 }, { x: 64, y: 270, w: 80, h: 36 }] },
+  // 3 — par 3, 371ft. Hugs the shoreline, bending left to a beachside green.
+  { par: 3, tee: TEE, basket: { x: 118, y: 104 }, fairway: [{ x: 160, y: 416 }, { x: 152, y: 300 }, { x: 138, y: 200 }, { x: 122, y: 140 }, { x: 118, y: 104 }], fwWidth: 108, trees: [{ x: 190, y: 260, r: 10 }, { x: 170, y: 180, r: 9 }, { x: 162, y: 144, r: 9 }], water: [{ x: 70, y: 170, w: 34, h: 90 }], hazard: [{ x: 138, y: 124, w: 26, h: 16 }] },
+  // 4 — par 3, 284ft. Open, but a fence wall crosses short of the green with
+  // only a center gate to throw through; water lurks top-left.
+  { par: 3, tee: TEE, basket: { x: 160, y: 100 }, fairway: [{ x: 160, y: 416 }, { x: 160, y: 300 }, { x: 160, y: 180 }, { x: 160, y: 100 }], fwWidth: 120, trees: [{ x: 110, y: 150, r: 8 }, { x: 132, y: 150, r: 8 }, { x: 188, y: 150, r: 8 }, { x: 210, y: 150, r: 8 }], water: [{ x: 66, y: 86, w: 36, h: 30 }] },
+  // 5 — par 4, 697ft. Narrow wooded corridor with a creek left and rope
+  // hazards down the right.
+  { par: 4, tee: TEE, basket: { x: 165, y: 90 }, fairway: [{ x: 160, y: 416 }, { x: 162, y: 320 }, { x: 160, y: 220 }, { x: 165, y: 150 }, { x: 165, y: 90 }], fwWidth: 106, trees: [{ x: 115, y: 330, r: 9 }, { x: 212, y: 300, r: 9 }, { x: 118, y: 250, r: 10 }, { x: 210, y: 220, r: 9 }, { x: 120, y: 170, r: 9 }, { x: 205, y: 150, r: 9 }, { x: 130, y: 106, r: 9 }, { x: 202, y: 98, r: 9 }], water: [{ x: 96, y: 230, w: 18, h: 30 }], hazard: [{ x: 196, y: 260, w: 24, h: 18 }, { x: 200, y: 190, w: 24, h: 18 }] },
+  // 6 — par 3, 395ft. Straight up the strip, then hooks LEFT at the top to a
+  // green by the clubhouse; road left, parking right — OB everywhere.
+  { par: 3, tee: TEE, basket: { x: 120, y: 106 }, fairway: [{ x: 160, y: 416 }, { x: 166, y: 300 }, { x: 168, y: 200 }, { x: 150, y: 140 }, { x: 120, y: 106 }], fwWidth: 110, trees: [{ x: 120, y: 300, r: 9 }, { x: 205, y: 250, r: 9 }, { x: 165, y: 130, r: 9 }, { x: 86, y: 134, r: 9 }, { x: 116, y: 70, r: 9 }], water: [] },
+  // 7 — par 4, 549ft. The horseshoe: out LEFT around the bend, then back RIGHT
+  // to a hilltop green — 440-wide world, OB inside and out.
+  { par: 4, worldW: 440, tee: { x: 300, y: 416 }, basket: { x: 300, y: 104 }, fairway: [{ x: 300, y: 416 }, { x: 230, y: 360 }, { x: 180, y: 300 }, { x: 165, y: 230 }, { x: 185, y: 165 }, { x: 245, y: 125 }, { x: 300, y: 104 }], fwWidth: 116, trees: [{ x: 250, y: 330, r: 9 }, { x: 205, y: 265, r: 9 }, { x: 230, y: 150, r: 9 }, { x: 264, y: 120, r: 9 }, { x: 336, y: 96, r: 9 }, { x: 296, y: 68, r: 9 }], water: [], hazard: [{ x: 180, y: 200, w: 24, h: 18 }] },
+  // 8 — par 4, 734ft. Long, narrow, dead straight — rope hazards snake along
+  // both edges the whole way (road left, lot right).
+  { par: 4, tee: TEE, basket: { x: 160, y: 80 }, fairway: [{ x: 160, y: 416 }, { x: 158, y: 320 }, { x: 160, y: 230 }, { x: 158, y: 150 }, { x: 160, y: 80 }], fwWidth: 98, trees: [{ x: 120, y: 300, r: 9 }, { x: 200, y: 260, r: 9 }, { x: 125, y: 180, r: 9 }], water: [], hazard: [{ x: 110, y: 330, w: 26, h: 20 }, { x: 186, y: 290, w: 26, h: 20 }, { x: 108, y: 240, w: 26, h: 20 }, { x: 188, y: 200, w: 26, h: 20 }, { x: 112, y: 150, w: 26, h: 20 }, { x: 182, y: 118, w: 24, h: 18 }] },
+  // 9 — par 3, 449ft. Wide-open park golf; rope-hazard pockets flank the green.
+  { par: 3, tee: TEE, basket: { x: 150, y: 95 }, fairway: [{ x: 160, y: 416 }, { x: 156, y: 300 }, { x: 150, y: 190 }, { x: 150, y: 95 }], fwWidth: 128, trees: [{ x: 200, y: 220, r: 9 }], water: [], hazard: [{ x: 96, y: 120, w: 30, h: 22 }, { x: 188, y: 112, w: 30, h: 22 }] },
+  // 10 — par 3, 413ft. Bends left with a huge hazard field covering the left
+  // half and a sand ring at the green.
+  { par: 3, tee: { x: 180, y: 416 }, basket: { x: 120, y: 100 }, fairway: [{ x: 180, y: 416 }, { x: 170, y: 320 }, { x: 150, y: 230 }, { x: 130, y: 160 }, { x: 120, y: 100 }], fwWidth: 116, trees: [{ x: 196, y: 260, r: 9 }], water: [], hazard: [{ x: 70, y: 250, w: 40, h: 26 }, { x: 84, y: 180, w: 36, h: 24 }, { x: 80, y: 124, w: 28, h: 18 }] },
+  // 11 — par 3, 303ft. A tight tunnel through the woods.
+  { par: 3, tee: TEE, basket: { x: 160, y: 108 }, fairway: [{ x: 160, y: 416 }, { x: 160, y: 300 }, { x: 160, y: 200 }, { x: 160, y: 108 }], fwWidth: 96, trees: [{ x: 114, y: 320, r: 10 }, { x: 206, y: 320, r: 10 }, { x: 114, y: 250, r: 10 }, { x: 206, y: 250, r: 10 }, { x: 114, y: 190, r: 10 }, { x: 206, y: 190, r: 10 }, { x: 116, y: 140, r: 9 }, { x: 204, y: 140, r: 9 }, { x: 148, y: 280, r: 8 }, { x: 174, y: 220, r: 8 }], water: [] },
+  // 12 — par 3, 321ft. Tree-lined lane drifting right along the path.
+  { par: 3, tee: TEE, basket: { x: 175, y: 108 }, fairway: [{ x: 160, y: 416 }, { x: 165, y: 300 }, { x: 172, y: 200 }, { x: 175, y: 108 }], fwWidth: 108, trees: [{ x: 125, y: 310, r: 9 }, { x: 210, y: 270, r: 9 }, { x: 130, y: 220, r: 9 }, { x: 215, y: 180, r: 9 }, { x: 140, y: 150, r: 9 }, { x: 140, y: 124, r: 9 }, { x: 212, y: 118, r: 9 }], water: [] },
+  // 13 — par 3, 391ft. Straight, ringed by rope hazards on both edges, with
+  // staggered tree clusters to weave through.
+  { par: 3, tee: TEE, basket: { x: 160, y: 100 }, fairway: [{ x: 160, y: 416 }, { x: 160, y: 300 }, { x: 160, y: 200 }, { x: 160, y: 100 }], fwWidth: 118, trees: [{ x: 150, y: 260, r: 10 }, { x: 172, y: 250, r: 9 }, { x: 185, y: 170, r: 10 }, { x: 140, y: 160, r: 9 }, { x: 128, y: 118, r: 9 }, { x: 196, y: 112, r: 9 }], water: [], hazard: [{ x: 98, y: 280, w: 24, h: 20 }, { x: 198, y: 240, w: 24, h: 20 }, { x: 100, y: 170, w: 24, h: 20 }, { x: 196, y: 140, w: 24, h: 18 }] },
+  // 14 — par 3, 409ft. Drifts right between the gravel lot and the fence line.
+  { par: 3, tee: TEE, basket: { x: 185, y: 98 }, fairway: [{ x: 160, y: 416 }, { x: 168, y: 310 }, { x: 178, y: 210 }, { x: 185, y: 98 }], fwWidth: 112, trees: [{ x: 160, y: 250, r: 10 }, { x: 195, y: 180, r: 9 }, { x: 145, y: 160, r: 9 }, { x: 152, y: 114, r: 9 }, { x: 218, y: 90, r: 9 }], water: [] },
+  // 15 — par 3, 283ft. Wooded with a rock-gate pinch mid-flight, then a
+  // clearing around the green; mind the fallen log right of the pin.
+  { par: 3, tee: TEE, basket: { x: 170, y: 104 }, fairway: [{ x: 160, y: 416 }, { x: 162, y: 300 }, { x: 168, y: 200 }, { x: 170, y: 104 }], fwWidth: 100, trees: [{ x: 118, y: 320, r: 10 }, { x: 208, y: 310, r: 10 }, { x: 128, y: 232, r: 9 }, { x: 196, y: 228, r: 9 }, { x: 120, y: 170, r: 9 }, { x: 215, y: 160, r: 9 }, { x: 206, y: 122, r: 8 }], water: [] },
+  // 16 — par 3, 249ft. Short pitch to a beach green by the lake — water long,
+  // sand short. Don't be greedy.
+  { par: 3, tee: TEE, basket: { x: 130, y: 150 }, fairway: [{ x: 160, y: 416 }, { x: 150, y: 310 }, { x: 138, y: 220 }, { x: 130, y: 150 }], fwWidth: 112, trees: [{ x: 190, y: 240, r: 9 }], water: [{ x: 70, y: 90, w: 80, h: 40 }], hazard: [{ x: 92, y: 176, w: 28, h: 16 }, { x: 150, y: 182, w: 26, h: 16 }] },
+  // 17 — par 4, 647ft. A narrow shore strip with the lake left the whole way,
+  // hooking left at the top behind the trees.
+  { par: 4, tee: TEE, basket: { x: 114, y: 100 }, fairway: [{ x: 160, y: 416 }, { x: 148, y: 320 }, { x: 140, y: 240 }, { x: 142, y: 170 }, { x: 128, y: 120 }, { x: 114, y: 100 }], fwWidth: 104, trees: [{ x: 180, y: 280, r: 9 }, { x: 172, y: 200, r: 9 }, { x: 158, y: 140, r: 10 }], water: [{ x: 62, y: 300, w: 30, h: 30 }, { x: 58, y: 200, w: 32, h: 32 }, { x: 56, y: 130, w: 30, h: 24 }], hazard: [{ x: 178, y: 244, w: 22, h: 16 }] },
+  // 18 — par 5, 841ft. The closer: up the hill past the rock-ring OB, bending
+  // gently to the finishing green.
+  { par: 5, tee: { x: 200, y: 416 }, basket: { x: 170, y: 80 }, fairway: [{ x: 200, y: 416 }, { x: 175, y: 340 }, { x: 155, y: 260 }, { x: 150, y: 190 }, { x: 160, y: 130 }, { x: 170, y: 80 }], fwWidth: 118, trees: [{ x: 210, y: 300, r: 9 }, { x: 120, y: 240, r: 9 }, { x: 195, y: 170, r: 9 }, { x: 120, y: 150, r: 9 }, { x: 136, y: 96, r: 9 }, { x: 206, y: 88, r: 9 }, { x: 166, y: 48, r: 9 }], water: [{ x: 100, y: 330, w: 36, h: 20 }, { x: 196, y: 230, w: 30, h: 12 }] },
+];
+const WINTHROP_HOLES: Hole[] = WINTHROP_TEMPLATES.map(materializeHole);
+const WINTHROP_PAR = WINTHROP_HOLES.reduce((s, h) => s + h.par, 0);
+// Winthrop's personal best lives in its own key (Glendoveer's BEST_KEY and the
+// shared leaderboard stay Glendoveer-only).
+const WBEST_KEY = "discgolf.best.winthrop18";
+
 // Fixed per-hole elevation (course identity, not random): + uphill / − downhill,
 // −2..+2. Matches the real Glendoveer East terrain hole by hole (e.g. 2/5/6/11
 // drop hard, 7 climbs hard, the closing stretch is flat). Affects how far a
@@ -219,7 +279,7 @@ const TOTAL_PAR = HOLES.reduce((s, h) => s + h.par, 0);
 // (Hole 9 is zoned in its template instead: downhill first half, uphill second.)
 const HOLE_ELEV = [0, -2, 0, 0, -2, -2, 2, -1, 0, 0, -2, -1, 1, -1, 0, 0, 0, 0];
 
-type Mode = "daily" | "course";
+type Mode = "daily" | "course" | "winthrop";
 
 // Achievements — evaluated from a finished round's per-hole scores.
 type Achievement = { id: string; name: string; emoji: string; desc: string };
@@ -680,7 +740,8 @@ function generateDailyCourse(rng: () => number): Hole[] {
 function buildRound(seed: number, mode: Mode): Hole[] {
   const rng = mulberry32(seed);
   if (mode === "daily") return generateDailyCourse(rng);
-  return HOLES.map((h, i) => {
+  const course = mode === "winthrop" ? WINTHROP_HOLES : HOLES;
+  return course.map((h, i) => {
     const { wind, windMag } = seededWind(rng);
     const base = h.basket;
     const pin = clampPin(
@@ -689,7 +750,7 @@ function buildRound(seed: number, mode: Mode): Hole[] {
       h.fwWidth / 2 - 9,
       base,
     );
-    return { ...h, basket: pin, wind, windMag, elev: HOLE_ELEV[i] ?? 0 };
+    return { ...h, basket: pin, wind, windMag, elev: mode === "course" ? HOLE_ELEV[i] ?? 0 : h.elev ?? 0 };
   });
 }
 // Elevation acts on the disc DURING flight: a per-frame pull along the hole
@@ -850,6 +911,7 @@ export function DiscGolfGame() {
   const [finalPars, setFinalPars] = useState<number[]>(HOLES.map((h) => h.par));
   const [finalMode, setFinalMode] = useState<Mode>("course");
   const [bestScore, setBestScore] = useState<number | null>(null);
+  const [winthropBest, setWinthropBest] = useState<number | null>(null);
   const [isNewBest, setIsNewBest] = useState(false);
   const [leaderboard, setLeaderboard] = useState<ArcadeScore[]>([]);
   const [nameInput, setNameInput] = useState("");
@@ -904,6 +966,8 @@ export function DiscGolfGame() {
     try {
       const best = localStorage.getItem(BEST_KEY);
       setBestScore(best && Number.isFinite(Number(best)) ? Number(best) : null);
+      const wBest = localStorage.getItem(WBEST_KEY);
+      setWinthropBest(wBest && Number.isFinite(Number(wBest)) ? Number(wBest) : null);
 
       const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
       if (s.throwStyle === "BH" || s.throwStyle === "FH") setThrowStyle(s.throwStyle);
@@ -1107,12 +1171,13 @@ export function DiscGolfGame() {
     setFinalPars(pars);
     setFinalMode(mode);
 
-    // Personal best is only tracked for the fixed 18-hole Glendoveer course
-    // (the daily course is different every day, so an all-time best is moot).
-    if (mode === "course") {
+    // Personal bests are tracked per fixed course — Glendoveer and Winthrop
+    // each have their own key (the daily course changes every day).
+    if (mode === "course" || mode === "winthrop") {
+      const key = mode === "course" ? BEST_KEY : WBEST_KEY;
       let prior: number | null = null;
       try {
-        const raw = localStorage.getItem(BEST_KEY);
+        const raw = localStorage.getItem(key);
         prior = raw ? Number(raw) : null;
         if (prior != null && !Number.isFinite(prior)) prior = null;
       } catch {
@@ -1120,8 +1185,9 @@ export function DiscGolfGame() {
       }
       const newBest = prior == null || total < prior;
       const best = newBest ? total : prior!;
-      try { localStorage.setItem(BEST_KEY, String(best)); } catch { /* ignore */ }
-      setBestScore(best);
+      try { localStorage.setItem(key, String(best)); } catch { /* ignore */ }
+      if (mode === "course") setBestScore(best);
+      else setWinthropBest(best);
       setIsNewBest(newBest);
     } else {
       setIsNewBest(false);
@@ -1191,7 +1257,8 @@ export function DiscGolfGame() {
     const over = total - parTotal;
     const nHoles = finalPars.length;
     const isDaily = finalMode === "daily";
-    const courseName = isDaily ? `Daily Challenge · ${nHoles} holes · par ${parTotal}` : `Glendoveer East · ${nHoles} holes · par ${parTotal}`;
+    const courseLabel = isDaily ? "Daily Challenge" : finalMode === "winthrop" ? "Winthrop Lake" : "Glendoveer East";
+    const courseName = `${courseLabel} · ${nHoles} holes · par ${parTotal}`;
     const os = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
     const cv = document.createElement("canvas");
     cv.width = 600;
@@ -1240,7 +1307,7 @@ export function DiscGolfGame() {
       cv.toBlob(async (blob) => {
         if (!blob) return resolve();
         const file = new File([blob], "discgolf-scorecard.png", { type: "image/png" });
-        const where = isDaily ? "today's Daily Challenge" : "Glendoveer East";
+        const where = isDaily ? "today's Daily Challenge" : courseLabel;
         try {
           const nav = navigator as Navigator & { canShare?: (d: { files: File[] }) => boolean };
           if (nav.canShare?.({ files: [file] })) {
@@ -2048,6 +2115,8 @@ export function DiscGolfGame() {
   const finalParTotal = finalPars.reduce((s, n) => s + n, 0);
   const finalOver = finalTotal - finalParTotal;
   const finalIsDaily = finalMode === "daily";
+  // The personal best for the course just played (null for the daily).
+  const finalBest = finalMode === "course" ? bestScore : finalMode === "winthrop" ? winthropBest : null;
   const overStr = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
 
   return (
@@ -2084,12 +2153,18 @@ export function DiscGolfGame() {
               <p className="text-gray-500 text-[11px] mt-1">Drag back from the disc to aim &amp; throw.</p>
 
               {/* Stat pills */}
-              {(bestScore != null || roundsPlayed > 0) && (
+              {(bestScore != null || winthropBest != null || roundsPlayed > 0) && (
                 <div className="flex gap-2 mt-3">
                   {bestScore != null && (
                     <div className="rounded-lg bg-white/5 border border-white/10 px-3 py-1.5">
                       <p className="text-[#36D7B7] font-bold text-sm leading-none">{bestScore}</p>
-                      <p className="text-gray-500 text-[9px] mt-0.5 uppercase tracking-wide">Best ({overStr(bestScore - TOTAL_PAR)})</p>
+                      <p className="text-gray-500 text-[9px] mt-0.5 uppercase tracking-wide">GE Best ({overStr(bestScore - TOTAL_PAR)})</p>
+                    </div>
+                  )}
+                  {winthropBest != null && (
+                    <div className="rounded-lg bg-white/5 border border-white/10 px-3 py-1.5">
+                      <p className="text-[#f5d24a] font-bold text-sm leading-none">{winthropBest}</p>
+                      <p className="text-gray-500 text-[9px] mt-0.5 uppercase tracking-wide">WL Best ({overStr(winthropBest - WINTHROP_PAR)})</p>
                     </div>
                   )}
                   {roundsPlayed > 0 && (
@@ -2110,6 +2185,10 @@ export function DiscGolfGame() {
                 <button type="button" onClick={() => startGame("course")}
                   className="w-full rounded-xl bg-[#4B3DFF] hover:bg-[#3a2ee0] active:scale-[0.99] text-white font-bold py-3 transition">
                   ▶ Play Glendoveer · 18
+                </button>
+                <button type="button" onClick={() => startGame("winthrop")}
+                  className="w-full rounded-xl bg-[#f5d24a] hover:bg-[#e3c138] active:scale-[0.99] text-[#0f1117] font-bold py-3 transition">
+                  🏆 Play Winthrop Lake · 18
                 </button>
                 <button type="button" onClick={() => setTutorialOpen(true)}
                   className="w-full rounded-xl border border-white/15 bg-white/5 hover:bg-white/10 active:scale-[0.99] text-white font-bold py-3 transition">
@@ -2305,14 +2384,16 @@ export function DiscGolfGame() {
             <div className="text-center">
               <h2 className="text-white font-black text-2xl">{finalIsDaily ? "Daily Challenge complete!" : "Round complete!"}</h2>
               <p className="text-gray-400 text-xs">
-                {finalIsDaily ? `Today's course · ${finalPars.length} holes · par ${finalParTotal}` : `Glendoveer East · 18 holes · par ${finalParTotal}`}
+                {finalIsDaily
+                  ? `Today's course · ${finalPars.length} holes · par ${finalParTotal}`
+                  : `${finalMode === "winthrop" ? "Winthrop Lake" : "Glendoveer East"} · 18 holes · par ${finalParTotal}`}
               </p>
               <p className="text-[#36D7B7] font-bold text-lg mt-1">
                 {finalTotal} throws · {finalOver === 0 ? "Even par" : overStr(finalOver)}
                 {isNewBest && <span className="ml-2 text-[#f5d24a]">★ New best!</span>}
               </p>
-              {!finalIsDaily && bestScore != null && !isNewBest && (
-                <p className="text-gray-400 text-xs mt-0.5">Your best: {bestScore} ({overStr(bestScore - TOTAL_PAR)})</p>
+              {finalBest != null && !isNewBest && (
+                <p className="text-gray-400 text-xs mt-0.5">Your best: {finalBest} ({overStr(finalBest - finalParTotal)})</p>
               )}
             </div>
 
@@ -2383,9 +2464,11 @@ export function DiscGolfGame() {
             </div>
 
             {/* Save + leaderboard are for the shared Glendoveer course only. */}
-            {finalIsDaily ? (
+            {finalMode !== "course" ? (
               <p className="text-center text-gray-400 text-sm">
-                Everyone plays the same course today — share your card to compare with friends.
+                {finalIsDaily
+                  ? "Everyone plays the same course today — share your card to compare with friends."
+                  : "The leaderboard tracks Glendoveer East — share your card to compare with friends."}
               </p>
             ) : (
               <>
