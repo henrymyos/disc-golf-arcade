@@ -253,15 +253,15 @@ const WINTHROP_TEMPLATES: Omit<Hole, "worldH">[] = [
   // 5 — par 4, 697ft. Narrow wooded corridor easing LEFT, then cutting back
   // RIGHT at the very end into the green.
   { par: 4, tee: TEE, basket: { x: 172, y: 90 }, fairway: [{ x: 160, y: 416 }, { x: 150, y: 320 }, { x: 142, y: 230 }, { x: 142, y: 160 }, { x: 158, y: 115 }, { x: 172, y: 90 }], fwWidth: 106, trees: [{ x: 115, y: 330, r: 9 }, { x: 198, y: 300, r: 9 }, { x: 118, y: 250, r: 10 }, { x: 192, y: 220, r: 9 }, { x: 120, y: 170, r: 9 }, { x: 195, y: 150, r: 9 }, { x: 130, y: 106, r: 9 }, { x: 210, y: 102, r: 9 }], water: [] },
-  // 6 — par 3, 395ft. Straight up the strip, then hooks LEFT at the top to a
-  // green by the clubhouse; road left, parking right — OB everywhere.
-  { par: 3, tee: TEE, basket: { x: 120, y: 106 }, fairway: [{ x: 160, y: 416 }, { x: 166, y: 300 }, { x: 168, y: 200 }, { x: 150, y: 140 }, { x: 120, y: 106 }], fwWidth: 110, trees: [{ x: 120, y: 300, r: 9 }, { x: 205, y: 250, r: 9 }, { x: 165, y: 130, r: 9 }, { x: 86, y: 134, r: 9 }, { x: 116, y: 70, r: 9 }], water: [] },
+  // 6 — par 3, 395ft. A "7" shape: out to the RIGHT first, then the whole
+  // finish sweeps LEFT down to the green by the clubhouse; OB everywhere.
+  { par: 3, tee: TEE, basket: { x: 120, y: 106 }, fairway: [{ x: 160, y: 416 }, { x: 180, y: 340 }, { x: 198, y: 270 }, { x: 200, y: 230 }, { x: 160, y: 160 }, { x: 120, y: 106 }], fwWidth: 110, trees: [{ x: 145, y: 300, r: 9 }, { x: 230, y: 255, r: 9 }, { x: 165, y: 130, r: 9 }, { x: 88, y: 132, r: 9 }, { x: 116, y: 70, r: 9 }], water: [] },
   // 7 — par 4, 549ft. The horseshoe: out LEFT around the bend, then back RIGHT
   // to a hilltop green — 440-wide world, OB inside and out.
-  { par: 4, worldW: 440, tee: { x: 300, y: 416 }, basket: { x: 300, y: 104 }, fairway: [{ x: 300, y: 416 }, { x: 230, y: 360 }, { x: 180, y: 300 }, { x: 165, y: 230 }, { x: 185, y: 165 }, { x: 245, y: 125 }, { x: 300, y: 104 }], dropZone: { x: 148, y: 235 }, fwWidth: 116, trees: [{ x: 250, y: 330, r: 9 }, { x: 205, y: 265, r: 9 }, { x: 230, y: 150, r: 9 }, { x: 264, y: 120, r: 9 }, { x: 336, y: 96, r: 9 }, { x: 296, y: 68, r: 9 }], water: [], hazard: [{ x: 180, y: 200, w: 24, h: 18 }] },
-  // 8 — par 4, 734ft. Long, narrow, dead straight — rope hazards snake along
-  // both edges the whole way (road left, lot right).
-  { par: 4, tee: TEE, basket: { x: 160, y: 80 }, fairway: [{ x: 160, y: 416 }, { x: 158, y: 320 }, { x: 160, y: 230 }, { x: 158, y: 150 }, { x: 160, y: 80 }], fwWidth: 98, trees: [{ x: 120, y: 300, r: 9 }, { x: 200, y: 260, r: 9 }, { x: 125, y: 180, r: 9 }], water: [], hazard: [{ x: 110, y: 330, w: 26, h: 20 }, { x: 186, y: 290, w: 26, h: 20 }, { x: 108, y: 240, w: 26, h: 20 }, { x: 188, y: 200, w: 26, h: 20 }, { x: 112, y: 150, w: 26, h: 20 }, { x: 182, y: 118, w: 24, h: 18 }] },
+  { par: 4, worldW: 440, tee: { x: 300, y: 416 }, basket: { x: 300, y: 104 }, fairway: [{ x: 300, y: 416 }, { x: 230, y: 360 }, { x: 180, y: 300 }, { x: 165, y: 230 }, { x: 185, y: 165 }, { x: 245, y: 125 }, { x: 300, y: 104 }], fwWidth: 116, trees: [{ x: 250, y: 330, r: 9 }, { x: 205, y: 265, r: 9 }, { x: 230, y: 150, r: 9 }, { x: 264, y: 120, r: 9 }, { x: 336, y: 96, r: 9 }, { x: 296, y: 68, r: 9 }], water: [] },
+  // 8 — par 4, 734ft. Long, narrow, dead straight — big rope-hazard bunkers
+  // snake along both edges (and one mid-lane) the whole way.
+  { par: 4, tee: TEE, basket: { x: 160, y: 80 }, fairway: [{ x: 160, y: 416 }, { x: 158, y: 320 }, { x: 160, y: 230 }, { x: 158, y: 150 }, { x: 160, y: 80 }], fwWidth: 98, trees: [{ x: 120, y: 300, r: 9 }, { x: 200, y: 260, r: 9 }, { x: 125, y: 180, r: 9 }], water: [], hazard: [{ x: 104, y: 340, w: 34, h: 26 }, { x: 176, y: 302, w: 32, h: 26 }, { x: 102, y: 250, w: 34, h: 26 }, { x: 146, y: 222, w: 30, h: 22 }, { x: 180, y: 182, w: 30, h: 24 }, { x: 104, y: 154, w: 34, h: 24 }, { x: 176, y: 124, w: 32, h: 22 }] },
   // 9 — par 3, 449ft. Wide-open park golf; rope-hazard pockets flank the green.
   { par: 3, tee: TEE, basket: { x: 150, y: 95 }, fairway: [{ x: 160, y: 416 }, { x: 156, y: 300 }, { x: 150, y: 190 }, { x: 150, y: 95 }], fwWidth: 128, trees: [{ x: 200, y: 220, r: 9 }], water: [], hazard: [{ x: 96, y: 120, w: 30, h: 22 }, { x: 188, y: 112, w: 30, h: 22 }] },
   // 10 — par 3, 413ft. Bends left with a huge hazard field covering the left
