@@ -1897,7 +1897,7 @@ export function DiscGolfGame() {
         />
 
         {screen === "title" && (
-          <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-gradient-to-b from-black/55 via-black/70 to-black/85 px-5">
+          <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-gradient-to-b from-[#1c2233] via-[#141926] to-[#0f1117] px-5">
             <div className="w-full max-w-[290px] flex flex-col items-center text-center">
               {/* Logo */}
               <div className="flex flex-col items-center gap-2">
