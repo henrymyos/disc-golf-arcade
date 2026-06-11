@@ -1616,12 +1616,15 @@ export function DiscGolfGame() {
       ctx.fillStyle = disc.color;
       ctx.fillRect(Math.round(g.disc.x) - 1, Math.round(discY) - 1, 2, 2);
 
-      // ── Mini-map (screen-fixed, top-right) ──
+      // ── Mini-map (screen-fixed) — sits on the side AWAY from the hole's
+      // upper half, so a dogleg toward one corner is never hidden under it. ──
       {
         const s = Math.min(60 / W, (H - 90) / hole.worldH);
         const mw = W * s;
         const mh = hole.worldH * s;
-        const ox = W - 7 - mw;
+        const upper = hole.fairway.filter((p) => p.y < hole.worldH * 0.5);
+        const leanX = [...upper, hole.basket].reduce((sum, p) => sum + p.x, 0) / (upper.length + 1);
+        const ox = leanX > W / 2 ? 7 : W - 7 - mw;
         const oy = 25; // below the HUD pill
         ctx.fillStyle = "rgba(0,0,0,0.5)";
         ctx.fillRect(ox - 3, oy - 3, mw + 6, mh + 6);
