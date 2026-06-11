@@ -55,7 +55,9 @@ type Water = { x: number; y: number; w: number; h: number };
 // `elevZones` (optional) varies the slope along the hole — each zone applies
 // until `to`, a fraction of the way from tee (0) to basket (1); without it the
 // whole hole uses the single `elev`.
-type Hole = { par: number; worldH: number; worldW?: number; tee: Vec; basket: Vec; fairway: Vec[]; fwWidth: number; trees: Tree[]; water: Water[]; hazard?: Water[]; wind?: Vec; windMag?: number; elev?: number; elevZones?: { to: number; elev: number }[] };
+// `fairways` (optional) adds extra disconnected in-bounds ribbons of the same
+// width — e.g. an island tee pad separated from the main fairway by OB.
+type Hole = { par: number; worldH: number; worldW?: number; tee: Vec; basket: Vec; fairway: Vec[]; fairways?: Vec[][]; fwWidth: number; trees: Tree[]; water: Water[]; hazard?: Water[]; wind?: Vec; windMag?: number; elev?: number; elevZones?: { to: number; elev: number }[] };
 
 // Holes are authored in this old 448-tall frame, then stretched to a length
 // that scales with par (below).
@@ -132,11 +134,10 @@ const HOLE_TEMPLATES: Omit<Hole, "worldH">[] = [
   // 12 — par 3, 370ft. Straight up the middle through scattered guards to a
   // tree-ringed green.
   { par: 3, tee: TEE, basket: { x: 162, y: 112 }, fairway: [{ x: 160, y: 416 }, { x: 162, y: 300 }, { x: 162, y: 200 }, { x: 162, y: 112 }], fwWidth: 114, trees: [{ x: 150, y: 250, r: 9 }, { x: 130, y: 200, r: 9 }, { x: 185, y: 165, r: 9 }, { x: 126, y: 128, r: 9 }, { x: 198, y: 124, r: 9 }, { x: 160, y: 78, r: 9 }], water: [] },
-  // 13 — par 4, 775ft. The tee pad is in bounds, but straight ahead is an OB
-  // gap: rip a full drive over it to the upper fairway, or take the safe,
-  // narrow in-bounds strip that snakes around the LEFT. Then the hole doglegs
-  // RIGHT at the top to a green ringed in trees — 400 wide.
-  { par: 4, worldW: 400, tee: { x: 200, y: 416 }, basket: { x: 260, y: 92 }, fairway: [{ x: 200, y: 416 }, { x: 118, y: 370 }, { x: 118, y: 295 }, { x: 145, y: 270 }, { x: 170, y: 175 }, { x: 230, y: 120 }, { x: 260, y: 92 }], fwWidth: 90, trees: [
+  // 13 — par 4, 775ft. An ISLAND tee pad: everything between it and the main
+  // fairway is OB, so the drive is a straight forced carry to the upper
+  // fairway, which then doglegs RIGHT to a green ringed in trees — 400 wide.
+  { par: 4, worldW: 400, tee: { x: 155, y: 416 }, basket: { x: 260, y: 92 }, fairway: [{ x: 150, y: 280 }, { x: 150, y: 250 }, { x: 170, y: 175 }, { x: 230, y: 120 }, { x: 260, y: 92 }], fairways: [[{ x: 155, y: 416 }, { x: 154, y: 404 }]], fwWidth: 90, trees: [
     { x: 185, y: 235, r: 9 }, { x: 125, y: 205, r: 9 },
     // Green ring
     { x: 226, y: 108, r: 9 }, { x: 296, y: 104, r: 9 }, { x: 256, y: 64, r: 9 }, { x: 226, y: 64, r: 9 }, { x: 292, y: 68, r: 9 },
@@ -199,6 +200,7 @@ function materializeHole(t: Omit<Hole, "worldH">): Hole {
     tee: { x: t.tee.x, y: worldH - TEE_BEHIND },
     basket: { x: t.basket.x, y: ty(t.basket.y) },
     fairway: t.fairway.map((p) => ({ x: p.x, y: ty(p.y) })),
+    fairways: t.fairways?.map((f) => f.map((p) => ({ x: p.x, y: ty(p.y) }))),
     fwWidth: t.fwWidth,
     trees: t.trees.map((tr) => ({ x: tr.x, y: ty(tr.y), r: tr.r })),
     water: t.water.map((w) => ({ x: w.x, y: ty(w.y), w: w.w, h: w.h * scale })),
@@ -557,8 +559,10 @@ function distToPath(px: number, py: number, pts: Vec[]) {
 }
 function inAnyOB(hole: Hole, x: number, y: number) {
   if (x < 2 || x > (hole.worldW ?? W) - 2 || y < 2 || y > hole.worldH - 2) return true;
-  // Anything more than half the fairway width from the curved centerline is OB.
-  if (distToPath(x, y, hole.fairway) > hole.fwWidth / 2) return true;
+  // Anything more than half the fairway width from every ribbon centerline is OB.
+  const half = hole.fwWidth / 2;
+  const inRibbon = [hole.fairway, ...(hole.fairways ?? [])].some((f) => distToPath(x, y, f) <= half);
+  if (!inRibbon) return true;
   for (const w of hole.water) if (inRect(w, x, y)) return true;
   return false;
 }
@@ -811,8 +815,8 @@ function stepFlight(f: Flight, disc: Disc, fadeSign: number, path: FlightPath, h
     const settling = f.vh <= 0;
     if (settling) {
       if (Math.hypot(f.x - hole.basket.x, f.y - hole.basket.y) < CATCH_R) return { status: "hole", treeHit };
-      // Off the curved fairway, or in water, is out of bounds.
-      if (distToPath(f.x, f.y, hole.fairway) > hole.fwWidth / 2) return { status: "ob", treeHit };
+      // Off every fairway ribbon, or in water, is out of bounds.
+      if (![hole.fairway, ...(hole.fairways ?? [])].some((fw) => distToPath(f.x, f.y, fw) <= hole.fwWidth / 2)) return { status: "ob", treeHit };
       for (const wt of hole.water) if (inRect(wt, f.x, f.y)) return { status: "ob", treeHit };
     }
     // Hazards (sand) don't stop the disc — they only cost a stroke if it comes
@@ -1456,25 +1460,27 @@ export function DiscGolfGame() {
 
       // The curved fairway, drawn as a thick ribbon along the centerline. The
       // outer (white) stroke is the OB line; the green stroke inside is the
-      // fairway — so doglegs and bends give curved OB edges that follow the hole.
-      const fw = hole.fairway;
+      // fairway — so doglegs and bends give curved OB edges that follow the
+      // hole. Extra ribbons (e.g. hole 13's island tee pad) draw the same way.
       ctx.lineJoin = "round";
       ctx.lineCap = "round";
-      ctx.beginPath();
-      ctx.moveTo(fw[0].x, fw[0].y - cam);
-      for (let i = 1; i < fw.length; i++) ctx.lineTo(fw[i].x, fw[i].y - cam);
-      ctx.strokeStyle = "#eef1e6"; // OB line (ribbon edge)
-      ctx.lineWidth = hole.fwWidth;
-      ctx.stroke();
-      ctx.strokeStyle = "#4d9a39"; // fairway
-      ctx.lineWidth = hole.fwWidth - 3;
-      ctx.stroke();
-      // Mowing stripes inside the fairway.
-      ctx.strokeStyle = "#56a541";
-      ctx.lineWidth = hole.fwWidth - 3;
-      ctx.setLineDash([10, 10]);
-      ctx.stroke();
-      ctx.setLineDash([]);
+      for (const fw of [hole.fairway, ...(hole.fairways ?? [])]) {
+        ctx.beginPath();
+        ctx.moveTo(fw[0].x, fw[0].y - cam);
+        for (let i = 1; i < fw.length; i++) ctx.lineTo(fw[i].x, fw[i].y - cam);
+        ctx.strokeStyle = "#eef1e6"; // OB line (ribbon edge)
+        ctx.lineWidth = hole.fwWidth;
+        ctx.stroke();
+        ctx.strokeStyle = "#4d9a39"; // fairway
+        ctx.lineWidth = hole.fwWidth - 3;
+        ctx.stroke();
+        // Mowing stripes inside the fairway.
+        ctx.strokeStyle = "#56a541";
+        ctx.lineWidth = hole.fwWidth - 3;
+        ctx.setLineDash([10, 10]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
       ctx.lineJoin = "miter";
       ctx.lineCap = "butt";
       ctx.lineWidth = 1;
@@ -1726,15 +1732,17 @@ export function DiscGolfGame() {
         ctx.fillRect(ox - 3, oy - 3, mw + 6, mh + 6);
         ctx.fillStyle = "#2f5a26"; // rough
         ctx.fillRect(ox, oy, mw, mh);
-        // curved fairway ribbon
+        // curved fairway ribbon(s)
         ctx.strokeStyle = "#4d9a39";
         ctx.lineJoin = "round";
         ctx.lineCap = "round";
         ctx.lineWidth = Math.max(3, hole.fwWidth * s);
-        ctx.beginPath();
-        ctx.moveTo(ox + hole.fairway[0].x * s, oy + hole.fairway[0].y * s);
-        for (let i = 1; i < hole.fairway.length; i++) ctx.lineTo(ox + hole.fairway[i].x * s, oy + hole.fairway[i].y * s);
-        ctx.stroke();
+        for (const fw of [hole.fairway, ...(hole.fairways ?? [])]) {
+          ctx.beginPath();
+          ctx.moveTo(ox + fw[0].x * s, oy + fw[0].y * s);
+          for (let i = 1; i < fw.length; i++) ctx.lineTo(ox + fw[i].x * s, oy + fw[i].y * s);
+          ctx.stroke();
+        }
         ctx.lineJoin = "miter";
         ctx.lineCap = "butt";
         ctx.lineWidth = 1;
