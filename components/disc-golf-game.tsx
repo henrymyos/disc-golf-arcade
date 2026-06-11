@@ -2188,8 +2188,8 @@ export function DiscGolfGame() {
         )}
       </div>
 
-      {/* Control panel: disc rack + flight/stance/mute (hidden on results) */}
-      {screen !== "gameComplete" && (
+      {/* Control panel: disc rack + flight/stance/mute — only while in a round */}
+      {(screen === "playing" || screen === "holeComplete") && (
         <div className="shrink-0 w-full border-t border-white/10 bg-[#13161b]">
           <div className="mx-auto w-full max-w-[480px] px-3 pt-2 pb-[max(env(safe-area-inset-bottom),0.55rem)] flex flex-col gap-2">
             {/* Disc selector */}
