@@ -131,8 +131,10 @@ const HOLES: Hole[] = HOLE_TEMPLATES.map(materializeHole);
 const TOTAL_PAR = HOLES.reduce((s, h) => s + h.par, 0);
 
 // Fixed per-hole elevation (course identity, not random): + uphill / − downhill,
-// roughly −2..+2. Affects how far a throw carries; shown on the minimap as ▲/▼.
-const HOLE_ELEV = [0, 1, -1, 2, 0, -1, 1, 0, -1, 1, 0, 1, -2, 2, 0, -1, 1, -1];
+// −2..+2. Matches the real Glendoveer East terrain hole by hole (e.g. 2/5/6/11
+// drop hard, 7 climbs hard, the closing stretch is flat). Affects how far a
+// throw carries; shown on the minimap as ▲/▼.
+const HOLE_ELEV = [0, -2, 0, 0, -2, -2, 2, -1, -1, 0, -2, -1, 1, -1, 0, 0, 0, 0];
 
 type Mode = "daily" | "course";
 
