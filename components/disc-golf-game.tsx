@@ -62,8 +62,10 @@ const TEE: Vec = { x: 160, y: 416 };
 // hole's actual character. Comments note the real par/distance.
 const HOLE_TEMPLATES: Omit<Hole, "worldH">[] = [
   // ── Front nine (par 31) ── (`fairway` = curved centerline tee→green; `fwWidth` = corridor width)
-  // 1 — par 4, 670ft. Dogleg left around a pond to an upper-right green; mando tree short.
-  { par: 4, tee: TEE, basket: { x: 190, y: 98 }, fairway: [{ x: 160, y: 416 }, { x: 150, y: 300 }, { x: 132, y: 215 }, { x: 168, y: 150 }, { x: 190, y: 98 }], fwWidth: 126, trees: [{ x: 206, y: 152, r: 13 }, { x: 118, y: 124, r: 12 }], water: [{ x: 104, y: 206, w: 76, h: 58 }] },
+  // 1 — par 4, 670ft. Sweeping right dogleg: the drive carries a pond to a
+  // landing zone guarded by a sand bunker, then a straight second shot into a
+  // tree-ringed green.
+  { par: 4, tee: TEE, basket: { x: 202, y: 98 }, fairway: [{ x: 160, y: 416 }, { x: 178, y: 330 }, { x: 200, y: 250 }, { x: 204, y: 160 }, { x: 202, y: 98 }], fwWidth: 126, trees: [{ x: 166, y: 110, r: 12 }, { x: 238, y: 116, r: 12 }, { x: 226, y: 152, r: 12 }], water: [{ x: 150, y: 282, w: 84, h: 44 }], hazard: [{ x: 212, y: 240, w: 30, h: 24 }] },
   // 2 — par 3, 390ft. Corridor bending right; tight on the left.
   { par: 3, tee: TEE, basket: { x: 196, y: 122 }, fairway: [{ x: 160, y: 416 }, { x: 168, y: 300 }, { x: 188, y: 200 }, { x: 196, y: 122 }], fwWidth: 112, trees: [{ x: 132, y: 252, r: 13 }, { x: 210, y: 208, r: 13 }, { x: 150, y: 170, r: 12 }], water: [] },
   // 3 — par 3, 370ft. Tree-lined, green up the left.
