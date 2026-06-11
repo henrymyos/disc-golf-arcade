@@ -9,3 +9,8 @@ create table if not exists public.arcade_scores (
 );
 alter table public.arcade_scores enable row level security;
 create index if not exists arcade_scores_strokes_idx on public.arcade_scores (strokes asc, created_at asc);
+
+-- Migration (2026-06-11): per-course + daily leaderboards. Existing rows are
+-- Glendoveer scores; daily boards use course values like 'daily-20603'.
+alter table public.arcade_scores add column if not exists course text not null default 'glendoveer';
+create index if not exists arcade_scores_course_idx on public.arcade_scores (course, strokes asc, created_at asc);

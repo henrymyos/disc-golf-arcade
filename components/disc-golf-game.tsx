@@ -299,9 +299,12 @@ const WINTHROP_TEMPLATES: Omit<Hole, "worldH">[] = [
 ];
 const WINTHROP_HOLES: Hole[] = WINTHROP_TEMPLATES.map(materializeHole);
 const WINTHROP_PAR = WINTHROP_HOLES.reduce((s, h) => s + h.par, 0);
-// Winthrop's personal best lives in its own key (Glendoveer's BEST_KEY and the
-// shared leaderboard stay Glendoveer-only).
+// Winthrop's personal best lives in its own key.
 const WBEST_KEY = "discgolf.best.winthrop18";
+// Leaderboards are per course; each daily seed gets its own board.
+function leaderboardCourse(mode: Mode, seed: number): string {
+  return mode === "course" ? "glendoveer" : mode === "winthrop" ? "winthrop" : `daily-${seed}`;
+}
 
 // Fixed per-hole elevation (course identity, not random): + uphill / − downhill,
 // −2..+2. Matches the real Glendoveer East terrain hole by hole (e.g. 2/5/6/11
@@ -956,6 +959,7 @@ export function DiscGolfGame() {
   // End-of-round state
   const [scorecard, setScorecard] = useState<number[]>([]);
   const [finalTotal, setFinalTotal] = useState(0);
+  const [finalSeed, setFinalSeed] = useState(0);
   const [finalPars, setFinalPars] = useState<number[]>(HOLES.map((h) => h.par));
   const [finalMode, setFinalMode] = useState<Mode>("course");
   const [bestScore, setBestScore] = useState<number | null>(null);
@@ -1263,8 +1267,9 @@ export function DiscGolfGame() {
     audioRef.current?.sfx("win");
     vibrate([20, 40, 20]);
     setScreen("gameComplete");
-    if (mode === "course") void getArcadeLeaderboard().then(setLeaderboard).catch(() => {});
-    else setLeaderboard([]);
+    setFinalSeed(g?.seed ?? 0);
+    setLeaderboard([]);
+    void getArcadeLeaderboard(leaderboardCourse(mode, g?.seed ?? 0)).then(setLeaderboard).catch(() => {});
     saveProgress(); // sync best/achievements/history to the cloud if signed in
   }, [saveProgress]);
 
@@ -1287,16 +1292,17 @@ export function DiscGolfGame() {
     setSaving(true);
     setSaveErr(null);
     try {
-      await submitArcadeScore(nameInput, finalTotal);
+      const course = leaderboardCourse(finalMode, finalSeed);
+      await submitArcadeScore(nameInput, finalTotal, course);
       setSaved(true);
-      const lb = await getArcadeLeaderboard();
+      const lb = await getArcadeLeaderboard(course);
       setLeaderboard(lb);
     } catch (e) {
       setSaveErr(e instanceof Error ? e.message : "Save failed");
     } finally {
       setSaving(false);
     }
-  }, [saving, saved, nameInput, finalTotal]);
+  }, [saving, saved, nameInput, finalTotal, finalMode, finalSeed]);
 
   // Render the finished round to an image and share it (or download as fallback).
   const shareCard = useCallback(async () => {
@@ -2603,18 +2609,10 @@ export function DiscGolfGame() {
               </div>
             </div>
 
-            {/* Save + leaderboard are for the shared Glendoveer course only. */}
-            {finalMode !== "course" ? (
-              <p className="text-center text-gray-400 text-sm">
-                {finalIsDaily
-                  ? "Everyone plays the same course today — share your card to compare with friends."
-                  : "The leaderboard tracks Glendoveer East — share your card to compare with friends."}
-              </p>
+            {/* Save + per-course leaderboard (the daily board resets each day). */}
+            {saved ? (
+              <p className="text-center text-[#36D7B7] text-sm font-semibold">Saved to the leaderboard ✓</p>
             ) : (
-              <>
-                {saved ? (
-                  <p className="text-center text-[#36D7B7] text-sm font-semibold">Saved to the leaderboard ✓</p>
-                ) : (
                   <div className="flex items-center gap-2">
                     <input
                       type="text"
@@ -2634,30 +2632,30 @@ export function DiscGolfGame() {
                     </button>
                   </div>
                 )}
-                {saveErr && <p className="text-red-400 text-xs text-center">{saveErr}</p>}
+            {saveErr && <p className="text-red-400 text-xs text-center">{saveErr}</p>}
 
-                <div className="bg-[#1a1d23] border border-white/5 rounded-2xl overflow-hidden">
-                  <p className="text-white font-bold text-sm px-4 py-2.5 border-b border-white/5">🏆 Leaderboard</p>
-                  {leaderboard.length === 0 ? (
-                    <p className="text-gray-400 text-sm text-center py-6">No scores yet — be the first!</p>
-                  ) : (
-                    <ol>
-                      {leaderboard.map((row, i) => (
-                        <li
-                          key={`${row.name}-${row.created_at}`}
-                          className={`flex items-center gap-3 px-4 py-2 text-sm ${i !== 0 ? "border-t border-white/5" : ""}`}
-                        >
-                          <span className="text-gray-400 font-mono w-6 text-right">{i + 1}</span>
-                          <span className="text-white flex-1 truncate">{row.name}</span>
-                          <span className="text-gray-400 font-mono">{overStr(row.strokes - TOTAL_PAR)}</span>
-                          <span className="text-white font-mono font-bold w-8 text-right">{row.strokes}</span>
-                        </li>
-                      ))}
-                    </ol>
-                  )}
-                </div>
-              </>
-            )}
+            <div className="bg-[#1a1d23] border border-white/5 rounded-2xl overflow-hidden">
+              <p className="text-white font-bold text-sm px-4 py-2.5 border-b border-white/5">
+                🏆 {finalIsDaily ? "Today's leaderboard" : `${finalMode === "winthrop" ? "Winthrop Lake" : "Glendoveer East"} leaderboard`}
+              </p>
+              {leaderboard.length === 0 ? (
+                <p className="text-gray-400 text-sm text-center py-6">No scores yet — be the first!</p>
+              ) : (
+                <ol>
+                  {leaderboard.map((row, i) => (
+                    <li
+                      key={`${row.name}-${row.created_at}`}
+                      className={`flex items-center gap-3 px-4 py-2 text-sm ${i !== 0 ? "border-t border-white/5" : ""}`}
+                    >
+                      <span className="text-gray-400 font-mono w-6 text-right">{i + 1}</span>
+                      <span className="text-white flex-1 truncate">{row.name}</span>
+                      <span className="text-gray-400 font-mono">{overStr(row.strokes - finalParTotal)}</span>
+                      <span className="text-white font-mono font-bold w-8 text-right">{row.strokes}</span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
 
             <div className="flex flex-wrap justify-center gap-2">
               <button type="button" onClick={() => startGame()} className={btn}>↻ Play again</button>
