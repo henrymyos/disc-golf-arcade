@@ -156,9 +156,9 @@ const HOLE_TEMPLATES: Omit<Hole, "worldH">[] = [
     // In-fairway slalom
     { x: 148, y: 330, r: 9 }, { x: 172, y: 230, r: 9 }, { x: 146, y: 178, r: 9 },
   ], water: [] },
-  // 16 — par 3, 410ft. The lane runs up the right; the green hides LEFT inside
-  // a pocket of trees (caddie book).
-  { par: 3, tee: TEE, basket: { x: 138, y: 104 }, fairway: [{ x: 160, y: 416 }, { x: 162, y: 300 }, { x: 158, y: 200 }, { x: 146, y: 140 }, { x: 138, y: 104 }], fwWidth: 108, trees: [{ x: 140, y: 310, r: 10 }, { x: 120, y: 260, r: 10 }, { x: 170, y: 240, r: 9 }, { x: 135, y: 180, r: 10 }, { x: 180, y: 150, r: 9 }, { x: 106, y: 118, r: 9 }, { x: 158, y: 76, r: 9 }, { x: 172, y: 122, r: 9 }], water: [] },
+  // 16 — par 3, 410ft. Curves gently RIGHT; the lane runs up the left and the
+  // green hides RIGHT inside a pocket of trees.
+  { par: 3, tee: TEE, basket: { x: 182, y: 104 }, fairway: [{ x: 160, y: 416 }, { x: 158, y: 300 }, { x: 162, y: 200 }, { x: 174, y: 140 }, { x: 182, y: 104 }], fwWidth: 108, trees: [{ x: 180, y: 310, r: 10 }, { x: 200, y: 260, r: 10 }, { x: 150, y: 240, r: 9 }, { x: 185, y: 180, r: 10 }, { x: 140, y: 150, r: 9 }, { x: 214, y: 118, r: 9 }, { x: 162, y: 76, r: 9 }, { x: 148, y: 122, r: 9 }], water: [] },
   // 17 — par 4, 830ft. Bends steadily RIGHT through gate trees to a green
   // ringed in wood; the big sand traps sit on the left of the curve.
   { par: 4, tee: TEE, basket: { x: 220, y: 80 }, fairway: [{ x: 160, y: 416 }, { x: 160, y: 300 }, { x: 175, y: 210 }, { x: 200, y: 140 }, { x: 220, y: 80 }], fwWidth: 118, trees: [
