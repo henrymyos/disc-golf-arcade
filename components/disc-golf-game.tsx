@@ -600,11 +600,11 @@ function buildRound(seed: number, mode: Mode): Hole[] {
     return { ...h, basket: pin, wind, windMag, elev: HOLE_ELEV[i] ?? 0 };
   });
 }
-// Carry multiplier from elevation: uphill (+) shortens, downhill (−) lengthens.
-// Strong enough to clearly change where a throw lands (±~20% at ±2).
-function elevMul(elev: number | undefined) {
-  return 1 - (elev ?? 0) * 0.1;
-}
+// Elevation acts on the disc DURING flight: a per-frame pull along the hole
+// axis while airborne. Uphill (+elev) pushes the disc back downfield (+y),
+// downhill (−elev) pulls it on toward the basket — so the flight visibly
+// stretches or stalls on sloped holes (~±13% carry per |elev| step).
+const SLOPE_PULL = 0.014;
 // Ground roll-out also depends on slope: downhill rolls farther, uphill checks
 // up quickly. Higher friction value = less deceleration = more roll.
 function elevGroundFriction(elev: number | undefined) {
@@ -619,7 +619,7 @@ function vibrate(pattern: number | number[]) {
 // including the hole's elevation and the straight-flight speed boost.
 function fullPowerRange(disc: Disc, elev: number | undefined, speedMul = 1): number {
   let y = 0;
-  let vy = disc.power * (1.2 + 3.35) * speedMul * elevMul(elev); // power = 1
+  let vy = disc.power * (1.2 + 3.35) * speedMul; // power = 1
   let h = 0;
   let vh = disc.arc; // power = 1
   for (let i = 0; i < 600; i++) {
@@ -628,6 +628,8 @@ function fullPowerRange(disc: Disc, elev: number | undefined, speedMul = 1): num
     vh -= GRAVITY;
     if (h <= 0) { h = 0; vh = 0; }
     const airborne = h > AIRBORNE_H;
+    // `vy` here is forward speed, so the uphill pull subtracts from it.
+    if (airborne) vy -= (elev ?? 0) * SLOPE_PULL;
     vy *= airborne ? disc.friction : elevGroundFriction(elev);
     if (!airborne && vy < STOP_SPEED) break;
   }
@@ -676,6 +678,9 @@ function stepFlight(f: Flight, disc: Disc, fadeSign: number, path: FlightPath, h
     f.vx += hole.wind.x;
     f.vy += hole.wind.y;
   }
+  // The slope pulls the airborne disc downhill along the hole axis: uphill
+  // (+elev) drags it back toward the tee (+y), downhill carries it onward.
+  if (airborne) f.vy += (hole.elev ?? 0) * SLOPE_PULL;
   const friction = airborne ? disc.friction : elevGroundFriction(hole.elev);
   f.vx *= friction;
   f.vy *= friction;
@@ -966,9 +971,10 @@ export function DiscGolfGame() {
     // Destroyer straight); simple mode uses the overstable/straight toggle.
     g.path = g.advanced ? disc.flight ?? "straight" : flightPathRef.current;
     // Slower launch + extra glide (disc friction) so it floats across the
-    // fairway. Straight throws carry farther; uphill (+elev) shortens carry.
+    // fairway. Straight throws carry farther; the hole's slope acts on the
+    // disc in-flight (see SLOPE_PULL in stepFlight), not on the launch.
     const pathMul = g.path === "straight" ? STRAIGHT_SPEED_MUL : 1;
-    const speed = disc.power * (1.2 + g.power * 3.35) * pathMul * elevMul(hole.elev);
+    const speed = disc.power * (1.2 + g.power * 3.35) * pathMul;
     g.disc.vx = Math.cos(g.angle) * speed;
     g.disc.vy = Math.sin(g.angle) * speed;
     g.rest = { x: g.disc.x, y: g.disc.y };
@@ -1510,7 +1516,7 @@ export function DiscGolfGame() {
 
         if (dr.active && power > 0.04 && !inCancel) {
           const pathMul = path === "straight" ? STRAIGHT_SPEED_MUL : 1;
-          const speed = aimDisc.power * (1.2 + power * 3.35) * pathMul * elevMul(hole.elev);
+          const speed = aimDisc.power * (1.2 + power * 3.35) * pathMul;
           const f: Flight = {
             x: g.disc.x, y: g.disc.y,
             vx: Math.cos(g.angle) * speed, vy: Math.sin(g.angle) * speed,
