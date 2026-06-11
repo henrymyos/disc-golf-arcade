@@ -68,16 +68,16 @@ const HOLE_TEMPLATES: Omit<Hole, "worldH">[] = [
   // runs straight over a center-left pond, then doglegs hard right and the
   // camera pans with it to a green far right behind a tree gate (caddie book).
   { par: 4, worldW: 480, tee: { x: 160, y: 416 }, basket: { x: 328, y: 96 }, fairway: [{ x: 160, y: 416 }, { x: 162, y: 330 }, { x: 176, y: 260 }, { x: 216, y: 195 }, { x: 271, y: 140 }, { x: 316, y: 110 }, { x: 328, y: 96 }], fwWidth: 126, trees: [{ x: 274, y: 130, r: 9 }, { x: 314, y: 126, r: 9 }, { x: 292, y: 84, r: 9 }, { x: 362, y: 104, r: 9 }], water: [{ x: 124, y: 272, w: 64, h: 44 }], hazard: [{ x: 200, y: 232, w: 30, h: 22 }] },
-  // 2 — par 3, 390ft. Sweeps hard right in a 432-wide world. A line of trees
-  // hugs the left/center of the curve the whole way, so the open lane is the
-  // right-hugging forehand-hyzer line. Sand sits mid-hole right of center
-  // (right of the FPO pin on the real hole), well away from the green.
+  // 2 — par 3, 390ft. Sweeps hard right in a 432-wide world. The tree line
+  // rides the RIGHT side of the curve, so the play is up its left side and
+  // then cutting right into the green at the end. Sand sits 2-3 basket
+  // diameters short-right of the pin.
   { par: 3, worldW: 432, tee: { x: 148, y: 416 }, basket: { x: 300, y: 108 }, fairway: [{ x: 148, y: 416 }, { x: 156, y: 330 }, { x: 180, y: 250 }, { x: 222, y: 185 }, { x: 268, y: 140 }, { x: 300, y: 108 }], fwWidth: 110, trees: [
-    // Center-left tree line through the bend — blocks the straight bomb
-    { x: 148, y: 330, r: 9 }, { x: 159, y: 290, r: 9 }, { x: 172, y: 250, r: 9 }, { x: 195, y: 210, r: 9 }, { x: 232, y: 170, r: 9 },
+    // Right-of-center tree line through the bend — the lane runs up its left
+    { x: 168, y: 330, r: 9 }, { x: 180, y: 290, r: 9 }, { x: 192, y: 250, r: 9 }, { x: 218, y: 210, r: 9 }, { x: 250, y: 170, r: 9 },
     // Green guards
-    { x: 262, y: 130, r: 9 }, { x: 334, y: 88, r: 9 },
-  ], water: [], hazard: [{ x: 212, y: 255, w: 28, h: 20 }] },
+    { x: 284, y: 140, r: 9 }, { x: 334, y: 88, r: 9 },
+  ], water: [], hazard: [{ x: 256, y: 140, w: 30, h: 20 }] },
   // 3 — par 3, 370ft. Straight with a mid-right pinch, then a guard cluster
   // dead in front of the green — pick a side, left or right (caddie book).
   { par: 3, tee: TEE, basket: { x: 156, y: 108 }, fairway: [{ x: 160, y: 416 }, { x: 156, y: 290 }, { x: 152, y: 180 }, { x: 156, y: 108 }], fwWidth: 116, trees: [
