@@ -62,10 +62,10 @@ const TEE: Vec = { x: 160, y: 416 };
 // hole's actual character. Comments note the real par/distance.
 const HOLE_TEMPLATES: Omit<Hole, "worldH">[] = [
   // ── Front nine (par 31) ── (`fairway` = curved centerline tee→green; `fwWidth` = corridor width)
-  // 1 — par 4, 670ft. Straight off the tee over a center-left pond, then the
-  // fairway bends right and keeps working right the rest of the way to a green
-  // tucked top-right behind a tree gate (per the caddie book).
-  { par: 4, tee: TEE, basket: { x: 232, y: 96 }, fairway: [{ x: 160, y: 416 }, { x: 162, y: 320 }, { x: 178, y: 250 }, { x: 205, y: 175 }, { x: 228, y: 120 }, { x: 232, y: 96 }], fwWidth: 126, trees: [{ x: 206, y: 142, r: 9 }, { x: 246, y: 136, r: 9 }, { x: 198, y: 108, r: 9 }, { x: 266, y: 120, r: 9 }], water: [{ x: 120, y: 280, w: 70, h: 46 }], hazard: [{ x: 175, y: 235, w: 30, h: 22 }] },
+  // 1 — par 4, 670ft. Tees off far LEFT and runs straight over a center-left
+  // pond, then doglegs hard right and keeps sweeping right across the whole
+  // width to a green tucked top-right behind a tree gate (per the caddie book).
+  { par: 4, tee: { x: 84, y: 416 }, basket: { x: 252, y: 96 }, fairway: [{ x: 84, y: 416 }, { x: 86, y: 330 }, { x: 100, y: 260 }, { x: 140, y: 195 }, { x: 195, y: 140 }, { x: 240, y: 110 }, { x: 252, y: 96 }], fwWidth: 126, trees: [{ x: 198, y: 130, r: 9 }, { x: 238, y: 126, r: 9 }, { x: 216, y: 84, r: 9 }, { x: 286, y: 104, r: 9 }], water: [{ x: 48, y: 272, w: 64, h: 44 }], hazard: [{ x: 124, y: 232, w: 30, h: 22 }] },
   // 2 — par 3, 390ft. Long corridor swinging hard right, a wall of trees down
   // the whole right side, and a sand bunker just short of the green.
   { par: 3, tee: TEE, basket: { x: 218, y: 104 }, fairway: [{ x: 160, y: 416 }, { x: 172, y: 310 }, { x: 196, y: 215 }, { x: 214, y: 140 }, { x: 218, y: 104 }], fwWidth: 112, trees: [
@@ -129,6 +129,8 @@ const TEE_BEHIND = 120;
 const worldHForPar = (par: number) => (par - 2) * DRIVE + 60 + TEE_BEHIND;
 // Stretch an authored template (tee y≈416, basket near the top) into a full hole
 // whose length scales with par. Shared by Glendoveer and the procedural daily.
+// The tee keeps its authored x — putting the tee off-center (e.g. far left)
+// lets a hole dogleg across the full canvas width instead of only ±90px.
 function materializeHole(t: Omit<Hole, "worldH">): Hole {
   const worldH = worldHForPar(t.par);
   const scale = (worldH - 60 - TEE_BEHIND) / (416 - 50); // template y[50..416] → world[60..tee]
@@ -136,7 +138,7 @@ function materializeHole(t: Omit<Hole, "worldH">): Hole {
   return {
     par: t.par,
     worldH,
-    tee: { x: 160, y: worldH - TEE_BEHIND },
+    tee: { x: t.tee.x, y: worldH - TEE_BEHIND },
     basket: { x: t.basket.x, y: ty(t.basket.y) },
     fairway: t.fairway.map((p) => ({ x: p.x, y: ty(p.y) })),
     fwWidth: t.fwWidth,
@@ -1394,16 +1396,34 @@ export function DiscGolfGame() {
         for (let i = 0; i < wt.h; i += 6) ctx.fillRect(wt.x + 2, wy + 3 + i, wt.w - 6, 1);
       }
 
-      // Hazards (sand) — solid sandy ovals, no OB line.
+      // Hazards (sand) — sandy ovals ringed in caddie-book orange with an HZ
+      // tag, so they read as "+1 stroke" at a glance (unlike plain fairway).
       for (const hz of hole.hazard ?? []) {
+        const hx = hz.x + hz.w / 2;
+        const hy = hz.y - cam + hz.h / 2;
         ctx.fillStyle = "#d9c089";
         ctx.beginPath();
-        ctx.ellipse(hz.x + hz.w / 2, hz.y - cam + hz.h / 2, hz.w / 2, hz.h / 2, 0, 0, Math.PI * 2);
+        ctx.ellipse(hx, hy, hz.w / 2, hz.h / 2, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.fillStyle = "#c4a96b";
         ctx.beginPath();
-        ctx.ellipse(hz.x + hz.w / 2, hz.y - cam + hz.h / 2, hz.w / 2 - 2, hz.h / 2 - 2, 0, 0, Math.PI * 2);
+        ctx.ellipse(hx, hy, hz.w / 2 - 2, hz.h / 2 - 2, 0, 0, Math.PI * 2);
         ctx.fill();
+        ctx.strokeStyle = "#e0923b";
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([3, 2]);
+        ctx.beginPath();
+        ctx.ellipse(hx, hy, hz.w / 2, hz.h / 2, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.lineWidth = 1;
+        ctx.fillStyle = "#a8651f";
+        ctx.font = "bold 6px ui-monospace, monospace";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("HZ", hx, hy + 0.5);
+        ctx.textAlign = "left";
+        ctx.textBaseline = "alphabetic";
       }
 
       // Tee pad
@@ -1621,8 +1641,12 @@ export function DiscGolfGame() {
         ctx.lineWidth = 1;
         ctx.fillStyle = "#3a6ea5";
         for (const wt of hole.water) ctx.fillRect(ox + wt.x * s, oy + wt.y * s, wt.w * s, wt.h * s);
-        ctx.fillStyle = "#d9c089";
-        for (const hz of hole.hazard ?? []) ctx.fillRect(ox + hz.x * s, oy + hz.y * s, hz.w * s, hz.h * s);
+        for (const hz of hole.hazard ?? []) {
+          ctx.fillStyle = "#d9c089";
+          ctx.fillRect(ox + hz.x * s, oy + hz.y * s, hz.w * s, hz.h * s);
+          ctx.strokeStyle = "#e0923b";
+          ctx.strokeRect(ox + hz.x * s + 0.5, oy + hz.y * s + 0.5, Math.max(2, hz.w * s) - 1, Math.max(2, hz.h * s) - 1);
+        }
         ctx.fillStyle = "#234d1f";
         for (const tr of hole.trees) {
           ctx.beginPath();
