@@ -65,42 +65,48 @@ const HOLE_TEMPLATES: Omit<Hole, "worldH">[] = [
   // 1 — par 4, 670ft. Sweeping right dogleg: the drive carries a pond to a
   // landing zone guarded by a sand bunker, then a straight second shot into a
   // tree-ringed green.
-  { par: 4, tee: TEE, basket: { x: 202, y: 98 }, fairway: [{ x: 160, y: 416 }, { x: 178, y: 330 }, { x: 200, y: 250 }, { x: 204, y: 160 }, { x: 202, y: 98 }], fwWidth: 126, trees: [{ x: 166, y: 110, r: 12 }, { x: 238, y: 116, r: 12 }, { x: 226, y: 152, r: 12 }], water: [{ x: 150, y: 282, w: 84, h: 44 }], hazard: [{ x: 212, y: 240, w: 30, h: 24 }] },
-  // 2 — par 3, 390ft. Corridor bending right; tight on the left.
-  { par: 3, tee: TEE, basket: { x: 196, y: 122 }, fairway: [{ x: 160, y: 416 }, { x: 168, y: 300 }, { x: 188, y: 200 }, { x: 196, y: 122 }], fwWidth: 112, trees: [{ x: 132, y: 252, r: 13 }, { x: 210, y: 208, r: 13 }, { x: 150, y: 170, r: 12 }], water: [] },
+  { par: 4, tee: TEE, basket: { x: 202, y: 98 }, fairway: [{ x: 160, y: 416 }, { x: 178, y: 330 }, { x: 200, y: 250 }, { x: 204, y: 160 }, { x: 202, y: 98 }], fwWidth: 126, trees: [{ x: 166, y: 110, r: 9 }, { x: 238, y: 116, r: 9 }, { x: 226, y: 152, r: 9 }], water: [{ x: 150, y: 282, w: 84, h: 44 }], hazard: [{ x: 212, y: 240, w: 30, h: 24 }] },
+  // 2 — par 3, 390ft. Long corridor swinging hard right, a wall of trees down
+  // the whole right side, and a sand bunker just short of the green.
+  { par: 3, tee: TEE, basket: { x: 218, y: 104 }, fairway: [{ x: 160, y: 416 }, { x: 172, y: 310 }, { x: 196, y: 215 }, { x: 214, y: 140 }, { x: 218, y: 104 }], fwWidth: 112, trees: [
+    // Right-side tree line following the bend, tee to green
+    { x: 214, y: 370, r: 8 }, { x: 220, y: 330, r: 9 }, { x: 226, y: 290, r: 8 }, { x: 236, y: 250, r: 9 }, { x: 246, y: 210, r: 8 }, { x: 252, y: 175, r: 9 }, { x: 261, y: 145, r: 8 },
+    // Left guards keeping the inside line honest
+    { x: 132, y: 252, r: 9 }, { x: 150, y: 170, r: 8 },
+  ], water: [], hazard: [{ x: 200, y: 124, w: 36, h: 18 }] },
   // 3 — par 3, 370ft. Tree-lined, green up the left.
-  { par: 3, tee: TEE, basket: { x: 150, y: 110 }, fairway: [{ x: 160, y: 416 }, { x: 156, y: 290 }, { x: 150, y: 180 }, { x: 150, y: 110 }], fwWidth: 116, trees: [{ x: 196, y: 252, r: 13 }, { x: 120, y: 200, r: 13 }, { x: 202, y: 150, r: 12 }], water: [] },
+  { par: 3, tee: TEE, basket: { x: 150, y: 110 }, fairway: [{ x: 160, y: 416 }, { x: 156, y: 290 }, { x: 150, y: 180 }, { x: 150, y: 110 }], fwWidth: 116, trees: [{ x: 196, y: 252, r: 10 }, { x: 120, y: 200, r: 10 }, { x: 202, y: 150, r: 9 }], water: [] },
   // 4 — par 3, 450ft. Slight left to a guarded green.
-  { par: 3, tee: TEE, basket: { x: 150, y: 96 }, fairway: [{ x: 160, y: 416 }, { x: 154, y: 260 }, { x: 150, y: 150 }, { x: 150, y: 96 }], fwWidth: 120, trees: [{ x: 150, y: 152, r: 14 }, { x: 118, y: 232, r: 12 }], water: [] },
+  { par: 3, tee: TEE, basket: { x: 150, y: 96 }, fairway: [{ x: 160, y: 416 }, { x: 154, y: 260 }, { x: 150, y: 150 }, { x: 150, y: 96 }], fwWidth: 120, trees: [{ x: 150, y: 152, r: 11 }, { x: 118, y: 232, r: 9 }], water: [] },
   // 5 — par 4, 910ft. Wide & open with sand hazards and a pond short of the pin.
   { par: 4, tee: TEE, basket: { x: 160, y: 72 }, fairway: [{ x: 160, y: 416 }, { x: 160, y: 280 }, { x: 160, y: 170 }, { x: 160, y: 72 }], fwWidth: 150, trees: [], water: [{ x: 132, y: 118, w: 56, h: 34 }], hazard: [{ x: 116, y: 182, w: 30, h: 22 }, { x: 184, y: 202, w: 28, h: 20 }] },
   // 6 — par 3, 415ft. Mostly open with a couple of guard trees.
-  { par: 3, tee: TEE, basket: { x: 168, y: 110 }, fairway: [{ x: 160, y: 416 }, { x: 164, y: 280 }, { x: 168, y: 160 }, { x: 168, y: 110 }], fwWidth: 128, trees: [{ x: 132, y: 242, r: 13 }, { x: 196, y: 190, r: 13 }], water: [] },
+  { par: 3, tee: TEE, basket: { x: 168, y: 110 }, fairway: [{ x: 160, y: 416 }, { x: 164, y: 280 }, { x: 168, y: 160 }, { x: 168, y: 110 }], fwWidth: 128, trees: [{ x: 132, y: 242, r: 10 }, { x: 196, y: 190, r: 10 }], water: [] },
   // 7 — par 4, 710ft. Tree-lined dogleg left.
-  { par: 4, tee: TEE, basket: { x: 132, y: 86 }, fairway: [{ x: 160, y: 416 }, { x: 160, y: 290 }, { x: 150, y: 190 }, { x: 132, y: 86 }], fwWidth: 120, trees: [{ x: 196, y: 252, r: 13 }, { x: 150, y: 182, r: 13 }, { x: 206, y: 140, r: 12 }], water: [] },
+  { par: 4, tee: TEE, basket: { x: 132, y: 86 }, fairway: [{ x: 160, y: 416 }, { x: 160, y: 290 }, { x: 150, y: 190 }, { x: 132, y: 86 }], fwWidth: 120, trees: [{ x: 196, y: 252, r: 10 }, { x: 150, y: 182, r: 10 }, { x: 206, y: 140, r: 9 }], water: [] },
   // 8 — par 3, 500ft. Straight tree-lined corridor.
-  { par: 3, tee: TEE, basket: { x: 160, y: 90 }, fairway: [{ x: 160, y: 416 }, { x: 160, y: 260 }, { x: 160, y: 150 }, { x: 160, y: 90 }], fwWidth: 116, trees: [{ x: 122, y: 242, r: 13 }, { x: 200, y: 242, r: 13 }, { x: 160, y: 162, r: 12 }], water: [] },
+  { par: 3, tee: TEE, basket: { x: 160, y: 90 }, fairway: [{ x: 160, y: 416 }, { x: 160, y: 260 }, { x: 160, y: 150 }, { x: 160, y: 90 }], fwWidth: 116, trees: [{ x: 122, y: 242, r: 10 }, { x: 200, y: 242, r: 10 }, { x: 160, y: 162, r: 9 }], water: [] },
   // 9 — par 4, 695ft. S-shaped fairway with a sand hazard.
-  { par: 4, tee: TEE, basket: { x: 150, y: 86 }, fairway: [{ x: 160, y: 416 }, { x: 172, y: 300 }, { x: 145, y: 205 }, { x: 162, y: 140 }, { x: 150, y: 86 }], fwWidth: 118, trees: [{ x: 206, y: 252, r: 13 }, { x: 120, y: 182, r: 13 }, { x: 196, y: 130, r: 12 }], water: [], hazard: [{ x: 148, y: 202, w: 28, h: 20 }] },
+  { par: 4, tee: TEE, basket: { x: 150, y: 86 }, fairway: [{ x: 160, y: 416 }, { x: 172, y: 300 }, { x: 145, y: 205 }, { x: 162, y: 140 }, { x: 150, y: 86 }], fwWidth: 118, trees: [{ x: 206, y: 252, r: 10 }, { x: 120, y: 182, r: 10 }, { x: 196, y: 130, r: 9 }], water: [], hazard: [{ x: 148, y: 202, w: 28, h: 20 }] },
   // ── Back nine (par 35) ──
   // 10 — par 4, 710ft. S-curve with sand hazards.
-  { par: 4, tee: TEE, basket: { x: 168, y: 84 }, fairway: [{ x: 160, y: 416 }, { x: 150, y: 300 }, { x: 182, y: 205 }, { x: 150, y: 140 }, { x: 168, y: 84 }], fwWidth: 120, trees: [{ x: 122, y: 252, r: 13 }, { x: 206, y: 252, r: 13 }, { x: 150, y: 172, r: 12 }], water: [], hazard: [{ x: 176, y: 150, w: 30, h: 22 }, { x: 118, y: 112, w: 28, h: 20 }] },
+  { par: 4, tee: TEE, basket: { x: 168, y: 84 }, fairway: [{ x: 160, y: 416 }, { x: 150, y: 300 }, { x: 182, y: 205 }, { x: 150, y: 140 }, { x: 168, y: 84 }], fwWidth: 120, trees: [{ x: 122, y: 252, r: 10 }, { x: 206, y: 252, r: 10 }, { x: 150, y: 172, r: 9 }], water: [], hazard: [{ x: 176, y: 150, w: 30, h: 22 }, { x: 118, y: 112, w: 28, h: 20 }] },
   // 11 — par 5, 1145ft. Long straight tree-lined corridor.
-  { par: 5, tee: TEE, basket: { x: 160, y: 56 }, fairway: [{ x: 160, y: 416 }, { x: 160, y: 310 }, { x: 160, y: 200 }, { x: 160, y: 110 }, { x: 160, y: 56 }], fwWidth: 120, trees: [{ x: 120, y: 292, r: 13 }, { x: 206, y: 232, r: 13 }, { x: 132, y: 172, r: 12 }, { x: 196, y: 120, r: 12 }], water: [] },
+  { par: 5, tee: TEE, basket: { x: 160, y: 56 }, fairway: [{ x: 160, y: 416 }, { x: 160, y: 310 }, { x: 160, y: 200 }, { x: 160, y: 110 }, { x: 160, y: 56 }], fwWidth: 120, trees: [{ x: 120, y: 292, r: 10 }, { x: 206, y: 232, r: 10 }, { x: 132, y: 172, r: 9 }, { x: 196, y: 120, r: 9 }], water: [] },
   // 12 — par 3, 370ft. Dogleg right around trees.
-  { par: 3, tee: TEE, basket: { x: 196, y: 110 }, fairway: [{ x: 160, y: 416 }, { x: 162, y: 270 }, { x: 185, y: 175 }, { x: 196, y: 110 }], fwWidth: 116, trees: [{ x: 140, y: 232, r: 13 }, { x: 168, y: 162, r: 13 }], water: [] },
+  { par: 3, tee: TEE, basket: { x: 196, y: 110 }, fairway: [{ x: 160, y: 416 }, { x: 162, y: 270 }, { x: 185, y: 175 }, { x: 196, y: 110 }], fwWidth: 116, trees: [{ x: 140, y: 232, r: 10 }, { x: 168, y: 162, r: 10 }], water: [] },
   // 13 — par 4, 775ft. Dogleg right, tree-lined.
-  { par: 4, tee: TEE, basket: { x: 196, y: 84 }, fairway: [{ x: 160, y: 416 }, { x: 166, y: 290 }, { x: 186, y: 185 }, { x: 196, y: 84 }], fwWidth: 120, trees: [{ x: 132, y: 252, r: 13 }, { x: 168, y: 182, r: 13 }, { x: 214, y: 140, r: 12 }], water: [] },
+  { par: 4, tee: TEE, basket: { x: 196, y: 84 }, fairway: [{ x: 160, y: 416 }, { x: 166, y: 290 }, { x: 186, y: 185 }, { x: 196, y: 84 }], fwWidth: 120, trees: [{ x: 132, y: 252, r: 10 }, { x: 168, y: 182, r: 10 }, { x: 214, y: 140, r: 9 }], water: [] },
   // 14 — par 4, 845ft. Dogleg left to a guarded green; pond + sand.
-  { par: 4, tee: TEE, basket: { x: 138, y: 76 }, fairway: [{ x: 160, y: 416 }, { x: 160, y: 290 }, { x: 150, y: 185 }, { x: 138, y: 76 }], fwWidth: 120, trees: [{ x: 196, y: 252, r: 13 }, { x: 150, y: 172, r: 13 }], water: [{ x: 120, y: 108, w: 50, h: 30 }] },
+  { par: 4, tee: TEE, basket: { x: 138, y: 76 }, fairway: [{ x: 160, y: 416 }, { x: 160, y: 290 }, { x: 150, y: 185 }, { x: 138, y: 76 }], fwWidth: 120, trees: [{ x: 196, y: 252, r: 10 }, { x: 150, y: 172, r: 10 }], water: [{ x: 120, y: 108, w: 50, h: 30 }] },
   // 15 — par 3, 335ft. Narrow tree-lined tunnel straight to the green.
-  { par: 3, tee: TEE, basket: { x: 158, y: 88 }, fairway: [{ x: 160, y: 416 }, { x: 158, y: 260 }, { x: 158, y: 150 }, { x: 158, y: 88 }], fwWidth: 96, trees: [{ x: 108, y: 300, r: 14 }, { x: 212, y: 300, r: 14 }, { x: 104, y: 200, r: 14 }, { x: 216, y: 200, r: 14 }, { x: 110, y: 122, r: 13 }, { x: 210, y: 122, r: 13 }], water: [] },
+  { par: 3, tee: TEE, basket: { x: 158, y: 88 }, fairway: [{ x: 160, y: 416 }, { x: 158, y: 260 }, { x: 158, y: 150 }, { x: 158, y: 88 }], fwWidth: 96, trees: [{ x: 108, y: 300, r: 11 }, { x: 212, y: 300, r: 11 }, { x: 104, y: 200, r: 11 }, { x: 216, y: 200, r: 11 }, { x: 110, y: 122, r: 10 }, { x: 210, y: 122, r: 10 }], water: [] },
   // 16 — par 3, 410ft. Straight, but trees stand in the fairway.
-  { par: 3, tee: TEE, basket: { x: 158, y: 110 }, fairway: [{ x: 160, y: 416 }, { x: 158, y: 280 }, { x: 158, y: 170 }, { x: 158, y: 110 }], fwWidth: 108, trees: [{ x: 150, y: 300, r: 14 }, { x: 168, y: 232, r: 14 }, { x: 132, y: 182, r: 13 }, { x: 186, y: 160, r: 13 }], water: [] },
+  { par: 3, tee: TEE, basket: { x: 158, y: 110 }, fairway: [{ x: 160, y: 416 }, { x: 158, y: 280 }, { x: 158, y: 170 }, { x: 158, y: 110 }], fwWidth: 108, trees: [{ x: 150, y: 300, r: 11 }, { x: 168, y: 232, r: 11 }, { x: 132, y: 182, r: 10 }, { x: 186, y: 160, r: 10 }], water: [] },
   // 17 — par 4, 830ft. Tree-lined with gate trees; sand hazard.
-  { par: 4, tee: TEE, basket: { x: 160, y: 80 }, fairway: [{ x: 160, y: 416 }, { x: 160, y: 260 }, { x: 160, y: 160 }, { x: 160, y: 80 }], fwWidth: 118, trees: [{ x: 120, y: 252, r: 13 }, { x: 200, y: 252, r: 13 }, { x: 134, y: 160, r: 12 }, { x: 188, y: 160, r: 12 }], water: [], hazard: [{ x: 82, y: 150, w: 28, h: 22 }] },
+  { par: 4, tee: TEE, basket: { x: 160, y: 80 }, fairway: [{ x: 160, y: 416 }, { x: 160, y: 260 }, { x: 160, y: 160 }, { x: 160, y: 80 }], fwWidth: 118, trees: [{ x: 120, y: 252, r: 10 }, { x: 200, y: 252, r: 10 }, { x: 134, y: 160, r: 9 }, { x: 188, y: 160, r: 9 }], water: [], hazard: [{ x: 82, y: 150, w: 28, h: 22 }] },
   // 18 — par 5, 1000ft. Long slight dogleg left with a pond in the fairway.
-  { par: 5, tee: TEE, basket: { x: 168, y: 58 }, fairway: [{ x: 160, y: 416 }, { x: 160, y: 310 }, { x: 156, y: 200 }, { x: 162, y: 120 }, { x: 168, y: 58 }], fwWidth: 124, trees: [{ x: 120, y: 300, r: 13 }, { x: 206, y: 222, r: 13 }, { x: 140, y: 152, r: 12 }], water: [{ x: 150, y: 188, w: 70, h: 40 }] },
+  { par: 5, tee: TEE, basket: { x: 168, y: 58 }, fairway: [{ x: 160, y: 416 }, { x: 160, y: 310 }, { x: 156, y: 200 }, { x: 162, y: 120 }, { x: 168, y: 58 }], fwWidth: 124, trees: [{ x: 120, y: 300, r: 10 }, { x: 206, y: 222, r: 10 }, { x: 140, y: 152, r: 9 }], water: [{ x: 150, y: 188, w: 70, h: 40 }] },
 ];
 
 // A max drive carries ~DRIVE world px, so a hole's length is ~(par-2) drives:
@@ -552,7 +558,7 @@ function genDailyHole(rng: () => number): Hole {
   const addTree = (p: Vec, side: number, extra: number) => {
     const tx = Math.round(p.x + side * (fwWidth / 2 + extra));
     if (tx < 16 || tx > 304 || p.y > 348 || p.y < 96) return;
-    trees.push({ x: tx, y: Math.round(p.y), r: Math.round(r(12, 14)) });
+    trees.push({ x: tx, y: Math.round(p.y), r: Math.round(r(9, 11)) });
   };
   for (let i = 1; i <= nBends; i++) {
     const p = pts[i];
