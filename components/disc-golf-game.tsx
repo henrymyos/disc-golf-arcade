@@ -199,7 +199,7 @@ const STRAIGHT_SPEED_MUL = 1.13;
 // the climb-turn / descent-fade for a straight flight; friction is glide
 // (higher = floats/rolls farther). Curving is capped per throw (MAX_FADE_TURN)
 // so a disc can never loop or fade backward.
-type Disc = { key: string; name: string; brand?: string; power: number; arc: number; fade: number; turn: number; sFade: number; friction: number; color: string; blurb: string };
+type Disc = { key: string; name: string; brand?: string; power: number; arc: number; fade: number; turn: number; sFade: number; friction: number; color: string; blurb: string; flight?: FlightPath };
 const DISCS: Disc[] = [
   // `arc` is the vertical launch per unit power. The putter flies flat so it
   // stays low and reaches the basket near the ground (high chance to catch);
@@ -209,35 +209,28 @@ const DISCS: Disc[] = [
   { key: "driver", name: "Driver", power: 1.34, arc: 2.9, fade: 0.014, turn: 0.011, sFade: 0.015, friction: 0.990, color: "#e23b3b", blurb: "Far, S-flight" },
 ];
 
-// Advanced bag — real discs translated from their flight numbers
-// (speed/glide/turn/fade). Speed → power + launch arc, glide → float, a negative
-// turn → high-speed turn (understable), fade → low-speed fade. In advanced mode
-// each disc flies its own S-shaped line (no overstable/straight toggle).
-function discFromNumbers(key: string, name: string, brand: string, color: string, speed: number, glide: number, turnN: number, fadeN: number): Disc {
-  return {
-    key, name, brand, color,
-    power: 0.74 + speed * 0.05,
-    arc: 1.0 + speed * 0.14,
-    friction: 0.964 + glide * 0.0045,
-    fade: fadeN * 0.005,
-    turn: Math.max(0, -turnN) * 0.008, // understable high-speed turn
-    sFade: fadeN * 0.006, // low-speed fade
-    blurb: `${brand} · ${speed} / ${glide} / ${turnN} / ${fadeN}`,
-  };
+// Advanced bag — real discs that fly the simple bag's proven lines. Each disc
+// borrows a simple-bag tier's stats (putter / mid / fairway / driver) plus a
+// baked-in flight shape: "overstable" bends steadily one way, "straight" flies
+// the farther S-line — exactly like the simple bag's toggle, just per-disc.
+// The fairway tier sits halfway between mid and driver for distance.
+const FAIRWAY_BASE: Disc = { key: "fairway", name: "Fairway", power: 1.17, arc: 2.55, fade: 0.011, turn: 0.0055, sFade: 0.0085, friction: 0.987, color: "", blurb: "" };
+function advDisc(key: string, name: string, brand: string, color: string, base: Disc, flight: FlightPath, nums: string): Disc {
+  return { ...base, key, name, brand, color, flight, blurb: `${brand} · ${nums}` };
 }
 const ADV_DISCS: Disc[] = [
-  // Putt & approach
-  discFromNumbers("aviar", "Aviar", "Innova", "#36D7B7", 2, 3, 0, 1),
-  discFromNumbers("zone", "Zone", "Discraft", "#e07b3b", 4, 3, 0, 3),
-  // Midrange — straight Buzzz vs overstable Swarm
-  discFromNumbers("buzzz", "Buzzz", "Discraft", "#f5d24a", 5, 4, 0, 1),
-  discFromNumbers("swarm", "Swarm", "Discraft", "#b85cd6", 5, 4, 0, 3),
-  // Fairway / control
-  discFromNumbers("teebird", "Teebird", "Innova", "#5fb0e8", 7, 5, 0, 2),
-  discFromNumbers("firebird", "Firebird", "Innova", "#e2453b", 9, 3, 0, 4),
-  // Distance — overstable Nuke OS vs straighter Destroyer
-  discFromNumbers("nukeos", "Nuke OS", "Discraft", "#2f6fe0", 13, 5, 0, 4),
-  discFromNumbers("destroyer", "Destroyer", "Innova", "#e23b7b", 12, 5, -1, 3),
+  // Putt & approach — straight Aviar vs overstable Zone (putter tier)
+  advDisc("aviar", "Aviar", "Innova", "#36D7B7", DISCS[0], "straight", "2 / 3 / 0 / 1"),
+  advDisc("zone", "Zone", "Discraft", "#e07b3b", DISCS[0], "overstable", "4 / 3 / 0 / 3"),
+  // Midrange — straight Buzzz vs overstable Swarm (mid tier)
+  advDisc("buzzz", "Buzzz", "Discraft", "#f5d24a", DISCS[1], "straight", "5 / 4 / 0 / 1"),
+  advDisc("swarm", "Swarm", "Discraft", "#b85cd6", DISCS[1], "overstable", "5 / 4 / 0 / 3"),
+  // Fairway / control — straight Teebird vs overstable Firebird (fairway tier)
+  advDisc("teebird", "Teebird", "Innova", "#5fb0e8", FAIRWAY_BASE, "straight", "7 / 5 / 0 / 2"),
+  advDisc("firebird", "Firebird", "Innova", "#e2453b", FAIRWAY_BASE, "overstable", "9 / 3 / 0 / 4"),
+  // Distance — overstable Nuke OS vs straight-flying Destroyer (driver tier)
+  advDisc("nukeos", "Nuke OS", "Discraft", "#2f6fe0", DISCS[2], "overstable", "13 / 5 / 0 / 4"),
+  advDisc("destroyer", "Destroyer", "Innova", "#e23b7b", DISCS[2], "straight", "12 / 5 / -1 / 3"),
 ];
 function activeDiscs(advanced: boolean): Disc[] {
   return advanced ? ADV_DISCS : DISCS;
@@ -621,10 +614,10 @@ function vibrate(pattern: number | number[]) {
 }
 // Forward carry of a full-power throw with this disc (obstacle-free, straight),
 // in world px — used to draw the "reach" line. Mirrors the real flight physics
-// including the hole's elevation.
-function fullPowerRange(disc: Disc, elev: number | undefined): number {
+// including the hole's elevation and the straight-flight speed boost.
+function fullPowerRange(disc: Disc, elev: number | undefined, speedMul = 1): number {
   let y = 0;
-  let vy = disc.power * (1.2 + 3.35) * elevMul(elev); // power = 1
+  let vy = disc.power * (1.2 + 3.35) * speedMul * elevMul(elev); // power = 1
   let h = 0;
   let vh = disc.arc; // power = 1
   for (let i = 0; i < 600; i++) {
@@ -966,12 +959,12 @@ export function DiscGolfGame() {
     if (!g || g.phase !== "aim") return;
     const hole = g.roundHoles[g.holeIndex];
     const disc = activeDiscs(g.advanced)[g.discIndex];
-    // Advanced discs fly their own S-line (turn → fade) with no distance boost;
-    // simple mode uses the overstable/straight toggle.
-    g.path = g.advanced ? "straight" : flightPathRef.current;
+    // Advanced discs fly their baked-in shape (e.g. Nuke OS overstable,
+    // Destroyer straight); simple mode uses the overstable/straight toggle.
+    g.path = g.advanced ? disc.flight ?? "straight" : flightPathRef.current;
     // Slower launch + extra glide (disc friction) so it floats across the
     // fairway. Straight throws carry farther; uphill (+elev) shortens carry.
-    const pathMul = !g.advanced && g.path === "straight" ? STRAIGHT_SPEED_MUL : 1;
+    const pathMul = g.path === "straight" ? STRAIGHT_SPEED_MUL : 1;
     const speed = disc.power * (1.2 + g.power * 3.35) * pathMul * elevMul(hole.elev);
     g.disc.vx = Math.cos(g.angle) * speed;
     g.disc.vy = Math.sin(g.angle) * speed;
@@ -1422,7 +1415,7 @@ export function DiscGolfGame() {
         const aimDisc = activeDiscs(g.advanced)[g.discIndex];
         const lh2 = leftHandedRef.current ? -1 : 1;
         const sign = (throwStyleRef.current === "BH" ? -1 : 1) * lh2;
-        const path: FlightPath = g.advanced ? "straight" : flightPathRef.current;
+        const path: FlightPath = g.advanced ? aimDisc.flight ?? "straight" : flightPathRef.current;
         const dsx = g.disc.x;
         const dsy = g.disc.y - cam; // disc screen position
 
@@ -1434,7 +1427,7 @@ export function DiscGolfGame() {
           const since = performance.now() - rangeFlashRef.current;
           const SHOW_MS = 2000;
           if (!dr.active && since < SHOW_MS) {
-            const range = fullPowerRange(aimDisc, hole.elev);
+            const range = fullPowerRange(aimDisc, hole.elev, path === "straight" ? STRAIGHT_SPEED_MUL : 1);
             const bsy = hole.basket.y - cam;
             const basketVisible = bsy >= 0 && bsy <= H && hole.basket.x >= 0 && hole.basket.x <= W;
             const ang = basketVisible ? g.angle : -Math.PI / 2; // straight up if off-screen
@@ -1513,7 +1506,7 @@ export function DiscGolfGame() {
         }
 
         if (dr.active && power > 0.04 && !inCancel) {
-          const pathMul = !g.advanced && path === "straight" ? STRAIGHT_SPEED_MUL : 1;
+          const pathMul = path === "straight" ? STRAIGHT_SPEED_MUL : 1;
           const speed = aimDisc.power * (1.2 + power * 3.35) * pathMul * elevMul(hole.elev);
           const f: Flight = {
             x: g.disc.x, y: g.disc.y,
