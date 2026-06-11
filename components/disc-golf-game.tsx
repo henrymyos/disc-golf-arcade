@@ -52,7 +52,10 @@ type Water = { x: number; y: number; w: number; h: number };
 // −downhill lengthens it). Both render as indicators on the HUD/minimap.
 // `worldW` (optional, default W) makes the hole wider than the viewport; the
 // camera pans horizontally following the disc, so big doglegs get full room.
-type Hole = { par: number; worldH: number; worldW?: number; tee: Vec; basket: Vec; fairway: Vec[]; fwWidth: number; trees: Tree[]; water: Water[]; hazard?: Water[]; wind?: Vec; windMag?: number; elev?: number };
+// `elevZones` (optional) varies the slope along the hole — each zone applies
+// until `to`, a fraction of the way from tee (0) to basket (1); without it the
+// whole hole uses the single `elev`.
+type Hole = { par: number; worldH: number; worldW?: number; tee: Vec; basket: Vec; fairway: Vec[]; fwWidth: number; trees: Tree[]; water: Water[]; hazard?: Water[]; wind?: Vec; windMag?: number; elev?: number; elevZones?: { to: number; elev: number }[] };
 
 // Holes are authored in this old 448-tall frame, then stretched to a length
 // that scales with par (below).
@@ -116,8 +119,9 @@ const HOLE_TEMPLATES: Omit<Hole, "worldH">[] = [
   // center tree mid-flight; the green sits in a gap between guards.
   { par: 3, tee: TEE, basket: { x: 160, y: 78 }, fairway: [{ x: 160, y: 416 }, { x: 160, y: 260 }, { x: 160, y: 150 }, { x: 160, y: 78 }], fwWidth: 116, trees: [{ x: 130, y: 290, r: 9 }, { x: 195, y: 255, r: 9 }, { x: 118, y: 235, r: 9 }, { x: 160, y: 205, r: 9 }, { x: 126, y: 160, r: 9 }, { x: 124, y: 122, r: 9 }, { x: 196, y: 120, r: 9 }], water: [] },
   // 9 — par 4, 695ft. Runs straight then finishes LEFT to a well-wooded green;
-  // sand mid-fairway on the way in (caddie book).
-  { par: 4, tee: TEE, basket: { x: 138, y: 92 }, fairway: [{ x: 160, y: 416 }, { x: 166, y: 310 }, { x: 162, y: 215 }, { x: 148, y: 140 }, { x: 138, y: 92 }], fwWidth: 118, trees: [{ x: 200, y: 290, r: 9 }, { x: 120, y: 250, r: 9 }, { x: 178, y: 200, r: 9 }, { x: 110, y: 160, r: 9 }, { x: 170, y: 130, r: 9 }, { x: 100, y: 112, r: 9 }, { x: 176, y: 112, r: 9 }, { x: 96, y: 84, r: 9 }, { x: 134, y: 64, r: 9 }], water: [], hazard: [{ x: 150, y: 180, w: 30, h: 20 }] },
+  // sand mid-fairway on the way in (caddie book). Drops downhill off the tee,
+  // then climbs to the green over the back half.
+  { par: 4, tee: TEE, basket: { x: 138, y: 92 }, elevZones: [{ to: 0.5, elev: -1 }, { to: 1, elev: 1 }], fairway: [{ x: 160, y: 416 }, { x: 166, y: 310 }, { x: 162, y: 215 }, { x: 148, y: 140 }, { x: 138, y: 92 }], fwWidth: 118, trees: [{ x: 200, y: 290, r: 9 }, { x: 120, y: 250, r: 9 }, { x: 178, y: 200, r: 9 }, { x: 110, y: 160, r: 9 }, { x: 170, y: 130, r: 9 }, { x: 100, y: 112, r: 9 }, { x: 176, y: 112, r: 9 }, { x: 96, y: 84, r: 9 }, { x: 134, y: 64, r: 9 }], water: [], hazard: [{ x: 150, y: 180, w: 30, h: 20 }] },
   // ── Back nine (par 35) ──
   // 10 — par 4, 710ft. Gentle S working left, sand everywhere: near the tee,
   // mid-hole, and a pair guarding the green (caddie book).
@@ -199,6 +203,7 @@ function materializeHole(t: Omit<Hole, "worldH">): Hole {
     water: t.water.map((w) => ({ x: w.x, y: ty(w.y), w: w.w, h: w.h * scale })),
     hazard: (t.hazard ?? []).map((o) => ({ x: o.x, y: ty(o.y), w: o.w, h: o.h * scale })),
     elev: t.elev,
+    elevZones: t.elevZones, // fractions of tee→basket, so no rescaling needed
   };
 }
 const HOLES: Hole[] = HOLE_TEMPLATES.map(materializeHole);
@@ -208,7 +213,8 @@ const TOTAL_PAR = HOLES.reduce((s, h) => s + h.par, 0);
 // −2..+2. Matches the real Glendoveer East terrain hole by hole (e.g. 2/5/6/11
 // drop hard, 7 climbs hard, the closing stretch is flat). Affects how far a
 // throw carries; shown on the minimap as ▲/▼.
-const HOLE_ELEV = [0, -2, 0, 0, -2, -2, 2, -1, -1, 0, -2, -1, 1, -1, 0, 0, 0, 0];
+// (Hole 9 is zoned in its template instead: downhill first half, uphill second.)
+const HOLE_ELEV = [0, -2, 0, 0, -2, -2, 2, -1, 0, 0, -2, -1, 1, -1, 0, 0, 0, 0];
 
 type Mode = "daily" | "course";
 
@@ -691,6 +697,15 @@ const SLOPE_PULL = 0.014;
 function elevGroundFriction(elev: number | undefined) {
   return Math.max(0.7, Math.min(0.92, GROUND_FRICTION - (elev ?? 0) * 0.025));
 }
+// Elevation at a world position. Most holes have a single slope (`elev`); a
+// hole with `elevZones` changes slope along its length (e.g. hole 9 plays
+// downhill for the first half, then climbs to the green).
+function elevAt(hole: Hole, y: number): number {
+  if (!hole.elevZones?.length) return hole.elev ?? 0;
+  const t = (hole.tee.y - y) / Math.max(1, hole.tee.y - hole.basket.y);
+  for (const z of hole.elevZones) if (t <= z.to) return z.elev;
+  return hole.elevZones[hole.elevZones.length - 1].elev;
+}
 // Best-effort haptics on mobile (no-op where unsupported).
 function vibrate(pattern: number | number[]) {
   try { navigator.vibrate?.(pattern); } catch { /* ignore */ }
@@ -761,8 +776,10 @@ function stepFlight(f: Flight, disc: Disc, fadeSign: number, path: FlightPath, h
   }
   // The slope pulls the airborne disc downhill along the hole axis: uphill
   // (+elev) drags it back toward the tee (+y), downhill carries it onward.
-  if (airborne) f.vy += (hole.elev ?? 0) * SLOPE_PULL;
-  const friction = airborne ? disc.friction : elevGroundFriction(hole.elev);
+  // Read at the disc's position so zoned holes change slope mid-flight.
+  const elevHere = elevAt(hole, f.y);
+  if (airborne) f.vy += elevHere * SLOPE_PULL;
+  const friction = airborne ? disc.friction : elevGroundFriction(elevHere);
   f.vx *= friction;
   f.vy *= friction;
 
@@ -1548,7 +1565,7 @@ export function DiscGolfGame() {
           const since = performance.now() - rangeFlashRef.current;
           const SHOW_MS = 2000;
           if (!dr.active && since < SHOW_MS) {
-            const range = fullPowerRange(aimDisc, hole.elev, path === "straight" ? STRAIGHT_SPEED_MUL : 1);
+            const range = fullPowerRange(aimDisc, elevAt(hole, g.disc.y), path === "straight" ? STRAIGHT_SPEED_MUL : 1);
             const bsy = hole.basket.y - cam;
             const bsx = hole.basket.x - camX;
             const basketVisible = bsy >= 0 && bsy <= H && bsx >= 0 && bsx <= W;
@@ -1752,7 +1769,7 @@ export function DiscGolfGame() {
         const mag = hole.windMag ?? 0;
         const mph = Math.round((mag / 0.018) * 15);
         const wa = Math.atan2(hole.wind?.y ?? 0, hole.wind?.x ?? 0);
-        const elev = hole.elev ?? 0;
+        const elev = elevAt(hole, g.disc.y); // slope where the disc lies (zoned holes change mid-hole)
         const panY = oy + mh + 5;
         const panH = 48;
         ctx.fillStyle = "rgba(0,0,0,0.55)";
@@ -1865,7 +1882,15 @@ export function DiscGolfGame() {
         ctx.font = "10px monospace";
         ctx.textAlign = "center";
         ctx.fillText(`HOLE ${g.holeIndex + 1}  ·  PAR ${hole.par}`, W / 2, H / 2 - 6);
-        if (elev !== 0) {
+        if (hole.elevZones?.length) {
+          // Changing slope, e.g. "▼ DOWNHILL EARLY — UPHILL LATE ▲"
+          const first = hole.elevZones[0].elev;
+          const last = hole.elevZones[hole.elevZones.length - 1].elev;
+          ctx.fillStyle = "#e89a4a";
+          ctx.font = "bold 11px monospace";
+          const word = (e: number) => (e > 0 ? "UPHILL" : e < 0 ? "DOWNHILL" : "FLAT");
+          ctx.fillText(`${first < 0 ? "▼" : "▲"} ${word(first)} EARLY — ${word(last)} LATE ${last < 0 ? "▼" : "▲"}`, W / 2, H / 2 + 8);
+        } else if (elev !== 0) {
           ctx.fillStyle = elev > 0 ? "#e89a4a" : "#5fc8e8";
           ctx.font = "bold 11px monospace";
           const word = elev > 0 ? "UPHILL" : "DOWNHILL";
