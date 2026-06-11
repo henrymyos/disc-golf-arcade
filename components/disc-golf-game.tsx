@@ -161,9 +161,15 @@ const HOLE_TEMPLATES: Omit<Hole, "worldH">[] = [
     // Green ring
     { x: 196, y: 110, r: 9 }, { x: 186, y: 96, r: 9 }, { x: 254, y: 88, r: 9 }, { x: 216, y: 48, r: 9 }, { x: 184, y: 58, r: 9 },
   ], water: [], hazard: [{ x: 142, y: 150, w: 30, h: 20 }, { x: 158, y: 185, w: 22, h: 16 }] },
-  // 18 — par 5, 1000ft. A tree line marches up the middle into a fairway pond
-  // center-left, then on to the finishing green up right (caddie book).
-  { par: 5, tee: TEE, basket: { x: 180, y: 60 }, fairway: [{ x: 160, y: 416 }, { x: 162, y: 330 }, { x: 158, y: 240 }, { x: 164, y: 150 }, { x: 180, y: 60 }], fwWidth: 124, trees: [{ x: 158, y: 320, r: 9 }, { x: 162, y: 282, r: 9 }, { x: 156, y: 246, r: 9 }, { x: 200, y: 210, r: 9 }, { x: 120, y: 130, r: 9 }, { x: 142, y: 80, r: 9 }, { x: 212, y: 72, r: 9 }], water: [{ x: 120, y: 170, w: 74, h: 38 }] },
+  // 18 — par 5, 1000ft. The fairway pond sits right where a full DRIVE lands —
+  // lay up short or thread past it — then a wood of trees shapes the second
+  // shot on the way to the finishing green up right (caddie book).
+  { par: 5, tee: TEE, basket: { x: 180, y: 60 }, fairway: [{ x: 160, y: 416 }, { x: 162, y: 330 }, { x: 158, y: 240 }, { x: 164, y: 150 }, { x: 180, y: 60 }], fwWidth: 124, trees: [
+    { x: 165, y: 340, r: 9 },
+    // Second-shot wood (between the pond and the green approach)
+    { x: 150, y: 250, r: 9 }, { x: 190, y: 225, r: 9 }, { x: 130, y: 200, r: 9 }, { x: 175, y: 178, r: 9 },
+    { x: 120, y: 130, r: 9 }, { x: 142, y: 80, r: 9 }, { x: 212, y: 72, r: 9 },
+  ], water: [{ x: 120, y: 280, w: 74, h: 30 }] },
 ];
 
 // A max drive carries ~DRIVE world px, so a hole's length is ~(par-2) drives:
