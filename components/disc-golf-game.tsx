@@ -89,15 +89,17 @@ const HOLE_TEMPLATES: Omit<Hole, "worldH">[] = [
   // the play is out LEFT over the OB line. The green sits in a tree pocket
   // with sand short-right (caddie book).
   { par: 3, tee: TEE, basket: { x: 150, y: 96 }, fairway: [{ x: 160, y: 416 }, { x: 154, y: 260 }, { x: 150, y: 150 }, { x: 150, y: 96 }], fwWidth: 120, trees: [
-    // Tee-shot wall spanning the corridor (and a bit beyond on the right)
-    { x: 108, y: 338, r: 9 }, { x: 132, y: 332, r: 10 }, { x: 158, y: 328, r: 10 }, { x: 184, y: 332, r: 10 }, { x: 210, y: 338, r: 9 }, { x: 234, y: 344, r: 9 },
+    // Tee-shot wall across the middle of the corridor (no trees in the OB
+    // rough) — squeeze past in-bounds at the edges, or fly out left over OB.
+    { x: 132, y: 332, r: 10 }, { x: 158, y: 328, r: 10 }, { x: 184, y: 332, r: 10 }, { x: 210, y: 338, r: 9 },
     { x: 118, y: 232, r: 9 },
     // Green pocket
     { x: 150, y: 152, r: 11 }, { x: 118, y: 138, r: 9 }, { x: 182, y: 142, r: 9 },
   ], water: [], hazard: [{ x: 196, y: 120, w: 26, h: 18 }] },
   // 5 — par 4, 910ft. Wide & open, a minefield of sand traps up the middle and
   // a pond right at the green (caddie book shows 5 HZ + water short of pin).
-  { par: 4, tee: TEE, basket: { x: 160, y: 72 }, fairway: [{ x: 160, y: 416 }, { x: 160, y: 280 }, { x: 160, y: 170 }, { x: 160, y: 72 }], fwWidth: 150, trees: [], water: [{ x: 132, y: 118, w: 56, h: 34 }], hazard: [{ x: 116, y: 182, w: 30, h: 22 }, { x: 184, y: 202, w: 28, h: 20 }, { x: 140, y: 215, w: 26, h: 16 }, { x: 190, y: 160, w: 24, h: 16 }, { x: 118, y: 148, w: 24, h: 16 }] },
+  // The fairway ribbon ends short of the pin so OB sits tight behind the basket.
+  { par: 4, tee: TEE, basket: { x: 160, y: 72 }, fairway: [{ x: 160, y: 416 }, { x: 160, y: 280 }, { x: 160, y: 170 }, { x: 160, y: 93 }], fwWidth: 150, trees: [], water: [{ x: 132, y: 118, w: 56, h: 34 }], hazard: [{ x: 116, y: 182, w: 30, h: 22 }, { x: 184, y: 202, w: 28, h: 20 }, { x: 140, y: 215, w: 26, h: 16 }, { x: 190, y: 160, w: 24, h: 16 }, { x: 118, y: 148, w: 24, h: 16 }] },
   // 6 — par 3, 415ft. A tree line works up the center-right and the green hides
   // in its own cluster top-center (caddie book).
   { par: 3, tee: TEE, basket: { x: 165, y: 105 }, fairway: [{ x: 160, y: 416 }, { x: 163, y: 280 }, { x: 165, y: 160 }, { x: 165, y: 105 }], fwWidth: 124, trees: [{ x: 185, y: 300, r: 9 }, { x: 175, y: 245, r: 9 }, { x: 190, y: 195, r: 9 }, { x: 150, y: 140, r: 9 }, { x: 196, y: 128, r: 9 }], water: [] },
@@ -122,14 +124,14 @@ const HOLE_TEMPLATES: Omit<Hole, "worldH">[] = [
   { par: 3, tee: TEE, basket: { x: 135, y: 112 }, fairway: [{ x: 160, y: 416 }, { x: 175, y: 300 }, { x: 190, y: 210 }, { x: 170, y: 140 }, { x: 135, y: 112 }], fwWidth: 114, trees: [{ x: 150, y: 250, r: 9 }, { x: 185, y: 165, r: 9 }, { x: 170, y: 118, r: 9 }, { x: 100, y: 138, r: 9 }, { x: 136, y: 84, r: 9 }], water: [] },
   // 13 — par 4, 775ft. Swings LEFT around a wooded right side, then doglegs
   // RIGHT at the top to a green pocketed in trees (caddie book) — 400 wide.
-  { par: 4, worldW: 400, tee: { x: 200, y: 416 }, basket: { x: 260, y: 92 }, fairway: [{ x: 200, y: 416 }, { x: 170, y: 330 }, { x: 150, y: 250 }, { x: 170, y: 175 }, { x: 230, y: 120 }, { x: 260, y: 92 }], fwWidth: 118, trees: [{ x: 240, y: 340, r: 10 }, { x: 225, y: 290, r: 10 }, { x: 205, y: 250, r: 9 }, { x: 110, y: 200, r: 9 }, { x: 226, y: 108, r: 9 }, { x: 296, y: 104, r: 9 }, { x: 256, y: 64, r: 9 }], water: [] },
+  { par: 4, worldW: 400, tee: { x: 200, y: 416 }, basket: { x: 260, y: 92 }, fairway: [{ x: 200, y: 416 }, { x: 170, y: 330 }, { x: 150, y: 250 }, { x: 170, y: 175 }, { x: 230, y: 120 }, { x: 260, y: 92 }], fwWidth: 118, trees: [{ x: 228, y: 340, r: 10 }, { x: 214, y: 290, r: 10 }, { x: 205, y: 250, r: 9 }, { x: 110, y: 200, r: 9 }, { x: 226, y: 108, r: 9 }, { x: 296, y: 104, r: 9 }, { x: 256, y: 64, r: 9 }], water: [] },
   // 14 — par 4, 845ft. Broad and straight, drifting right at the top; the FPO
   // green sits in a left tree pocket mid-hole and sand guards the MPO green's
   // right side (caddie book).
   { par: 4, tee: TEE, basket: { x: 185, y: 86 }, fairway: [{ x: 160, y: 416 }, { x: 158, y: 300 }, { x: 160, y: 200 }, { x: 172, y: 130 }, { x: 185, y: 86 }], fwWidth: 122, trees: [{ x: 205, y: 300, r: 9 }, { x: 120, y: 230, r: 10 }, { x: 135, y: 190, r: 9 }, { x: 105, y: 180, r: 9 }, { x: 150, y: 104, r: 9 }], water: [], hazard: [{ x: 212, y: 104, w: 26, h: 18 }] },
   // 15 — par 3, 335ft. Narrow tunnel walled with trees both sides, opening to a
   // small clearing around the green (caddie book).
-  { par: 3, tee: TEE, basket: { x: 158, y: 88 }, fairway: [{ x: 160, y: 416 }, { x: 158, y: 260 }, { x: 158, y: 150 }, { x: 158, y: 88 }], fwWidth: 96, trees: [{ x: 108, y: 300, r: 11 }, { x: 212, y: 300, r: 11 }, { x: 108, y: 255, r: 10 }, { x: 212, y: 255, r: 10 }, { x: 104, y: 200, r: 11 }, { x: 216, y: 200, r: 11 }, { x: 106, y: 160, r: 10 }, { x: 214, y: 160, r: 10 }, { x: 110, y: 122, r: 10 }, { x: 210, y: 122, r: 10 }], water: [] },
+  { par: 3, tee: TEE, basket: { x: 158, y: 88 }, fairway: [{ x: 160, y: 416 }, { x: 158, y: 260 }, { x: 158, y: 150 }, { x: 158, y: 88 }], fwWidth: 96, trees: [{ x: 112, y: 300, r: 11 }, { x: 206, y: 300, r: 11 }, { x: 112, y: 255, r: 10 }, { x: 206, y: 255, r: 10 }, { x: 112, y: 200, r: 11 }, { x: 206, y: 200, r: 11 }, { x: 112, y: 160, r: 10 }, { x: 206, y: 160, r: 10 }, { x: 114, y: 122, r: 10 }, { x: 204, y: 122, r: 10 }], water: [] },
   // 16 — par 3, 410ft. The lane runs up the right; the green hides LEFT inside
   // a pocket of trees (caddie book).
   { par: 3, tee: TEE, basket: { x: 138, y: 104 }, fairway: [{ x: 160, y: 416 }, { x: 162, y: 300 }, { x: 158, y: 200 }, { x: 146, y: 140 }, { x: 138, y: 104 }], fwWidth: 108, trees: [{ x: 140, y: 310, r: 10 }, { x: 120, y: 260, r: 10 }, { x: 170, y: 240, r: 9 }, { x: 135, y: 180, r: 10 }, { x: 180, y: 150, r: 9 }, { x: 106, y: 118, r: 9 }, { x: 158, y: 76, r: 9 }, { x: 172, y: 122, r: 9 }], water: [] },
