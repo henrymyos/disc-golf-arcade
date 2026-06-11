@@ -19,6 +19,9 @@ export const metadata: Metadata = {
 
 export const viewport = {
   themeColor: "#0f1117",
+  // Lets env(safe-area-inset-*) report real values so the control panel can
+  // pad itself above curved phone corners / the home indicator.
+  viewportFit: "cover" as const,
 };
 
 export default function RootLayout({

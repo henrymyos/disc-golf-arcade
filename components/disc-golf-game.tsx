@@ -2191,7 +2191,7 @@ export function DiscGolfGame() {
       {/* Control panel: disc rack + flight/stance/mute — only while in a round */}
       {(screen === "playing" || screen === "holeComplete") && (
         <div className="shrink-0 w-full border-t border-white/10 bg-[#13161b]">
-          <div className="mx-auto w-full max-w-[480px] px-3 pt-2 pb-[calc(env(safe-area-inset-bottom)+0.55rem)] flex flex-col gap-2">
+          <div className="mx-auto w-full max-w-[480px] px-3 pt-2 pb-[max(calc(env(safe-area-inset-bottom)+0.4rem),1.25rem)] flex flex-col gap-2">
             {/* Disc selector */}
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-gray-500">Disc</span>
