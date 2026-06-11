@@ -1808,6 +1808,24 @@ export function DiscGolfGame() {
     });
   }
 
+  // ── Canvas display size ───────────────────────────────────────────────────
+  // Contain-fit the canvas to the play area: without this it sits at its native
+  // 320×448 CSS size (max-w/max-h only shrink), which looks tiny on desktop.
+  const playAreaRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const area = playAreaRef.current;
+    const canvas = canvasRef.current;
+    if (!area || !canvas) return;
+    const ro = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      const scale = Math.min(width / W, height / H);
+      canvas.style.width = `${W * scale}px`;
+      canvas.style.height = `${H * scale}px`;
+    });
+    ro.observe(area);
+    return () => ro.disconnect();
+  }, []);
+
   // ── Drag-to-throw (pointer) ────────────────────────────────────────────────
   const clientToCanvas = useCallback((clientX: number, clientY: number) => {
     const c = canvasRef.current;
@@ -1875,7 +1893,7 @@ export function DiscGolfGame() {
   return (
     <div className="h-[100dvh] w-full bg-[#0f1117] flex flex-col select-none overflow-hidden">
       {/* Play area — canvas fills the available space, keeping its aspect ratio */}
-      <div className="relative flex-1 min-h-0 flex items-center justify-center p-2">
+      <div ref={playAreaRef} className="relative flex-1 min-h-0 flex items-center justify-center p-2">
         <canvas
           ref={canvasRef}
           width={W}
