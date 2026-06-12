@@ -971,6 +971,11 @@ export function DiscGolfGame() {
   const dragRef = useRef<{ active: boolean; cx: number; cy: number }>({ active: false, cx: 0, cy: 0 });
   const camRef = useRef({ x: 0, y: 0 }); // current camera scroll, mirrored for the pointer handlers
   const rangeFlashRef = useRef(0); // when a disc was last switched (brightens the reach line)
+  // Juice: short-lived particles (world coords), camera shake, basket rattle.
+  type Particle = { x: number; y: number; vx: number; vy: number; g: number; life: number; max: number; color: string; size: number };
+  const particlesRef = useRef<Particle[]>([]);
+  const shakeRef = useRef({ until: 0, mag: 0 });
+  const rattleRef = useRef(0); // timestamp the basket chains were last hit
   const audioRef = useRef<AudioEngine | null>(null);
   const rafRef = useRef<number>(0);
 
@@ -1556,6 +1561,23 @@ export function DiscGolfGame() {
     if (!ctx0) return;
     const ctx = ctx0;
 
+    function spawnBurst(x: number, y: number, colors: string[], n: number, speed: number, grav = 0.04, life = 26) {
+      const ps = particlesRef.current;
+      for (let i = 0; i < n; i++) {
+        const ang = Math.random() * Math.PI * 2;
+        const sp = speed * (0.35 + Math.random() * 0.65);
+        ps.push({
+          x, y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - speed * 0.4, g: grav,
+          life: life * (0.6 + Math.random() * 0.4), max: life,
+          color: colors[(Math.random() * colors.length) | 0], size: 1 + Math.random() * 1.6,
+        });
+      }
+      if (ps.length > 400) ps.splice(0, ps.length - 400);
+    }
+    function shake(mag: number) {
+      shakeRef.current = { until: performance.now() + 160, mag };
+    }
+
     function update() {
       const g = stateRef.current;
       if (!g || screenRef.current !== "playing") return;
@@ -1609,7 +1631,11 @@ export function DiscGolfGame() {
         g.vh = f.vh;
         g.fadeTurn = f.fadeTurn;
         g.trailBuf.push({ x: d.x, y: d.y }); // record the real flight curve
-        if (res.treeHit) audioRef.current?.sfx("tree");
+        if (res.treeHit) {
+          audioRef.current?.sfx("tree");
+          spawnBurst(d.x, d.y, ["#2f6b22", "#3f8a2e", "#56a541"], 10, 1.6);
+          shake(2);
+        }
 
         if (res.status === "hole") {
           g.phase = "holed";
@@ -1623,11 +1649,20 @@ export function DiscGolfGame() {
           g.trailBuf = [];
           audioRef.current?.sfx("basket");
           vibrate([15, 30, 15]);
+          rattleRef.current = performance.now();
+          const under = g.throws < hole.par;
+          spawnBurst(hole.basket.x, hole.basket.y, ["#36D7B7", "#f5d24a", "#ffffff", "#4B3DFF"], under ? 70 : 36, under ? 2.6 : 1.9, 0.05, 40);
         } else if (res.status === "ob" || res.status === "oob") {
           // OUT OF BOUNDS: +1 and play from where it crossed the line.
           const inWater = hole.water.some((w) => inRect(w, f.x, f.y));
           audioRef.current?.sfx(inWater ? "water" : "tree");
           vibrate(60);
+          spawnBurst(
+            f.x, f.y,
+            inWater ? ["#5b8fc4", "#9cc4e8", "#3a6ea5"] : ["#cfd8dc", "#9aa4b2"],
+            inWater ? 16 : 8, inWater ? 1.8 : 1.2,
+          );
+          shake(inWater ? 3 : 2);
           // Replay from the hole's drop zone if it has one; otherwise from the
           // last point the disc was actually in bounds (walk the recorded
           // flight path back), falling back to this throw's start.
@@ -1654,10 +1689,14 @@ export function DiscGolfGame() {
           g.rest = { x: d.x, y: d.y };
           // Chains rattle when it stops just short of the basket (a near miss).
           const distPin = Math.hypot(d.x - hole.basket.x, d.y - hole.basket.y);
-          if (distPin < CATCH_R * 2.4) audioRef.current?.sfx("chains");
+          if (distPin < CATCH_R * 2.4) {
+            audioRef.current?.sfx("chains");
+            rattleRef.current = performance.now();
+          }
           if ((hole.hazard ?? []).some((hz) => inRect(hz, d.x, d.y)) || (hole.roughIsHazard && offRibbons(hole, d.x, d.y))) {
             g.throws += 1;
             g.flash = { text: "HAZARD", at: performance.now() };
+            spawnBurst(d.x, d.y, ["#d9c089", "#c4a96b"], 12, 1.4);
             audioRef.current?.sfx("tree");
             vibrate(60);
             syncHud();
@@ -1674,6 +1713,19 @@ export function DiscGolfGame() {
           setScreen("holeComplete");
           syncHud();
         }
+      }
+
+      // Step the particles (cheap Euler + drag).
+      const ps = particlesRef.current;
+      for (let i = ps.length - 1; i >= 0; i--) {
+        const pt = ps[i];
+        pt.x += pt.vx;
+        pt.y += pt.vy;
+        pt.vy += pt.g;
+        pt.vx *= 0.95;
+        pt.vy *= 0.95;
+        pt.life -= 1;
+        if (pt.life <= 0) ps.splice(i, 1);
       }
     }
 
@@ -1693,10 +1745,14 @@ export function DiscGolfGame() {
       ctx.fillStyle = hole.roughIsHazard ? "#4b4c22" : "#2b5323";
       for (let y = startY; y < cam + H; y += 32) ctx.fillRect(0, y - cam, W, 16);
 
-      // All world-space drawing below is shifted by the horizontal camera; the
-      // screen-fixed UI (minimap, HUD, banners) restores afterwards.
+      // All world-space drawing below is shifted by the horizontal camera (and
+      // jolted briefly by impacts); screen-fixed UI restores afterwards.
+      const shk = shakeRef.current;
+      const shakeLeft = Math.max(0, shk.until - performance.now()) / 160;
+      const jx = shakeLeft > 0 ? (Math.random() - 0.5) * shk.mag * 2 * shakeLeft : 0;
+      const jy = shakeLeft > 0 ? (Math.random() - 0.5) * shk.mag * 2 * shakeLeft : 0;
       ctx.save();
-      ctx.translate(-camX, 0);
+      ctx.translate(-camX + jx, jy);
 
       // The curved fairway, drawn as a thick ribbon along the centerline. The
       // outer (white) stroke is the OB line; the green stroke inside is the
@@ -1863,7 +1919,9 @@ export function DiscGolfGame() {
         ctx.fill();
       }
 
-      drawBasket(ctx, hole.basket.x, hole.basket.y - cam);
+      const rattleAge = performance.now() - rattleRef.current;
+      const rattle = rattleAge < 420 ? Math.sin(rattleAge * 0.09) * (1 - rattleAge / 420) * 1.6 : 0;
+      drawBasket(ctx, hole.basket.x + rattle, hole.basket.y - cam);
       for (const tr of hole.trees) drawTree(ctx, { x: tr.x, y: tr.y - cam, r: tr.r });
 
       // Aim: the exact predicted flight path (simulated with the real physics)
@@ -2027,6 +2085,14 @@ export function DiscGolfGame() {
       ctx.fill();
       ctx.fillStyle = disc.color;
       ctx.fillRect(Math.round(g.disc.x) - 1, Math.round(discY) - 1, 2, 2);
+
+      // Particles (leaves, splashes, sand, confetti) fade out as they die.
+      for (const pt of particlesRef.current) {
+        ctx.globalAlpha = Math.max(0, pt.life / pt.max);
+        ctx.fillStyle = pt.color;
+        ctx.fillRect(pt.x - pt.size / 2, pt.y - cam - pt.size / 2, pt.size, pt.size);
+      }
+      ctx.globalAlpha = 1;
 
       ctx.restore(); // end of world-space (horizontally panned) drawing
 
