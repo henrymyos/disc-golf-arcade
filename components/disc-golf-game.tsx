@@ -501,6 +501,7 @@ type GameState = {
   mode: Mode; // daily challenge vs the full course
   practice?: boolean; // single-hole practice (no bests/history/leaderboard)
   practiceHole?: number; // 1-based hole number being practiced
+  party?: { names: string[]; current: number; scores: (number | null)[][] }; // hot-seat pass-and-play
   advanced: boolean; // advanced bag (real discs) vs simple (putter/mid/driver)
   seed: number; // round seed (drives wind + pins)
   roundHoles: Hole[]; // this round's holes (wind/pins baked in)
@@ -1041,7 +1042,7 @@ export function DiscGolfGame() {
   const [discIndex, setDiscIndex] = useState(1); // Mid by default
   const [throwStyle, setThrowStyle] = useState<"BH" | "FH">("BH");
   const [flightPath, setFlightPath] = useState<FlightPath>("overstable");
-  const [hud, setHud] = useState({ hole: 1, par: 3, throws: 0, holes: 18 });
+  const [hud, setHud] = useState<{ hole: number; par: number; throws: number; holes: number; player?: string }>({ hole: 1, par: 3, throws: 0, holes: 18 });
 
   // End-of-round state
   const [scorecard, setScorecard] = useState<number[]>([]);
@@ -1056,6 +1057,9 @@ export function DiscGolfGame() {
   useEffect(() => { tournamentRef.current = tournament; }, [tournament]);
   const tournamentPlayRef = useRef(false); // current round is a tournament round
   const [finalTournament, setFinalTournament] = useState(false);
+  const [partyOpen, setPartyOpen] = useState(false);
+  const [partyView, setPartyView] = useState<{ names: string[]; holeScores: (number | null)[]; totals: number[] } | null>(null);
+  const [finalParty, setFinalParty] = useState<{ names: string[]; totals: number[] } | null>(null);
   const saveTournament = useCallback((t: Tournament | null) => {
     setTournament(t);
     try {
@@ -1274,7 +1278,7 @@ export function DiscGolfGame() {
   const syncHud = useCallback(() => {
     const g = stateRef.current;
     if (!g) return;
-    setHud({ hole: g.holeIndex + 1, par: g.roundHoles[g.holeIndex].par, throws: g.throws, holes: g.roundHoles.length });
+    setHud({ hole: g.holeIndex + 1, par: g.roundHoles[g.holeIndex].par, throws: g.throws, holes: g.roundHoles.length, player: g.party ? g.party.names[g.party.current] : undefined });
   }, []);
 
   const startGame = useCallback((mode?: Mode, seedOverride?: number) => {
@@ -1288,6 +1292,7 @@ export function DiscGolfGame() {
     audioRef.current.setMuted(muted);
     audioRef.current.startMusic();
     challengePlayRef.current = false; // the challenge button re-arms this after calling
+    tournamentPlayRef.current = false; // ditto for the tournament launcher
     const seed = seedOverride ?? (m === "daily" ? dailySeed() : (Math.random() * 1e9) | 0);
     const roundHoles = buildRound(seed, m);
     const adv = advancedRef.current;
@@ -1305,6 +1310,7 @@ export function DiscGolfGame() {
     setIsNewBest(false);
     setNewAchievements([]);
     setHoleBestNote(null);
+    setPartyView(null);
     setSettingsOpen(false);
     setScreen("playing");
     syncHud();
@@ -1335,6 +1341,41 @@ export function DiscGolfGame() {
     setIsNewBest(false);
     setNewAchievements([]);
     setHoleBestNote(null);
+    setPartyView(null);
+    setSettingsOpen(false);
+    setScreen("playing");
+    syncHud();
+  }, [muted, musicVolume, syncHud]);
+
+  // Hot-seat pass-and-play: 2-4 players take turns playing each hole on one
+  // device. Nothing counts toward records — it's bragging rights only.
+  const startParty = useCallback((m: Mode, names: string[]) => {
+    modeRef.current = m;
+    if (!audioRef.current) {
+      audioRef.current = new AudioEngine();
+      audioRef.current.setMusicVolume(musicVolume);
+    }
+    audioRef.current.resume();
+    audioRef.current.setMuted(muted);
+    audioRef.current.startMusic();
+    challengePlayRef.current = false;
+    tournamentPlayRef.current = false;
+    const seed = m === "daily" ? dailySeed() : (Math.random() * 1e9) | 0;
+    const roundHoles = buildRound(seed, m);
+    const adv = advancedRef.current;
+    stateRef.current = {
+      holeIndex: 0, scores: [], discIndex: Math.min(discIndexRef.current, activeDiscs(adv).length - 1), roundPaths: [],
+      mode: m, advanced: adv, seed, roundHoles, practice: true,
+      party: { names, current: 0, scores: names.map(() => Array(roundHoles.length).fill(null)) },
+      ...freshHole(roundHoles[0]),
+    };
+    ghostRef.current = null;
+    setSaved(false);
+    setSaveErr(null);
+    setIsNewBest(false);
+    setNewAchievements([]);
+    setHoleBestNote(null);
+    setPartyView(null);
     setSettingsOpen(false);
     setScreen("playing");
     syncHud();
@@ -1404,6 +1445,7 @@ export function DiscGolfGame() {
     setFinalPars(pars);
     setFinalMode(mode);
     setFinalPracticeHole(practice ? g?.practiceHole ?? null : null);
+    setFinalParty(g?.party ? { names: g.party.names, totals: g.party.scores.map((sc) => sc.reduce<number>((a, b) => a + (b ?? 0), 0)) } : null);
 
     // Personal bests are tracked per fixed course — Glendoveer and Winthrop
     // each have their own key (the daily course changes every day).
@@ -1517,6 +1559,7 @@ export function DiscGolfGame() {
     }
     g.roundPaths.push(g.shotPaths);
     g.holeIndex += 1;
+    if (g.party) g.party.current = 0;
     Object.assign(g, freshHole(g.roundHoles[g.holeIndex]));
     g.discIndex = discIndexRef.current;
     setScreen("playing");
@@ -1841,6 +1884,23 @@ export function DiscGolfGame() {
       } else if (g.phase === "holed") {
         if (g.holedAt && performance.now() - g.holedAt > 850) {
           g.scores[g.holeIndex] = g.throws;
+          if (g.party) {
+            g.party.scores[g.party.current][g.holeIndex] = g.throws;
+            if (g.party.current < g.party.names.length - 1) {
+              // Pass the device: same hole resets (fly-over intro re-runs) for
+              // the next player.
+              g.party.current += 1;
+              Object.assign(g, freshHole(g.roundHoles[g.holeIndex]));
+              g.discIndex = discIndexRef.current;
+              syncHud();
+              return;
+            }
+            setPartyView({
+              names: g.party.names,
+              holeScores: g.party.scores.map((sc) => sc[g.holeIndex]),
+              totals: g.party.scores.map((sc) => sc.reduce<number>((a, b) => a + (b ?? 0), 0)),
+            });
+          }
           setScreen("holeComplete");
           syncHud();
         }
@@ -2412,7 +2472,8 @@ export function DiscGolfGame() {
         ctx.fillText(value, hx, hcy);
         hx += ctx.measureText(value).width + 9;
       };
-      hudItem("HOLE", g.practice ? `P${g.practiceHole}` : `${g.holeIndex + 1}/${g.roundHoles.length}`, "#ffffff");
+      if (g.party) hudItem("UP", g.party.names[g.party.current].slice(0, 8), "#f5d24a");
+      hudItem("HOLE", g.party ? `${g.holeIndex + 1}/${g.roundHoles.length}` : g.practice ? `P${g.practiceHole}` : `${g.holeIndex + 1}/${g.roundHoles.length}`, "#ffffff");
       hudItem("PAR", `${hole.par}`, "#ffffff");
       hudItem("THR", `${g.throws}`, "#ffffff");
       hudItem("TO PAR", overStr, over < 0 ? "#36D7B7" : over > 0 ? "#e08a3b" : "#cbd5e1");
@@ -2438,7 +2499,12 @@ export function DiscGolfGame() {
         ctx.fillStyle = "#fff";
         ctx.font = "10px monospace";
         ctx.textAlign = "center";
-        ctx.fillText(`HOLE ${g.practiceHole ?? g.holeIndex + 1}  ·  PAR ${hole.par}${g.practice ? "  ·  PRACTICE" : ""}`, W / 2, H / 2 - 6);
+        ctx.fillText(
+          g.party
+            ? `${g.party.names[g.party.current].toUpperCase().slice(0, 12)}  ·  HOLE ${g.holeIndex + 1}  ·  PAR ${hole.par}`
+            : `HOLE ${g.practiceHole ?? g.holeIndex + 1}  ·  PAR ${hole.par}${g.practice ? "  ·  PRACTICE" : ""}`,
+          W / 2, H / 2 - 6,
+        );
         if (hole.elevZones?.length) {
           // Changing slope, e.g. "▼ DOWNHILL EARLY — UPHILL LATE ▲"
           const first = hole.elevZones[0].elev;
@@ -2687,6 +2753,10 @@ export function DiscGolfGame() {
                   className="w-full rounded-xl border border-[#f5d24a]/40 bg-[#f5d24a]/10 hover:bg-[#f5d24a]/20 active:scale-[0.99] text-white font-bold py-3 transition">
                   🏟 Tournament{tournament && !tournament.finished ? ` · R${tournament.myTotals.length + 1}` : ""}
                 </button>
+                <button type="button" onClick={() => setPartyOpen(true)}
+                  className="w-full rounded-xl border border-white/15 bg-white/5 hover:bg-white/10 active:scale-[0.99] text-white font-bold py-3 transition">
+                  👥 Pass &amp; Play
+                </button>
                 <button type="button" onClick={() => setTutorialOpen(true)}
                   className="w-full rounded-xl border border-white/15 bg-white/5 hover:bg-white/10 active:scale-[0.99] text-white font-bold py-3 transition">
                   📖 How to Play
@@ -2719,7 +2789,27 @@ export function DiscGolfGame() {
           </div>
         )}
 
-        {screen === "holeComplete" && (() => {
+        {screen === "holeComplete" && partyView && (
+          <Overlay>
+            <p className="text-[#36D7B7] font-bold text-xl">Hole {hud.hole} complete</p>
+            <div className="w-full max-w-[240px] space-y-1">
+              {partyView.names.map((n, i) => {
+                const sc = partyView.holeScores[i];
+                const lead = Math.min(...partyView.totals);
+                return (
+                  <div key={n} className="flex items-center justify-between bg-white/5 rounded-lg px-3 py-1.5 text-sm">
+                    <span className="text-white font-semibold truncate">{partyView.totals[i] === lead ? "👑 " : ""}{n}</span>
+                    <span className="text-gray-300 font-mono">{sc != null ? scoreLabel(sc, hud.par).name : "–"} · {partyView.totals[i]}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <button type="button" onClick={nextHole} className={btn}>
+              {hud.hole >= hud.holes ? "See results ▶" : "Next hole ▶"}
+            </button>
+          </Overlay>
+        )}
+        {screen === "holeComplete" && !partyView && (() => {
           const sl = scoreLabel(hud.throws, hud.par);
           const tone =
             sl.tone === "great" ? "text-[#f5d24a]" :
@@ -2749,6 +2839,13 @@ export function DiscGolfGame() {
         {tutorialOpen && <TutorialPanel onClose={() => setTutorialOpen(false)} />}
 
         {statsOpen && <StatsPanel onClose={() => setStatsOpen(false)} />}
+
+        {partyOpen && (
+          <PartyPanel
+            onClose={() => setPartyOpen(false)}
+            onStart={(m, names) => { setPartyOpen(false); startParty(m, names); }}
+          />
+        )}
 
         {tournamentOpen && (
           <TournamentPanel
@@ -2944,7 +3041,7 @@ export function DiscGolfGame() {
           <div className="w-full max-w-lg space-y-4 my-auto">
             <div className="text-center">
               <h2 className="text-white font-black text-2xl">
-                {finalPracticeHole != null ? "Practice complete!" : finalIsDaily ? "Daily Challenge complete!" : "Round complete!"}
+                {finalParty ? "Match complete!" : finalPracticeHole != null ? "Practice complete!" : finalIsDaily ? "Daily Challenge complete!" : "Round complete!"}
               </h2>
               <p className="text-gray-400 text-xs">
                 {finalPracticeHole != null
@@ -2967,6 +3064,23 @@ export function DiscGolfGame() {
                 </p>
               )}
             </div>
+
+            {/* Pass-and-play standings */}
+            {finalParty && (
+              <div className="bg-[#1a1d23] border border-white/5 rounded-2xl overflow-hidden">
+                {finalParty.names
+                  .map((n, i) => ({ n, t: finalParty.totals[i] }))
+                  .sort((a, b) => a.t - b.t)
+                  .map((row, i) => (
+                    <div key={row.n} className={`flex items-center gap-3 px-4 py-2.5 text-sm ${i ? "border-t border-white/5" : ""}`}>
+                      <span className="text-gray-400 font-mono w-5">{i + 1}</span>
+                      <span className="text-white font-semibold flex-1 truncate">{i === 0 ? "🏆 " : ""}{row.n}</span>
+                      <span className="text-gray-400 font-mono">{overStr(row.t - finalParTotal)}</span>
+                      <span className="text-white font-mono font-bold w-8 text-right">{row.t}</span>
+                    </div>
+                  ))}
+              </div>
+            )}
 
             {/* Newly-unlocked achievements */}
             {newAchievements.length > 0 && (
@@ -3036,7 +3150,7 @@ export function DiscGolfGame() {
 
             {/* Save + per-course leaderboard (the daily board resets each day);
                 practice rounds skip all of it. */}
-            {finalPracticeHole == null && (<>
+            {finalPracticeHole == null && !finalParty && (<>
             {saved ? (
               <p className="text-center text-[#36D7B7] text-sm font-semibold">Saved to the leaderboard ✓</p>
             ) : (
@@ -3248,6 +3362,56 @@ function TutorialPanel({ onClose }: { onClose: () => void }) {
             {last ? "Got it ✓" : "Next ▶"}
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// Pass-and-play setup: pick a course, 2-4 players, optional names.
+function PartyPanel({ onClose, onStart }: { onClose: () => void; onStart: (m: Mode, names: string[]) => void }) {
+  const [course, setCourse] = useState<Mode>("course");
+  const [count, setCount] = useState(2);
+  const [names, setNames] = useState<string[]>(["", "", "", ""]);
+  const seg = (active: boolean) =>
+    `flex-1 rounded-md px-2 py-2 text-xs font-bold transition ${active ? "bg-[#4B3DFF] text-white" : "text-gray-400 hover:text-white"}`;
+  return (
+    <div className="absolute inset-0 z-20 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm p-4 flex items-start justify-center rounded-lg">
+      <div className="w-full max-w-xs space-y-3 my-auto text-left">
+        <div className="flex items-center justify-between">
+          <h2 className="text-white font-black text-xl">👥 Pass &amp; Play</h2>
+          <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
+        </div>
+        <p className="text-gray-500 text-[11px]">Take turns on each hole, one phone. Doesn&apos;t count toward records.</p>
+        <div className="flex gap-1 bg-[#1a1d23] border border-white/10 rounded-lg p-1">
+          <button type="button" onClick={() => setCourse("course")} className={seg(course === "course")}>Glendoveer</button>
+          <button type="button" onClick={() => setCourse("winthrop")} className={seg(course === "winthrop")}>Winthrop</button>
+          <button type="button" onClick={() => setCourse("daily")} className={seg(course === "daily")}>Daily</button>
+        </div>
+        <div className="flex gap-1 bg-[#1a1d23] border border-white/10 rounded-lg p-1">
+          {[2, 3, 4].map((n) => (
+            <button key={n} type="button" onClick={() => setCount(n)} className={seg(count === n)}>{n} players</button>
+          ))}
+        </div>
+        <div className="space-y-1.5">
+          {Array.from({ length: count }, (_, i) => (
+            <input
+              key={i}
+              type="text"
+              value={names[i]}
+              maxLength={12}
+              onChange={(e) => setNames((ns) => ns.map((n, j) => (j === i ? e.target.value : n)))}
+              placeholder={`Player ${i + 1}`}
+              className="w-full bg-[#1a1d23] border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-[#4B3DFF]"
+            />
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={() => onStart(course, Array.from({ length: count }, (_, i) => names[i].trim() || `Player ${i + 1}`))}
+          className={`${btn} w-full`}
+        >
+          ▶ Tee off
+        </button>
       </div>
     </div>
   );
