@@ -330,11 +330,46 @@ function tournSkills(seed: number): number[] {
   const rng = mulberry32((seed ^ 0x9e3779b9) >>> 0);
   return TOURN_NAMES.map(() => rng() * 24 - 20); // -20..+4 over 2.5 divisor below
 }
-function tournFieldRound(seed: number, round: number): number[] {
+// Hole-by-hole field scores so live standings exist mid-round. The field also
+// tightens up as the event goes on (~1.5 strokes better each round).
+function tournFieldHoles(seed: number, round: number): number[][] {
   const skills = tournSkills(seed);
   const rng = mulberry32((seed * 31 + round * 7919) >>> 0);
-  return skills.map((sk) => WINTHROP_PAR + Math.round(sk / 2.5 + (rng() * 2 - 1) * 3.5 + (rng() * 2 - 1) * 2.5));
+  return skills.map((sk) => {
+    const perHole = (sk / 2.5 - 1.5 * round) / 18;
+    return WINTHROP_HOLES.map((h) => {
+      let d = Math.round(perHole + (rng() * 2 - 1) * 0.85);
+      if (rng() < 0.04) d -= 1; // the odd bomb
+      if (rng() < 0.05) d += 1; // and the odd blow-up
+      return Math.max(1, h.par + d);
+    });
+  });
 }
+function tournFieldRound(seed: number, round: number): number[] {
+  return tournFieldHoles(seed, round).map((hs) => hs.reduce((a, b) => a + b, 0));
+}
+// Live position during a tournament round: the AI field is scored through the
+// same number of holes you've played (cut players excluded in the final round).
+function tournLive(t: Tournament, myRoundSoFar: number, holesPlayed: number): { rank: number; behind: number; field: number } {
+  const roundIdx = t.myTotals.length;
+  const fieldHoles = tournFieldHoles(t.seed, roundIdx);
+  const myTotal = t.myTotals.reduce((a, b) => a + b, 0) + myRoundSoFar;
+  let active = TOURN_NAMES.map((_, i) => i);
+  if (roundIdx === 2 && t.fieldTotals.length >= 2) {
+    const sums = [t.myTotals[0] + t.myTotals[1], ...t.fieldTotals[0].map((_, i) => t.fieldTotals[0][i] + t.fieldTotals[1][i])];
+    const line = [...sums].sort((a, b) => a - b)[Math.floor(sums.length / 2) - 1];
+    active = active.filter((i) => t.fieldTotals[0][i] + t.fieldTotals[1][i] <= line);
+  }
+  const totals = active.map((i) => {
+    let prev = 0;
+    for (let r = 0; r < roundIdx; r++) prev += t.fieldTotals[r][i];
+    return prev + fieldHoles[i].slice(0, holesPlayed).reduce((a, b) => a + b, 0);
+  });
+  const rank = 1 + totals.filter((v) => v < myTotal).length;
+  const leader = Math.min(myTotal, ...totals);
+  return { rank, behind: myTotal - leader, field: active.length + 1 };
+}
+const ordinal = (n: number) => `${n}${n % 10 === 1 && n % 100 !== 11 ? "st" : n % 10 === 2 && n % 100 !== 12 ? "nd" : n % 10 === 3 && n % 100 !== 13 ? "rd" : "th"}`;
 type TournRow = { name: string; you: boolean; rounds: (number | null)[]; total: number; cut: boolean };
 // Standings with the post-R2 cut applied (ties at the line advance).
 function tournStandings(t: Tournament): TournRow[] {
@@ -1057,6 +1092,7 @@ export function DiscGolfGame() {
   useEffect(() => { tournamentRef.current = tournament; }, [tournament]);
   const tournamentPlayRef = useRef(false); // current round is a tournament round
   const [finalTournament, setFinalTournament] = useState(false);
+  const [tournLiveView, setTournLiveView] = useState<{ rank: number; behind: number; field: number } | null>(null);
   const [partyOpen, setPartyOpen] = useState(false);
   const [partyView, setPartyView] = useState<{ names: string[]; holeScores: (number | null)[]; totals: number[] } | null>(null);
   const [finalParty, setFinalParty] = useState<{ names: string[]; totals: number[] } | null>(null);
@@ -1884,6 +1920,12 @@ export function DiscGolfGame() {
       } else if (g.phase === "holed") {
         if (g.holedAt && performance.now() - g.holedAt > 850) {
           g.scores[g.holeIndex] = g.throws;
+          if (tournamentPlayRef.current && tournamentRef.current && !tournamentRef.current.finished) {
+            const myRoundSoFar = g.scores.reduce((a, b) => a + (b ?? 0), 0);
+            setTournLiveView(tournLive(tournamentRef.current, myRoundSoFar, g.holeIndex + 1));
+          } else {
+            setTournLiveView(null);
+          }
           if (g.party) {
             g.party.scores[g.party.current][g.holeIndex] = g.throws;
             if (g.party.current < g.party.names.length - 1) {
@@ -2827,6 +2869,12 @@ export function DiscGolfGame() {
                   {holeBestNote.isNew
                     ? <span className="text-[#f5d24a]">★ New best for this hole!</span>
                     : <span className="text-gray-400">Your best here: {holeBestNote.best}</span>}
+                </p>
+              )}
+              {tournLiveView && (
+                <p className="text-[#f5d24a] text-xs font-bold">
+                  🏟 {ordinal(tournLiveView.rank)} of {tournLiveView.field} ·{" "}
+                  {tournLiveView.behind === 0 ? "leading!" : `${tournLiveView.behind} back`} · thru {hud.hole}
                 </p>
               )}
               <button type="button" onClick={nextHole} className={btn}>
