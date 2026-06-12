@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { SwRegister } from "./sw-register";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -15,6 +16,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Disc Golf Arcade",
   description: "A retro pixel-art disc golf game — 18 holes, a daily challenge, real discs, and a leaderboard.",
+  appleWebApp: { capable: true, title: "Disc Golf Arcade", statusBarStyle: "black-translucent" },
 };
 
 export const viewport = {
@@ -34,7 +36,10 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-[#0f1117]">{children}</body>
+      <body className="min-h-full flex flex-col bg-[#0f1117]">
+        <SwRegister />
+        {children}
+      </body>
     </html>
   );
 }
