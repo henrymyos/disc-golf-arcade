@@ -1609,7 +1609,11 @@ export function DiscGolfGame() {
     setSaveErr(null);
     try {
       const course = leaderboardCourse(finalMode, finalSeed);
-      await submitArcadeScore(nameInput, finalTotal, course);
+      const res = await submitArcadeScore(nameInput, finalTotal, course);
+      if (!res.ok) {
+        setSaveErr(res.error ?? "Save failed");
+        return;
+      }
       setSaved(true);
       const lb = await getArcadeLeaderboard(course);
       setLeaderboard(lb);

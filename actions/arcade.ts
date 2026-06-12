@@ -13,27 +13,35 @@ function isValidCourse(course: string): boolean {
   return course === "glendoveer" || course === "winthrop" || /^daily-\d{1,7}$/.test(course);
 }
 
-// `42703` = undefined column: the `course` migration hasn't been applied yet.
-// Until it is, the legacy single-board behavior keeps working for Glendoveer.
+// The `course` migration may not be applied yet. Postgres reports a missing
+// column as 42703, but PostgREST inserts surface it as PGRST204 — check both.
+// Until migrated, the legacy single-board behavior keeps working for Glendoveer.
 function isMissingColumn(error: { code?: string } | null): boolean {
-  return error?.code === "42703";
+  return error?.code === "42703" || error?.code === "PGRST204";
 }
 
-export async function submitArcadeScore(name: string, strokes: number, course = "glendoveer"): Promise<{ ok: true }> {
+// Returns a result object instead of throwing: thrown server-action errors get
+// masked in production builds, which turns real problems into cryptic red text.
+export async function submitArcadeScore(name: string, strokes: number, course = "glendoveer"): Promise<{ ok: boolean; error?: string }> {
   const s = Math.round(Number(strokes));
   if (!Number.isFinite(s) || s < MIN_STROKES || s > MAX_STROKES) {
-    throw new Error("Invalid score");
+    return { ok: false, error: "Invalid score" };
   }
-  if (!isValidCourse(course)) throw new Error("Invalid course");
+  if (!isValidCourse(course)) return { ok: false, error: "Invalid course" };
   const clean = (name ?? "").trim().slice(0, 16) || "Anon";
 
   const admin = createAdminClient();
   let { error } = await admin.from("arcade_scores").insert({ name: clean, strokes: s, course });
   if (isMissingColumn(error)) {
-    if (course !== "glendoveer") throw new Error("This course's leaderboard isn't set up yet");
+    if (course !== "glendoveer") {
+      return { ok: false, error: "This leaderboard isn't set up yet — ask the course owner to run the latest database migration." };
+    }
     ({ error } = await admin.from("arcade_scores").insert({ name: clean, strokes: s }));
   }
-  if (error) throw new Error(error.message);
+  if (error) {
+    console.error("submitArcadeScore failed:", error.code, error.message);
+    return { ok: false, error: "Couldn't save the score — please try again." };
+  }
   return { ok: true };
 }
 
@@ -56,6 +64,9 @@ export async function getArcadeLeaderboard(course = "glendoveer", limit = 15): P
       .order("created_at", { ascending: true })
       .limit(limit));
   }
-  if (error) throw new Error(error.message);
+  if (error) {
+    console.error("getArcadeLeaderboard failed:", error.code, error.message);
+    return [];
+  }
   return (data ?? []) as ArcadeScore[];
 }
