@@ -325,18 +325,19 @@ type Tournament = {
   madeCut: boolean;
   finished: boolean;
 };
-// Per-player skill (strokes vs par per round, roughly -8..+2 for the top end).
+// Per-player skill: divided by 2.5 below, this spans about -10..+1.5 strokes
+// vs par per round — the very best in the field average around -10.
 function tournSkills(seed: number): number[] {
   const rng = mulberry32((seed ^ 0x9e3779b9) >>> 0);
-  return TOURN_NAMES.map(() => rng() * 24 - 20); // -20..+4 over 2.5 divisor below
+  return TOURN_NAMES.map(() => rng() * 29 - 25);
 }
-// Hole-by-hole field scores so live standings exist mid-round. The field also
-// tightens up as the event goes on (~1.5 strokes better each round).
+// Hole-by-hole field scores so live standings exist mid-round. Skill is fixed
+// across rounds — same player, same expected scoring all weekend.
 function tournFieldHoles(seed: number, round: number): number[][] {
   const skills = tournSkills(seed);
   const rng = mulberry32((seed * 31 + round * 7919) >>> 0);
   return skills.map((sk) => {
-    const perHole = (sk / 2.5 - 1.5 * round) / 18;
+    const perHole = sk / 2.5 / 18;
     return WINTHROP_HOLES.map((h) => {
       let d = Math.round(perHole + (rng() * 2 - 1) * 0.85);
       if (rng() < 0.04) d -= 1; // the odd bomb
