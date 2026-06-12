@@ -231,7 +231,7 @@ const TOTAL_PAR = HOLES.reduce((s, h) => s + h.par, 0);
 const WINTHROP_TEMPLATES: Omit<Hole, "worldH">[] = [
   // 1 — par 4, 701ft. The lake runs the ENTIRE left side while the fairway
   // bends steadily right away from it to a green up the right (caddie book).
-  { par: 4, tee: TEE, basket: { x: 205, y: 96 }, fairway: [{ x: 160, y: 416 }, { x: 152, y: 330 }, { x: 150, y: 250 }, { x: 170, y: 175 }, { x: 195, y: 120 }, { x: 205, y: 96 }], fwWidth: 116, trees: [{ x: 120, y: 290, r: 9 }, { x: 200, y: 310, r: 9 }, { x: 205, y: 210, r: 9 }, { x: 238, y: 140, r: 9 }, { x: 240, y: 86, r: 9 }], water: [
+  { par: 4, tee: TEE, basket: { x: 205, y: 96 }, fairway: [{ x: 160, y: 416 }, { x: 152, y: 330 }, { x: 150, y: 250 }, { x: 170, y: 175 }, { x: 195, y: 120 }, { x: 205, y: 96 }], elev: -1, fwWidth: 116, trees: [{ x: 120, y: 290, r: 9 }, { x: 200, y: 310, r: 9 }, { x: 205, y: 210, r: 9 }, { x: 238, y: 140, r: 9 }, { x: 240, y: 86, r: 9 }], water: [
     // Continuous shoreline hugging the left OB edge, tee to green — each slab
     // overlaps the next so the lake reads as one body of water, running a
     // little past the basket on the left
@@ -241,7 +241,7 @@ const WINTHROP_TEMPLATES: Omit<Hole, "worldH">[] = [
   // between tee and basket on the left, creeps to the pin and wraps BEHIND it.
   // The in-bounds bail is the right side — but a tree cluster guards it, so
   // going around rarely leaves a birdie look.
-  { par: 3, tee: TEE, basket: { x: 120, y: 98 }, fairway: [{ x: 160, y: 416 }, { x: 165, y: 330 }, { x: 160, y: 240 }, { x: 140, y: 160 }, { x: 120, y: 98 }], fwWidth: 112, trees: [
+  { par: 3, tee: TEE, basket: { x: 120, y: 98 }, fairway: [{ x: 160, y: 416 }, { x: 165, y: 330 }, { x: 160, y: 240 }, { x: 140, y: 160 }, { x: 120, y: 98 }], elev: -1, fwWidth: 112, trees: [
     { x: 172, y: 166, r: 11 }, { x: 190, y: 150, r: 9 }, { x: 182, y: 196, r: 9 }, { x: 200, y: 186, r: 9 },
   ], water: [
     { x: 60, y: 278, w: 88, h: 42 }, { x: 52, y: 158, w: 96, h: 112 }, // the lake, tee to mid
@@ -255,7 +255,7 @@ const WINTHROP_TEMPLATES: Omit<Hole, "worldH">[] = [
   ], dropZone: { x: 160, y: 142 } },
   // 4 — par 3, 284ft. Open, but a wooden fence crosses the fairway short of
   // the green with a square arch in the middle — thread it or bounce off.
-  { par: 3, tee: TEE, basket: { x: 160, y: 100 }, fairway: [{ x: 160, y: 416 }, { x: 160, y: 300 }, { x: 160, y: 180 }, { x: 160, y: 100 }], dropZone: { x: 120, y: 182 }, fwWidth: 120, trees: [], walls: [{ x: 100, y: 150, w: 46 }, { x: 174, y: 150, w: 46 }], water: [] },
+  { par: 3, tee: TEE, basket: { x: 160, y: 100 }, fairway: [{ x: 160, y: 416 }, { x: 160, y: 300 }, { x: 160, y: 180 }, { x: 160, y: 100 }], dropZone: { x: 120, y: 182 }, elev: -1, fwWidth: 120, trees: [], walls: [{ x: 100, y: 150, w: 46 }, { x: 174, y: 150, w: 46 }], water: [] },
   // 5 — par 4, 697ft. Narrow wooded corridor easing LEFT, then cutting back
   // RIGHT at the very end into the green.
   { par: 4, tee: TEE, basket: { x: 172, y: 90 }, fairway: [{ x: 160, y: 416 }, { x: 150, y: 320 }, { x: 142, y: 230 }, { x: 142, y: 160 }, { x: 158, y: 115 }, { x: 172, y: 90 }], fwWidth: 106, trees: [{ x: 115, y: 330, r: 9 }, { x: 198, y: 300, r: 9 }, { x: 118, y: 250, r: 10 }, { x: 192, y: 220, r: 9 }, { x: 120, y: 170, r: 9 }, { x: 195, y: 150, r: 9 }, { x: 130, y: 106, r: 9 }, { x: 210, y: 102, r: 9 }], water: [] },
@@ -269,10 +269,10 @@ const WINTHROP_TEMPLATES: Omit<Hole, "worldH">[] = [
   // snake along both edges (and one mid-lane) the whole way.
   { par: 4, tee: TEE, basket: { x: 160, y: 80 }, fairway: [{ x: 160, y: 416 }, { x: 158, y: 320 }, { x: 160, y: 230 }, { x: 158, y: 150 }, { x: 160, y: 80 }], fwWidth: 98, trees: [{ x: 120, y: 300, r: 9 }, { x: 200, y: 260, r: 9 }, { x: 125, y: 180, r: 9 }], water: [], hazard: [{ x: 104, y: 340, w: 34, h: 26 }, { x: 176, y: 302, w: 32, h: 26 }, { x: 102, y: 250, w: 34, h: 26 }, { x: 146, y: 222, w: 30, h: 22 }, { x: 180, y: 182, w: 30, h: 24 }, { x: 104, y: 154, w: 34, h: 24 }, { x: 176, y: 124, w: 32, h: 22 }] },
   // 9 — par 3, 449ft. Wide-open park golf; rope-hazard pockets flank the green.
-  { par: 3, tee: TEE, basket: { x: 150, y: 95 }, fairway: [{ x: 160, y: 416 }, { x: 156, y: 300 }, { x: 150, y: 190 }, { x: 150, y: 95 }], fwWidth: 128, trees: [{ x: 200, y: 220, r: 9 }], water: [], hazard: [{ x: 96, y: 120, w: 30, h: 22 }, { x: 188, y: 112, w: 30, h: 22 }] },
+  { par: 3, tee: TEE, basket: { x: 150, y: 95 }, fairway: [{ x: 160, y: 416 }, { x: 156, y: 300 }, { x: 150, y: 190 }, { x: 150, y: 95 }], elev: -2, fwWidth: 128, trees: [{ x: 200, y: 220, r: 9 }], water: [], hazard: [{ x: 96, y: 120, w: 30, h: 22 }, { x: 188, y: 112, w: 30, h: 22 }] },
   // 10 — par 3, 413ft. Bends left; everything outside the rope line plays as
   // HAZARD (+1, play it where it lies) — no OB, no sand.
-  { par: 3, tee: { x: 180, y: 416 }, basket: { x: 120, y: 100 }, roughIsHazard: true, fairway: [{ x: 180, y: 416 }, { x: 170, y: 320 }, { x: 150, y: 230 }, { x: 130, y: 160 }, { x: 120, y: 100 }], fwWidth: 116, trees: [{ x: 196, y: 260, r: 9 }], water: [] },
+  { par: 3, tee: { x: 180, y: 416 }, basket: { x: 120, y: 100 }, roughIsHazard: true, fairway: [{ x: 180, y: 416 }, { x: 170, y: 320 }, { x: 150, y: 230 }, { x: 130, y: 160 }, { x: 120, y: 100 }], elev: -2, fwWidth: 116, trees: [{ x: 196, y: 260, r: 9 }], water: [] },
   // 11 — par 3, 303ft. A tight tunnel through the woods.
   { par: 3, tee: TEE, basket: { x: 160, y: 108 }, fairway: [{ x: 160, y: 416 }, { x: 160, y: 300 }, { x: 160, y: 200 }, { x: 160, y: 108 }], fwWidth: 96, trees: [{ x: 114, y: 320, r: 10 }, { x: 206, y: 320, r: 10 }, { x: 114, y: 250, r: 10 }, { x: 206, y: 250, r: 10 }, { x: 114, y: 190, r: 10 }, { x: 206, y: 190, r: 10 }, { x: 116, y: 140, r: 9 }, { x: 204, y: 140, r: 9 }, { x: 148, y: 280, r: 8 }, { x: 174, y: 220, r: 8 }], water: [] },
   // 12 — par 3, 321ft. Tree-lined lane drifting right along the path, with
@@ -280,22 +280,22 @@ const WINTHROP_TEMPLATES: Omit<Hole, "worldH">[] = [
   { par: 3, tee: TEE, basket: { x: 175, y: 108 }, fairway: [{ x: 160, y: 416 }, { x: 165, y: 300 }, { x: 172, y: 200 }, { x: 175, y: 108 }], fwWidth: 108, trees: [{ x: 130, y: 370, r: 9 }, { x: 195, y: 360, r: 9 }, { x: 125, y: 310, r: 9 }, { x: 210, y: 270, r: 9 }, { x: 130, y: 220, r: 9 }, { x: 215, y: 180, r: 9 }, { x: 140, y: 150, r: 9 }, { x: 206, y: 142, r: 9 }, { x: 140, y: 124, r: 9 }, { x: 212, y: 118, r: 9 }, { x: 172, y: 76, r: 9 }], water: [] },
   // 13 — par 3, 391ft. Straight with staggered tree clusters to weave through;
   // like 10, the rough outside the rope plays as HAZARD instead of OB.
-  { par: 3, tee: TEE, basket: { x: 160, y: 100 }, roughIsHazard: true, fairway: [{ x: 160, y: 416 }, { x: 160, y: 300 }, { x: 160, y: 200 }, { x: 160, y: 100 }], fwWidth: 118, trees: [{ x: 150, y: 260, r: 10 }, { x: 172, y: 250, r: 9 }, { x: 185, y: 170, r: 10 }, { x: 140, y: 160, r: 9 }, { x: 128, y: 118, r: 9 }, { x: 196, y: 112, r: 9 }], water: [] },
+  { par: 3, tee: TEE, basket: { x: 160, y: 100 }, roughIsHazard: true, fairway: [{ x: 160, y: 416 }, { x: 160, y: 300 }, { x: 160, y: 200 }, { x: 160, y: 100 }], elev: -1, fwWidth: 118, trees: [{ x: 150, y: 260, r: 10 }, { x: 172, y: 250, r: 9 }, { x: 185, y: 170, r: 10 }, { x: 140, y: 160, r: 9 }, { x: 128, y: 118, r: 9 }, { x: 196, y: 112, r: 9 }], water: [] },
   // 14 — par 3, 409ft. Drifts right between the gravel lot and the fence line;
   // wooded right off the tee.
-  { par: 3, tee: TEE, basket: { x: 185, y: 98 }, fairway: [{ x: 160, y: 416 }, { x: 168, y: 310 }, { x: 178, y: 210 }, { x: 185, y: 98 }], fwWidth: 112, trees: [{ x: 125, y: 370, r: 9 }, { x: 195, y: 362, r: 9 }, { x: 140, y: 330, r: 9 }, { x: 160, y: 250, r: 10 }, { x: 195, y: 180, r: 9 }, { x: 145, y: 160, r: 9 }, { x: 152, y: 114, r: 9 }, { x: 218, y: 90, r: 9 }], water: [] },
+  { par: 3, tee: TEE, basket: { x: 185, y: 98 }, fairway: [{ x: 160, y: 416 }, { x: 168, y: 310 }, { x: 178, y: 210 }, { x: 185, y: 98 }], elev: 1, fwWidth: 112, trees: [{ x: 125, y: 370, r: 9 }, { x: 195, y: 362, r: 9 }, { x: 140, y: 330, r: 9 }, { x: 160, y: 250, r: 10 }, { x: 195, y: 180, r: 9 }, { x: 145, y: 160, r: 9 }, { x: 152, y: 114, r: 9 }, { x: 218, y: 90, r: 9 }], water: [] },
   // 15 — par 3, 283ft. Wooded with a rock-gate pinch mid-flight, then a
   // clearing around the green; mind the fallen log right of the pin.
-  { par: 3, tee: TEE, basket: { x: 170, y: 104 }, fairway: [{ x: 160, y: 416 }, { x: 162, y: 300 }, { x: 168, y: 200 }, { x: 170, y: 104 }], fwWidth: 100, trees: [{ x: 118, y: 320, r: 10 }, { x: 208, y: 310, r: 10 }, { x: 128, y: 232, r: 9 }, { x: 196, y: 228, r: 9 }, { x: 120, y: 170, r: 9 }, { x: 215, y: 160, r: 9 }, { x: 206, y: 122, r: 8 }], water: [] },
+  { par: 3, tee: TEE, basket: { x: 170, y: 104 }, fairway: [{ x: 160, y: 416 }, { x: 162, y: 300 }, { x: 168, y: 200 }, { x: 170, y: 104 }], elev: -1, fwWidth: 100, trees: [{ x: 118, y: 320, r: 10 }, { x: 208, y: 310, r: 10 }, { x: 128, y: 232, r: 9 }, { x: 196, y: 228, r: 9 }, { x: 120, y: 170, r: 9 }, { x: 215, y: 160, r: 9 }, { x: 206, y: 122, r: 8 }], water: [] },
   // 16 — par 3, 249ft. Short pitch to a beach green by the lake — water long,
   // sand short. Don't be greedy.
-  { par: 3, tee: TEE, basket: { x: 130, y: 150 }, fairway: [{ x: 160, y: 416 }, { x: 150, y: 310 }, { x: 138, y: 220 }, { x: 130, y: 150 }], dropZone: { x: 178, y: 158 }, fwWidth: 112, trees: [{ x: 190, y: 240, r: 9 }], water: [{ x: 70, y: 90, w: 80, h: 40 }], hazard: [{ x: 92, y: 176, w: 28, h: 16 }, { x: 150, y: 182, w: 26, h: 16 }] },
+  { par: 3, tee: TEE, basket: { x: 130, y: 150 }, fairway: [{ x: 160, y: 416 }, { x: 150, y: 310 }, { x: 138, y: 220 }, { x: 130, y: 150 }], dropZone: { x: 178, y: 158 }, elev: -1, fwWidth: 112, trees: [{ x: 190, y: 240, r: 9 }], water: [{ x: 70, y: 90, w: 80, h: 40 }], hazard: [{ x: 92, y: 176, w: 28, h: 16 }, { x: 150, y: 182, w: 26, h: 16 }] },
   // 17 — par 4, 647ft. A narrow shore strip with the lake left the whole way,
   // hooking left at the top behind the trees.
-  { par: 4, tee: TEE, basket: { x: 114, y: 100 }, fairway: [{ x: 160, y: 416 }, { x: 148, y: 320 }, { x: 140, y: 240 }, { x: 142, y: 170 }, { x: 128, y: 120 }, { x: 114, y: 100 }], fwWidth: 104, trees: [{ x: 180, y: 280, r: 9 }, { x: 172, y: 200, r: 9 }, { x: 158, y: 140, r: 10 }], water: [{ x: 62, y: 300, w: 30, h: 30 }, { x: 58, y: 200, w: 32, h: 32 }, { x: 56, y: 130, w: 30, h: 24 }] },
+  { par: 4, tee: TEE, basket: { x: 114, y: 100 }, fairway: [{ x: 160, y: 416 }, { x: 148, y: 320 }, { x: 140, y: 240 }, { x: 142, y: 170 }, { x: 128, y: 120 }, { x: 114, y: 100 }], elev: 1, fwWidth: 104, trees: [{ x: 180, y: 280, r: 9 }, { x: 172, y: 200, r: 9 }, { x: 158, y: 140, r: 10 }], water: [{ x: 62, y: 300, w: 30, h: 30 }, { x: 58, y: 200, w: 32, h: 32 }, { x: 56, y: 130, w: 30, h: 24 }] },
   // 18 — par 5, 841ft. The closer: grass OB islands dot the fairway (roped-off
   // turf, not sand), and the hole curves harder RIGHT at the end to the green.
-  { par: 5, tee: { x: 200, y: 416 }, basket: { x: 205, y: 84 }, fairway: [{ x: 200, y: 416 }, { x: 175, y: 340 }, { x: 155, y: 260 }, { x: 150, y: 190 }, { x: 175, y: 130 }, { x: 205, y: 84 }], fwWidth: 118, trees: [{ x: 210, y: 300, r: 9 }, { x: 120, y: 240, r: 9 }, { x: 195, y: 170, r: 9 }, { x: 120, y: 150, r: 9 }, { x: 170, y: 96, r: 9 }, { x: 240, y: 100, r: 9 }, { x: 206, y: 44, r: 9 }], water: [], obZones: [{ x: 180, y: 250, w: 34, h: 16 }, { x: 128, y: 148, w: 30, h: 14 }, { x: 190, y: 118, w: 28, h: 12 }] },
+  { par: 5, tee: { x: 200, y: 416 }, basket: { x: 205, y: 84 }, fairway: [{ x: 200, y: 416 }, { x: 175, y: 340 }, { x: 155, y: 260 }, { x: 150, y: 190 }, { x: 175, y: 130 }, { x: 205, y: 84 }], elev: -1, fwWidth: 118, trees: [{ x: 210, y: 300, r: 9 }, { x: 120, y: 240, r: 9 }, { x: 195, y: 170, r: 9 }, { x: 120, y: 150, r: 9 }, { x: 170, y: 96, r: 9 }, { x: 240, y: 100, r: 9 }, { x: 206, y: 44, r: 9 }], water: [], obZones: [{ x: 180, y: 250, w: 34, h: 16 }, { x: 128, y: 148, w: 30, h: 14 }, { x: 190, y: 118, w: 28, h: 12 }] },
 ];
 const WINTHROP_HOLES: Hole[] = WINTHROP_TEMPLATES.map(materializeHole);
 const WINTHROP_PAR = WINTHROP_HOLES.reduce((s, h) => s + h.par, 0);
