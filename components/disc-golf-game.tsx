@@ -459,6 +459,7 @@ type GameState = {
   scores: number[];
   lies: Vec[]; // where each shot on the current hole came to rest (ghost trail)
   shotPaths: Vec[][]; // the actual flight path of each completed shot this hole
+  roundPaths: Vec[][][]; // shotPaths of every finished hole (for the best-round ghost)
   trailBuf: Vec[]; // path of the shot currently in the air
   holedAt: number | null;
   fadeTurn: number; // radians the current flight has curved so far
@@ -970,6 +971,7 @@ export function DiscGolfGame() {
   // Drag-to-throw (Wii-golf style): pull back to set power + aim, release to throw.
   const dragRef = useRef<{ active: boolean; cx: number; cy: number }>({ active: false, cx: 0, cy: 0 });
   const camRef = useRef({ x: 0, y: 0 }); // current camera scroll, mirrored for the pointer handlers
+  const ghostRef = useRef<Vec[][][] | null>(null); // best-round flight paths for the active course
   const rangeFlashRef = useRef(0); // when a disc was last switched (brightens the reach line)
   // Juice: short-lived particles (world coords), camera shake, basket rattle.
   type Particle = { x: number; y: number; vx: number; vy: number; g: number; life: number; max: number; color: string; size: number };
@@ -1058,6 +1060,9 @@ export function DiscGolfGame() {
   const [tutorialOpen, setTutorialOpen] = useState(false);
   const [musicVolume, setMusicVolume] = useState(0.7);
   const [leftHanded, setLeftHanded] = useState(false);
+  const [showGhost, setShowGhost] = useState(true);
+  const showGhostRef = useRef(true);
+  useEffect(() => { showGhostRef.current = showGhost; }, [showGhost]);
   const leftHandedRef = useRef(false);
   useEffect(() => { leftHandedRef.current = leftHanded; }, [leftHanded]);
   const [advanced, setAdvanced] = useState(false);
@@ -1089,6 +1094,7 @@ export function DiscGolfGame() {
       if (s.release === "hyzer" || s.release === "flat" || s.release === "anny") setRelease(s.release);
       if (typeof s.musicVolume === "number") setMusicVolume(s.musicVolume);
       if (typeof s.leftHanded === "boolean") setLeftHanded(s.leftHanded);
+      if (typeof s.showGhost === "boolean") setShowGhost(s.showGhost);
       if (typeof s.advanced === "boolean") setAdvanced(s.advanced);
 
       const hb = JSON.parse(localStorage.getItem(HOLEBEST_KEY) || "null");
@@ -1190,10 +1196,10 @@ export function DiscGolfGame() {
   useEffect(() => {
     audioRef.current?.setMusicVolume(musicVolume);
     try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ throwStyle, flightPath, release, musicVolume, leftHanded, advanced }));
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ throwStyle, flightPath, release, musicVolume, leftHanded, advanced, showGhost }));
     } catch { /* ignore */ }
     saveProgress();
-  }, [throwStyle, flightPath, release, musicVolume, leftHanded, advanced, saveProgress]);
+  }, [throwStyle, flightPath, release, musicVolume, leftHanded, advanced, showGhost, saveProgress]);
 
   const syncHud = useCallback(() => {
     const g = stateRef.current;
@@ -1217,9 +1223,13 @@ export function DiscGolfGame() {
     const adv = advancedRef.current;
     const discIndex = Math.min(discIndexRef.current, activeDiscs(adv).length - 1);
     stateRef.current = {
-      holeIndex: 0, scores: [], discIndex,
+      holeIndex: 0, scores: [], discIndex, roundPaths: [],
       mode: m, advanced: adv, seed, roundHoles, ...freshHole(roundHoles[0]),
     };
+    // Load this course's best-round ghost (drawn as faint gold lines).
+    try {
+      ghostRef.current = m === "course" || m === "winthrop" ? JSON.parse(localStorage.getItem(`discgolf.ghost.${m}`) || "null") : null;
+    } catch { ghostRef.current = null; }
     setSaved(false);
     setSaveErr(null);
     setIsNewBest(false);
@@ -1246,9 +1256,10 @@ export function DiscGolfGame() {
     const roundHoles = [buildRound(seed, m)[holeIdx]];
     const adv = advancedRef.current;
     stateRef.current = {
-      holeIndex: 0, scores: [], discIndex: Math.min(discIndexRef.current, activeDiscs(adv).length - 1),
+      holeIndex: 0, scores: [], discIndex: Math.min(discIndexRef.current, activeDiscs(adv).length - 1), roundPaths: [],
       mode: m, advanced: adv, seed, roundHoles, practice: true, practiceHole: holeIdx + 1, ...freshHole(roundHoles[0]),
     };
+    ghostRef.current = null;
     setSaved(false);
     setSaveErr(null);
     setIsNewBest(false);
@@ -1342,6 +1353,16 @@ export function DiscGolfGame() {
       if (mode === "course") setBestScore(best);
       else setWinthropBest(best);
       setIsNewBest(newBest);
+      // A new best round becomes the course ghost: every shot's flight path,
+      // downsampled to keep storage small.
+      if (newBest && g) {
+        try {
+          const paths = [...g.roundPaths, g.shotPaths].map((hp) =>
+            hp.map((path) => path.filter((_, i) => i % 3 === 0 || i === path.length - 1).map((pt) => ({ x: Math.round(pt.x), y: Math.round(pt.y) }))),
+          );
+          localStorage.setItem(`discgolf.ghost.${mode}`, JSON.stringify(paths));
+        } catch { /* ignore */ }
+      }
     } else {
       setIsNewBest(false);
     }
@@ -1386,6 +1407,7 @@ export function DiscGolfGame() {
       finishGame(g.scores.slice());
       return;
     }
+    g.roundPaths.push(g.shotPaths);
     g.holeIndex += 1;
     Object.assign(g, freshHole(g.roundHoles[g.holeIndex]));
     g.discIndex = discIndexRef.current;
@@ -1898,6 +1920,27 @@ export function DiscGolfGame() {
       ctx.fillRect(hole.tee.x - 7, hole.tee.y - cam - 5, 14, 10);
       ctx.fillStyle = "#8a6a3a";
       ctx.fillRect(hole.tee.x - 7, hole.tee.y - cam - 5, 14, 2);
+
+      // Best-round ghost: your record round's flight lines on this hole.
+      if (ghostRef.current && showGhostRef.current && !g.practice) {
+        const hp = ghostRef.current[g.holeIndex];
+        if (Array.isArray(hp)) {
+          ctx.strokeStyle = "rgba(245,210,74,0.35)";
+          ctx.setLineDash([2, 4]);
+          ctx.lineWidth = 1;
+          for (const path of hp) {
+            if (!Array.isArray(path) || path.length < 2) continue;
+            ctx.beginPath();
+            ctx.moveTo(path[0].x, path[0].y - cam);
+            for (let i = 1; i < path.length; i++) ctx.lineTo(path[i].x, path[i].y - cam);
+            ctx.stroke();
+            const end = path[path.length - 1];
+            ctx.fillStyle = "rgba(245,210,74,0.55)";
+            ctx.fillRect(end.x - 1.5, end.y - cam - 1.5, 3, 3);
+          }
+          ctx.setLineDash([]);
+        }
+      }
 
       // Ghost trail: the actual curved flight path of each earlier shot on this
       // hole, with a dot where each came to rest.
@@ -2609,6 +2652,7 @@ export function DiscGolfGame() {
             flightPath={flightPath} setFlightPath={setFlightPath}
             musicVolume={musicVolume} setMusicVolume={setMusicVolume}
             leftHanded={leftHanded} setLeftHanded={setLeftHanded}
+            showGhost={showGhost} setShowGhost={setShowGhost}
             advanced={advanced} setAdvanced={handleSetAdvanced}
             unlocked={unlocked}
           />
@@ -3230,11 +3274,13 @@ function SettingsPanel(props: {
   setMusicVolume: (v: number) => void;
   leftHanded: boolean;
   setLeftHanded: (b: boolean) => void;
+  showGhost: boolean;
+  setShowGhost: (b: boolean) => void;
   advanced: boolean;
   setAdvanced: (b: boolean) => void;
   unlocked: string[];
 }) {
-  const { onClose, throwStyle, setThrowStyle, flightPath, setFlightPath, musicVolume, setMusicVolume, leftHanded, setLeftHanded, advanced, setAdvanced, unlocked } = props;
+  const { onClose, throwStyle, setThrowStyle, flightPath, setFlightPath, musicVolume, setMusicVolume, leftHanded, setLeftHanded, showGhost, setShowGhost, advanced, setAdvanced, unlocked } = props;
   const seg = (active: boolean) =>
     `flex-1 rounded-md px-2 py-2 text-xs font-bold transition ${active ? "bg-[#4B3DFF] text-white" : "text-gray-400 hover:text-white"}`;
   return (
@@ -3285,6 +3331,20 @@ function SettingsPanel(props: {
           <span className="text-white text-sm font-semibold">Left-handed</span>
           <span className={`text-xs font-bold px-2 py-0.5 rounded ${leftHanded ? "bg-[#36D7B7] text-[#0f1117]" : "bg-white/10 text-gray-400"}`}>
             {leftHanded ? "ON" : "OFF"}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setShowGhost(!showGhost)}
+          className="w-full flex items-center justify-between bg-[#1a1d23] border border-white/10 rounded-lg px-3 py-2.5"
+        >
+          <span className="text-left">
+            <span className="block text-white text-sm font-semibold">Best-round ghost</span>
+            <span className="block text-gray-500 text-[11px]">Show your record round&apos;s flight lines while you play</span>
+          </span>
+          <span className={`shrink-0 text-xs font-bold px-2 py-0.5 rounded ${showGhost ? "bg-[#36D7B7] text-[#0f1117]" : "bg-white/10 text-gray-400"}`}>
+            {showGhost ? "ON" : "OFF"}
           </span>
         </button>
 
