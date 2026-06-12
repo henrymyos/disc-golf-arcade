@@ -423,6 +423,15 @@ const ADV_DISCS: Disc[] = [
 function activeDiscs(advanced: boolean): Disc[] {
   return advanced ? ADV_DISCS : DISCS;
 }
+// Some advanced discs are earned, not given: each maps to the achievement that
+// unlocks it (the simple bag and the advanced core are always available).
+const DISC_UNLOCKS: Record<string, { ach: string; label: string } | undefined> = {
+  zone: { ach: "birdie", label: "score a birdie" },
+  swarm: { ach: "bogeyfree9", label: "bogey-free nine" },
+  firebird: { ach: "daily", label: "finish a Daily" },
+  nukeos: { ach: "eagle", label: "score an eagle" },
+  destroyer: { ach: "underpar", label: "round under par" },
+};
 // Most the flight path may bend over a single throw (~46°) — keeps fade
 // noticeable without ever curving back toward the thrower.
 const MAX_FADE_TURN = 0.8;
@@ -1245,6 +1254,11 @@ export function DiscGolfGame() {
   }, [muted, musicVolume, syncHud]);
 
   const selectDisc = useCallback((i: number) => {
+    // Locked advanced discs can't be selected until their achievement is earned.
+    if (advancedRef.current) {
+      const lock = DISC_UNLOCKS[ADV_DISCS[i]?.key ?? ""];
+      if (lock && !unlockedRef.current.includes(lock.ach)) return;
+    }
     setDiscIndex(i);
     if (stateRef.current) stateRef.current.discIndex = i;
     rangeFlashRef.current = performance.now(); // emphasize the reach line briefly
@@ -2552,23 +2566,31 @@ export function DiscGolfGame() {
             </div>
             {advanced ? (
               <div className="flex gap-2 overflow-x-auto pb-0.5 -mx-1 px-1" style={{ scrollbarWidth: "thin" }}>
-                {ADV_DISCS.map((d, i) => (
+                {ADV_DISCS.map((d, i) => {
+                  const lock = DISC_UNLOCKS[d.key];
+                  const locked = !!lock && !unlocked.includes(lock.ach);
+                  return (
                   <button
                     key={d.key}
                     type="button"
                     onClick={() => selectDisc(i)}
+                    disabled={locked}
                     className={`shrink-0 w-[90px] rounded-lg border px-2 py-1.5 text-left transition ${
-                      i === discIndex ? "border-[#36D7B7]/70 bg-[#36D7B7]/10" : "border-white/10 hover:border-white/25 bg-white/[0.02]"
+                      locked ? "border-white/5 bg-white/[0.02] opacity-50"
+                        : i === discIndex ? "border-[#36D7B7]/70 bg-[#36D7B7]/10" : "border-white/10 hover:border-white/25 bg-white/[0.02]"
                     }`}
                   >
                     <span className="flex items-center gap-1.5">
-                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: d.color }} />
-                      <span className={`text-xs font-bold truncate ${i === discIndex ? "text-white" : "text-gray-300"}`}>{d.name}</span>
+                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: locked ? "#444" : d.color }} />
+                      <span className={`text-xs font-bold truncate ${i === discIndex && !locked ? "text-white" : "text-gray-300"}`}>
+                        {locked ? "🔒 " : ""}{d.name}
+                      </span>
                     </span>
-                    <span className="block text-[9px] text-gray-500 mt-0.5">{d.brand}</span>
-                    <span className="block text-[9px] font-mono text-gray-400 leading-tight">{d.blurb.split("· ")[1]}</span>
+                    <span className="block text-[9px] text-gray-500 mt-0.5">{locked ? lock!.label : d.brand}</span>
+                    <span className="block text-[9px] font-mono text-gray-400 leading-tight">{locked ? "to unlock" : d.blurb.split("· ")[1]}</span>
                   </button>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="grid grid-cols-3 gap-2">
