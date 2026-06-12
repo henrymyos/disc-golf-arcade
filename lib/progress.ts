@@ -8,7 +8,7 @@ export const SETTINGS_KEY = "discgolf.settings.v1";
 export const ACH_KEY = "discgolf.achievements.v1";
 export const HIST_KEY = "discgolf.history.v1";
 
-export type HistoryRow = { mode: string; total: number; date: number };
+export type HistoryRow = { mode: string; total: number; date: number; scores?: number[]; pars?: number[] };
 export type Progress = {
   best: number | null;
   holeBest: (number | null)[];
