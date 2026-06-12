@@ -373,6 +373,15 @@ type FlightPath = "overstable" | "straight";
 // Straight throws launch this much faster (carry farther) than overstable ones.
 const STRAIGHT_SPEED_MUL = 1.13;
 
+// Release angle, chosen per throw. Hyzer locks in a hard, early, reliable fade
+// (a touch less distance); flat flies the disc's natural shape; anhyzer turns
+// the disc over AGAINST its fade while it climbs — more distance and the
+// opposite shape, but it only drifts back a little late, so it's commitment.
+type Release = "hyzer" | "flat" | "anny";
+function releaseSpeedMul(r: Release) {
+  return r === "hyzer" ? 0.94 : r === "anny" ? 1.04 : 1;
+}
+
 // Disc bag — power scales throw speed, `fade` is how many radians an overstable
 // flight curves per frame (backhand left, forehand right); `turn`/`sFade` are
 // the climb-turn / descent-fade for a straight flight; friction is glide
@@ -446,6 +455,7 @@ type GameState = {
   fadeTurn: number; // radians the current flight has curved so far
   fadeSign: number; // -1 backhand (left), +1 forehand (right)
   path: FlightPath; // shape of the current flight (overstable / straight)
+  release: Release; // release angle of the current flight (hyzer / flat / anny)
   h: number; // current height above the ground
   vh: number; // vertical velocity (height units per frame)
   camY: number; // top of the viewport in world coords (vertical scroll)
@@ -481,6 +491,7 @@ function freshHole(hole: Hole) {
     fadeTurn: 0,
     fadeSign: -1,
     path: "overstable" as FlightPath,
+    release: "flat" as Release,
     h: 0,
     vh: 0,
     camY: 0, // start showing the basket (top), then pan down
@@ -848,7 +859,7 @@ function lastInBoundsLie(trail: Vec[], hole: Hole, fallback: Vec): Vec {
   return { x: fallback.x, y: fallback.y };
 }
 
-function stepFlight(f: Flight, disc: Disc, fadeSign: number, path: FlightPath, hole: Hole): { status: StepStatus; treeHit: boolean } {
+function stepFlight(f: Flight, disc: Disc, fadeSign: number, path: FlightPath, hole: Hole, release: Release = "flat"): { status: StepStatus; treeHit: boolean } {
   f.x += f.vx;
   f.y += f.vy;
   f.h += f.vh;
@@ -862,11 +873,14 @@ function stepFlight(f: Flight, disc: Disc, fadeSign: number, path: FlightPath, h
   if (airborne && sp > 0.6 && Math.abs(f.fadeTurn) < MAX_FADE_TURN) {
     // Overstable bends steadily one way. Straight turns the OTHER way while
     // climbing (high-speed turn), then fades back while descending — an S that
-    // finishes slightly toward the fade side.
-    const a =
+    // finishes slightly toward the fade side. The release angle overrides the
+    // shape: hyzer is a hard steady fade, anhyzer turns over against the fade.
+    let a =
       path === "straight"
         ? (f.vh > 0 ? -fadeSign * disc.turn : fadeSign * disc.sFade)
         : fadeSign * disc.fade;
+    if (release === "hyzer") a = fadeSign * Math.max(disc.fade, disc.sFade) * 1.6;
+    else if (release === "anny") a = f.vh > 0 ? -fadeSign * (disc.fade + disc.turn + 0.004) : fadeSign * disc.sFade * 0.5;
     const cos = Math.cos(a);
     const sin = Math.sin(a);
     const nvx = f.vx * cos - f.vy * sin;
@@ -1018,6 +1032,12 @@ export function DiscGolfGame() {
     flightPathRef.current = flightPath;
   }, [flightPath]);
 
+  const [release, setRelease] = useState<Release>("flat");
+  const releaseRef = useRef<Release>("flat");
+  useEffect(() => {
+    releaseRef.current = release;
+  }, [release]);
+
   // ── Settings (persisted) ──
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [tutorialOpen, setTutorialOpen] = useState(false);
@@ -1051,6 +1071,7 @@ export function DiscGolfGame() {
       const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
       if (s.throwStyle === "BH" || s.throwStyle === "FH") setThrowStyle(s.throwStyle);
       if (s.flightPath === "overstable" || s.flightPath === "straight") setFlightPath(s.flightPath);
+      if (s.release === "hyzer" || s.release === "flat" || s.release === "anny") setRelease(s.release);
       if (typeof s.musicVolume === "number") setMusicVolume(s.musicVolume);
       if (typeof s.leftHanded === "boolean") setLeftHanded(s.leftHanded);
       if (typeof s.advanced === "boolean") setAdvanced(s.advanced);
@@ -1154,10 +1175,10 @@ export function DiscGolfGame() {
   useEffect(() => {
     audioRef.current?.setMusicVolume(musicVolume);
     try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ throwStyle, flightPath, musicVolume, leftHanded, advanced }));
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ throwStyle, flightPath, release, musicVolume, leftHanded, advanced }));
     } catch { /* ignore */ }
     saveProgress();
-  }, [throwStyle, flightPath, musicVolume, leftHanded, advanced, saveProgress]);
+  }, [throwStyle, flightPath, release, musicVolume, leftHanded, advanced, saveProgress]);
 
   const syncHud = useCallback(() => {
     const g = stateRef.current;
@@ -1245,10 +1266,11 @@ export function DiscGolfGame() {
     // Advanced discs fly their baked-in shape (e.g. Nuke OS overstable,
     // Destroyer straight); simple mode uses the overstable/straight toggle.
     g.path = g.advanced ? disc.flight ?? "straight" : flightPathRef.current;
+    g.release = releaseRef.current;
     // Slower launch + extra glide (disc friction) so it floats across the
     // fairway. Straight throws carry farther; the hole's slope acts on the
     // disc in-flight (see SLOPE_PULL in stepFlight), not on the launch.
-    const pathMul = g.path === "straight" ? STRAIGHT_SPEED_MUL : 1;
+    const pathMul = (g.path === "straight" ? STRAIGHT_SPEED_MUL : 1) * releaseSpeedMul(g.release);
     const speed = disc.power * (1.2 + g.power * 3.35) * pathMul;
     g.disc.vx = Math.cos(g.angle) * speed;
     g.disc.vy = Math.sin(g.angle) * speed;
@@ -1564,7 +1586,7 @@ export function DiscGolfGame() {
         const d = g.disc;
         const disc = activeDiscs(g.advanced)[g.discIndex];
         const f: Flight = { x: d.x, y: d.y, vx: d.vx, vy: d.vy, h: g.h, vh: g.vh, fadeTurn: g.fadeTurn };
-        const res = stepFlight(f, disc, g.fadeSign, g.path, hole);
+        const res = stepFlight(f, disc, g.fadeSign, g.path, hole, g.release);
         d.x = f.x;
         d.y = f.y;
         d.vx = f.vx;
@@ -1849,7 +1871,7 @@ export function DiscGolfGame() {
           const since = performance.now() - rangeFlashRef.current;
           const SHOW_MS = 2000;
           if (!dr.active && since < SHOW_MS) {
-            const range = fullPowerRange(aimDisc, elevAt(hole, g.disc.y), path === "straight" ? STRAIGHT_SPEED_MUL : 1);
+            const range = fullPowerRange(aimDisc, elevAt(hole, g.disc.y), (path === "straight" ? STRAIGHT_SPEED_MUL : 1) * releaseSpeedMul(releaseRef.current));
             const bsy = hole.basket.y - cam;
             const bsx = hole.basket.x - camX;
             const basketVisible = bsy >= 0 && bsy <= H && bsx >= 0 && bsx <= W;
@@ -1930,7 +1952,7 @@ export function DiscGolfGame() {
         }
 
         if (dr.active && power > 0.04 && !inCancel) {
-          const pathMul = path === "straight" ? STRAIGHT_SPEED_MUL : 1;
+          const pathMul = (path === "straight" ? STRAIGHT_SPEED_MUL : 1) * releaseSpeedMul(releaseRef.current);
           const speed = aimDisc.power * (1.2 + power * 3.35) * pathMul;
           const f: Flight = {
             x: g.disc.x, y: g.disc.y,
@@ -1939,7 +1961,7 @@ export function DiscGolfGame() {
           };
           const pts: { x: number; y: number }[] = [{ x: f.x, y: f.y }];
           for (let i = 0; i < 360; i++) {
-            const r = stepFlight(f, aimDisc, sign, path, hole);
+            const r = stepFlight(f, aimDisc, sign, path, hole, releaseRef.current);
             pts.push({ x: f.x, y: f.y });
             if (r.status !== "fly") break;
           }
@@ -2592,6 +2614,30 @@ export function DiscGolfGame() {
                 </div>
               </div>
             )}
+
+            {/* Release angle */}
+            <div className="flex items-center gap-2">
+              <span className="w-12 shrink-0 text-[10px] font-bold uppercase tracking-[0.1em] text-gray-500">Angle</span>
+              <div className="flex-1 flex gap-1 bg-[#0f1117] border border-white/10 rounded-lg p-1">
+                {([
+                  { key: "hyzer", label: "Hyzer ⤸" },
+                  { key: "flat", label: "Flat" },
+                  { key: "anny", label: "⤹ Anny" },
+                ] as const).map((r) => (
+                  <button
+                    key={r.key}
+                    type="button"
+                    onClick={() => setRelease(r.key)}
+                    aria-pressed={release === r.key}
+                    className={`flex-1 rounded-md px-2 py-1.5 text-xs font-bold transition ${
+                      release === r.key ? "bg-[#e0923b] text-[#0f1117] shadow" : "text-gray-400 hover:text-white"
+                    }`}
+                  >
+                    {r.label}
+                  </button>
+                ))}
+              </div>
+            </div>
 
             {/* Stance + mute */}
             <div className="flex items-center gap-2">
