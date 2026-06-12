@@ -306,6 +306,60 @@ function leaderboardCourse(mode: Mode, seed: number): string {
   return mode === "course" ? "glendoveer" : mode === "winthrop" ? "winthrop" : `daily-${seed}`;
 }
 
+// ── Tournament mode: 3 rounds at Winthrop Lake (College Nationals) against a
+// seeded AI field, with a cut to the top half after round 2. ──
+const TOURN_KEY = "discgolf.tournament.v1";
+const TOURN_NAMES = [
+  "A. Hammes", "C. Dickerson", "L. Castro", "J. Mwangi", "T. Nakamura", "R. Pulido",
+  "S. Ostrander", "M. Beil", "D. Kowalski", "B. Tran", "K. Ferraro", "E. Stokes",
+  "G. Lindqvist", "P. Okafor", "N. Marsh", "V. Duarte", "H. Sloan", "W. Pickett",
+  "F. Aaltonen", "O. Reyes", "C. Burchfield", "J. Whitlock", "A. Drummond", "Z. Calloway",
+  "M. Sorensen", "T. Vega", "R. Easterling", "D. Croft", "S. Bhatt", "L. Mercer",
+  "K. Howell", "E. Trask", "B. Quinones", "J. Felder", "Y. Petrov",
+];
+type Tournament = {
+  seed: number;
+  round: number; // next round to play (0-based); rounds played = myTotals.length
+  myTotals: number[];
+  fieldTotals: number[][]; // [round][playerIdx]
+  madeCut: boolean;
+  finished: boolean;
+};
+// Per-player skill (strokes vs par per round, roughly -8..+2 for the top end).
+function tournSkills(seed: number): number[] {
+  const rng = mulberry32((seed ^ 0x9e3779b9) >>> 0);
+  return TOURN_NAMES.map(() => rng() * 24 - 20); // -20..+4 over 2.5 divisor below
+}
+function tournFieldRound(seed: number, round: number): number[] {
+  const skills = tournSkills(seed);
+  const rng = mulberry32((seed * 31 + round * 7919) >>> 0);
+  return skills.map((sk) => WINTHROP_PAR + Math.round(sk / 2.5 + (rng() * 2 - 1) * 3.5 + (rng() * 2 - 1) * 2.5));
+}
+type TournRow = { name: string; you: boolean; rounds: (number | null)[]; total: number; cut: boolean };
+// Standings with the post-R2 cut applied (ties at the line advance).
+function tournStandings(t: Tournament): TournRow[] {
+  const played = t.myTotals.length;
+  const fieldRounds = t.fieldTotals.length;
+  let cutLine = Infinity;
+  if (played >= 2 && fieldRounds >= 2) {
+    const sums = [t.myTotals[0] + t.myTotals[1], ...t.fieldTotals[0].map((_, i) => t.fieldTotals[0][i] + t.fieldTotals[1][i])];
+    const sorted = [...sums].sort((a, b) => a - b);
+    cutLine = sorted[Math.floor(sorted.length / 2) - 1];
+  }
+  const rows: TournRow[] = [];
+  const myCut = played >= 2 && t.myTotals[0] + t.myTotals[1] > cutLine;
+  rows.push({ name: "You", you: true, rounds: t.myTotals.slice(), total: t.myTotals.reduce((a, b) => a + b, 0), cut: myCut });
+  TOURN_NAMES.forEach((name, i) => {
+    const sum2 = fieldRounds >= 2 ? t.fieldTotals[0][i] + t.fieldTotals[1][i] : 0;
+    const cut = fieldRounds >= 2 && sum2 > cutLine;
+    const rounds: (number | null)[] = [];
+    for (let r = 0; r < fieldRounds; r++) rounds.push(r === 2 && cut ? null : t.fieldTotals[r][i]);
+    rows.push({ name, you: false, rounds, total: rounds.reduce<number>((a, b) => a + (b ?? 0), 0), cut });
+  });
+  rows.sort((a, b) => (a.cut === b.cut ? a.total - b.total : a.cut ? 1 : -1));
+  return rows;
+}
+
 // Fixed per-hole elevation (course identity, not random): + uphill / − downhill,
 // −2..+2. Matches the real Glendoveer East terrain hole by hole (e.g. 2/5/6/11
 // drop hard, 7 climbs hard, the closing stretch is flat). Affects how far a
@@ -326,6 +380,7 @@ const ACHIEVEMENTS: Achievement[] = [
   { id: "evenpar", name: "Par the Course", emoji: "🟢", desc: "Finish a round at par or better" },
   { id: "regular", name: "Glendoveer Regular", emoji: "📅", desc: "Finish 5 rounds" },
   { id: "daily", name: "Daily Grinder", emoji: "🔥", desc: "Complete a Daily Challenge" },
+  { id: "natty", name: "National Champion", emoji: "🏟", desc: "Win the Winthrop Lake tournament" },
 ];
 // Which achievement ids this round earns (a superset is fine — newly-unlocked is
 // the diff against what's already saved).
@@ -995,6 +1050,19 @@ export function DiscGolfGame() {
   const [finalPracticeHole, setFinalPracticeHole] = useState<number | null>(null);
   const [practiceOpen, setPracticeOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
+  const [tournamentOpen, setTournamentOpen] = useState(false);
+  const [tournament, setTournament] = useState<Tournament | null>(null);
+  const tournamentRef = useRef<Tournament | null>(null);
+  useEffect(() => { tournamentRef.current = tournament; }, [tournament]);
+  const tournamentPlayRef = useRef(false); // current round is a tournament round
+  const [finalTournament, setFinalTournament] = useState(false);
+  const saveTournament = useCallback((t: Tournament | null) => {
+    setTournament(t);
+    try {
+      if (t) localStorage.setItem(TOURN_KEY, JSON.stringify(t));
+      else localStorage.removeItem(TOURN_KEY);
+    } catch { /* ignore */ }
+  }, []);
 
   // ── Challenge links: ?ch=<mode>.<seed>.<score>.<name> replays the exact
   // same round (same pins + wind) so two players can compare fairly. ──
@@ -1103,6 +1171,8 @@ export function DiscGolfGame() {
       if (Array.isArray(ach)) { unlockedRef.current = ach; setUnlocked(ach); }
       const hist = JSON.parse(localStorage.getItem(HIST_KEY) || "[]");
       if (Array.isArray(hist)) { roundsPlayedRef.current = hist.length; setRoundsPlayed(hist.length); }
+      const tourn = JSON.parse(localStorage.getItem(TOURN_KEY) || "null");
+      if (tourn && typeof tourn.seed === "number" && Array.isArray(tourn.myTotals)) setTournament(tourn);
     } catch {
       /* ignore */
     }
@@ -1389,6 +1459,44 @@ export function DiscGolfGame() {
       setNewAchievements([]);
     }
 
+    // Tournament round: record it, simulate the AI field, run the cut, and
+    // crown a champion at the end.
+    if (tournamentPlayRef.current) {
+      tournamentPlayRef.current = false;
+      const t = tournamentRef.current;
+      if (t && !t.finished) {
+        const roundIdx = t.myTotals.length;
+        const myTotals = [...t.myTotals, total];
+        const fieldTotals = [...t.fieldTotals, tournFieldRound(t.seed, roundIdx)];
+        let madeCut = t.madeCut;
+        let finished = false;
+        if (roundIdx === 1) {
+          const sums = [myTotals[0] + myTotals[1], ...fieldTotals[0].map((_, i) => fieldTotals[0][i] + fieldTotals[1][i])];
+          const sorted = [...sums].sort((a, b) => a - b);
+          const line = sorted[Math.floor(sorted.length / 2) - 1];
+          madeCut = myTotals[0] + myTotals[1] <= line;
+          if (!madeCut) {
+            finished = true;
+            fieldTotals.push(tournFieldRound(t.seed, 2)); // the field plays on
+          }
+        } else if (roundIdx === 2) {
+          finished = true;
+        }
+        const next: Tournament = { ...t, myTotals, fieldTotals, madeCut, finished, round: roundIdx + 1 };
+        saveTournament(next);
+        if (finished && madeCut && tournStandings(next)[0]?.you && !unlockedRef.current.includes("natty")) {
+          const all = [...unlockedRef.current, "natty"];
+          unlockedRef.current = all;
+          setUnlocked(all);
+          try { localStorage.setItem(ACH_KEY, JSON.stringify(all)); } catch { /* ignore */ }
+          setNewAchievements((prev) => [...prev, ACHIEVEMENTS.find((a) => a.id === "natty")!]);
+        }
+      }
+      setFinalTournament(true);
+    } else {
+      setFinalTournament(false);
+    }
+
     audioRef.current?.sfx("win");
     vibrate([20, 40, 20]);
     setScreen("gameComplete");
@@ -1398,7 +1506,7 @@ export function DiscGolfGame() {
     setLeaderboard([]);
     if (!practice) void getArcadeLeaderboard(leaderboardCourse(mode, g?.seed ?? 0)).then(setLeaderboard).catch(() => {});
     if (!practice) saveProgress(); // sync best/achievements/history to the cloud if signed in
-  }, [saveProgress]);
+  }, [saveProgress, saveTournament]);
 
   const nextHole = useCallback(() => {
     const g = stateRef.current;
@@ -2575,6 +2683,10 @@ export function DiscGolfGame() {
                   className="w-full rounded-xl bg-[#f5d24a] hover:bg-[#e3c138] active:scale-[0.99] text-[#0f1117] font-bold py-3 transition">
                   🏆 Play Winthrop Lake · 18
                 </button>
+                <button type="button" onClick={() => setTournamentOpen(true)}
+                  className="w-full rounded-xl border border-[#f5d24a]/40 bg-[#f5d24a]/10 hover:bg-[#f5d24a]/20 active:scale-[0.99] text-white font-bold py-3 transition">
+                  🏟 Tournament{tournament && !tournament.finished ? ` · R${tournament.myTotals.length + 1}` : ""}
+                </button>
                 <button type="button" onClick={() => setTutorialOpen(true)}
                   className="w-full rounded-xl border border-white/15 bg-white/5 hover:bg-white/10 active:scale-[0.99] text-white font-bold py-3 transition">
                   📖 How to Play
@@ -2637,6 +2749,20 @@ export function DiscGolfGame() {
         {tutorialOpen && <TutorialPanel onClose={() => setTutorialOpen(false)} />}
 
         {statsOpen && <StatsPanel onClose={() => setStatsOpen(false)} />}
+
+        {tournamentOpen && (
+          <TournamentPanel
+            tournament={tournament}
+            onClose={() => setTournamentOpen(false)}
+            onNew={() => saveTournament({ seed: (Math.random() * 1e9) | 0, round: 0, myTotals: [], fieldTotals: [], madeCut: true, finished: false })}
+            onAbandon={() => saveTournament(null)}
+            onPlayRound={(t) => {
+              setTournamentOpen(false);
+              startGame("winthrop", (t.seed + t.myTotals.length * 1013904223) | 0);
+              tournamentPlayRef.current = true;
+            }}
+          />
+        )}
 
         {practiceOpen && (
           <PracticePanel
@@ -2962,6 +3088,10 @@ export function DiscGolfGame() {
             <div className="flex flex-wrap justify-center gap-2">
               {finalPracticeHole != null ? (
                 <button type="button" onClick={() => startPractice(finalMode, finalPracticeHole - 1)} className={btn}>↻ Retry hole</button>
+              ) : finalTournament ? (
+                <button type="button" onClick={() => { audioRef.current?.stopMusic(); setScreen("title"); setTournamentOpen(true); }} className={btn}>
+                  🏟 Standings
+                </button>
               ) : (
                 <button type="button" onClick={() => startGame()} className={btn}>↻ Play again</button>
               )}
@@ -3118,6 +3248,95 @@ function TutorialPanel({ onClose }: { onClose: () => void }) {
             {last ? "Got it ✓" : "Next ▶"}
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// College Nationals at Winthrop Lake: 3 rounds vs a seeded AI field, top half
+// makes the cut after round 2, lowest 3-round total takes the title.
+function TournamentPanel({ tournament, onClose, onNew, onAbandon, onPlayRound }: {
+  tournament: Tournament | null;
+  onClose: () => void;
+  onNew: () => void;
+  onAbandon: () => void;
+  onPlayRound: (t: Tournament) => void;
+}) {
+  const t = tournament;
+  const standings = t && t.myTotals.length > 0 ? tournStandings(t) : null;
+  const myRank = standings ? standings.findIndex((r) => r.you) + 1 : 0;
+  const champion = t?.finished && t.madeCut && myRank === 1;
+  return (
+    <div className="absolute inset-0 z-20 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm p-4 flex items-start justify-center rounded-lg">
+      <div className="w-full max-w-sm space-y-3 my-auto text-left">
+        <div className="flex items-center justify-between">
+          <h2 className="text-white font-black text-xl">🏟 Tournament</h2>
+          <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
+        </div>
+        <p className="text-gray-400 text-xs -mt-2">College Nationals · Winthrop Lake · 3 rounds · cut after R2</p>
+
+        {!t ? (
+          <>
+            <p className="text-gray-300 text-sm">
+              Take on a 36-player field over three rounds. The top half survives the cut; the lowest total lifts the trophy.
+            </p>
+            <button type="button" onClick={onNew} className={`${btn} w-full`}>Start tournament</button>
+          </>
+        ) : (
+          <>
+            {champion && (
+              <div className="bg-[#f5d24a]/10 border border-[#f5d24a]/40 rounded-xl p-3 text-center">
+                <p className="text-[#f5d24a] font-black text-lg">🏆 NATIONAL CHAMPION!</p>
+              </div>
+            )}
+            {t.finished && !t.madeCut && (
+              <p className="text-[#e08a3b] text-sm font-semibold text-center">Missed the cut — there&apos;s always next season.</p>
+            )}
+            {t.finished && t.madeCut && !champion && (
+              <p className="text-gray-300 text-sm text-center">Finished <span className="text-white font-bold">#{myRank}</span> of {TOURN_NAMES.length + 1}.</p>
+            )}
+
+            {standings ? (
+              <div className="bg-[#1a1d23] border border-white/5 rounded-xl overflow-hidden max-h-72 overflow-y-auto">
+                <table className="w-full text-[11px] tabular-nums">
+                  <thead className="sticky top-0 bg-[#1a1d23]">
+                    <tr className="text-gray-500 border-b border-white/5">
+                      <th className="text-left pl-3 py-1.5 w-8">#</th>
+                      <th className="text-left">Player</th>
+                      {[0, 1, 2].map((r) => <th key={r} className="text-right pr-1">R{r + 1}</th>)}
+                      <th className="text-right pr-3">Tot</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {standings.map((row, i) => (
+                      <tr key={row.name} className={`${row.you ? "bg-[#36D7B7]/10 text-[#36D7B7] font-bold" : "text-gray-300"} ${i ? "border-t border-white/5" : ""} ${row.cut ? "opacity-50" : ""}`}>
+                        <td className="pl-3 py-1">{row.cut ? "—" : i + 1}</td>
+                        <td className="truncate max-w-[110px]">{row.name}{row.cut ? " (cut)" : ""}</td>
+                        {[0, 1, 2].map((r) => <td key={r} className="text-right pr-1 font-mono">{row.rounds[r] ?? ""}</td>)}
+                        <td className="text-right pr-3 font-mono font-bold">{row.total || ""}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-gray-300 text-sm">Round 1 awaits — the field is warming up.</p>
+            )}
+
+            {!t.finished ? (
+              <button type="button" onClick={() => onPlayRound(t)} className={`${btn} w-full`}>
+                ▶ Play round {t.myTotals.length + 1}
+              </button>
+            ) : (
+              <button type="button" onClick={onNew} className={`${btn} w-full`}>↻ New tournament</button>
+            )}
+            {!t.finished && (
+              <button type="button" onClick={onAbandon} className="w-full text-gray-500 hover:text-gray-300 text-xs py-1 transition">
+                Abandon tournament
+              </button>
+            )}
+          </>
+        )}
       </div>
     </div>
   );
