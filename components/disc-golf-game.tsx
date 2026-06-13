@@ -1106,6 +1106,7 @@ export function DiscGolfGame() {
   const [practiceOpen, setPracticeOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
   const [boardsOpen, setBoardsOpen] = useState(false);
+  const [pauseMenu, setPauseMenu] = useState<{ canRestart: boolean } | null>(null); // in-round menu (restart / home / continue)
   const [tournamentOpen, setTournamentOpen] = useState(false);
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const tournamentRef = useRef<Tournament | null>(null);
@@ -1167,9 +1168,11 @@ export function DiscGolfGame() {
   const [saveErr, setSaveErr] = useState<string | null>(null);
 
   const screenRef = useRef<Screen>("title");
+  const pausedRef = useRef(false); // freezes the sim while the pause menu is open
   useEffect(() => {
     screenRef.current = screen;
   }, [screen]);
+  useEffect(() => { pausedRef.current = pauseMenu != null; }, [pauseMenu]);
 
   const discIndexRef = useRef(1);
   useEffect(() => {
@@ -1733,6 +1736,37 @@ export function DiscGolfGame() {
     syncHud();
   }, [syncHud, finishGame]);
 
+  // In-round pause menu: restart the current round from the first hole using
+  // the SAME holes (same seed), or bail out to the title screen.
+  const restartRound = useCallback(() => {
+    const g = stateRef.current;
+    if (!g) return;
+    audioRef.current?.resume();
+    stateRef.current = {
+      ...g,
+      holeIndex: 0,
+      scores: [],
+      roundPaths: [],
+      discIndex: Math.min(discIndexRef.current, activeDiscs(g.advanced).length - 1),
+      party: g.party ? { names: g.party.names, current: 0, scores: g.party.names.map(() => Array(g.roundHoles.length).fill(null)) } : undefined,
+      ...freshHole(g.roundHoles[0]),
+    };
+    ghostRef.current = g.online || g.practice ? null : ghostRef.current;
+    setPartyView(null);
+    setOnlineView(null);
+    setPauseMenu(null);
+    setScreen("playing");
+    syncHud();
+  }, [syncHud]);
+
+  const exitToHome = useCallback(() => {
+    audioRef.current?.stopMusic();
+    if (stateRef.current?.online) leaveLobby();
+    tournamentPlayRef.current = false;
+    setPauseMenu(null);
+    setScreen("title");
+  }, [leaveLobby]);
+
   const saveScore = useCallback(async () => {
     if (saving || saved) return;
     setSaving(true);
@@ -1858,6 +1892,7 @@ export function DiscGolfGame() {
   // Keyboard
   useEffect(() => {
     function onDown(e: KeyboardEvent) {
+      if (pausedRef.current) return;
       if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " ", "Enter"].includes(e.key)) e.preventDefault();
       keysRef.current.add(e.key);
       if (e.key >= "1" && e.key <= "9") {
@@ -1909,7 +1944,7 @@ export function DiscGolfGame() {
 
     function update() {
       const g = stateRef.current;
-      if (!g || screenRef.current !== "playing") return;
+      if (!g || screenRef.current !== "playing" || pausedRef.current) return;
       const hole = g.roundHoles[g.holeIndex];
       const maxCam = Math.max(0, hole.worldH - H);
       const basketCamX = camXFor(hole, hole.basket.x);
@@ -2793,7 +2828,7 @@ export function DiscGolfGame() {
     if (dist > 4) g.angle = Math.atan2(-pullY, -pullX); // throw opposite the pull
   }, []);
   function onCanvasDown(e: React.PointerEvent<HTMLCanvasElement>) {
-    if (screenRef.current !== "playing") return;
+    if (screenRef.current !== "playing" || pausedRef.current) return;
     const g = stateRef.current;
     if (!g || g.phase !== "aim") return;
     const p = clientToCanvas(e.clientX, e.clientY);
@@ -3125,6 +3160,26 @@ export function DiscGolfGame() {
             onSignIn={signIn} onSignUp={signUp} onSignOut={signOut}
           />
         )}
+
+        {/* In-round pause menu */}
+        {pauseMenu && (screen === "playing" || screen === "holeComplete") && (
+          <div className="absolute inset-0 z-40 flex items-center justify-center bg-[#0f1117]/80 backdrop-blur-sm rounded-lg px-6">
+            <div className="w-full max-w-[240px] flex flex-col gap-2.5">
+              <h2 className="text-white font-black text-2xl text-center mb-1">Paused</h2>
+              <button type="button" onClick={() => setPauseMenu(null)} className={`${btn} w-full !mt-0`}>▶ Continue</button>
+              {pauseMenu.canRestart && (
+                <button type="button" onClick={restartRound}
+                  className="w-full bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white font-bold py-3 rounded-lg transition">
+                  ↻ Restart round
+                </button>
+              )}
+              <button type="button" onClick={exitToHome}
+                className="w-full bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white font-bold py-3 rounded-lg transition">
+                🏠 Exit to home
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Control panel: disc rack + flight/stance/mute — only while in a round */}
@@ -3263,6 +3318,14 @@ export function DiscGolfGame() {
                 className="shrink-0 w-10 h-[34px] flex items-center justify-center bg-[#0f1117] border border-white/10 hover:border-white/25 text-white rounded-lg active:bg-white/10 transition"
               >
                 {muted ? "🔇" : "🔊"}
+              </button>
+              <button
+                type="button"
+                onClick={() => { const g = stateRef.current; setPauseMenu({ canRestart: !!g && !g.online && !tournamentPlayRef.current }); }}
+                aria-label="Menu"
+                className="shrink-0 w-10 h-[34px] flex items-center justify-center bg-[#0f1117] border border-white/10 hover:border-white/25 text-white rounded-lg active:bg-white/10 transition"
+              >
+                ☰
               </button>
             </div>
           </div>
