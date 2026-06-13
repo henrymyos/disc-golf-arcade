@@ -1087,6 +1087,7 @@ export function DiscGolfGame() {
   const [finalPracticeHole, setFinalPracticeHole] = useState<number | null>(null);
   const [practiceOpen, setPracticeOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
+  const [boardsOpen, setBoardsOpen] = useState(false);
   const [tournamentOpen, setTournamentOpen] = useState(false);
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const tournamentRef = useRef<Tournament | null>(null);
@@ -2813,6 +2814,10 @@ export function DiscGolfGame() {
 
               {/* Secondary actions */}
               <div className="w-full flex gap-2 mt-4">
+                <button type="button" onClick={() => setBoardsOpen(true)}
+                  className="flex-1 rounded-lg border border-white/10 hover:border-white/25 text-gray-300 hover:text-white text-xs font-semibold py-2 transition">
+                  🏆 Leaders
+                </button>
                 <button type="button" onClick={() => setPracticeOpen(true)}
                   className="flex-1 rounded-lg border border-white/10 hover:border-white/25 text-gray-300 hover:text-white text-xs font-semibold py-2 transition">
                   🎯 Practice
@@ -2821,6 +2826,8 @@ export function DiscGolfGame() {
                   className="flex-1 rounded-lg border border-white/10 hover:border-white/25 text-gray-300 hover:text-white text-xs font-semibold py-2 transition">
                   📊 Stats
                 </button>
+              </div>
+              <div className="w-full flex gap-2 mt-2">
                 <button type="button" onClick={() => setSettingsOpen(true)}
                   className="flex-1 rounded-lg border border-white/10 hover:border-white/25 text-gray-300 hover:text-white text-xs font-semibold py-2 transition">
                   ⚙ Settings
@@ -2892,6 +2899,8 @@ export function DiscGolfGame() {
         {tutorialOpen && <TutorialPanel onClose={() => setTutorialOpen(false)} />}
 
         {statsOpen && <StatsPanel onClose={() => setStatsOpen(false)} />}
+
+        {boardsOpen && <LeaderboardPanel onClose={() => setBoardsOpen(false)} />}
 
         {partyOpen && (
           <PartyPanel
@@ -3561,6 +3570,74 @@ function TournamentPanel({ tournament, onClose, onNew, onAbandon, onPlayRound }:
 
 // Career stats computed from the locally-stored round history. Older rounds
 // (before per-hole scores were recorded) still count toward totals/averages.
+// Browse the global (Supabase) leaderboard for any course from the title
+// screen. Daily uses today's seed; Glendoveer & Winthrop are all-time.
+function LeaderboardPanel({ onClose }: { onClose: () => void }) {
+  type Board = { key: "course" | "winthrop" | "daily"; label: string; courseKey: string; par: number };
+  const [boards] = useState<Board[]>(() => {
+    const dSeed = dailySeed();
+    const dPar = buildRound(dSeed, "daily").reduce((s, h) => s + h.par, 0);
+    return [
+      { key: "course", label: "Glendoveer", courseKey: "glendoveer", par: TOTAL_PAR },
+      { key: "winthrop", label: "Winthrop", courseKey: "winthrop", par: WINTHROP_PAR },
+      { key: "daily", label: "Daily", courseKey: `daily-${dSeed}`, par: dPar },
+    ];
+  });
+  const [pick, setPick] = useState<Board>(boards[0]);
+  const [rows, setRows] = useState<ArcadeScore[] | null>(null);
+  const over = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
+  const seg = (active: boolean) =>
+    `flex-1 rounded-md px-2 py-2 text-xs font-bold transition ${active ? "bg-[#4B3DFF] text-white" : "text-gray-400 hover:text-white"}`;
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    let active = true;
+    setRows(null);
+    getArcadeLeaderboard(pick.courseKey, 25).then((r) => { if (active) setRows(r); }).catch(() => { if (active) setRows([]); });
+    return () => { active = false; };
+  }, [pick]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+  return (
+    <div className="absolute inset-0 z-20 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm p-4 flex items-start justify-center rounded-lg">
+      <div className="w-full max-w-xs space-y-3 my-auto text-left">
+        <div className="flex items-center justify-between">
+          <h2 className="text-white font-black text-xl">🏆 Leaderboards</h2>
+          <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
+        </div>
+        <div className="flex gap-1 bg-[#1a1d23] border border-white/10 rounded-lg p-1">
+          {boards.map((b) => (
+            <button key={b.key} type="button" onClick={() => setPick(b)} className={seg(pick.key === b.key)}>{b.label}</button>
+          ))}
+        </div>
+        <p className="text-gray-500 text-[11px]">
+          {pick.key === "daily" ? "Today's course · par " : "All-time · par "}{pick.par}
+        </p>
+        <div className="bg-[#1a1d23] border border-white/5 rounded-2xl overflow-hidden">
+          {rows === null ? (
+            <p className="text-gray-400 text-sm text-center py-6">Loading…</p>
+          ) : rows.length === 0 ? (
+            <p className="text-gray-400 text-sm text-center py-6">No scores yet — be the first!</p>
+          ) : (
+            <ol>
+              {rows.map((row, i) => (
+                <li
+                  key={`${row.name}-${row.created_at}`}
+                  className={`flex items-center gap-3 px-4 py-2 text-sm ${i !== 0 ? "border-t border-white/5" : ""}`}
+                >
+                  <span className={`font-mono w-6 text-right ${i === 0 ? "text-[#f5d24a]" : "text-gray-400"}`}>{i + 1}</span>
+                  <span className="text-white flex-1 truncate">{i === 0 ? "👑 " : ""}{row.name}</span>
+                  <span className="text-gray-400 font-mono">{over(row.strokes - pick.par)}</span>
+                  <span className="text-white font-mono font-bold w-8 text-right">{row.strokes}</span>
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+        <button type="button" onClick={onClose} className={`${btn} w-full`}>Done</button>
+      </div>
+    </div>
+  );
+}
+
 function StatsPanel({ onClose }: { onClose: () => void }) {
   const [hist] = useState<{ mode: string; total: number; date: number; scores?: number[]; pars?: number[] }[]>(() => {
     try {
