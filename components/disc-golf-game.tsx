@@ -366,28 +366,30 @@ function tournFieldHoles(seed: number, round: number): number[][] {
 function tournFieldRound(seed: number, round: number): number[] {
   return tournFieldHoles(seed, round).map((hs) => hs.reduce((a, b) => a + b, 0));
 }
-// Live position during a tournament round: the AI field is scored through the
-// same number of holes you've played (cut players excluded in the final round).
-function tournLive(t: Tournament, myRoundSoFar: number, holesPlayed: number): { rank: number; behind: number; field: number } {
+// Full live leaderboard during a tournament round — everyone scored through the
+// same number of holes (cut players dropped in the final round), sorted, with
+// rank, to-par, and which row is you. `parThru` is par for the holes played so
+// far (completed rounds + this round's first `holesPlayed` holes).
+type TournLiveRow = { rank: number; name: string; total: number; toPar: number; you: boolean };
+function tournLiveStandings(t: Tournament, myRoundSoFar: number, holesPlayed: number): TournLiveRow[] {
   const roundIdx = t.myTotals.length;
   const fieldHoles = tournFieldHoles(t.seed, roundIdx);
-  const myTotal = t.myTotals.reduce((a, b) => a + b, 0) + myRoundSoFar;
   let active = TOURN_NAMES.map((_, i) => i);
   if (roundIdx === 2 && t.fieldTotals.length >= 2) {
     const sums = [t.myTotals[0] + t.myTotals[1], ...t.fieldTotals[0].map((_, i) => t.fieldTotals[0][i] + t.fieldTotals[1][i])];
     const line = [...sums].sort((a, b) => a - b)[Math.floor(sums.length / 2) - 1];
     active = active.filter((i) => t.fieldTotals[0][i] + t.fieldTotals[1][i] <= line);
   }
-  const totals = active.map((i) => {
+  const parThru = roundIdx * WINTHROP_PAR + WINTHROP_HOLES.slice(0, holesPlayed).reduce((s, h) => s + h.par, 0);
+  const rows = [{ name: "You", total: t.myTotals.reduce((a, b) => a + b, 0) + myRoundSoFar, you: true }];
+  for (const i of active) {
     let prev = 0;
     for (let r = 0; r < roundIdx; r++) prev += t.fieldTotals[r][i];
-    return prev + fieldHoles[i].slice(0, holesPlayed).reduce((a, b) => a + b, 0);
-  });
-  const rank = 1 + totals.filter((v) => v < myTotal).length;
-  const leader = Math.min(myTotal, ...totals);
-  return { rank, behind: myTotal - leader, field: active.length + 1 };
+    rows.push({ name: TOURN_NAMES[i], total: prev + fieldHoles[i].slice(0, holesPlayed).reduce((a, b) => a + b, 0), you: false });
+  }
+  rows.sort((a, b) => a.total - b.total);
+  return rows.map((r, idx) => ({ rank: idx + 1, name: r.name, total: r.total, toPar: r.total - parThru, you: r.you }));
 }
-const ordinal = (n: number) => `${n}${n % 10 === 1 && n % 100 !== 11 ? "st" : n % 10 === 2 && n % 100 !== 12 ? "nd" : n % 10 === 3 && n % 100 !== 13 ? "rd" : "th"}`;
 type TournRow = { name: string; you: boolean; rounds: (number | null)[]; total: number; cut: boolean };
 // Standings with the post-R2 cut applied (ties at the line advance).
 function tournStandings(t: Tournament): TournRow[] {
@@ -1113,7 +1115,7 @@ export function DiscGolfGame() {
   useEffect(() => { tournamentRef.current = tournament; }, [tournament]);
   const tournamentPlayRef = useRef(false); // current round is a tournament round
   const [finalTournament, setFinalTournament] = useState(false);
-  const [tournLiveView, setTournLiveView] = useState<{ rank: number; behind: number; field: number } | null>(null);
+  const [tournLiveView, setTournLiveView] = useState<{ rows: TournLiveRow[]; thru: number } | null>(null);
   const [partyOpen, setPartyOpen] = useState(false);
   const [partyView, setPartyView] = useState<{ names: string[]; holeScores: (number | null)[]; totals: number[] } | null>(null);
   const [finalParty, setFinalParty] = useState<{ names: string[]; totals: number[] } | null>(null);
@@ -2091,7 +2093,7 @@ export function DiscGolfGame() {
           }
           if (tournamentPlayRef.current && tournamentRef.current && !tournamentRef.current.finished) {
             const myRoundSoFar = g.scores.reduce((a, b) => a + (b ?? 0), 0);
-            setTournLiveView(tournLive(tournamentRef.current, myRoundSoFar, g.holeIndex + 1));
+            setTournLiveView({ rows: tournLiveStandings(tournamentRef.current, myRoundSoFar, g.holeIndex + 1), thru: g.holeIndex + 1 });
           } else {
             setTournLiveView(null);
           }
@@ -3069,12 +3071,33 @@ export function DiscGolfGame() {
                     : <span className="text-gray-400">Your best here: {holeBestNote.best}</span>}
                 </p>
               )}
-              {tournLiveView && (
-                <p className="text-[#f5d24a] text-xs font-bold">
-                  🏟 {ordinal(tournLiveView.rank)} of {tournLiveView.field} ·{" "}
-                  {tournLiveView.behind === 0 ? "leading!" : `${tournLiveView.behind} back`} · thru {hud.hole}
-                </p>
-              )}
+              {tournLiveView && (() => {
+                const top = tournLiveView.rows.slice(0, 10);
+                const me = tournLiveView.rows.find((r) => r.you)!;
+                const par = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
+                const row = (r: TournLiveRow, key: string) => (
+                  <div key={key} className={`flex items-center gap-2 px-2.5 py-1 text-xs ${r.you ? "bg-[#36D7B7]/15 text-[#36D7B7] font-bold rounded" : "text-gray-300"}`}>
+                    <span className="font-mono w-5 text-right">{r.rank}</span>
+                    <span className="flex-1 truncate text-left">{r.name}</span>
+                    <span className="font-mono">{par(r.toPar)}</span>
+                    <span className="font-mono font-bold w-7 text-right text-white">{r.total}</span>
+                  </div>
+                );
+                return (
+                  <div className="w-full max-w-[260px]">
+                    <p className="text-[#f5d24a] text-[10px] font-bold uppercase tracking-wide mb-1 text-center">🏟 Leaderboard · thru {hud.hole}</p>
+                    <div className="bg-black/30 rounded-lg p-1 space-y-0.5">
+                      {top.map((r) => row(r, `t${r.rank}`))}
+                      {me.rank > 10 && (
+                        <>
+                          <div className="text-center text-gray-600 text-xs leading-none">···</div>
+                          {row(me, "me")}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
               <button type="button" onClick={nextHole} className={btn}>
                 {hud.hole >= hud.holes ? "See results ▶" : "Next hole ▶"}
               </button>
