@@ -768,6 +768,22 @@ type StepStatus = "fly" | "stop" | "hole" | "oob" | "ob";
 function inRect(r: Water, x: number, y: number) {
   return x > r.x && x < r.x + r.w && y > r.y && y < r.y + r.h;
 }
+// Hazards (sand) are DRAWN as an ellipse inscribed in {x,y,w,h}, so a plain
+// bounding-box test false-positives in the rect corners that are visually
+// fairway. This tests whether the whole disc sits inside that ellipse — a
+// throw only counts as a hazard when it's completely in the sand, not merely
+// clipping the edge. Shrinking the radii by DISC_R approximates "disc fully
+// contained"; a hazard smaller than the disc can never fully contain it.
+function inHazard(hz: Water, x: number, y: number) {
+  const cx = hz.x + hz.w / 2;
+  const cy = hz.y + hz.h / 2;
+  const rx = hz.w / 2 - DISC_R;
+  const ry = hz.h / 2 - DISC_R;
+  if (rx <= 0 || ry <= 0) return false;
+  const nx = (x - cx) / rx;
+  const ny = (y - cy) / ry;
+  return nx * nx + ny * ny <= 1;
+}
 // Distance from a point to a line segment.
 function distToSeg(px: number, py: number, ax: number, ay: number, bx: number, by: number) {
   const dx = bx - ax;
@@ -2059,7 +2075,7 @@ export function DiscGolfGame() {
             audioRef.current?.sfx("chains");
             rattleRef.current = performance.now();
           }
-          if ((hole.hazard ?? []).some((hz) => inRect(hz, d.x, d.y)) || (hole.roughIsHazard && offRibbons(hole, d.x, d.y))) {
+          if ((hole.hazard ?? []).some((hz) => inHazard(hz, d.x, d.y)) || (hole.roughIsHazard && offRibbons(hole, d.x, d.y))) {
             g.throws += 1;
             g.flash = { text: "HAZARD", at: performance.now() };
             spawnBurst(d.x, d.y, ["#d9c089", "#c4a96b"], 12, 1.4);
