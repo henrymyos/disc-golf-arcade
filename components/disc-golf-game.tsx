@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import { submitArcadeScore, getArcadeLeaderboard } from "@/actions/arcade";
 import type { ArcadeScore } from "@/lib/arcade-types";
 import { getSupabase } from "@/lib/supabase/browser";
@@ -306,6 +307,22 @@ function leaderboardCourse(mode: Mode, seed: number): string {
   return mode === "course" ? "glendoveer" : mode === "winthrop" ? "winthrop" : `daily-${seed}`;
 }
 
+// ── Online Friendly Challenge: ephemeral lobbies over Supabase Realtime
+// (broadcast + presence, no database). A short shareable code names the
+// channel; everyone with the code plays the same seed and scores sync live. ──
+type LobbyPlayer = { id: string; name: string; host: boolean; mode?: Mode };
+type OnlineScore = { name: string; scores: number[]; total: number; thru: number };
+// 4-char codes, omitting easily-confused characters (0/O, 1/I, etc.).
+function makeLobbyCode(): string {
+  const alphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+  let out = "";
+  for (let i = 0; i < 4; i++) out += alphabet[(Math.random() * alphabet.length) | 0];
+  return out;
+}
+function makeClientId(): string {
+  return `${(Math.random() * 1e9) | 0}-${(Math.random() * 1e9) | 0}`;
+}
+
 // ── Tournament mode: 3 rounds at Winthrop Lake (College Nationals) against a
 // seeded AI field, with a cut to the top half after round 2. ──
 const TOURN_KEY = "discgolf.tournament.v1";
@@ -538,6 +555,7 @@ type GameState = {
   practice?: boolean; // single-hole practice (no bests/history/leaderboard)
   practiceHole?: number; // 1-based hole number being practiced
   party?: { names: string[]; current: number; scores: (number | null)[][] }; // hot-seat pass-and-play
+  online?: boolean; // online Friendly Challenge round (scores synced over Realtime)
   advanced: boolean; // advanced bag (real discs) vs simple (putter/mid/driver)
   seed: number; // round seed (drives wind + pins)
   roundHoles: Hole[]; // this round's holes (wind/pins baked in)
@@ -1098,6 +1116,16 @@ export function DiscGolfGame() {
   const [partyOpen, setPartyOpen] = useState(false);
   const [partyView, setPartyView] = useState<{ names: string[]; holeScores: (number | null)[]; totals: number[] } | null>(null);
   const [finalParty, setFinalParty] = useState<{ names: string[]; totals: number[] } | null>(null);
+
+  // ── Online Friendly Challenge lobby (Supabase Realtime) ──
+  const [challengeOpen, setChallengeOpen] = useState(false);
+  const [lobby, setLobby] = useState<{ code: string; isHost: boolean; mode: Mode } | null>(null);
+  const [lobbyPlayers, setLobbyPlayers] = useState<LobbyPlayer[]>([]);
+  const [onlineScores, setOnlineScores] = useState<Record<string, OnlineScore>>({});
+  const [onlineView, setOnlineView] = useState<{ hole: number; par: number; myId: string } | null>(null);
+  const [finalOnline, setFinalOnline] = useState(false);
+  const onlineRef = useRef<{ channel: RealtimeChannel; code: string; myId: string; myName: string; isHost: boolean; mode: Mode } | null>(null);
+  const onlineScoresRef = useRef<Record<string, OnlineScore>>({});
   const saveTournament = useCallback((t: Tournament | null) => {
     setTournament(t);
     try {
@@ -1112,7 +1140,6 @@ export function DiscGolfGame() {
   const [challenge, setChallenge] = useState<Challenge | null>(null);
   const challengePlayRef = useRef(false); // current round IS the challenge round
   const [finalChallenge, setFinalChallenge] = useState<Challenge | null>(null);
-  const [challengeCopied, setChallengeCopied] = useState(false);
   useEffect(() => {
     try {
       const raw = new URLSearchParams(location.search).get("ch");
@@ -1349,6 +1376,7 @@ export function DiscGolfGame() {
     setNewAchievements([]);
     setHoleBestNote(null);
     setPartyView(null);
+    setOnlineView(null);
     setSettingsOpen(false);
     setScreen("playing");
     syncHud();
@@ -1380,6 +1408,7 @@ export function DiscGolfGame() {
     setNewAchievements([]);
     setHoleBestNote(null);
     setPartyView(null);
+    setOnlineView(null);
     setSettingsOpen(false);
     setScreen("playing");
     syncHud();
@@ -1414,10 +1443,108 @@ export function DiscGolfGame() {
     setNewAchievements([]);
     setHoleBestNote(null);
     setPartyView(null);
+    setOnlineView(null);
     setSettingsOpen(false);
     setScreen("playing");
     syncHud();
   }, [muted, musicVolume, syncHud]);
+
+  // ── Online Friendly Challenge controller ──
+  // Begin an online round (host on Start, everyone else on the "start"
+  // broadcast). Same seed ⇒ identical holes; scores sync hole-by-hole.
+  const beginOnlineRound = useCallback((seed: number, m: Mode) => {
+    const o = onlineRef.current;
+    if (!o) return;
+    modeRef.current = m;
+    if (!audioRef.current) {
+      audioRef.current = new AudioEngine();
+      audioRef.current.setMusicVolume(musicVolume);
+    }
+    audioRef.current.resume();
+    audioRef.current.setMuted(muted);
+    audioRef.current.startMusic();
+    challengePlayRef.current = false;
+    tournamentPlayRef.current = false;
+    const roundHoles = buildRound(seed, m);
+    const adv = advancedRef.current;
+    onlineScoresRef.current = { [o.myId]: { name: o.myName, scores: [], total: 0, thru: 0 } };
+    setOnlineScores(onlineScoresRef.current);
+    stateRef.current = {
+      holeIndex: 0, scores: [], discIndex: Math.min(discIndexRef.current, activeDiscs(adv).length - 1), roundPaths: [],
+      mode: m, advanced: adv, seed, roundHoles, online: true,
+      ...freshHole(roundHoles[0]),
+    };
+    ghostRef.current = null;
+    setSaved(false);
+    setSaveErr(null);
+    setIsNewBest(false);
+    setNewAchievements([]);
+    setHoleBestNote(null);
+    setPartyView(null);
+    setOnlineView(null);
+    setChallengeOpen(false);
+    setScreen("playing");
+    syncHud();
+  }, [muted, musicVolume, syncHud]);
+
+  // Join a Realtime channel for a lobby code: presence drives the roster,
+  // broadcast carries the start signal and live scores.
+  const connectLobby = useCallback((code: string, myName: string, isHost: boolean, m: Mode) => {
+    if (!supa) return false;
+    const myId = makeClientId();
+    const channel = supa.channel(`dga-lobby-${code}`, {
+      config: { presence: { key: myId }, broadcast: { self: false } },
+    });
+    channel
+      .on("presence", { event: "sync" }, () => {
+        const st = channel.presenceState() as unknown as Record<string, LobbyPlayer[]>;
+        setLobbyPlayers(Object.values(st).map((arr) => arr[0]).filter(Boolean));
+      })
+      .on("broadcast", { event: "start" }, ({ payload }) => {
+        beginOnlineRound(payload.seed as number, payload.mode as Mode);
+      })
+      .on("broadcast", { event: "score" }, ({ payload }) => {
+        const p = payload as OnlineScore & { id: string };
+        onlineScoresRef.current = { ...onlineScoresRef.current, [p.id]: { name: p.name, scores: p.scores, total: p.total, thru: p.thru } };
+        setOnlineScores(onlineScoresRef.current);
+      })
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") void channel.track({ id: myId, name: myName, host: isHost, mode: m });
+      });
+    onlineRef.current = { channel, code, myId, myName, isHost, mode: m };
+    return true;
+  }, [supa, beginOnlineRound]);
+
+  const createLobby = useCallback((m: Mode, name: string) => {
+    const code = makeLobbyCode();
+    if (!connectLobby(code, name.trim() || "Host", true, m)) return;
+    setLobbyPlayers([{ id: "self", name: name.trim() || "Host", host: true, mode: m }]);
+    setLobby({ code, isHost: true, mode: m });
+  }, [connectLobby]);
+
+  const joinLobby = useCallback((code: string, name: string) => {
+    const c = code.trim().toUpperCase();
+    if (!connectLobby(c, name.trim() || "Player", false, "winthrop")) return;
+    setLobby({ code: c, isHost: false, mode: "winthrop" });
+  }, [connectLobby]);
+
+  const startOnlineHost = useCallback(() => {
+    const o = onlineRef.current;
+    if (!o) return;
+    const seed = (Math.random() * 1e9) | 0;
+    void o.channel.send({ type: "broadcast", event: "start", payload: { seed, mode: o.mode } });
+    beginOnlineRound(seed, o.mode);
+  }, [beginOnlineRound]);
+
+  const leaveLobby = useCallback(() => {
+    const o = onlineRef.current;
+    if (o) void supa?.removeChannel(o.channel);
+    onlineRef.current = null;
+    onlineScoresRef.current = {};
+    setLobby(null);
+    setLobbyPlayers([]);
+    setOnlineScores({});
+  }, [supa]);
 
   const selectDisc = useCallback((i: number) => {
     // Locked advanced discs can't be selected until their achievement is earned.
@@ -1475,15 +1602,18 @@ export function DiscGolfGame() {
   const finishGame = useCallback((scores: number[]) => {
     const g = stateRef.current;
     const mode = g?.mode ?? modeRef.current;
-    const practice = g?.practice ?? false;
+    const online = g?.online ?? false;
+    // Online and practice rounds don't touch personal records / history.
+    const practice = (g?.practice ?? false) || online;
     const pars = g ? g.roundHoles.map((h) => h.par) : HOLES.map((h) => h.par);
     const total = scores.reduce((s, n) => s + n, 0);
     setScorecard(scores);
     setFinalTotal(total);
     setFinalPars(pars);
     setFinalMode(mode);
-    setFinalPracticeHole(practice ? g?.practiceHole ?? null : null);
+    setFinalPracticeHole(g?.practice ? g?.practiceHole ?? null : null);
     setFinalParty(g?.party ? { names: g.party.names, totals: g.party.scores.map((sc) => sc.reduce<number>((a, b) => a + (b ?? 0), 0)) } : null);
+    setFinalOnline(online);
 
     // Personal bests are tracked per fixed course — Glendoveer and Winthrop
     // each have their own key (the daily course changes every day).
@@ -1582,7 +1712,6 @@ export function DiscGolfGame() {
     setScreen("gameComplete");
     setFinalSeed(g?.seed ?? 0);
     setFinalChallenge(challengePlayRef.current ? challengeRef.current : null);
-    setChallengeCopied(false);
     setLeaderboard([]);
     if (!practice) void getArcadeLeaderboard(leaderboardCourse(mode, g?.seed ?? 0)).then(setLeaderboard).catch(() => {});
     if (!practice) saveProgress(); // sync best/achievements/history to the cloud if signed in
@@ -1626,22 +1755,6 @@ export function DiscGolfGame() {
   }, [saving, saved, nameInput, finalTotal, finalMode, finalSeed]);
 
   // Share a challenge link that replays this exact round (mode + seed).
-  const shareChallenge = useCallback(async () => {
-    const who = encodeURIComponent(nameInput.trim() || "A friend");
-    const url = `${location.origin}/?ch=${finalMode}.${finalSeed}.${finalTotal}.${who}`;
-    const text = `I shot ${finalTotal} — play the exact same round and beat me!`;
-    try {
-      if (navigator.share) {
-        await navigator.share({ title: "Disc Golf Arcade challenge", text, url });
-        return;
-      }
-    } catch { /* fall through to clipboard */ }
-    try {
-      await navigator.clipboard.writeText(url);
-      setChallengeCopied(true);
-    } catch { /* ignore */ }
-  }, [finalMode, finalSeed, finalTotal, nameInput]);
-
   // Render the finished round to an image and share it (or download as fallback).
   const shareCard = useCallback(async () => {
     const total = finalTotal;
@@ -1926,6 +2039,21 @@ export function DiscGolfGame() {
       } else if (g.phase === "holed") {
         if (g.holedAt && performance.now() - g.holedAt > 850) {
           g.scores[g.holeIndex] = g.throws;
+          // Online: record my hole, broadcast my full card (self-healing against
+          // dropped messages), and show the live leaderboard.
+          if (g.online && onlineRef.current) {
+            const o = onlineRef.current;
+            const scores = g.scores.slice(0, g.holeIndex + 1).map((x) => x ?? 0);
+            const total = scores.reduce((a, b) => a + b, 0);
+            const thru = g.holeIndex + 1;
+            onlineScoresRef.current = { ...onlineScoresRef.current, [o.myId]: { name: o.myName, scores, total, thru } };
+            setOnlineScores(onlineScoresRef.current);
+            void o.channel.send({ type: "broadcast", event: "score", payload: { id: o.myId, name: o.myName, scores, total, thru } });
+            setOnlineView({ hole: g.holeIndex, par: g.roundHoles[g.holeIndex].par, myId: o.myId });
+            setScreen("holeComplete");
+            syncHud();
+            return;
+          }
           if (tournamentPlayRef.current && tournamentRef.current && !tournamentRef.current.finished) {
             const myRoundSoFar = g.scores.reduce((a, b) => a + (b ?? 0), 0);
             setTournLiveView(tournLive(tournamentRef.current, myRoundSoFar, g.holeIndex + 1));
@@ -2801,9 +2929,9 @@ export function DiscGolfGame() {
                   className="w-full rounded-xl border border-[#f5d24a]/40 bg-[#f5d24a]/10 hover:bg-[#f5d24a]/20 active:scale-[0.99] text-white font-bold py-3 transition">
                   🏟 Tournament{tournament && !tournament.finished ? ` · R${tournament.myTotals.length + 1}` : ""}
                 </button>
-                <button type="button" onClick={() => setPartyOpen(true)}
+                <button type="button" onClick={() => setChallengeOpen(true)}
                   className="w-full rounded-xl border border-white/15 bg-white/5 hover:bg-white/10 active:scale-[0.99] text-white font-bold py-3 transition">
-                  👥 Pass &amp; Play
+                  👥 Challenge Friends
                 </button>
                 <button type="button" onClick={() => setTutorialOpen(true)}
                   className="w-full rounded-xl border border-white/15 bg-white/5 hover:bg-white/10 active:scale-[0.99] text-white font-bold py-3 transition">
@@ -2843,6 +2971,29 @@ export function DiscGolfGame() {
           </div>
         )}
 
+        {screen === "holeComplete" && onlineView && (() => {
+          const sl = scoreLabel(hud.throws, onlineView.par);
+          const rows = Object.entries(onlineScores)
+            .map(([id, s]) => ({ id, ...s }))
+            .sort((a, b) => a.total - b.total);
+          const lead = rows.length ? rows[0].total : 0;
+          return (
+            <Overlay>
+              <p className="text-[#36D7B7] font-bold text-lg">Hole {onlineView.hole + 1} · {sl.emoji && `${sl.emoji} `}{sl.name}</p>
+              <div className="w-full max-w-[260px] space-y-1">
+                {rows.map((r) => (
+                  <div key={r.id} className="flex items-center justify-between bg-white/5 rounded-lg px-3 py-1.5 text-sm">
+                    <span className="text-white font-semibold truncate">{r.total === lead ? "👑 " : ""}{r.id === onlineView.myId ? `${r.name} (you)` : r.name}</span>
+                    <span className="text-gray-300 font-mono text-xs">thru {r.thru} · {r.total}</span>
+                  </div>
+                ))}
+              </div>
+              <button type="button" onClick={nextHole} className={btn}>
+                {hud.hole >= hud.holes ? "See results ▶" : "Next hole ▶"}
+              </button>
+            </Overlay>
+          );
+        })()}
         {screen === "holeComplete" && partyView && (
           <Overlay>
             <p className="text-[#36D7B7] font-bold text-xl">Hole {hud.hole} complete</p>
@@ -2863,7 +3014,7 @@ export function DiscGolfGame() {
             </button>
           </Overlay>
         )}
-        {screen === "holeComplete" && !partyView && (() => {
+        {screen === "holeComplete" && !partyView && !onlineView && (() => {
           const sl = scoreLabel(hud.throws, hud.par);
           const tone =
             sl.tone === "great" ? "text-[#f5d24a]" :
@@ -2906,6 +3057,27 @@ export function DiscGolfGame() {
           <PartyPanel
             onClose={() => setPartyOpen(false)}
             onStart={(m, names) => { setPartyOpen(false); startParty(m, names); }}
+          />
+        )}
+
+        {/* Challenge Friends menu (online lobbies disabled if Supabase isn't set up) */}
+        {challengeOpen && !lobby && (
+          <ChallengePanel
+            online={!!supa}
+            onClose={() => setChallengeOpen(false)}
+            onPassPlay={() => { setChallengeOpen(false); setPartyOpen(true); }}
+            onCreate={(m, name) => createLobby(m, name)}
+            onJoin={(code, name) => joinLobby(code, name)}
+          />
+        )}
+
+        {/* Lobby (shown on the title screen until the host starts) */}
+        {screen === "title" && lobby && (
+          <LobbyPanel
+            lobby={lobby}
+            players={lobbyPlayers}
+            onStart={startOnlineHost}
+            onLeave={leaveLobby}
           />
         )}
 
@@ -3103,7 +3275,7 @@ export function DiscGolfGame() {
           <div className="w-full max-w-lg space-y-4 my-auto">
             <div className="text-center">
               <h2 className="text-white font-black text-2xl">
-                {finalParty ? "Match complete!" : finalPracticeHole != null ? "Practice complete!" : finalIsDaily ? "Daily Challenge complete!" : "Round complete!"}
+                {finalParty || finalOnline ? "Match complete!" : finalPracticeHole != null ? "Practice complete!" : finalIsDaily ? "Daily Challenge complete!" : "Round complete!"}
               </h2>
               <p className="text-gray-400 text-xs">
                 {finalPracticeHole != null
@@ -3139,6 +3311,24 @@ export function DiscGolfGame() {
                       <span className="text-white font-semibold flex-1 truncate">{i === 0 ? "🏆 " : ""}{row.n}</span>
                       <span className="text-gray-400 font-mono">{overStr(row.t - finalParTotal)}</span>
                       <span className="text-white font-mono font-bold w-8 text-right">{row.t}</span>
+                    </div>
+                  ))}
+              </div>
+            )}
+
+            {/* Online Friendly Challenge standings (live — updates as friends finish) */}
+            {finalOnline && (
+              <div className="bg-[#1a1d23] border border-white/5 rounded-2xl overflow-hidden">
+                {Object.entries(onlineScores)
+                  .map(([id, s]) => ({ id, ...s }))
+                  .sort((a, b) => a.total - b.total)
+                  .map((row, i) => (
+                    <div key={row.id} className={`flex items-center gap-3 px-4 py-2.5 text-sm ${i ? "border-t border-white/5" : ""}`}>
+                      <span className="text-gray-400 font-mono w-5">{i + 1}</span>
+                      <span className="text-white font-semibold flex-1 truncate">{i === 0 ? "🏆 " : ""}{row.name}</span>
+                      <span className="text-gray-500 font-mono text-xs">thru {row.thru}</span>
+                      <span className="text-gray-400 font-mono">{overStr(row.total - finalParTotal)}</span>
+                      <span className="text-white font-mono font-bold w-8 text-right">{row.total}</span>
                     </div>
                   ))}
               </div>
@@ -3212,7 +3402,7 @@ export function DiscGolfGame() {
 
             {/* Save + per-course leaderboard (the daily board resets each day);
                 practice rounds skip all of it. */}
-            {finalPracticeHole == null && !finalParty && (<>
+            {finalPracticeHole == null && !finalParty && !finalOnline && (<>
             {saved ? (
               <p className="text-center text-[#36D7B7] text-sm font-semibold">Saved to the leaderboard ✓</p>
             ) : (
@@ -3268,20 +3458,19 @@ export function DiscGolfGame() {
                 <button type="button" onClick={() => { audioRef.current?.stopMusic(); setScreen("title"); setTournamentOpen(true); }} className={btn}>
                   🏟 Standings
                 </button>
+              ) : finalOnline ? (
+                <button type="button" onClick={() => { audioRef.current?.stopMusic(); setScreen("title"); }} className={btn}>
+                  🎉 Back to lobby
+                </button>
               ) : (
                 <button type="button" onClick={() => startGame()} className={btn}>↻ Play again</button>
               )}
               <button type="button" onClick={shareCard} className="mt-1 bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white font-bold px-6 py-3 rounded-lg transition">
                 📤 Share card
               </button>
-              {finalPracticeHole == null && (
-                <button type="button" onClick={shareChallenge} className="mt-1 bg-[#1a1d23] border border-[#e0923b]/40 hover:border-[#e0923b]/80 text-white font-bold px-6 py-3 rounded-lg transition">
-                  {challengeCopied ? "✓ Link copied" : "⚔ Challenge"}
-                </button>
-              )}
               <button
                 type="button"
-                onClick={() => { audioRef.current?.stopMusic(); setScreen("title"); }}
+                onClick={() => { audioRef.current?.stopMusic(); if (finalOnline) leaveLobby(); setScreen("title"); }}
                 className="mt-1 bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white font-bold px-6 py-3 rounded-lg transition"
               >
                 🏠 Home
@@ -3424,6 +3613,130 @@ function TutorialPanel({ onClose }: { onClose: () => void }) {
             {last ? "Got it ✓" : "Next ▶"}
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// Challenge Friends entry point: choose hot-seat Pass & Play or an online
+// Friendly Challenge, then Create a lobby or Join one with a code.
+function ChallengePanel({ online, onClose, onPassPlay, onCreate, onJoin }: {
+  online: boolean;
+  onClose: () => void;
+  onPassPlay: () => void;
+  onCreate: (m: Mode, name: string) => void;
+  onJoin: (code: string, name: string) => void;
+}) {
+  const [step, setStep] = useState<"menu" | "create" | "join">("menu");
+  const [course, setCourse] = useState<Mode>("winthrop");
+  const [name, setName] = useState("");
+  const [code, setCode] = useState("");
+  const seg = (active: boolean) =>
+    `flex-1 rounded-md px-2 py-2 text-xs font-bold transition ${active ? "bg-[#4B3DFF] text-white" : "text-gray-400 hover:text-white"}`;
+  const input = "w-full bg-[#1a1d23] border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-[#4B3DFF]";
+  return (
+    <div className="absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm p-4 flex items-start justify-center rounded-lg">
+      <div className="w-full max-w-xs space-y-3 my-auto text-left">
+        <div className="flex items-center justify-between">
+          <h2 className="text-white font-black text-xl">👥 Challenge Friends</h2>
+          <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
+        </div>
+
+        {step === "menu" && (
+          <>
+            <button type="button" onClick={onPassPlay}
+              className="w-full text-left rounded-xl bg-[#1a1d23] border border-white/10 hover:border-white/30 px-4 py-3 transition">
+              <span className="block text-white font-bold text-sm">🤝 Pass &amp; Play</span>
+              <span className="block text-gray-500 text-[11px] mt-0.5">2–4 players take turns on one device.</span>
+            </button>
+            <button type="button" onClick={() => online && setStep("create")} disabled={!online}
+              className={`w-full text-left rounded-xl border px-4 py-3 transition ${online ? "bg-[#1a1d23] border-white/10 hover:border-white/30" : "bg-white/[0.02] border-white/5 opacity-50"}`}>
+              <span className="block text-white font-bold text-sm">🌐 Friendly Challenge</span>
+              <span className="block text-gray-500 text-[11px] mt-0.5">
+                {online ? "Play the same round online — everyone on their own phone." : "Online play needs Supabase configured."}
+              </span>
+            </button>
+          </>
+        )}
+
+        {step === "create" && (
+          <>
+            <p className="text-gray-400 text-xs">Pick a course and create a lobby — share the code so friends can join.</p>
+            <div className="flex gap-1 bg-[#1a1d23] border border-white/10 rounded-lg p-1">
+              <button type="button" onClick={() => setCourse("course")} className={seg(course === "course")}>Glendoveer</button>
+              <button type="button" onClick={() => setCourse("winthrop")} className={seg(course === "winthrop")}>Winthrop</button>
+              <button type="button" onClick={() => setCourse("daily")} className={seg(course === "daily")}>Daily</button>
+            </div>
+            <input type="text" value={name} maxLength={12} onChange={(e) => setName(e.target.value)} placeholder="Your name" className={input} />
+            <button type="button" onClick={() => onCreate(course, name)} className={`${btn} w-full`}>Create lobby</button>
+            <button type="button" onClick={() => setStep("menu")} className="w-full text-gray-500 hover:text-gray-300 text-xs py-1 transition">← Back</button>
+          </>
+        )}
+
+        {step === "join" && (
+          <>
+            <p className="text-gray-400 text-xs">Enter the 4-character code your friend shared.</p>
+            <input type="text" value={code} maxLength={4} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="CODE" className={`${input} tracking-[0.3em] text-center font-mono uppercase`} />
+            <input type="text" value={name} maxLength={12} onChange={(e) => setName(e.target.value)} placeholder="Your name" className={input} />
+            <button type="button" onClick={() => code.trim().length === 4 && onJoin(code, name)} disabled={code.trim().length !== 4} className={`${btn} w-full disabled:opacity-50`}>Join lobby</button>
+            <button type="button" onClick={() => setStep("menu")} className="w-full text-gray-500 hover:text-gray-300 text-xs py-1 transition">← Back</button>
+          </>
+        )}
+
+        {online && step === "menu" && (
+          <button type="button" onClick={() => setStep("join")}
+            className="w-full text-center text-[#36D7B7] hover:text-[#2bc4a6] text-sm font-semibold py-1 transition">
+            Have a code? Join a lobby →
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Lobby waiting room: shows the code, live roster (Realtime presence), and a
+// Start button for the host. Friends join with the code from another device.
+function LobbyPanel({ lobby, players, onStart, onLeave }: {
+  lobby: { code: string; isHost: boolean; mode: Mode };
+  players: LobbyPlayer[];
+  onStart: () => void;
+  onLeave: () => void;
+}) {
+  const host = players.find((p) => p.host);
+  const courseMode = host?.mode ?? lobby.mode;
+  const courseLabel = courseMode === "course" ? "Glendoveer East" : courseMode === "winthrop" ? "Winthrop Lake" : "Daily course";
+  return (
+    <div className="absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm p-4 flex items-start justify-center rounded-lg">
+      <div className="w-full max-w-xs space-y-4 my-auto text-left">
+        <div className="flex items-center justify-between">
+          <h2 className="text-white font-black text-xl">Lobby</h2>
+          <button type="button" onClick={onLeave} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
+        </div>
+        <div className="rounded-xl bg-[#1a1d23] border border-white/10 p-4 text-center">
+          <p className="text-gray-500 text-[10px] uppercase tracking-[0.2em]">Join code</p>
+          <p className="text-[#36D7B7] font-black text-4xl tracking-[0.25em] mt-1">{lobby.code}</p>
+          <p className="text-gray-500 text-[11px] mt-2">{courseLabel}</p>
+        </div>
+        <div>
+          <p className="text-gray-400 text-xs font-semibold mb-1.5">Players ({players.length})</p>
+          <div className="space-y-1">
+            {players.map((p) => (
+              <div key={p.id} className="flex items-center gap-2 bg-white/5 rounded-lg px-3 py-2 text-sm">
+                <span className="text-white font-semibold truncate flex-1">{p.name}</span>
+                {p.host && <span className="text-[#f5d24a] text-[10px] font-bold uppercase tracking-wide">Host</span>}
+              </div>
+            ))}
+            {players.length === 0 && <p className="text-gray-500 text-xs">Connecting…</p>}
+          </div>
+        </div>
+        {lobby.isHost ? (
+          <>
+            <button type="button" onClick={onStart} className={`${btn} w-full`}>▶ Start round</button>
+            {players.length < 2 && <p className="text-gray-500 text-[11px] text-center">Waiting for friends to join — you can start anytime.</p>}
+          </>
+        ) : (
+          <p className="text-gray-400 text-sm text-center py-2">Waiting for the host to start…</p>
+        )}
       </div>
     </div>
   );
