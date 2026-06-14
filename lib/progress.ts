@@ -3,6 +3,7 @@
 // user_metadata (no table/RLS needed). These helpers gather/scatter/merge it.
 
 export const BEST_KEY = "discgolf.best.glendoveer18";
+export const WBEST_KEY = "discgolf.best.winthrop18";
 export const HOLEBEST_KEY = "discgolf.holebest.glendoveer18";
 export const SETTINGS_KEY = "discgolf.settings.v1";
 export const ACH_KEY = "discgolf.achievements.v1";
@@ -11,6 +12,7 @@ export const HIST_KEY = "discgolf.history.v1";
 export type HistoryRow = { mode: string; total: number; date: number; scores?: number[]; pars?: number[] };
 export type Progress = {
   best: number | null;
+  winthropBest: number | null;
   holeBest: (number | null)[];
   achievements: string[];
   history: HistoryRow[];
@@ -24,21 +26,24 @@ function parse<T>(raw: string | null, fallback: T): T {
 
 export function readLocalProgress(): Progress {
   if (typeof localStorage === "undefined") {
-    return { best: null, holeBest: [], achievements: [], history: [], settings: null };
+    return { best: null, winthropBest: null, holeBest: [], achievements: [], history: [], settings: null };
   }
   const bestRaw = localStorage.getItem(BEST_KEY);
   const best = bestRaw != null && Number.isFinite(Number(bestRaw)) ? Number(bestRaw) : null;
+  const wBestRaw = localStorage.getItem(WBEST_KEY);
+  const winthropBest = wBestRaw != null && Number.isFinite(Number(wBestRaw)) ? Number(wBestRaw) : null;
   const holeBest = parse<(number | null)[]>(localStorage.getItem(HOLEBEST_KEY), []);
   const achievements = parse<string[]>(localStorage.getItem(ACH_KEY), []);
   const history = parse<HistoryRow[]>(localStorage.getItem(HIST_KEY), []);
   const settings = parse<Record<string, unknown> | null>(localStorage.getItem(SETTINGS_KEY), null);
-  return { best, holeBest, achievements, history, settings };
+  return { best, winthropBest, holeBest, achievements, history, settings };
 }
 
 export function applyProgress(p: Progress) {
   if (typeof localStorage === "undefined") return;
   try {
     if (p.best != null) localStorage.setItem(BEST_KEY, String(p.best));
+    if (p.winthropBest != null) localStorage.setItem(WBEST_KEY, String(p.winthropBest));
     if (p.holeBest?.length) localStorage.setItem(HOLEBEST_KEY, JSON.stringify(p.holeBest));
     localStorage.setItem(ACH_KEY, JSON.stringify(p.achievements ?? []));
     localStorage.setItem(HIST_KEY, JSON.stringify((p.history ?? []).slice(-100)));
@@ -74,6 +79,7 @@ export function mergeProgress(a: Progress, b: Progress): Progress {
 
   return {
     best: minDefined(a.best, b.best),
+    winthropBest: minDefined(a.winthropBest, b.winthropBest),
     holeBest,
     achievements,
     history: history.slice(-100),
