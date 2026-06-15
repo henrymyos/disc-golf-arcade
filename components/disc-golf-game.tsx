@@ -19,8 +19,9 @@ import { challengeParam } from "@/lib/discgolf/challenge";
 import {
   newCareer, normalizeCareer, skillMods, careerRating, seasonSchedule, simEvent, recordResult, advanceSeason, retire, seasonComplete,
   placeLabel, STAGE_LABEL, SKILL_KEYS, SKILL_LABEL, IDENTITY_MODS,
-  availableSponsors, signSponsor, trainingPointCost, buyTrainingPoint, topRivals, rivalRating, careerGhostRacers, fmtCash, SPONSOR_CAP,
-  type Career, type CareerEvent, type EventResult, type CareerSkills, type SkillMods,
+  availableSponsors, signSponsor, trainingPointCost, buyTrainingPoint, topRivals, rivalRating, fmtCash, SPONSOR_CAP,
+  careerFieldHoles, careerCardRacers, careerLiveStandings,
+  type Career, type CareerEvent, type EventResult, type CareerSkills, type SkillMods, type FieldPlayer,
 } from "@/lib/discgolf/career";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -196,6 +197,7 @@ export function DiscGolfGame() {
   useEffect(() => { careerRef.current = career; }, [career]);
   const careerPlayRef = useRef(false); // current round is a played Career event
   const careerEventRef = useRef<CareerEvent | null>(null); // the event being played
+  const careerFieldRef = useRef<FieldPlayer[] | null>(null); // the field's per-hole scores (card + live board)
   const [careerLastResult, setCareerLastResult] = useState<EventResult | null>(null);
   const saveCareer = useCallback((c: Career | null) => {
     setCareer(c);
@@ -520,6 +522,7 @@ export function DiscGolfGame() {
     tournamentPlayRef.current = false;
     careerPlayRef.current = true;
     careerEventRef.current = ev;
+    careerFieldRef.current = careerFieldHoles(c, ev); // your card + the live board
     // Deterministic seed per (career, event) so a replay plays the same course.
     let h = c.seed >>> 0;
     for (let i = 0; i < ev.id.length; i++) h = (Math.imul(h, 31) + ev.id.charCodeAt(i)) >>> 0;
@@ -870,6 +873,7 @@ export function DiscGolfGame() {
         setCareerLastResult(result);
       }
       careerEventRef.current = null;
+      careerFieldRef.current = null;
       audioRef.current?.sfx("win");
       vibrate([20, 40, 20]);
       clearResume();
@@ -1173,7 +1177,7 @@ export function DiscGolfGame() {
   useEffect(() => {
     if (screen !== "holeComplete") return;
     const g = stateRef.current;
-    if (!g || g.mode !== "course" || g.practice) { setHoleBestNote(null); return; }
+    if (!g || g.mode !== "course" || g.practice || g.career) { setHoleBestNote(null); return; }
     const idx = g.holeIndex;
     const s = g.scores[idx];
     if (typeof s !== "number") return;
@@ -1263,9 +1267,9 @@ export function DiscGolfGame() {
         if (ghostsRef.current?.holeIndex !== g.holeIndex) {
           ghostsRef.current = buildTournGhosts(tournamentRef.current, g.holeIndex, hole, performance.now());
         }
-      } else if (careerPlayRef.current && careerRef.current && careerEventRef.current) {
+      } else if (careerPlayRef.current && careerRef.current && careerFieldRef.current) {
         if (ghostsRef.current?.holeIndex !== g.holeIndex) {
-          const racers = careerGhostRacers(careerRef.current, careerEventRef.current, g.holeIndex);
+          const racers = careerCardRacers(careerFieldRef.current, g.holeIndex);
           ghostsRef.current = buildRacerGhosts(careerRef.current.seed >>> 0, g.holeIndex, hole, racers, performance.now());
         }
       } else if (ghostsRef.current) {
@@ -1413,6 +1417,12 @@ export function DiscGolfGame() {
           if (tournamentPlayRef.current && tournamentRef.current && !tournamentRef.current.finished) {
             const myRoundSoFar = g.scores.reduce((a, b) => a + (b ?? 0), 0);
             setTournLiveView({ rows: tournLiveStandings(tournamentRef.current, myRoundSoFar, g.holeIndex + 1), thru: g.holeIndex + 1 });
+          } else if (careerPlayRef.current && careerRef.current && careerFieldRef.current) {
+            // Live top-10 after each hole, same as a tournament — you vs the field.
+            const myScores = g.scores.slice(0, g.holeIndex + 1).map((x) => x ?? 0);
+            const parThru = g.roundHoles.slice(0, g.holeIndex + 1).reduce((s, h) => s + h.par, 0);
+            const rows = careerLiveStandings(careerFieldRef.current, `${careerRef.current.name} (you)`, myScores, g.holeIndex + 1, parThru);
+            setTournLiveView({ rows, thru: g.holeIndex + 1 });
           } else {
             setTournLiveView(null);
           }

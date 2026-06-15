@@ -1020,7 +1020,7 @@ function stepFlight(f: Flight, disc: Disc, fadeSign: number, path: FlightPath, h
 // player per hole; here a few of the favorites are turned into "ghost" discs
 // that play the hole alongside you — fabricated shot-by-shot down the fairway
 // from their simulated score, so the round feels live. Deterministic. ──
-type TournGhost = { idx: number; name: string; color: string; path: Vec[]; shotDur: number; delay: number; holedFired: boolean };
+type TournGhost = { idx: number; name: string; color: string; path: Vec[]; shotDur: number; pause: number; delay: number; holedFired: boolean };
 type GhostState = { holeIndex: number; startAt: number; ghosts: TournGhost[] };
 const GHOST_PALETTE = ["#e23b7b", "#5fb0e8", "#b85cd6", "#e2a13b"];
 const N_RIVALS = 4;
@@ -1044,7 +1044,11 @@ function buildRacerGhosts(seed: number, holeIndex: number, hole: Hole, racers: G
       path.push({ x: base.x + (-dy / len) * j, y: base.y + (dx / len) * j });
     }
     path.push({ x: hole.basket.x, y: hole.basket.y });
-    return { idx: gi, name: rc.name, color: rc.color, path, shotDur: 1150 + rng() * 650, delay: gi * 420 + rng() * 800, holedFired: false };
+    // Each shot = a couple seconds standing over the disc, then a quick flight,
+    // so the card plays at a believable, unhurried pace.
+    const pause = 1800 + rng() * 700; // ~1.8–2.5s lining up before each throw
+    const flightDur = 540 + rng() * 260; // ~0.5–0.8s in the air
+    return { idx: gi, name: rc.name, color: rc.color, path, shotDur: pause + flightDur, pause, delay: gi * 500 + rng() * 700, holedFired: false };
   });
   return { holeIndex, startAt: now, ghosts };
 }
@@ -1068,8 +1072,8 @@ function buildTournGhosts(t: Tournament, holeIndex: number, hole: Hole, now: num
   return buildRacerGhosts((t.seed ^ (roundIdx * 99991)) >>> 0, holeIndex, hole, racers, now);
 }
 
-// Where a ghost is `elapsed` ms into the hole: gliding along the current shot
-// (with a little lift) for the first ~60% of each shot, then resting.
+// Where a ghost is `elapsed` ms into the hole: each shot waits at the lie for
+// `pause` ms, then flies to the next landing spot over the remaining time.
 function ghostPosAt(gh: TournGhost, elapsed: number): { x: number; y: number; lift: number; holed: boolean } {
   const segs = gh.path.length - 1;
   if (segs <= 0) return { x: gh.path[0].x, y: gh.path[0].y, lift: 0, holed: true };
@@ -1077,17 +1081,14 @@ function ghostPosAt(gh: TournGhost, elapsed: number): { x: number; y: number; li
   const total = segs * gh.shotDur;
   if (elapsed >= total) return { x: gh.path[segs].x, y: gh.path[segs].y, lift: 0, holed: true };
   const seg = Math.floor(elapsed / gh.shotDur);
-  const within = (elapsed - seg * gh.shotDur) / gh.shotDur;
+  const within = elapsed - seg * gh.shotDur; // ms into this shot
   const a = gh.path[seg], b = gh.path[seg + 1];
-  const flightFrac = 0.6;
-  if (within < flightFrac) {
-    const tt = within / flightFrac;
-    const e = tt * tt * (3 - 2 * tt);
-    const segLen = Math.hypot(b.x - a.x, b.y - a.y);
-    const lift = Math.sin(e * Math.PI) * Math.min(12, 3 + segLen * 0.06);
-    return { x: a.x + (b.x - a.x) * e, y: a.y + (b.y - a.y) * e, lift, holed: false };
-  }
-  return { x: b.x, y: b.y, lift: 0, holed: false };
+  if (within < gh.pause) return { x: a.x, y: a.y, lift: 0, holed: false }; // standing over the disc
+  const t = (within - gh.pause) / (gh.shotDur - gh.pause);
+  const e = t * t * (3 - 2 * t);
+  const segLen = Math.hypot(b.x - a.x, b.y - a.y);
+  const lift = Math.sin(e * Math.PI) * Math.min(12, 3 + segLen * 0.06);
+  return { x: a.x + (b.x - a.x) * e, y: a.y + (b.y - a.y) * e, lift, holed: false };
 }
 
 export {

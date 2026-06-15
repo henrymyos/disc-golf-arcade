@@ -3,7 +3,7 @@
 // Lake), and the pro tour. Events can be SIMULATED from your skills or PLAYED
 // as real rounds (your skills change how the disc flies — see skillMods). All
 // logic here is pure + deterministic so it's testable and resumes cleanly. ──
-import { mulberry32, CATCH_R, TOTAL_PAR, WINTHROP_PAR, type Mode } from "./engine";
+import { mulberry32, CATCH_R, TOTAL_PAR, WINTHROP_PAR, type Mode, type TournLiveRow, type GhostRacer } from "./engine";
 
 export type CareerSkills = { power: number; control: number; putt: number; mental: number };
 export const SKILL_KEYS: (keyof CareerSkills)[] = ["power", "control", "putt", "mental"];
@@ -273,40 +273,83 @@ export function simEvent(c: Career, ev: CareerEvent): { score: number; field: nu
   return { score, field: genField(c, ev) };
 }
 
-// A rival's score for an event (deterministic per career/event/rival).
-export function rivalEventScore(c: Career, r: Rival, ev: CareerEvent): number {
-  const rng = mulberry32((c.seed ^ hashId(ev.id) ^ hashId(r.id)) >>> 0);
-  return scoreFromRating(rivalRating(r), ev, rng);
+// ── A simulated field with per-hole scores, so a Career event can show a live
+// top-10 after each hole and an on-course "card" of playing partners, all
+// consistent with the final placement (mirrors the tournament field). The
+// rivals lead the array (in c.rivals order); anonymous pros fill the rest. ──
+export type FieldPlayer = { name: string; isRival: boolean; color: string; holes: number[]; total: number };
+
+const ANON_FIRST = ["A.", "B.", "C.", "D.", "E.", "G.", "H.", "J.", "K.", "L.", "M.", "N.", "P.", "R.", "S.", "T.", "V.", "W."];
+const ANON_LAST = [
+  "Holloway", "Nilsson", "Okafor", "Pereira", "Vasquez", "Hartman", "Lindberg", "Osei", "Behr", "Castellano",
+  "Drummond", "Ferreira", "Grayson", "Halvorsen", "Ishikawa", "Koval", "Lindqvist", "Mensah", "Novak", "Pappas",
+  "Quigley", "Rahman", "Solberg", "Tomlin", "Ueda", "Voss", "Whitaker", "Yamada", "Zielinski", "Abara",
+  "Brandt", "Cienfuegos", "Dvorak", "Engel", "Fontaine", "Guerrero", "Haas", "Ibarra", "Jansen", "Kerr",
+];
+function anonName(seed: number, i: number): string {
+  const h = (seed ^ Math.imul(i + 1, 2654435761)) >>> 0;
+  return `${ANON_FIRST[h % ANON_FIRST.length]} ${ANON_LAST[(h >>> 5) % ANON_LAST.length]}`;
 }
-// Anonymous filler field of a given size.
-function genAnonField(c: Career, ev: CareerEvent, count: number): number[] {
-  const rng = mulberry32((c.seed ^ hashId(ev.id) ^ 0x9e3779b9) >>> 0);
-  return Array.from({ length: Math.max(0, count) }, () => {
-    const r = clamp(ev.fieldMean + (rng() * 2 - 1) * 11, 5, 99);
-    return scoreFromRating(r, ev, rng);
+// Per-hole scores for a rating, summing to roughly scoreFromRating's total.
+function simHoleScores(rating: number, ev: CareerEvent, rng: () => number): number[] {
+  const parPerHole = ev.par / ev.holes;
+  const perHoleToPar = (50 - rating) * 0.28 / 18;
+  return Array.from({ length: ev.holes }, () => Math.max(1, Math.round(parPerHole + perHoleToPar + (rng() * 2 - 1) * 0.85)));
+}
+export function careerFieldHoles(c: Career, ev: CareerEvent): FieldPlayer[] {
+  const field: FieldPlayer[] = c.rivals.map((r) => {
+    const holes = simHoleScores(rivalRating(r), ev, mulberry32((c.seed ^ hashId(ev.id) ^ hashId(r.id)) >>> 0));
+    return { name: r.name, isRival: true, color: r.color, holes, total: holes.reduce((a, b) => a + b, 0) };
   });
+  const anonCount = Math.max(0, ev.fieldSize - c.rivals.length);
+  const rng = mulberry32((c.seed ^ hashId(ev.id) ^ 0x9e3779b9) >>> 0);
+  for (let i = 0; i < anonCount; i++) {
+    const rating = clamp(ev.fieldMean + (rng() * 2 - 1) * 11, 5, 99);
+    const holes = simHoleScores(rating, ev, rng);
+    field.push({ name: anonName((c.seed ^ hashId(ev.id)) >>> 0, i), isRival: false, color: "#7a808a", holes, total: holes.reduce((a, b) => a + b, 0) });
+  }
+  return field;
+}
+
+// Your on-course "card": the three best-placed rivals you're grouped with.
+export function careerCard(field: FieldPlayer[]): FieldPlayer[] {
+  return field.filter((p) => p.isRival).sort((a, b) => a.total - b.total).slice(0, 3);
+}
+// The card as ghost racers for one hole (shot count = their score on that hole).
+export function careerCardRacers(field: FieldPlayer[], holeIndex: number): GhostRacer[] {
+  return careerCard(field).map((p) => ({ name: p.name.split(" ").pop() || p.name, color: p.color, shots: Math.max(1, p.holes[holeIndex] ?? 1) }));
+}
+
+// Live standings through `holesPlayed` holes (you + the whole field), sorted,
+// to-par vs the actual cumulative par. Mirrors tournLiveStandings.
+export function careerLiveStandings(field: FieldPlayer[], myName: string, myScores: number[], holesPlayed: number, parThru: number): TournLiveRow[] {
+  const sum = (arr: number[]) => arr.slice(0, holesPlayed).reduce((a, b) => a + b, 0);
+  const rows = [{ name: myName, total: myScores.slice(0, holesPlayed).reduce((a, b) => a + b, 0), you: true }];
+  for (const p of field) rows.push({ name: p.name, total: sum(p.holes), you: false });
+  rows.sort((a, b) => a.total - b.total);
+  return rows.map((r, i) => ({ rank: i + 1, name: r.name, total: r.total, toPar: r.total - parThru, you: r.you }));
 }
 
 // Record a finished event (played or simmed). Folds in your recurring rivals
 // (placement, head-to-head, who actually won), prize money, points + titles.
 export function recordResult(c: Career, ev: CareerEvent, score: number, played: boolean): { career: Career; result: EventResult } {
-  const rivalScores = c.rivals.map((r) => rivalEventScore(c, r, ev));
-  const anon = genAnonField(c, ev, ev.fieldSize - c.rivals.length);
-  const others = [...rivalScores, ...anon];
+  const field = careerFieldHoles(c, ev);
+  const nRivals = c.rivals.length;
+  const others = field.map((p) => p.total);
   const placed = 1 + others.filter((s) => s < score).length;
   const fieldN = others.length + 1;
   const win = placed === 1;
-  const beatRivals = rivalScores.filter((s) => score < s).length;
+  const beatRivals = field.slice(0, nRivals).filter((p) => score < p.total).length;
 
   // Update each rival's head-to-head record; the event winner gets a title.
   const fieldMin = Math.min(score, ...others);
   let winnerName: string | undefined;
   let titleGiven = false;
   const rivals = c.rivals.map((r, i) => {
-    const rs = rivalScores[i];
-    const youBeat = score < rs;
+    const rTotal = field[i].total;
+    const youBeat = score < rTotal;
     let titles = r.titles;
-    if (!win && !titleGiven && rs === fieldMin && rs < score) { titles += 1; winnerName = r.name; titleGiven = true; }
+    if (!win && !titleGiven && rTotal === fieldMin && rTotal < score) { titles += 1; winnerName = r.name; titleGiven = true; }
     return { ...r, beat: r.beat + (youBeat ? 1 : 0), lost: r.lost + (youBeat ? 0 : 1), titles };
   });
 
@@ -479,18 +522,6 @@ export function buyTrainingPoint(c: Career): Career {
 // Rivals sorted strongest-first (for the hub's rivals board).
 export function topRivals(c: Career): Rival[] {
   return [...c.rivals].sort((a, b) => rivalRating(b) - rivalRating(a));
-}
-
-// The four toughest rivals as on-course ghosts for a played event: each one's
-// shot count on a given hole, derived from their rating (deterministic).
-export function careerGhostRacers(c: Career, ev: CareerEvent, holeIndex: number): { name: string; color: string; shots: number }[] {
-  const parPerHole = ev.par / ev.holes;
-  return topRivals(c).slice(0, 4).map((r) => {
-    const rng = mulberry32((c.seed ^ hashId(ev.id) ^ hashId(r.id) ^ (holeIndex * 2654435761)) >>> 0);
-    const adj = (50 - rivalRating(r)) * 0.02 + (rng() * 2 - 1) * 0.7;
-    const shots = Math.max(1, Math.min(8, Math.round(parPerHole + adj)));
-    return { name: r.name.split(" ").pop() || r.name, color: r.color, shots };
-  });
 }
 
 export function fmtCash(n: number): string {

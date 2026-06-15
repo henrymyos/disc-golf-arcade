@@ -16,7 +16,10 @@ import {
   signSponsor,
   trainingPointCost,
   buyTrainingPoint,
-  careerGhostRacers,
+  careerFieldHoles,
+  careerCard,
+  careerCardRacers,
+  careerLiveStandings,
   topRivals,
   rivalRating,
   SPONSOR_CAP,
@@ -188,12 +191,43 @@ describe("rivals", () => {
     const after = advanceSeason(c, {}).career;
     expect(rivalRating(topRivals(after)[0])).toBeGreaterThan(before);
   });
-  it("careerGhostRacers yields up to four racers with real shot counts", () => {
+  it("careerCard is a group of 3 rivals; racers carry their hole scores", () => {
     const c = newCareer("Kid", 3);
     const ev = seasonSchedule(c)[0];
-    const racers = careerGhostRacers(c, ev, 0);
-    expect(racers.length).toBeLessThanOrEqual(4);
-    racers.forEach((r) => { expect(r.shots).toBeGreaterThanOrEqual(1); expect(r.name).toBeTruthy(); });
+    const field = careerFieldHoles(c, ev);
+    const card = careerCard(field);
+    expect(card).toHaveLength(3);
+    card.forEach((p) => expect(p.isRival).toBe(true));
+    const racers = careerCardRacers(field, 0);
+    expect(racers).toHaveLength(3);
+    racers.forEach((r: { shots: number; name: string }) => { expect(r.shots).toBeGreaterThanOrEqual(1); expect(r.name).toBeTruthy(); });
+  });
+});
+
+describe("career field + live standings", () => {
+  const c = newCareer("Kid", 88);
+  const ev = seasonSchedule(c)[1]; // championship, larger field
+  const field = careerFieldHoles(c, ev);
+
+  it("builds a full field with per-hole scores summing to each total", () => {
+    expect(field).toHaveLength(ev.fieldSize);
+    expect(field.filter((p) => p.isRival)).toHaveLength(c.rivals.length);
+    for (const p of field) {
+      expect(p.holes).toHaveLength(ev.holes);
+      expect(p.holes.reduce((a, b) => a + b, 0)).toBe(p.total);
+      expect(p.name).toBeTruthy();
+    }
+  });
+  it("live standings rank you within the field and grow as holes complete", () => {
+    const parThru = 3 * 4; // 3 holes, ~par 4 each (illustrative)
+    const rows = careerLiveStandings(field, "Me (you)", [2, 2, 2], 3, parThru);
+    expect(rows).toHaveLength(ev.fieldSize + 1);
+    expect(rows.filter((r) => r.you)).toHaveLength(1);
+    expect(rows[0].rank).toBe(1);
+    // an ace-pace player should sit at or near the top
+    expect(rows.find((r) => r.you)!.rank).toBeLessThanOrEqual(3);
+    // sorted ascending by total
+    for (let i = 1; i < rows.length; i++) expect(rows[i].total).toBeGreaterThanOrEqual(rows[i - 1].total);
   });
 });
 
