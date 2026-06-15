@@ -16,6 +16,11 @@ import type {
   Vec, Tree, Hole, Mode, Tournament, TournLiveRow, Achievement, FlightPath, Release, Flight, GhostState,
 } from "@/lib/discgolf/engine";
 import { challengeParam } from "@/lib/discgolf/challenge";
+import {
+  newCareer, skillMods, careerRating, seasonSchedule, simEvent, recordResult, advanceSeason, retire, seasonComplete,
+  placeLabel, STAGE_LABEL, SKILL_KEYS, SKILL_LABEL, IDENTITY_MODS,
+  type Career, type CareerEvent, type EventResult, type CareerSkills, type SkillMods,
+} from "@/lib/discgolf/career";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Retro pixel disc-golf game. You throw from the bottom of the screen toward
@@ -81,6 +86,8 @@ type GameState = {
   party?: { names: string[]; current: number; scores: (number | null)[][] }; // hot-seat pass-and-play
   online?: boolean; // online Friendly Challenge round (scores synced over Realtime)
   advanced: boolean; // advanced bag (real discs) vs simple (putter/mid/driver)
+  career?: { eventId: string; eventName: string }; // round is a played Career event
+  skill: SkillMods; // Career skill effects on flight (identity for normal play)
   seed: number; // round seed (drives wind + pins)
   roundHoles: Hole[]; // this round's holes (wind/pins baked in)
   disc: { x: number; y: number; vx: number; vy: number };
@@ -180,6 +187,24 @@ export function DiscGolfGame() {
   const [partyOpen, setPartyOpen] = useState(false);
   const [partyView, setPartyView] = useState<{ names: string[]; holeScores: (number | null)[]; totals: number[] } | null>(null);
   const [finalParty, setFinalParty] = useState<{ names: string[]; totals: number[] } | null>(null);
+
+  // ── Career mode (persisted) ──
+  const CAREER_KEY = "discgolf.career.v1";
+  const [careerOpen, setCareerOpen] = useState(false);
+  const [career, setCareer] = useState<Career | null>(null);
+  const careerRef = useRef<Career | null>(null);
+  useEffect(() => { careerRef.current = career; }, [career]);
+  const careerPlayRef = useRef(false); // current round is a played Career event
+  const careerEventRef = useRef<CareerEvent | null>(null); // the event being played
+  const [careerLastResult, setCareerLastResult] = useState<EventResult | null>(null);
+  const saveCareer = useCallback((c: Career | null) => {
+    setCareer(c);
+    careerRef.current = c;
+    try {
+      if (c) localStorage.setItem(CAREER_KEY, JSON.stringify(c));
+      else localStorage.removeItem(CAREER_KEY);
+    } catch { /* ignore */ }
+  }, []);
 
   // ── Online Friendly Challenge lobby (Supabase Realtime) ──
   const [challengeOpen, setChallengeOpen] = useState(false);
@@ -315,6 +340,8 @@ export function DiscGolfGame() {
       const tourn = JSON.parse(localStorage.getItem(TOURN_KEY) || "null");
       if (tourn && typeof tourn.seed === "number" && Array.isArray(tourn.myTotals)) setTournament(tourn);
       setResumeRound(readResume());
+      const car = JSON.parse(localStorage.getItem(CAREER_KEY) || "null");
+      if (car && car.v === 1 && car.skills) { setCareer(car); careerRef.current = car; }
     } catch {
       /* ignore */
     }
@@ -322,7 +349,7 @@ export function DiscGolfGame() {
 
   // Snapshot / clear the resumable solo round.
   const persistResume = useCallback((g: GameState) => {
-    if (g.practice || g.party || g.online || tournamentPlayRef.current || challengePlayRef.current) return;
+    if (g.practice || g.party || g.online || g.career || tournamentPlayRef.current || challengePlayRef.current || careerPlayRef.current) return;
     const scores = g.scores.slice(0, g.holeIndex + 1).map((n) => n ?? 0);
     try {
       localStorage.setItem(RESUME_KEY, JSON.stringify({ v: 1, mode: g.mode, seed: g.seed, scores, advanced: g.advanced }));
@@ -444,6 +471,7 @@ export function DiscGolfGame() {
     audioRef.current.startMusic();
     challengePlayRef.current = false; // the challenge button re-arms this after calling
     tournamentPlayRef.current = false; // ditto for the tournament launcher
+    careerPlayRef.current = false;
     const seed = seedOverride ?? (m === "daily" ? dailySeed() : (Math.random() * 1e9) | 0);
     const roundHoles = buildRound(seed, m);
     const adv = advancedRef.current;
@@ -452,7 +480,7 @@ export function DiscGolfGame() {
     setDiscIndex(discIndex);
     stateRef.current = {
       holeIndex: 0, scores: [], discIndex, roundPaths: [],
-      mode: m, advanced: adv, seed, roundHoles, ...freshHole(roundHoles[0]),
+      mode: m, advanced: adv, skill: IDENTITY_MODS, seed, roundHoles, ...freshHole(roundHoles[0]),
     };
     // Load this course's best-round ghost (drawn as faint gold lines).
     try {
@@ -470,6 +498,75 @@ export function DiscGolfGame() {
     setScreen("playing");
     syncHud();
   }, [muted, musicVolume, syncHud, clearResume]);
+
+  // ── Career handlers ──
+  const [careerNotes, setCareerNotes] = useState<string[]>([]);
+
+  // Play a Career event as a real round, with your skills bending the flight.
+  const startCareerEvent = useCallback((c: Career, ev: CareerEvent) => {
+    modeRef.current = ev.mode;
+    if (!audioRef.current) {
+      audioRef.current = new AudioEngine();
+      audioRef.current.setMusicVolume(musicVolume);
+    }
+    audioRef.current.resume();
+    audioRef.current.setMuted(muted);
+    audioRef.current.startMusic();
+    challengePlayRef.current = false;
+    tournamentPlayRef.current = false;
+    careerPlayRef.current = true;
+    careerEventRef.current = ev;
+    // Deterministic seed per (career, event) so a replay plays the same course.
+    let h = c.seed >>> 0;
+    for (let i = 0; i < ev.id.length; i++) h = (Math.imul(h, 31) + ev.id.charCodeAt(i)) >>> 0;
+    const seed = h | 0;
+    const roundHoles = buildRound(seed, ev.mode);
+    const adv = advancedRef.current;
+    const discIndex = validDiscIndex(adv, discIndexRef.current, unlockedRef.current);
+    discIndexRef.current = discIndex;
+    setDiscIndex(discIndex);
+    stateRef.current = {
+      holeIndex: 0, scores: [], discIndex, roundPaths: [],
+      mode: ev.mode, advanced: adv, skill: skillMods(c.skills), career: { eventId: ev.id, eventName: ev.name },
+      seed, roundHoles, ...freshHole(roundHoles[0]),
+    };
+    ghostRef.current = null;
+    setSaved(false);
+    setSaveErr(null);
+    setIsNewBest(false);
+    setNewAchievements([]);
+    setHoleBestNote(null);
+    setPartyView(null);
+    setOnlineView(null);
+    setCareerOpen(false);
+    setScreen("playing");
+    syncHud();
+  }, [muted, musicVolume, syncHud]);
+
+  // Simulate an event instantly from your skills, record it, and stay in the hub.
+  const simCareerEvent = useCallback((ev: CareerEvent) => {
+    const c = careerRef.current;
+    if (!c) return;
+    const { score } = simEvent(c, ev);
+    const { career: nc, result } = recordResult(c, ev, score, false);
+    saveCareer(nc);
+    setCareerLastResult(result);
+  }, [saveCareer]);
+
+  const advanceCareerSeason = useCallback((alloc: Partial<CareerSkills>) => {
+    const c = careerRef.current;
+    if (!c) return;
+    const { career: nc, notes } = advanceSeason(c, alloc);
+    saveCareer(nc);
+    setCareerLastResult(null);
+    setCareerNotes(notes);
+  }, [saveCareer]);
+
+  const startNewCareer = useCallback((name: string) => {
+    saveCareer(newCareer(name, (Math.random() * 1e9) | 0));
+    setCareerLastResult(null);
+    setCareerNotes([]);
+  }, [saveCareer]);
 
   // Resume an interrupted solo round: rebuild the exact holes from the seed and
   // jump to the next unplayed hole with the completed scores restored.
@@ -492,7 +589,7 @@ export function DiscGolfGame() {
     setDiscIndex(discIndex);
     stateRef.current = {
       holeIndex, scores: snap.scores.slice(), discIndex, roundPaths: [],
-      mode: snap.mode, advanced: adv, seed: snap.seed, roundHoles, ...freshHole(roundHoles[holeIndex]),
+      mode: snap.mode, advanced: adv, skill: IDENTITY_MODS, seed: snap.seed, roundHoles, ...freshHole(roundHoles[holeIndex]),
     };
     try {
       ghostRef.current = snap.mode === "course" || snap.mode === "winthrop" ? JSON.parse(localStorage.getItem(`discgolf.ghost.${snap.mode}`) || "null") : null;
@@ -529,7 +626,7 @@ export function DiscGolfGame() {
     setDiscIndex(discIndex);
     stateRef.current = {
       holeIndex: 0, scores: [], discIndex, roundPaths: [],
-      mode: m, advanced: adv, seed, roundHoles, practice: true, practiceHole: holeIdx + 1, ...freshHole(roundHoles[0]),
+      mode: m, advanced: adv, skill: IDENTITY_MODS, seed, roundHoles, practice: true, practiceHole: holeIdx + 1, ...freshHole(roundHoles[0]),
     };
     ghostRef.current = null;
     setSaved(false);
@@ -565,7 +662,7 @@ export function DiscGolfGame() {
     setDiscIndex(discIndex);
     stateRef.current = {
       holeIndex: 0, scores: [], discIndex, roundPaths: [],
-      mode: m, advanced: adv, seed, roundHoles, practice: true,
+      mode: m, advanced: adv, skill: IDENTITY_MODS, seed, roundHoles, practice: true,
       party: { names, current: 0, scores: names.map(() => Array(roundHoles.length).fill(null)) },
       ...freshHole(roundHoles[0]),
     };
@@ -612,7 +709,7 @@ export function DiscGolfGame() {
     setOnlineScores(onlineScoresRef.current);
     stateRef.current = {
       holeIndex: 0, scores: [], discIndex, roundPaths: [],
-      mode: m, advanced: adv, seed, roundHoles, online: true,
+      mode: m, advanced: adv, skill: IDENTITY_MODS, seed, roundHoles, online: true,
       ...freshHole(roundHoles[0]),
     };
     ghostRef.current = null;
@@ -733,7 +830,7 @@ export function DiscGolfGame() {
     // fairway. Straight throws carry farther; the hole's slope acts on the
     // disc in-flight (see SLOPE_PULL in stepFlight), not on the launch.
     const pathMul = (g.path === "straight" ? STRAIGHT_SPEED_MUL : 1) * releaseSpeedMul(g.release);
-    const speed = disc.power * (1.2 + g.power * 3.35) * pathMul;
+    const speed = disc.power * (1.2 + g.power * 3.35) * pathMul * g.skill.speedMul;
     g.disc.vx = Math.cos(g.angle) * speed;
     g.disc.vy = Math.sin(g.angle) * speed;
     g.rest = { x: g.disc.x, y: g.disc.y };
@@ -756,6 +853,26 @@ export function DiscGolfGame() {
 
   const finishGame = useCallback((scores: number[]) => {
     const g = stateRef.current;
+    // A played Career event: record the result against the career and pop back
+    // to the hub instead of the normal results / leaderboard flow.
+    if (g?.career && careerPlayRef.current) {
+      careerPlayRef.current = false;
+      const total = scores.reduce((s, n) => s + n, 0);
+      const c = careerRef.current;
+      const ev = careerEventRef.current;
+      if (c && ev && !c.done.includes(ev.id)) {
+        const { career: nc, result } = recordResult(c, ev, total, true);
+        saveCareer(nc);
+        setCareerLastResult(result);
+      }
+      careerEventRef.current = null;
+      audioRef.current?.sfx("win");
+      vibrate([20, 40, 20]);
+      clearResume();
+      setCareerOpen(true);
+      setScreen("title");
+      return;
+    }
     const mode = g?.mode ?? modeRef.current;
     const online = g?.online ?? false;
     // Online and practice rounds don't touch personal records / history.
@@ -871,7 +988,7 @@ export function DiscGolfGame() {
     setLeaderboard([]);
     if (!practice) void getArcadeLeaderboard(leaderboardCourse(mode, g?.seed ?? 0)).then(setLeaderboard).catch(() => {});
     if (!practice) saveProgress(); // sync best/achievements/history to the cloud if signed in
-  }, [saveProgress, saveTournament, clearResume]);
+  }, [saveProgress, saveTournament, clearResume, saveCareer]);
 
   const nextHole = useCallback(() => {
     const g = stateRef.current;
@@ -916,8 +1033,11 @@ export function DiscGolfGame() {
     audioRef.current?.stopMusic();
     if (stateRef.current?.online) leaveLobby();
     tournamentPlayRef.current = false;
+    const wasCareer = careerPlayRef.current;
+    careerPlayRef.current = false;
     setPauseMenu(null);
     setResumeRound(readResume()); // surface "Resume" if we left a solo round mid-way
+    if (wasCareer) setCareerOpen(true); // bail back to the career hub
     setScreen("title");
   }, [leaveLobby]);
 
@@ -1178,7 +1298,7 @@ export function DiscGolfGame() {
         const d = g.disc;
         const disc = activeDiscs(g.advanced)[g.discIndex];
         const f: Flight = { x: d.x, y: d.y, vx: d.vx, vy: d.vy, h: g.h, vh: g.vh, fadeTurn: g.fadeTurn };
-        const res = stepFlight(f, disc, g.fadeSign, g.path, hole, g.release);
+        const res = stepFlight(f, disc, g.fadeSign, g.path, hole, g.release, { catchR: g.skill.catchR, windMul: g.skill.windMul });
         d.x = f.x;
         d.y = f.y;
         d.vx = f.vx;
@@ -1535,7 +1655,7 @@ export function DiscGolfGame() {
 
       const rattleAge = performance.now() - rattleRef.current;
       const rattle = rattleAge < 420 ? Math.sin(rattleAge * 0.09) * (1 - rattleAge / 420) * 1.6 : 0;
-      drawBasket(ctx, hole.basket.x + rattle, hole.basket.y - cam);
+      drawBasket(ctx, hole.basket.x + rattle, hole.basket.y - cam, g.skill.catchR);
       for (const tr of hole.trees) drawTree(ctx, { x: tr.x, y: tr.y - cam, r: tr.r });
 
       // Tournament rivals playing the hole alongside you (simulated field).
@@ -1597,7 +1717,7 @@ export function DiscGolfGame() {
           const since = performance.now() - rangeFlashRef.current;
           const SHOW_MS = 2000;
           if (!dr.active && since < SHOW_MS) {
-            const range = fullPowerRange(aimDisc, elevAt(hole, g.disc.y), (path === "straight" ? STRAIGHT_SPEED_MUL : 1) * releaseSpeedMul(releaseRef.current));
+            const range = fullPowerRange(aimDisc, elevAt(hole, g.disc.y), (path === "straight" ? STRAIGHT_SPEED_MUL : 1) * releaseSpeedMul(releaseRef.current) * g.skill.speedMul);
             const bsy = hole.basket.y - cam;
             const bsx = hole.basket.x - camX;
             const basketVisible = bsy >= 0 && bsy <= H && bsx >= 0 && bsx <= W;
@@ -1679,7 +1799,7 @@ export function DiscGolfGame() {
 
         if (dr.active && power > 0.04 && !inCancel) {
           const pathMul = (path === "straight" ? STRAIGHT_SPEED_MUL : 1) * releaseSpeedMul(releaseRef.current);
-          const speed = aimDisc.power * (1.2 + power * 3.35) * pathMul;
+          const speed = aimDisc.power * (1.2 + power * 3.35) * pathMul * g.skill.speedMul;
           const f: Flight = {
             x: g.disc.x, y: g.disc.y,
             vx: Math.cos(g.angle) * speed, vy: Math.sin(g.angle) * speed,
@@ -1687,7 +1807,7 @@ export function DiscGolfGame() {
           };
           const pts: { x: number; y: number }[] = [{ x: f.x, y: f.y }];
           for (let i = 0; i < 360; i++) {
-            const r = stepFlight(f, aimDisc, sign, path, hole, releaseRef.current);
+            const r = stepFlight(f, aimDisc, sign, path, hole, releaseRef.current, { catchR: g.skill.catchR, windMul: g.skill.windMul });
             pts.push({ x: f.x, y: f.y });
             if (r.status !== "fly") break;
           }
@@ -2215,6 +2335,10 @@ export function DiscGolfGame() {
                   className="w-full rounded-xl bg-[#f5d24a] hover:bg-[#e3c138] active:scale-[0.99] text-[#0f1117] font-bold py-3 transition">
                   🏆 Play Winthrop Lake · 18
                 </button>
+                <button type="button" onClick={() => { setCareerLastResult(null); setCareerNotes([]); setCareerOpen(true); }}
+                  className="w-full rounded-xl bg-gradient-to-r from-[#e0923b] to-[#e2453b] hover:brightness-110 active:scale-[0.99] text-white font-bold py-3 transition">
+                  🌟 Career{career && !career.retired ? ` · ${STAGE_LABEL[career.stage]}, age ${career.age}` : ""}
+                </button>
                 <button type="button" onClick={() => setTournamentOpen(true)}
                   className="w-full rounded-xl border border-[#f5d24a]/40 bg-[#f5d24a]/10 hover:bg-[#f5d24a]/20 active:scale-[0.99] text-white font-bold py-3 transition">
                   🏟 Tournament{tournament && !tournament.finished ? ` · R${tournament.myTotals.length + 1}` : ""}
@@ -2403,6 +2527,22 @@ export function DiscGolfGame() {
               startGame("winthrop", (t.seed + t.myTotals.length * 1013904223) | 0);
               tournamentPlayRef.current = true;
             }}
+          />
+        )}
+
+        {careerOpen && (
+          <CareerPanel
+            career={career}
+            lastResult={careerLastResult}
+            notes={careerNotes}
+            onClose={() => { setCareerOpen(false); setCareerNotes([]); }}
+            onStart={startNewCareer}
+            onPlay={(ev) => { const c = careerRef.current; if (c) startCareerEvent(c, ev); }}
+            onSim={simCareerEvent}
+            onAdvance={advanceCareerSeason}
+            onRetire={() => { const c = careerRef.current; if (c) saveCareer(retire(c)); }}
+            onAbandon={() => { saveCareer(null); setCareerLastResult(null); setCareerNotes([]); }}
+            dismissNotes={() => setCareerNotes([])}
           />
         )}
 
@@ -2597,7 +2737,7 @@ export function DiscGolfGame() {
               </button>
               <button
                 type="button"
-                onClick={() => { const g = stateRef.current; setPauseMenu({ canRestart: !!g && !g.online && !tournamentPlayRef.current }); }}
+                onClick={() => { const g = stateRef.current; setPauseMenu({ canRestart: !!g && !g.online && !tournamentPlayRef.current && !careerPlayRef.current }); }}
                 aria-label="Menu"
                 className="shrink-0 w-10 h-[34px] flex items-center justify-center bg-[#0f1117] border border-white/10 hover:border-white/25 text-white rounded-lg active:bg-white/10 transition"
               >
@@ -3236,6 +3376,207 @@ function TournamentPanel({ tournament, onClose, onNew, onAbandon, onPlayRound }:
   );
 }
 
+// ── Career mode panel: the multi-decade journey from junior events to the pro
+// tour. Skills grow each season (you allocate training); events can be PLAYED as
+// real rounds — your skills bend the flight — or SIMULATED from your skills. ──
+function CareerStat({ label, v }: { label: string; v: number | string }) {
+  return (
+    <div className="bg-[#1a1d23] border border-white/5 rounded-lg py-2">
+      <p className="text-white font-black text-lg leading-none">{v}</p>
+      <p className="text-gray-500 text-[10px] mt-0.5 uppercase tracking-wide">{label}</p>
+    </div>
+  );
+}
+function CareerPanel({ career, lastResult, notes, onClose, onStart, onPlay, onSim, onAdvance, onRetire, onAbandon, dismissNotes }: {
+  career: Career | null;
+  lastResult: EventResult | null;
+  notes: string[];
+  onClose: () => void;
+  onStart: (name: string) => void;
+  onPlay: (ev: CareerEvent) => void;
+  onSim: (ev: CareerEvent) => void;
+  onAdvance: (alloc: Partial<CareerSkills>) => void;
+  onRetire: () => void;
+  onAbandon: () => void;
+  dismissNotes: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [alloc, setAlloc] = useState<CareerSkills>({ power: 0, control: 0, putt: 0, mental: 0 });
+  const [confirm, setConfirm] = useState<"retire" | "abandon" | null>(null);
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => { setAlloc({ power: 0, control: 0, putt: 0, mental: 0 }); setConfirm(null); }, [career?.season, career?.retired]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  const wrap = "absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm p-4 flex items-start justify-center rounded-lg";
+  const card = "w-full max-w-sm space-y-3 my-auto text-left";
+  const toPar = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
+
+  // Season wrap-up (promotions, world #1, retirement) shown after advancing.
+  if (notes.length > 0) {
+    return (
+      <div className={wrap}><div className={card}>
+        <h2 className="text-white font-black text-xl">Season wrap-up</h2>
+        <div className="space-y-2">
+          {notes.map((n, i) => (
+            <p key={i} className="text-gray-200 text-sm bg-white/5 border border-white/10 rounded-lg px-3 py-2">{n}</p>
+          ))}
+        </div>
+        <button type="button" onClick={dismissNotes} className={`${btn} w-full`}>Continue ▶</button>
+      </div></div>
+    );
+  }
+
+  // New career.
+  if (!career) {
+    return (
+      <div className={wrap}><div className={card}>
+        <div className="flex items-center justify-between">
+          <h2 className="text-white font-black text-xl">🌟 Career</h2>
+          <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
+        </div>
+        <p className="text-gray-300 text-sm">Start as a 10-year-old with a bag and a dream. Build your <span className="text-white">power, control, putting</span> and <span className="text-white">mental</span> game over the years — junior events, high school, college (Nationals at Winthrop Lake), then the pro tour. Play the big rounds yourself; sim the rest.</p>
+        <input type="text" value={name} maxLength={16} onChange={(e) => setName(e.target.value)} placeholder="Your name" className="w-full bg-[#1a1d23] border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-[#e0923b]" />
+        <button type="button" onClick={() => onStart(name)} className={`${btn} w-full`}>Begin career</button>
+      </div></div>
+    );
+  }
+
+  const rating = Math.round(careerRating(career.skills));
+  const sched = seasonSchedule(career);
+  const resultFor = (id: string) => career.results.find((r) => r.eventId === id);
+  const spent = SKILL_KEYS.reduce((s, k) => s + alloc[k], 0);
+  const remaining = career.trainPts - spent;
+  const canAdvance = seasonComplete(career);
+  const undone = sched.filter((e) => !career.done.includes(e.id));
+
+  // Retired legacy screen.
+  if (career.retired) {
+    const big = career.titles.filter((t) => t.importance !== "minor");
+    return (
+      <div className={wrap}><div className={card}>
+        <div className="flex items-center justify-between">
+          <h2 className="text-white font-black text-xl">🏁 {career.name}</h2>
+          <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
+        </div>
+        <p className="text-gray-400 text-xs -mt-2">Retired at age {career.age} · {career.season} seasons · peak rating {rating}</p>
+        <div className="grid grid-cols-2 gap-2 text-center">
+          <CareerStat label="Titles" v={career.titles.length} />
+          <CareerStat label="Majors" v={career.majors} />
+          <CareerStat label="Best world rank" v={career.bestWorldRank ? `#${career.bestWorldRank}` : "—"} />
+          <CareerStat label="Seasons at #1" v={career.seasonsAtNo1} />
+        </div>
+        {big.length > 0 && (
+          <div className="bg-[#1a1d23] border border-white/5 rounded-xl p-3 max-h-44 overflow-y-auto">
+            <p className="text-[#f5d24a] text-xs font-bold mb-1.5">Career titles</p>
+            {big.map((t, i) => <p key={i} className="text-gray-300 text-xs">🏆 {t.name} <span className="text-gray-500">· age {t.age}</span></p>)}
+          </div>
+        )}
+        <button type="button" onClick={onAbandon} className={`${btn} w-full`}>Start a new career</button>
+        <button type="button" onClick={onClose} className="w-full text-gray-500 hover:text-gray-300 text-xs py-1 transition">Close</button>
+      </div></div>
+    );
+  }
+
+  // Season hub.
+  return (
+    <div className={wrap}><div className={card}>
+      <div className="flex items-center justify-between">
+        <div className="min-w-0">
+          <h2 className="text-white font-black text-lg leading-tight truncate">{career.name}</h2>
+          <p className="text-gray-400 text-[11px]">{STAGE_LABEL[career.stage]} · Age {career.age} · Season {career.season + 1}{career.stage === "pro" && career.worldRank ? ` · World #${career.worldRank}` : ""}</p>
+        </div>
+        <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none shrink-0">×</button>
+      </div>
+
+      {lastResult && (
+        <div className={`rounded-lg px-3 py-2 text-sm border ${lastResult.win ? "border-[#f5d24a]/50 bg-[#f5d24a]/10 text-[#f5d24a]" : "border-white/10 bg-white/5 text-gray-200"}`}>
+          {lastResult.name}: <span className="font-bold">{placeLabel(lastResult.placed)}</span> of {lastResult.field} · {toPar(lastResult.toPar)} ({lastResult.score})
+        </div>
+      )}
+
+      {/* Skills + training */}
+      <div className="bg-[#1a1d23] border border-white/5 rounded-xl p-3 space-y-2">
+        <div className="flex items-center justify-between">
+          <p className="text-gray-400 text-xs font-bold uppercase tracking-wide">Skills · rating {rating}</p>
+          <p className="text-[11px] text-gray-400">Training <span className={remaining > 0 ? "text-[#36D7B7] font-bold" : "text-gray-500"}>{remaining}</span>/{career.trainPts}</p>
+        </div>
+        {SKILL_KEYS.map((k) => {
+          const val = career.skills[k];
+          const pot = career.potential[k];
+          const add = alloc[k];
+          return (
+            <div key={k} className="flex items-center gap-2">
+              <span className="w-12 text-[11px] text-gray-300">{SKILL_LABEL[k]}</span>
+              <div className="flex-1 h-2.5 bg-white/5 rounded relative overflow-hidden">
+                <div className="absolute inset-y-0 left-0 bg-[#36D7B7] rounded" style={{ width: `${val}%` }} />
+                <div className="absolute inset-y-0 w-0.5 bg-white/50" style={{ left: `${pot}%` }} />
+              </div>
+              <span className="w-9 text-right text-[11px] font-mono text-white">{val}{add ? <span className="text-[#36D7B7]">+{add}</span> : null}</span>
+              <div className="flex gap-0.5 shrink-0">
+                <button type="button" onClick={() => setAlloc((a) => ({ ...a, [k]: Math.max(0, a[k] - 1) }))} disabled={add === 0} className="w-5 h-5 rounded bg-white/10 text-white text-xs leading-none disabled:opacity-30">−</button>
+                <button type="button" onClick={() => setAlloc((a) => (remaining > 0 ? { ...a, [k]: a[k] + 1 } : a))} disabled={remaining <= 0} className="w-5 h-5 rounded bg-white/10 text-white text-xs leading-none disabled:opacity-30">+</button>
+              </div>
+            </div>
+          );
+        })}
+        <p className="text-gray-600 text-[10px]">Training applies when you advance the season. The tick marks your potential.</p>
+      </div>
+
+      {/* Schedule */}
+      <div className="space-y-1.5">
+        <p className="text-gray-400 text-xs font-bold uppercase tracking-wide">Schedule</p>
+        {sched.map((ev) => {
+          const r = resultFor(ev.id);
+          const impColor = ev.importance === "championship" ? "text-[#f5d24a]" : ev.importance === "major" ? "text-[#5fb0e8]" : "text-gray-500";
+          const impWord = ev.importance === "championship" ? "Championship" : ev.importance === "major" ? "Major" : "Tour";
+          const courseLabel = ev.mode === "winthrop" ? "Winthrop Lake" : ev.mode === "course" ? "Glendoveer" : "9-hole";
+          return (
+            <div key={ev.id} className="bg-[#1a1d23] border border-white/5 rounded-lg px-3 py-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-white text-sm font-semibold truncate">{ev.name}</p>
+                  <p className="text-[10px] text-gray-500"><span className={impColor}>{impWord}</span> · {courseLabel} · {ev.fieldSize} players</p>
+                </div>
+                {r ? (
+                  <span className={`shrink-0 text-xs font-bold ${r.win ? "text-[#f5d24a]" : "text-gray-300"}`} title={r.played ? "played" : "simmed"}>{placeLabel(r.placed)} <span className="text-gray-500 font-normal">{r.played ? "▶" : "⚡"}</span></span>
+                ) : (
+                  <div className="shrink-0 flex gap-1">
+                    <button type="button" onClick={() => onPlay(ev)} className="rounded bg-[#4B3DFF] hover:bg-[#3a2ee0] text-white text-xs font-bold px-2.5 py-1">▶ Play</button>
+                    <button type="button" onClick={() => onSim(ev)} className="rounded bg-white/10 hover:bg-white/20 text-white text-xs font-bold px-2.5 py-1">⚡ Sim</button>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Advance / sim-remaining */}
+      {canAdvance ? (
+        <button type="button" onClick={() => onAdvance(alloc)} className={`${btn} w-full`}>Advance to next season ▶</button>
+      ) : (
+        <button type="button" onClick={() => undone.forEach((ev) => onSim(ev))} className="w-full rounded-lg bg-white/5 border border-white/10 hover:border-white/25 text-gray-200 text-sm font-bold py-2.5 transition">
+          ⚡ Sim remaining {undone.length} event{undone.length === 1 ? "" : "s"}
+        </button>
+      )}
+      <div className="flex items-center justify-between pt-0.5">
+        {career.stage === "pro" ? (
+          confirm === "retire" ? (
+            <span className="text-xs text-gray-400">Retire? <button type="button" onClick={onRetire} className="text-[#e2453b] font-bold">Yes</button> · <button type="button" onClick={() => setConfirm(null)} className="text-gray-300">No</button></span>
+          ) : (
+            <button type="button" onClick={() => setConfirm("retire")} className="text-gray-500 hover:text-gray-300 text-xs">Retire</button>
+          )
+        ) : <span />}
+        {confirm === "abandon" ? (
+          <span className="text-xs text-gray-400">Delete? <button type="button" onClick={onAbandon} className="text-[#e2453b] font-bold">Yes</button> · <button type="button" onClick={() => setConfirm(null)} className="text-gray-300">No</button></span>
+        ) : (
+          <button type="button" onClick={() => setConfirm("abandon")} className="text-gray-600 hover:text-gray-400 text-xs">Abandon</button>
+        )}
+      </div>
+    </div></div>
+  );
+}
+
 // Career stats computed from the locally-stored round history. Older rounds
 // (before per-hole scores were recorded) still count toward totals/averages.
 // Browse the global (Supabase) leaderboard for any course from the title
@@ -3626,10 +3967,10 @@ function drawTree(ctx: CanvasRenderingContext2D, tr: Tree) {
   ctx.fill();
 }
 
-function drawBasket(ctx: CanvasRenderingContext2D, x: number, y: number) {
+function drawBasket(ctx: CanvasRenderingContext2D, x: number, y: number, catchR = CATCH_R) {
   ctx.strokeStyle = "rgba(255,255,255,0.15)";
   ctx.beginPath();
-  ctx.arc(x, y, CATCH_R, 0, Math.PI * 2);
+  ctx.arc(x, y, catchR, 0, Math.PI * 2);
   ctx.stroke();
   ctx.fillStyle = "#9aa0a8";
   ctx.fillRect(Math.round(x) - 1, Math.round(y) - 2, 2, 12);

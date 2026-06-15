@@ -915,7 +915,13 @@ function lastInBoundsLie(trail: Vec[], hole: Hole, fallback: Vec): Vec {
   return { x: fallback.x, y: fallback.y };
 }
 
-function stepFlight(f: Flight, disc: Disc, fadeSign: number, path: FlightPath, hole: Hole, release: Release = "flat"): { status: StepStatus; treeHit: boolean } {
+// `opts` carries Career skill effects for the player's own flights: `windMul`
+// scales how hard the wind shoves the disc (low control → blown around), and
+// `catchR` widens/narrows the basket catch radius (putting skill). Both default
+// to the neutral values, so non-career play is unchanged.
+function stepFlight(f: Flight, disc: Disc, fadeSign: number, path: FlightPath, hole: Hole, release: Release = "flat", opts: { catchR?: number; windMul?: number } = {}): { status: StepStatus; treeHit: boolean } {
+  const catchR = opts.catchR ?? CATCH_R;
+  const windMul = opts.windMul ?? 1;
   f.x += f.vx;
   f.y += f.vy;
   f.h += f.vh;
@@ -947,8 +953,8 @@ function stepFlight(f: Flight, disc: Disc, fadeSign: number, path: FlightPath, h
   }
   // Wind catches the disc while it's in the air (not once it's on the ground).
   if (airborne && hole.wind) {
-    f.vx += hole.wind.x;
-    f.vy += hole.wind.y;
+    f.vx += hole.wind.x * windMul;
+    f.vy += hole.wind.y * windMul;
   }
   // The slope pulls the airborne disc downhill along the hole axis: uphill
   // (+elev) drags it back toward the tee (+y), downhill carries it onward.
@@ -996,7 +1002,7 @@ function stepFlight(f: Flight, disc: Disc, fadeSign: number, path: FlightPath, h
   if (!airborne) {
     const settling = f.vh <= 0;
     if (settling) {
-      if (Math.hypot(f.x - hole.basket.x, f.y - hole.basket.y) < CATCH_R) return { status: "hole", treeHit };
+      if (Math.hypot(f.x - hole.basket.x, f.y - hole.basket.y) < catchR) return { status: "hole", treeHit };
       // Off every fairway ribbon, or in water, is out of bounds — except on
       // hazard-rough holes, where off-ribbon is a playable +1 (handled at rest).
       if (!hole.roughIsHazard && offRibbons(hole, f.x, f.y)) return { status: "ob", treeHit };
