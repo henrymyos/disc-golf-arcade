@@ -6,19 +6,20 @@ import { submitArcadeScore, getArcadeLeaderboard } from "@/actions/arcade";
 import type { ArcadeScore } from "@/lib/arcade-types";
 import { getSupabase } from "@/lib/supabase/browser";
 import {
-  BEST_KEY, WBEST_KEY, HOLEBEST_KEY, SETTINGS_KEY, ACH_KEY, HIST_KEY,
+  BEST_KEY, WBEST_KEY, HOLEBEST_KEY, SETTINGS_KEY, ACH_KEY, HIST_KEY, CAREER_KEY,
   readLocalProgress, applyProgress, mergeProgress, type Progress,
 } from "@/lib/progress";
 import {
-  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, TOTAL_PAR, WINTHROP_HOLES, WINTHROP_PAR, leaderboardCourse, TOURN_KEY, TOURN_NAMES, tournFieldRound, tournLiveStandings, tournStandings, ACHIEVEMENTS, earnedAchievements, scoreLabel, STRAIGHT_SPEED_MUL, releaseSpeedMul, DISCS, ADV_DISCS, activeDiscs, DISC_UNLOCKS, validDiscIndex, aimAt, camXFor, buildTournGhosts, ghostPosAt, AudioEngine, inRect, inHazard, offRibbons, dailySeed, buildRound, elevAt, vibrate, fullPowerRange, lastInBoundsLie, stepFlight,
+  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, TOTAL_PAR, WINTHROP_HOLES, WINTHROP_PAR, leaderboardCourse, TOURN_KEY, TOURN_NAMES, tournFieldRound, tournLiveStandings, tournStandings, ACHIEVEMENTS, earnedAchievements, scoreLabel, STRAIGHT_SPEED_MUL, releaseSpeedMul, DISCS, ADV_DISCS, activeDiscs, DISC_UNLOCKS, validDiscIndex, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, inRect, inHazard, offRibbons, dailySeed, buildRound, elevAt, vibrate, fullPowerRange, lastInBoundsLie, stepFlight,
 } from "@/lib/discgolf/engine";
 import type {
   Vec, Tree, Hole, Mode, Tournament, TournLiveRow, Achievement, FlightPath, Release, Flight, GhostState,
 } from "@/lib/discgolf/engine";
 import { challengeParam } from "@/lib/discgolf/challenge";
 import {
-  newCareer, skillMods, careerRating, seasonSchedule, simEvent, recordResult, advanceSeason, retire, seasonComplete,
+  newCareer, normalizeCareer, skillMods, careerRating, seasonSchedule, simEvent, recordResult, advanceSeason, retire, seasonComplete,
   placeLabel, STAGE_LABEL, SKILL_KEYS, SKILL_LABEL, IDENTITY_MODS,
+  availableSponsors, signSponsor, trainingPointCost, buyTrainingPoint, topRivals, rivalRating, careerGhostRacers, fmtCash, SPONSOR_CAP,
   type Career, type CareerEvent, type EventResult, type CareerSkills, type SkillMods,
 } from "@/lib/discgolf/career";
 
@@ -188,8 +189,7 @@ export function DiscGolfGame() {
   const [partyView, setPartyView] = useState<{ names: string[]; holeScores: (number | null)[]; totals: number[] } | null>(null);
   const [finalParty, setFinalParty] = useState<{ names: string[]; totals: number[] } | null>(null);
 
-  // ── Career mode (persisted) ──
-  const CAREER_KEY = "discgolf.career.v1";
+  // ── Career mode (persisted locally + synced to the cloud when signed in) ──
   const [careerOpen, setCareerOpen] = useState(false);
   const [career, setCareer] = useState<Career | null>(null);
   const careerRef = useRef<Career | null>(null);
@@ -341,7 +341,7 @@ export function DiscGolfGame() {
       if (tourn && typeof tourn.seed === "number" && Array.isArray(tourn.myTotals)) setTournament(tourn);
       setResumeRound(readResume());
       const car = JSON.parse(localStorage.getItem(CAREER_KEY) || "null");
-      if (car && car.v === 1 && car.skills) { setCareer(car); careerRef.current = car; }
+      if (car && car.v === 1 && car.skills) { const nc = normalizeCareer(car); setCareer(nc); careerRef.current = nc; }
     } catch {
       /* ignore */
     }
@@ -452,6 +452,10 @@ export function DiscGolfGame() {
     } catch { /* ignore */ }
     saveProgress();
   }, [throwStyle, flightPath, release, musicVolume, leftHanded, advanced, showGhost, muted, saveProgress]);
+
+  // Sync the career save to the cloud whenever it changes (debounced; no-op
+  // when signed out). localStorage is already written by saveCareer.
+  useEffect(() => { if (career) saveProgress(); }, [career, saveProgress]);
 
   const syncHud = useCallback(() => {
     const g = stateRef.current;
@@ -1253,10 +1257,16 @@ export function DiscGolfGame() {
       const basketCamX = camXFor(hole, hole.basket.x);
       const teeCamX = camXFor(hole, hole.tee.x);
 
-      // Tournament rivals: (re)build the ghost field when the hole changes.
+      // Rival ghosts: (re)build the field when the hole changes — the tournament
+      // field, or your recurring Career rivals on a played event.
       if (tournamentPlayRef.current && tournamentRef.current && !tournamentRef.current.finished) {
         if (ghostsRef.current?.holeIndex !== g.holeIndex) {
           ghostsRef.current = buildTournGhosts(tournamentRef.current, g.holeIndex, hole, performance.now());
+        }
+      } else if (careerPlayRef.current && careerRef.current && careerEventRef.current) {
+        if (ghostsRef.current?.holeIndex !== g.holeIndex) {
+          const racers = careerGhostRacers(careerRef.current, careerEventRef.current, g.holeIndex);
+          ghostsRef.current = buildRacerGhosts(careerRef.current.seed >>> 0, g.holeIndex, hole, racers, performance.now());
         }
       } else if (ghostsRef.current) {
         ghostsRef.current = null;
@@ -1659,7 +1669,7 @@ export function DiscGolfGame() {
       for (const tr of hole.trees) drawTree(ctx, { x: tr.x, y: tr.y - cam, r: tr.r });
 
       // Tournament rivals playing the hole alongside you (simulated field).
-      if (tournamentPlayRef.current && ghostsRef.current?.holeIndex === g.holeIndex) {
+      if ((tournamentPlayRef.current || careerPlayRef.current) && ghostsRef.current?.holeIndex === g.holeIndex) {
         const gst = ghostsRef.current;
         const elapsed = performance.now() - gst.startAt;
         ctx.textAlign = "center";
@@ -1935,7 +1945,7 @@ export function DiscGolfGame() {
         ctx.lineWidth = 1;
         ctx.strokeRect(ox + camX * s + 0.5, oy + cam * s + 0.5, Math.min(mw, W * s) - 1, Math.min(mh, H * s) - 1);
         // tournament rivals
-        if (tournamentPlayRef.current && ghostsRef.current?.holeIndex === g.holeIndex) {
+        if ((tournamentPlayRef.current || careerPlayRef.current) && ghostsRef.current?.holeIndex === g.holeIndex) {
           const gst = ghostsRef.current;
           const elapsed = performance.now() - gst.startAt;
           for (const gh of gst.ghosts) {
@@ -2542,6 +2552,8 @@ export function DiscGolfGame() {
             onAdvance={advanceCareerSeason}
             onRetire={() => { const c = careerRef.current; if (c) saveCareer(retire(c)); }}
             onAbandon={() => { saveCareer(null); setCareerLastResult(null); setCareerNotes([]); }}
+            onSign={(id) => { const c = careerRef.current; if (c) saveCareer(signSponsor(c, id)); }}
+            onBuyTrain={() => { const c = careerRef.current; if (c) saveCareer(buyTrainingPoint(c)); }}
             dismissNotes={() => setCareerNotes([])}
           />
         )}
@@ -3387,7 +3399,7 @@ function CareerStat({ label, v }: { label: string; v: number | string }) {
     </div>
   );
 }
-function CareerPanel({ career, lastResult, notes, onClose, onStart, onPlay, onSim, onAdvance, onRetire, onAbandon, dismissNotes }: {
+function CareerPanel({ career, lastResult, notes, onClose, onStart, onPlay, onSim, onAdvance, onRetire, onAbandon, onSign, onBuyTrain, dismissNotes }: {
   career: Career | null;
   lastResult: EventResult | null;
   notes: string[];
@@ -3398,6 +3410,8 @@ function CareerPanel({ career, lastResult, notes, onClose, onStart, onPlay, onSi
   onAdvance: (alloc: Partial<CareerSkills>) => void;
   onRetire: () => void;
   onAbandon: () => void;
+  onSign: (id: string) => void;
+  onBuyTrain: () => void;
   dismissNotes: () => void;
 }) {
   const [name, setName] = useState("");
@@ -3448,6 +3462,9 @@ function CareerPanel({ career, lastResult, notes, onClose, onStart, onPlay, onSi
   const remaining = career.trainPts - spent;
   const canAdvance = seasonComplete(career);
   const undone = sched.filter((e) => !career.done.includes(e.id));
+  const sponsorOffers = availableSponsors(career);
+  const trainCost = trainingPointCost(career);
+  const rivals = topRivals(career);
 
   // Retired legacy screen.
   if (career.retired) {
@@ -3458,7 +3475,7 @@ function CareerPanel({ career, lastResult, notes, onClose, onStart, onPlay, onSi
           <h2 className="text-white font-black text-xl">🏁 {career.name}</h2>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
-        <p className="text-gray-400 text-xs -mt-2">Retired at age {career.age} · {career.season} seasons · peak rating {rating}</p>
+        <p className="text-gray-400 text-xs -mt-2">Retired at age {career.age} · {career.season} seasons · peak rating {rating} · earned {fmtCash(career.cash)}</p>
         <div className="grid grid-cols-2 gap-2 text-center">
           <CareerStat label="Titles" v={career.titles.length} />
           <CareerStat label="Majors" v={career.majors} />
@@ -3485,12 +3502,18 @@ function CareerPanel({ career, lastResult, notes, onClose, onStart, onPlay, onSi
           <h2 className="text-white font-black text-lg leading-tight truncate">{career.name}</h2>
           <p className="text-gray-400 text-[11px]">{STAGE_LABEL[career.stage]} · Age {career.age} · Season {career.season + 1}{career.stage === "pro" && career.worldRank ? ` · World #${career.worldRank}` : ""}</p>
         </div>
-        <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none shrink-0">×</button>
+        <div className="shrink-0 flex items-center gap-2">
+          <span className="text-[#36D7B7] font-bold text-sm font-mono">{fmtCash(career.cash)}</span>
+          <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
+        </div>
       </div>
 
       {lastResult && (
         <div className={`rounded-lg px-3 py-2 text-sm border ${lastResult.win ? "border-[#f5d24a]/50 bg-[#f5d24a]/10 text-[#f5d24a]" : "border-white/10 bg-white/5 text-gray-200"}`}>
-          {lastResult.name}: <span className="font-bold">{placeLabel(lastResult.placed)}</span> of {lastResult.field} · {toPar(lastResult.toPar)} ({lastResult.score})
+          <div>{lastResult.name}: <span className="font-bold">{placeLabel(lastResult.placed)}</span> of {lastResult.field} · {toPar(lastResult.toPar)} ({lastResult.score}){lastResult.prize > 0 && <span className="text-[#36D7B7]"> · +{fmtCash(lastResult.prize)}</span>}</div>
+          <div className="text-[10px] text-gray-400 mt-0.5">
+            Beat {lastResult.beatRivals}/{lastResult.rivalCount} rivals{lastResult.winnerName ? ` · ${lastResult.winnerName} took the title` : ""}
+          </div>
         </div>
       )}
 
@@ -3519,7 +3542,36 @@ function CareerPanel({ career, lastResult, notes, onClose, onStart, onPlay, onSi
             </div>
           );
         })}
-        <p className="text-gray-600 text-[10px]">Training applies when you advance the season. The tick marks your potential.</p>
+        <div className="flex items-center justify-between gap-2 pt-0.5">
+          <p className="text-gray-600 text-[10px] flex-1">Training applies when you advance. The tick marks potential.</p>
+          <button type="button" onClick={onBuyTrain} disabled={career.cash < trainCost}
+            className="shrink-0 rounded bg-[#36D7B7]/15 border border-[#36D7B7]/40 text-[#36D7B7] text-[11px] font-bold px-2 py-1 disabled:opacity-30 disabled:border-white/10 disabled:text-gray-500">
+            +1 pt · {fmtCash(trainCost)}
+          </button>
+        </div>
+      </div>
+
+      {/* Sponsors */}
+      <div className="bg-[#1a1d23] border border-white/5 rounded-xl p-3 space-y-1.5">
+        <p className="text-gray-400 text-xs font-bold uppercase tracking-wide">Sponsors ({career.sponsors.length}/{SPONSOR_CAP})</p>
+        {career.sponsors.length === 0 && sponsorOffers.length === 0 && (
+          <p className="text-gray-600 text-[11px]">Win events and raise your rating to attract sponsors.</p>
+        )}
+        {career.sponsors.map((s) => (
+          <div key={s.id} className="flex items-center justify-between text-[11px]">
+            <span className="text-white">{s.name}{s.coach ? " 🎓" : ""}</span>
+            <span className="text-gray-400 font-mono">{fmtCash(s.stipend)}/yr</span>
+          </div>
+        ))}
+        {sponsorOffers.map((s) => (
+          <div key={s.id} className="flex items-center justify-between gap-2 bg-white/[0.03] rounded px-2 py-1.5">
+            <div className="min-w-0">
+              <p className="text-white text-xs font-semibold truncate">{s.name}{s.coach ? " 🎓" : ""}</p>
+              <p className="text-gray-500 text-[10px]">{fmtCash(s.signing)} signing · {fmtCash(s.stipend)}/yr{s.coach ? " · +1 training" : ""}</p>
+            </div>
+            <button type="button" onClick={() => onSign(s.id)} className="shrink-0 rounded bg-[#e0923b] hover:brightness-110 text-[#0f1117] text-[11px] font-bold px-2.5 py-1">Sign</button>
+          </div>
+        ))}
       </div>
 
       {/* Schedule */}
@@ -3549,6 +3601,20 @@ function CareerPanel({ career, lastResult, notes, onClose, onStart, onPlay, onSi
             </div>
           );
         })}
+      </div>
+
+      {/* Rivals board */}
+      <div className="space-y-1">
+        <p className="text-gray-400 text-xs font-bold uppercase tracking-wide">Rivals · your record</p>
+        {rivals.map((r) => (
+          <div key={r.id} className="flex items-center gap-2 bg-[#1a1d23] border border-white/5 rounded-lg px-3 py-1.5 text-xs">
+            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: r.color }} />
+            <span className="text-white font-semibold flex-1 truncate">{r.name}</span>
+            {r.titles > 0 && <span className="text-[#f5d24a] text-[10px]">🏆{r.titles}</span>}
+            <span className="text-gray-500 text-[10px]">rtg {Math.round(rivalRating(r))}</span>
+            <span className="font-mono text-[11px]"><span className="text-[#36D7B7]">{r.beat}</span><span className="text-gray-600">-</span><span className="text-[#e2453b]">{r.lost}</span></span>
+          </div>
+        ))}
       </div>
 
       {/* Advance / sim-remaining */}

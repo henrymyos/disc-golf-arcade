@@ -2,12 +2,15 @@
 // localStorage (offline) and, when signed in, mirrored to Supabase auth
 // user_metadata (no table/RLS needed). These helpers gather/scatter/merge it.
 
+import type { Career } from "./discgolf/career";
+
 export const BEST_KEY = "discgolf.best.glendoveer18";
 export const WBEST_KEY = "discgolf.best.winthrop18";
 export const HOLEBEST_KEY = "discgolf.holebest.glendoveer18";
 export const SETTINGS_KEY = "discgolf.settings.v1";
 export const ACH_KEY = "discgolf.achievements.v1";
 export const HIST_KEY = "discgolf.history.v1";
+export const CAREER_KEY = "discgolf.career.v1";
 
 export type HistoryRow = { mode: string; total: number; date: number; scores?: number[]; pars?: number[] };
 export type Progress = {
@@ -17,7 +20,18 @@ export type Progress = {
   achievements: string[];
   history: HistoryRow[];
   settings: Record<string, unknown> | null;
+  career: Career | null;
 };
+
+// Of two career saves, keep the one further along (more seasons, then events).
+function moreAdvancedCareer(a: Career | null, b: Career | null): Career | null {
+  if (!a) return b;
+  if (!b) return a;
+  if (a.season !== b.season) return a.season > b.season ? a : b;
+  const ra = a.results?.length ?? 0, rb = b.results?.length ?? 0;
+  if (ra !== rb) return ra > rb ? a : b;
+  return (a.careerPoints ?? 0) >= (b.careerPoints ?? 0) ? a : b;
+}
 
 function parse<T>(raw: string | null, fallback: T): T {
   if (!raw) return fallback;
@@ -26,7 +40,7 @@ function parse<T>(raw: string | null, fallback: T): T {
 
 export function readLocalProgress(): Progress {
   if (typeof localStorage === "undefined") {
-    return { best: null, winthropBest: null, holeBest: [], achievements: [], history: [], settings: null };
+    return { best: null, winthropBest: null, holeBest: [], achievements: [], history: [], settings: null, career: null };
   }
   const bestRaw = localStorage.getItem(BEST_KEY);
   const best = bestRaw != null && Number.isFinite(Number(bestRaw)) ? Number(bestRaw) : null;
@@ -36,7 +50,8 @@ export function readLocalProgress(): Progress {
   const achievements = parse<string[]>(localStorage.getItem(ACH_KEY), []);
   const history = parse<HistoryRow[]>(localStorage.getItem(HIST_KEY), []);
   const settings = parse<Record<string, unknown> | null>(localStorage.getItem(SETTINGS_KEY), null);
-  return { best, winthropBest, holeBest, achievements, history, settings };
+  const career = parse<Career | null>(localStorage.getItem(CAREER_KEY), null);
+  return { best, winthropBest, holeBest, achievements, history, settings, career };
 }
 
 export function applyProgress(p: Progress) {
@@ -48,6 +63,7 @@ export function applyProgress(p: Progress) {
     localStorage.setItem(ACH_KEY, JSON.stringify(p.achievements ?? []));
     localStorage.setItem(HIST_KEY, JSON.stringify((p.history ?? []).slice(-100)));
     if (p.settings) localStorage.setItem(SETTINGS_KEY, JSON.stringify(p.settings));
+    if (p.career) localStorage.setItem(CAREER_KEY, JSON.stringify(p.career));
   } catch { /* ignore */ }
 }
 
@@ -84,5 +100,6 @@ export function mergeProgress(a: Progress, b: Progress): Progress {
     achievements,
     history: history.slice(-100),
     settings: b.settings ?? a.settings, // prefer cloud settings on conflict
+    career: moreAdvancedCareer(a.career ?? null, b.career ?? null),
   };
 }

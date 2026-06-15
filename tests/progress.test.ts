@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { mergeProgress, type Progress } from "../lib/progress";
 
-const base: Progress = { best: null, winthropBest: null, holeBest: [], achievements: [], history: [], settings: null };
+const base: Progress = { best: null, winthropBest: null, holeBest: [], achievements: [], history: [], settings: null, career: null };
 
 describe("mergeProgress", () => {
   it("keeps the lower (better) best score for each course", () => {
@@ -47,5 +47,19 @@ describe("mergeProgress", () => {
     const local: Progress = { ...base, settings: { muted: false } };
     const cloud: Progress = { ...base, settings: { muted: true } };
     expect(mergeProgress(local, cloud).settings).toEqual({ muted: true });
+  });
+
+  it("keeps the more-advanced career save (more seasons)", () => {
+    const early = { season: 2, results: [{}], careerPoints: 10 };
+    const late = { season: 9, results: [{}, {}], careerPoints: 80 };
+    const a: Progress = { ...base, career: early as unknown as Progress["career"] };
+    const b: Progress = { ...base, career: late as unknown as Progress["career"] };
+    expect(mergeProgress(a, b).career).toBe(b.career);
+    expect(mergeProgress(b, a).career).toBe(b.career);
+  });
+  it("takes whichever career exists when only one is present", () => {
+    const only = { season: 0, results: [], careerPoints: 0 } as unknown as Progress["career"];
+    expect(mergeProgress({ ...base, career: only }, base).career).toBe(only);
+    expect(mergeProgress(base, { ...base, career: only }).career).toBe(only);
   });
 });

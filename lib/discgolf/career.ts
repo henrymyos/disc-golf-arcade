@@ -55,6 +55,37 @@ export type EventResult = {
   field: number;
   played: boolean; // played manually vs simulated
   win: boolean;
+  beatRivals: number; // how many of your recurring rivals you outscored
+  rivalCount: number;
+  winnerName?: string; // a rival's name if a rival took the event
+  prize: number; // cash earned (pro events only)
+};
+
+// ── Recurring rivals: a fixed generation of named players who turn up at every
+// event and grow alongside you across the decades. You build a head-to-head
+// record, and when you PLAY an event they appear as ghost discs on the course. ──
+export type Rival = {
+  id: string;
+  name: string;
+  color: string;
+  skills: CareerSkills;
+  potential: CareerSkills;
+  titles: number;
+  beat: number; // events where you outscored them
+  lost: number; // events where they outscored you
+};
+
+// ── Sponsorships + economy: prize money (pro), sponsor signing bonuses and
+// per-season stipends, and cash you spend on extra training. ──
+export type Sponsor = {
+  id: string;
+  name: string;
+  tier: number; // 1 local … 4 global
+  signing: number; // one-time cash on signing
+  stipend: number; // cash per season
+  coach: boolean; // grants +1 training point each season
+  reqRating: number; // skill rating needed to be offered
+  reqStage: CareerStage; // earliest stage offered
 };
 
 export type Career = {
@@ -78,11 +109,53 @@ export type Career = {
   seasonsAtNo1: number;
   achievements: string[];
   retired: boolean;
+  cash: number;
+  sponsors: Sponsor[];
+  rivals: Rival[];
 };
 
 const clamp = (n: number, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, n));
 const TRAIN_PER_SEASON = 6;
 const RESULT_CAP = 120;
+const N_RIVALS = 6;
+const RIVAL_NAMES = [
+  "Mateo Cruz", "Jaylen Park", "Owen Fitch", "Diego Salas", "Kai Brennan", "Theo Vance",
+  "Niko Adeyemi", "Cole Rasmussen", "Eli Tanaka", "Marcus Hale", "Felix Romero", "Asher Quinn",
+];
+const RIVAL_PALETTE = ["#e23b7b", "#5fb0e8", "#b85cd6", "#e2a13b", "#36D7B7", "#f5d24a"];
+
+// Sponsors unlock by reputation (rating + stage). Sign up to 3.
+const SPONSOR_CAP = 3;
+const SPONSOR_POOL: Sponsor[] = [
+  { id: "localdisc", name: "Hometown Disc Shop", tier: 1, signing: 200, stipend: 150, coach: false, reqRating: 0, reqStage: "highschool" },
+  { id: "campusgear", name: "Campus Gear Co.", tier: 1, signing: 500, stipend: 400, coach: true, reqRating: 38, reqStage: "highschool" },
+  { id: "fairwayfoods", name: "Fairway Foods", tier: 2, signing: 1500, stipend: 1200, coach: false, reqRating: 50, reqStage: "college" },
+  { id: "apexdiscs", name: "Apex Discs", tier: 2, signing: 4000, stipend: 3000, coach: true, reqRating: 58, reqStage: "college" },
+  { id: "voltathletic", name: "Volt Athletic", tier: 3, signing: 15000, stipend: 12000, coach: false, reqRating: 66, reqStage: "pro" },
+  { id: "summitdiscs", name: "Summit Discs", tier: 3, signing: 30000, stipend: 22000, coach: true, reqRating: 72, reqStage: "pro" },
+  { id: "global", name: "Global Sportswear", tier: 4, signing: 90000, stipend: 60000, coach: true, reqRating: 80, reqStage: "pro" },
+];
+
+// One generation of named rivals, born deterministically from the seed. A spread
+// of ceilings: a couple are future stars, most are solid, a few are journeymen.
+function generateRivals(seed: number): Rival[] {
+  const rng = mulberry32((seed ^ 0x1d2c6f3b) >>> 0);
+  const names = [...RIVAL_NAMES];
+  // deterministic shuffle
+  for (let i = names.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [names[i], names[j]] = [names[j], names[i]]; }
+  return Array.from({ length: N_RIVALS }, (_, i) => {
+    const talent = rng(); // some rivals are simply more gifted
+    const potBase = 50 + talent * 45; // 50..95 ceiling
+    const pot = (b: number) => Math.round(clamp(potBase + (rng() * 2 - 1) * 8 + b, 40, 99));
+    const start = (lo: number, hi: number) => Math.round(lo + rng() * (hi - lo));
+    const skills: CareerSkills = { power: start(15, 26), control: start(15, 26), putt: start(15, 26), mental: start(18, 30) };
+    const potential: CareerSkills = {
+      power: Math.max(skills.power + 14, pot(2)), control: Math.max(skills.control + 14, pot(0)),
+      putt: Math.max(skills.putt + 14, pot(0)), mental: Math.max(skills.mental + 12, pot(-4)),
+    };
+    return { id: `r${i}`, name: names[i], color: RIVAL_PALETTE[i % RIVAL_PALETTE.length], skills, potential, titles: 0, beat: 0, lost: 0 };
+  });
+}
 
 export function newCareer(name: string, seed: number): Career {
   const rng = mulberry32((seed ^ 0x5bd1e995) >>> 0);
@@ -101,8 +174,22 @@ export function newCareer(name: string, seed: number): Career {
     age: 10, season: 0, stage: "youth", skills, potential, trainPts: TRAIN_PER_SEASON,
     done: [], results: [], titles: [], seasonPoints: 0, careerPoints: 0, majors: 0,
     worldRank: null, bestWorldRank: null, seasonsAtNo1: 0, achievements: [], retired: false,
+    cash: 0, sponsors: [], rivals: generateRivals(seed),
   };
 }
+
+// Backfill new fields on a save from before economy/rivals existed.
+export function normalizeCareer(c: Career): Career {
+  let rivals = c.rivals;
+  if (!rivals || rivals.length === 0) {
+    rivals = generateRivals(c.seed);
+    // age the rivals up to the career's current season so they're peers, not kids
+    for (let s = 0; s < c.season; s++) rivals = rivals.map((r) => growRival(r, 11 + s));
+  }
+  return { ...c, cash: c.cash ?? 0, sponsors: c.sponsors ?? [], rivals };
+}
+
+export const rivalRating = (r: Rival): number => careerRating(r.skills);
 
 function parForMode(mode: Mode): { par: number; holes: number } {
   if (mode === "winthrop") return { par: WINTHROP_PAR, holes: 18 };
@@ -186,14 +273,47 @@ export function simEvent(c: Career, ev: CareerEvent): { score: number; field: nu
   return { score, field: genField(c, ev) };
 }
 
-// Record a finished event (played or simmed). Returns a new career + the result.
+// A rival's score for an event (deterministic per career/event/rival).
+export function rivalEventScore(c: Career, r: Rival, ev: CareerEvent): number {
+  const rng = mulberry32((c.seed ^ hashId(ev.id) ^ hashId(r.id)) >>> 0);
+  return scoreFromRating(rivalRating(r), ev, rng);
+}
+// Anonymous filler field of a given size.
+function genAnonField(c: Career, ev: CareerEvent, count: number): number[] {
+  const rng = mulberry32((c.seed ^ hashId(ev.id) ^ 0x9e3779b9) >>> 0);
+  return Array.from({ length: Math.max(0, count) }, () => {
+    const r = clamp(ev.fieldMean + (rng() * 2 - 1) * 11, 5, 99);
+    return scoreFromRating(r, ev, rng);
+  });
+}
+
+// Record a finished event (played or simmed). Folds in your recurring rivals
+// (placement, head-to-head, who actually won), prize money, points + titles.
 export function recordResult(c: Career, ev: CareerEvent, score: number, played: boolean): { career: Career; result: EventResult } {
-  const field = genField(c, ev);
-  const { placed, field: fieldN } = placeInField(field, score);
+  const rivalScores = c.rivals.map((r) => rivalEventScore(c, r, ev));
+  const anon = genAnonField(c, ev, ev.fieldSize - c.rivals.length);
+  const others = [...rivalScores, ...anon];
+  const placed = 1 + others.filter((s) => s < score).length;
+  const fieldN = others.length + 1;
   const win = placed === 1;
+  const beatRivals = rivalScores.filter((s) => score < s).length;
+
+  // Update each rival's head-to-head record; the event winner gets a title.
+  const fieldMin = Math.min(score, ...others);
+  let winnerName: string | undefined;
+  let titleGiven = false;
+  const rivals = c.rivals.map((r, i) => {
+    const rs = rivalScores[i];
+    const youBeat = score < rs;
+    let titles = r.titles;
+    if (!win && !titleGiven && rs === fieldMin && rs < score) { titles += 1; winnerName = r.name; titleGiven = true; }
+    return { ...r, beat: r.beat + (youBeat ? 1 : 0), lost: r.lost + (youBeat ? 0 : 1), titles };
+  });
+
+  const prize = c.stage === "pro" ? prizeFor(ev, placed) : 0;
   const result: EventResult = {
     eventId: ev.id, name: ev.name, season: c.season, age: c.age, stage: c.stage,
-    score, toPar: score - ev.par, placed, field: fieldN, played, win,
+    score, toPar: score - ev.par, placed, field: fieldN, played, win, beatRivals, rivalCount: c.rivals.length, winnerName, prize,
   };
   const impMult = ev.importance === "championship" ? 3 : ev.importance === "major" ? 2 : 1;
   const points = Math.max(0, fieldN - placed + 1) * impMult;
@@ -207,13 +327,21 @@ export function recordResult(c: Career, ev: CareerEvent, score: number, played: 
     ...c,
     done: [...c.done, ev.id],
     results: [...c.results, result].slice(-RESULT_CAP),
-    titles,
+    titles, rivals,
+    cash: c.cash + prize,
     seasonPoints: c.seasonPoints + points,
     careerPoints: c.careerPoints + points,
     majors: c.majors + (win && ev.importance !== "minor" ? 1 : 0),
     achievements: [...ach],
   };
   return { career, result };
+}
+
+// Pro prize money: a purse by event tier, paid to roughly the top quarter.
+function prizeFor(ev: CareerEvent, placed: number): number {
+  const purse = ev.importance === "championship" ? 100000 : ev.importance === "major" ? 50000 : 15000;
+  if (placed > Math.max(5, Math.floor(ev.fieldSize * 0.25))) return 0;
+  return Math.round((purse * Math.pow(0.6, placed - 1)) / 100) * 100;
 }
 
 // Per-skill decline speed once you age past your prime (power fades fastest).
@@ -230,6 +358,13 @@ function growSkill(skill: number, pot: number, age: number, invested: number, de
   // Past 30: gentle decline, softened by how much you train the skill.
   const loss = Math.max(0, (age - 30) * 0.55 * declineRate - invested * 0.45);
   return clamp(skill - loss, 8, pot + 2);
+}
+
+// Rivals improve on their own each season (a little focused work, no allocation).
+function growRival(r: Rival, age: number): Rival {
+  const focus = age <= 30 ? 1.2 : 0;
+  const g = (k: keyof CareerSkills) => Math.round(growSkill(r.skills[k], r.potential[k], age, focus, DECLINE[k]));
+  return { ...r, skills: { power: g("power"), control: g("control"), putt: g("putt"), mental: g("mental") } };
 }
 
 // World rank among a synthetic pro pool (pro stage only).
@@ -267,9 +402,15 @@ export function advanceSeason(c: Career, alloc: Partial<CareerSkills>): { career
     notes.push(earned ? "🏆 You've turned PRO with your card earned on the strength of your college results." : "💪 You've turned PRO — time to prove it against the world's best.");
   }
 
+  // Rivals age + improve alongside you; sponsors pay out; coaches add training.
+  const rivals = c.rivals.map((r) => growRival(r, age));
+  const stipend = c.sponsors.reduce((s, sp) => s + sp.stipend, 0);
+  const coachPts = c.sponsors.filter((sp) => sp.coach).length;
+
   let career: Career = {
-    ...c, age, season: c.season + 1, stage, skills,
-    trainPts: TRAIN_PER_SEASON, done: [], seasonPoints: 0,
+    ...c, age, season: c.season + 1, stage, skills, rivals,
+    cash: c.cash + stipend,
+    trainPts: TRAIN_PER_SEASON + coachPts, done: [], seasonPoints: 0,
   };
 
   if (stage === "pro") {
@@ -299,6 +440,63 @@ export function retire(c: Career): Career {
 // Whether the season can be wrapped up (all events resolved).
 export function seasonComplete(c: Career): boolean {
   return seasonSchedule(c).every((e) => c.done.includes(e.id));
+}
+
+const STAGE_ORDER: CareerStage[] = ["youth", "highschool", "college", "pro", "retired"];
+
+// ── Sponsorships ──
+export { SPONSOR_CAP };
+// Sponsor offers you currently qualify for (by rating + stage) and haven't signed.
+export function availableSponsors(c: Career): Sponsor[] {
+  if (c.sponsors.length >= SPONSOR_CAP || c.retired) return [];
+  const rating = careerRating(c.skills);
+  const reached = STAGE_ORDER.indexOf(c.stage);
+  const signed = new Set(c.sponsors.map((s) => s.id));
+  return SPONSOR_POOL.filter((s) => !signed.has(s.id) && rating >= s.reqRating && reached >= STAGE_ORDER.indexOf(s.reqStage));
+}
+export function signSponsor(c: Career, id: string): Career {
+  if (c.sponsors.length >= SPONSOR_CAP) return c;
+  const s = SPONSOR_POOL.find((x) => x.id === id);
+  if (!s || c.sponsors.some((x) => x.id === id)) return c;
+  return { ...c, sponsors: [...c.sponsors, s], cash: c.cash + s.signing };
+}
+
+// ── Economy: spend cash on extra training points (escalating cost per season) ──
+function boughtThisSeason(c: Career): number {
+  const coachPts = c.sponsors.filter((s) => s.coach).length;
+  return Math.max(0, c.trainPts - (TRAIN_PER_SEASON + coachPts));
+}
+export function trainingPointCost(c: Career): number {
+  const stageMult = c.stage === "pro" ? 2500 : c.stage === "college" ? 800 : c.stage === "highschool" ? 300 : 120;
+  return stageMult * (boughtThisSeason(c) + 1);
+}
+export function buyTrainingPoint(c: Career): Career {
+  const cost = trainingPointCost(c);
+  if (c.cash < cost) return c;
+  return { ...c, cash: c.cash - cost, trainPts: c.trainPts + 1 };
+}
+
+// Rivals sorted strongest-first (for the hub's rivals board).
+export function topRivals(c: Career): Rival[] {
+  return [...c.rivals].sort((a, b) => rivalRating(b) - rivalRating(a));
+}
+
+// The four toughest rivals as on-course ghosts for a played event: each one's
+// shot count on a given hole, derived from their rating (deterministic).
+export function careerGhostRacers(c: Career, ev: CareerEvent, holeIndex: number): { name: string; color: string; shots: number }[] {
+  const parPerHole = ev.par / ev.holes;
+  return topRivals(c).slice(0, 4).map((r) => {
+    const rng = mulberry32((c.seed ^ hashId(ev.id) ^ hashId(r.id) ^ (holeIndex * 2654435761)) >>> 0);
+    const adj = (50 - rivalRating(r)) * 0.02 + (rng() * 2 - 1) * 0.7;
+    const shots = Math.max(1, Math.min(8, Math.round(parPerHole + adj)));
+    return { name: r.name.split(" ").pop() || r.name, color: r.color, shots };
+  });
+}
+
+export function fmtCash(n: number): string {
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1)}M`;
+  if (n >= 1000) return `$${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1)}k`;
+  return `$${n}`;
 }
 
 export function placeLabel(placed: number): string {

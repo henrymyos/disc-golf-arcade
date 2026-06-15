@@ -11,6 +11,15 @@ import {
   advanceSeason,
   retire,
   seasonComplete,
+  normalizeCareer,
+  availableSponsors,
+  signSponsor,
+  trainingPointCost,
+  buyTrainingPoint,
+  careerGhostRacers,
+  topRivals,
+  rivalRating,
+  SPONSOR_CAP,
   IDENTITY_MODS,
   type Career,
   type CareerSkills,
@@ -142,6 +151,106 @@ describe("advanceSeason", () => {
   it("auto-retires at 42", () => {
     const c: Career = { ...newCareer("Old", 5), age: 41, stage: "pro" };
     expect(advanceSeason(c, {}).career.retired).toBe(true);
+  });
+});
+
+describe("rivals", () => {
+  it("a new career has a full generation of distinct named rivals", () => {
+    const c = newCareer("Kid", 50);
+    expect(c.rivals).toHaveLength(6);
+    expect(new Set(c.rivals.map((r) => r.name)).size).toBe(6);
+    c.rivals.forEach((r) => { expect(r.beat).toBe(0); expect(r.lost).toBe(0); });
+  });
+  it("recordResult updates head-to-head and tallies beaten rivals", () => {
+    const c = newCareer("Kid", 50);
+    const ev = seasonSchedule(c)[0];
+    const winRes = recordResult(c, ev, 1, true); // ace it → beat everyone
+    expect(winRes.result.beatRivals).toBe(6);
+    winRes.career.rivals.forEach((r) => expect(r.beat).toBe(1));
+    const loseRes = recordResult(c, ev, 999, true); // last → beat nobody
+    expect(loseRes.result.beatRivals).toBe(0);
+    loseRes.career.rivals.forEach((r) => expect(r.lost).toBe(1));
+  });
+  it("a rival can win the event and pick up a title", () => {
+    const c = newCareer("Kid", 7);
+    const ev = seasonSchedule(c)[0];
+    const { career, result } = recordResult(c, ev, 999, false); // you bomb → someone else wins
+    expect(result.win).toBe(false);
+    // either a named rival or the anonymous field won; if a rival, they got a title
+    if (result.winnerName) {
+      const champ = career.rivals.find((r) => r.name === result.winnerName);
+      expect(champ!.titles).toBe(1);
+    }
+  });
+  it("rivals grow over a season and are sorted strongest-first", () => {
+    const c = newCareer("Kid", 9);
+    const before = rivalRating(topRivals(c)[0]);
+    const after = advanceSeason(c, {}).career;
+    expect(rivalRating(topRivals(after)[0])).toBeGreaterThan(before);
+  });
+  it("careerGhostRacers yields up to four racers with real shot counts", () => {
+    const c = newCareer("Kid", 3);
+    const ev = seasonSchedule(c)[0];
+    const racers = careerGhostRacers(c, ev, 0);
+    expect(racers.length).toBeLessThanOrEqual(4);
+    racers.forEach((r) => { expect(r.shots).toBeGreaterThanOrEqual(1); expect(r.name).toBeTruthy(); });
+  });
+});
+
+describe("economy + sponsors", () => {
+  it("a pro win pays prize money; amateur events do not", () => {
+    const am = newCareer("Am", 11);
+    const ev = seasonSchedule(am)[0];
+    expect(recordResult(am, ev, 1, false).result.prize).toBe(0); // youth = amateur
+    const pro: Career = { ...newCareer("Pro", 11), stage: "pro", age: 24 };
+    const pev = seasonSchedule(pro)[0];
+    const r = recordResult(pro, pev, 1, false);
+    expect(r.result.prize).toBeGreaterThan(0);
+    expect(r.career.cash).toBe(r.result.prize);
+  });
+  it("offers sponsors by stage + rating, caps signings, and pays a signing bonus", () => {
+    const c: Career = { ...newCareer("HS", 12), stage: "highschool", age: 15, skills: { power: 50, control: 50, putt: 50, mental: 50 } };
+    const offers = availableSponsors(c);
+    expect(offers.length).toBeGreaterThan(0);
+    const signed = signSponsor(c, offers[0].id);
+    expect(signed.sponsors).toHaveLength(1);
+    expect(signed.cash).toBe(offers[0].signing);
+    // can't exceed the cap
+    let s = signed;
+    for (const o of availableSponsors(s)) s = signSponsor(s, o.id);
+    expect(s.sponsors.length).toBeLessThanOrEqual(SPONSOR_CAP);
+  });
+  it("sponsor stipends + coaches pay out and add training at season's end", () => {
+    let c: Career = { ...newCareer("Pro", 13), stage: "pro", age: 25, cash: 100000, skills: { power: 85, control: 85, putt: 85, mental: 85 } };
+    const coach = availableSponsors(c).find((o) => o.coach)!;
+    c = signSponsor(c, coach.id);
+    const next = advanceSeason(c, {}).career;
+    expect(next.cash).toBe(c.cash + coach.stipend);
+    expect(next.trainPts).toBe(6 + 1); // base + one coach
+  });
+  it("buying a training point costs escalating cash and adds a point", () => {
+    const c: Career = { ...newCareer("Pro", 14), stage: "pro", age: 25, cash: 1_000_000 };
+    const cost1 = trainingPointCost(c);
+    const c2 = buyTrainingPoint(c);
+    expect(c2.trainPts).toBe(c.trainPts + 1);
+    expect(c2.cash).toBe(c.cash - cost1);
+    expect(trainingPointCost(c2)).toBeGreaterThan(cost1); // next one costs more
+  });
+  it("can't buy training without enough cash", () => {
+    const broke: Career = { ...newCareer("Broke", 15), cash: 0 };
+    expect(buyTrainingPoint(broke).trainPts).toBe(broke.trainPts); // unchanged
+  });
+});
+
+describe("normalizeCareer (migration)", () => {
+  it("backfills cash, sponsors and rivals on an old save", () => {
+    const old = newCareer("Old", 20);
+    // simulate a pre-economy save
+    const stripped = { ...old, cash: undefined, sponsors: undefined, rivals: [] } as unknown as Career;
+    const fixed = normalizeCareer(stripped);
+    expect(fixed.cash).toBe(0);
+    expect(fixed.sponsors).toEqual([]);
+    expect(fixed.rivals).toHaveLength(6);
   });
 });
 

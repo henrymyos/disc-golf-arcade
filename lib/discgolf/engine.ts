@@ -1025,25 +1025,14 @@ type GhostState = { holeIndex: number; startAt: number; ghosts: TournGhost[] };
 const GHOST_PALETTE = ["#e23b7b", "#5fb0e8", "#b85cd6", "#e2a13b"];
 const N_RIVALS = 4;
 
-// Build the rivals' fabricated paths for one hole. Rivals are the best-skilled
-// players still in the event (cut applied in round 3); each path runs tee →
-// landing spots along the fairway → basket, one node per simulated stroke. The
-// per-hole scores match tournFieldHoles, so a ghost you watch hole out in N is
-// the same N that shows up in the live standings.
-function buildTournGhosts(t: Tournament, holeIndex: number, hole: Hole, now: number): GhostState {
-  const roundIdx = t.myTotals.length;
-  const fieldHoles = tournFieldHoles(t.seed, roundIdx);
-  const skills = tournSkills(t.seed);
-  let active = TOURN_NAMES.map((_, i) => i);
-  if (roundIdx === 2 && t.fieldTotals.length >= 2) {
-    const sums = [t.myTotals[0] + t.myTotals[1], ...t.fieldTotals[0].map((_, i) => t.fieldTotals[0][i] + t.fieldTotals[1][i])];
-    const line = [...sums].sort((a, b) => a - b)[Math.floor(sums.length / 2) - 1];
-    active = active.filter((i) => t.fieldTotals[0][i] + t.fieldTotals[1][i] <= line);
-  }
-  const rivals = [...active].sort((a, b) => skills[a] - skills[b]).slice(0, N_RIVALS);
-  const ghosts = rivals.map((idx, gi) => {
-    const s = Math.max(1, fieldHoles[idx]?.[holeIndex] ?? hole.par);
-    const rng = mulberry32((t.seed ^ (idx * 2654435761) ^ (holeIndex * 40503) ^ (roundIdx * 99991)) >>> 0);
+// Generic ghost builder: turn a list of racers (name, color, shot count for THIS
+// hole) into discs that play the hole tee → fairway landings → basket, one node
+// per shot. Shared by tournament play and Career events.
+type GhostRacer = { name: string; color: string; shots: number };
+function buildRacerGhosts(seed: number, holeIndex: number, hole: Hole, racers: GhostRacer[], now: number): GhostState {
+  const ghosts = racers.map((rc, gi) => {
+    const s = Math.max(1, rc.shots);
+    const rng = mulberry32((seed ^ (gi * 2654435761) ^ (holeIndex * 40503) ^ 0x77777) >>> 0);
     const path: Vec[] = [{ x: hole.tee.x, y: hole.tee.y }];
     for (let k = 1; k < s; k++) {
       const f = 1 - Math.pow(1 - k / s, 1.25); // cover more ground early
@@ -1055,9 +1044,28 @@ function buildTournGhosts(t: Tournament, holeIndex: number, hole: Hole, now: num
       path.push({ x: base.x + (-dy / len) * j, y: base.y + (dx / len) * j });
     }
     path.push({ x: hole.basket.x, y: hole.basket.y });
-    return { idx, name: TOURN_NAMES[idx], color: GHOST_PALETTE[gi % GHOST_PALETTE.length], path, shotDur: 1150 + rng() * 650, delay: gi * 420 + rng() * 800, holedFired: false };
+    return { idx: gi, name: rc.name, color: rc.color, path, shotDur: 1150 + rng() * 650, delay: gi * 420 + rng() * 800, holedFired: false };
   });
   return { holeIndex, startAt: now, ghosts };
+}
+
+// Tournament rivals: the best-skilled players still in the event (cut applied in
+// round 3), with per-hole scores matching tournFieldHoles, as ghost discs.
+function buildTournGhosts(t: Tournament, holeIndex: number, hole: Hole, now: number): GhostState {
+  const roundIdx = t.myTotals.length;
+  const fieldHoles = tournFieldHoles(t.seed, roundIdx);
+  const skills = tournSkills(t.seed);
+  let active = TOURN_NAMES.map((_, i) => i);
+  if (roundIdx === 2 && t.fieldTotals.length >= 2) {
+    const sums = [t.myTotals[0] + t.myTotals[1], ...t.fieldTotals[0].map((_, i) => t.fieldTotals[0][i] + t.fieldTotals[1][i])];
+    const line = [...sums].sort((a, b) => a - b)[Math.floor(sums.length / 2) - 1];
+    active = active.filter((i) => t.fieldTotals[0][i] + t.fieldTotals[1][i] <= line);
+  }
+  const rivals = [...active].sort((a, b) => skills[a] - skills[b]).slice(0, N_RIVALS);
+  const racers: GhostRacer[] = rivals.map((idx, gi) => ({
+    name: TOURN_NAMES[idx], color: GHOST_PALETTE[gi % GHOST_PALETTE.length], shots: Math.max(1, fieldHoles[idx]?.[holeIndex] ?? hole.par),
+  }));
+  return buildRacerGhosts((t.seed ^ (roundIdx * 99991)) >>> 0, holeIndex, hole, racers, now);
 }
 
 // Where a ghost is `elapsed` ms into the hole: gliding along the current shot
@@ -1154,6 +1162,7 @@ export {
   lastInBoundsLie,
   stepFlight,
   buildTournGhosts,
+  buildRacerGhosts,
   ghostPosAt,
 };
 export type {
@@ -1173,4 +1182,5 @@ export type {
   StepStatus,
   TournGhost,
   GhostState,
+  GhostRacer,
 };
