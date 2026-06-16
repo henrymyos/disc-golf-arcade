@@ -142,6 +142,14 @@ function freshHole(hole: Hole) {
   };
 }
 
+// Every fixed course in the app (shown on the "Play Courses" page). Add new
+// hand-authored courses here.
+type CourseInfo = { mode: Mode; name: string; holes: number; par: number; blurb: string };
+const FIXED_COURSES: CourseInfo[] = [
+  { mode: "course", name: "Glendoveer East", holes: 18, par: TOTAL_PAR, blurb: "Northwest Championship — a center pond, hard doglegs and tree-gate greens." },
+  { mode: "winthrop", name: "Winthrop Lake", holes: 18, par: WINTHROP_PAR, blurb: "College Nationals — the lake guards the whole front, rope-hazard golf in the middle." },
+];
+
 export function DiscGolfGame() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const stateRef = useRef<GameState | null>(null);
@@ -178,6 +186,7 @@ export function DiscGolfGame() {
   const [practiceOpen, setPracticeOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
   const [boardsOpen, setBoardsOpen] = useState(false);
+  const [coursesOpen, setCoursesOpen] = useState(false);
   const [pauseMenu, setPauseMenu] = useState<{ canRestart: boolean } | null>(null); // in-round menu (restart / home / continue)
   const [tournamentOpen, setTournamentOpen] = useState(false);
   const [tournament, setTournament] = useState<Tournament | null>(null);
@@ -2294,8 +2303,12 @@ export function DiscGolfGame() {
         />
 
         {screen === "title" && (
-          <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-gradient-to-b from-[#1c2233] via-[#141926] to-[#0f1117] px-5">
-            <div className="w-full max-w-[290px] flex flex-col items-center text-center">
+          <div className="absolute inset-0 overflow-y-auto rounded-lg bg-gradient-to-b from-[#1c2233] via-[#141926] to-[#0f1117]">
+            <div
+              className="min-h-full flex items-center justify-center px-5"
+              style={{ paddingTop: "max(env(safe-area-inset-top), 0.75rem)", paddingBottom: "max(env(safe-area-inset-bottom), 0.75rem)" }}
+            >
+            <div className="w-full max-w-[290px] flex flex-col items-center text-center py-2">
               {/* Logo */}
               <div className="flex flex-col items-center gap-2">
                 <svg width="44" height="44" viewBox="0 0 32 32" aria-hidden className="drop-shadow">
@@ -2366,13 +2379,9 @@ export function DiscGolfGame() {
                   className="w-full rounded-xl bg-[#36D7B7] hover:bg-[#2bc4a6] active:scale-[0.99] text-[#0f1117] font-bold py-3 transition flex items-center justify-center gap-2">
                   <span>🔥 Daily Challenge</span>
                 </button>
-                <button type="button" onClick={() => startGame("course")}
+                <button type="button" onClick={() => setCoursesOpen(true)}
                   className="w-full rounded-xl bg-[#4B3DFF] hover:bg-[#3a2ee0] active:scale-[0.99] text-white font-bold py-3 transition">
-                  ▶ Play Glendoveer · 18
-                </button>
-                <button type="button" onClick={() => startGame("winthrop")}
-                  className="w-full rounded-xl bg-[#f5d24a] hover:bg-[#e3c138] active:scale-[0.99] text-[#0f1117] font-bold py-3 transition">
-                  🏆 Play Winthrop Lake · 18
+                  ⛳ Play Courses · {FIXED_COURSES.length}
                 </button>
                 <button type="button" onClick={() => { setCareerLastResult(null); setCareerNotes([]); setCareerOpen(true); }}
                   className="w-full rounded-xl bg-gradient-to-r from-[#e0923b] to-[#e2453b] hover:brightness-110 active:scale-[0.99] text-white font-bold py-3 transition">
@@ -2420,6 +2429,7 @@ export function DiscGolfGame() {
                   </button>
                 )}
               </div>
+            </div>
             </div>
           </div>
         )}
@@ -2584,6 +2594,15 @@ export function DiscGolfGame() {
             onSign={(id) => { const c = careerRef.current; if (c) saveCareer(signSponsor(c, id)); }}
             onBuyTrain={() => { const c = careerRef.current; if (c) saveCareer(buyTrainingPoint(c)); }}
             dismissNotes={() => setCareerNotes([])}
+          />
+        )}
+
+        {coursesOpen && (
+          <CoursesPanel
+            courses={FIXED_COURSES}
+            bests={{ course: bestScore, winthrop: winthropBest }}
+            onClose={() => setCoursesOpen(false)}
+            onPlay={(m) => { setCoursesOpen(false); startGame(m); }}
           />
         )}
 
@@ -3675,6 +3694,47 @@ function CareerPanel({ career, lastResult, notes, onClose, onStart, onPlay, onSi
         )}
       </div>
     </div></div>
+  );
+}
+
+// Every fixed course in the app on one page — keeps the title screen short and
+// scales as new courses are added to FIXED_COURSES.
+function CoursesPanel({ courses, bests, onClose, onPlay }: {
+  courses: CourseInfo[];
+  bests: Record<string, number | null>;
+  onClose: () => void;
+  onPlay: (m: Mode) => void;
+}) {
+  const over = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
+  return (
+    <div className="absolute inset-0 z-20 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm p-4 flex items-start justify-center rounded-lg">
+      <div className="w-full max-w-xs space-y-3 my-auto text-left">
+        <div className="flex items-center justify-between">
+          <h2 className="text-white font-black text-xl">⛳ Play Courses</h2>
+          <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
+        </div>
+        <p className="text-gray-500 text-[11px]">Every course in the app — more on the way.</p>
+        {courses.map((c) => {
+          const best = bests[c.mode];
+          return (
+            <div key={c.mode} className="rounded-xl bg-[#1a1d23] border border-white/10 p-3">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-white font-bold text-sm truncate">{c.name}</span>
+                <span className="text-gray-500 text-[10px] shrink-0">{c.holes} holes · par {c.par}</span>
+              </div>
+              <p className="text-gray-500 text-[11px] mt-0.5 leading-snug">{c.blurb}</p>
+              <div className="flex items-center justify-between mt-2.5">
+                <span className="text-[11px] text-gray-400">
+                  {best != null ? <>Best <span className="text-[#36D7B7] font-bold">{best}</span> <span className="text-gray-500">({over(best - c.par)})</span></> : "Not played yet"}
+                </span>
+                <button type="button" onClick={() => onPlay(c.mode)} className="rounded-lg bg-[#4B3DFF] hover:bg-[#3a2ee0] text-white text-sm font-bold px-5 py-1.5 transition">▶ Play</button>
+              </div>
+            </div>
+          );
+        })}
+        <button type="button" onClick={onClose} className={`${btn} w-full`}>Done</button>
+      </div>
+    </div>
   );
 }
 
