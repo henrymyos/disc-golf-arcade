@@ -84,6 +84,20 @@ describe("seasonSchedule", () => {
     expect(nats).toBeTruthy();
     expect(nats!.mode).toBe("winthrop");
   });
+  it("the pro tour visits multiple generated venues with real pars", () => {
+    const c: Career = { ...newCareer("Pro", 1), stage: "pro", age: 26, season: 5 };
+    const sched = seasonSchedule(c);
+    const tour = sched.filter((e) => e.mode === "tour");
+    expect(tour.length).toBeGreaterThanOrEqual(3);
+    const venues = new Set(tour.map((e) => e.venue));
+    expect(venues.size).toBeGreaterThanOrEqual(2); // distinct courses
+    tour.forEach((e) => {
+      expect(e.venue).toBeTruthy();
+      expect(e.seed).toBeTypeOf("number");
+      expect(e.holes).toBe(18);
+      expect(e.par).toBeGreaterThanOrEqual(62); // a real generated par, not the placeholder pattern
+    });
+  });
 });
 
 describe("event simulation", () => {

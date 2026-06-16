@@ -466,7 +466,9 @@ export function DiscGolfGame() {
   }, []);
 
   const startGame = useCallback((mode?: Mode, seedOverride?: number) => {
-    const m = mode ?? modeRef.current;
+    // "tour" only exists inside Career events — never fall back to it for a
+    // plain title-screen round (default to Glendoveer instead).
+    const m = mode ?? (modeRef.current === "tour" ? "course" : modeRef.current);
     modeRef.current = m;
     if (!audioRef.current) {
       audioRef.current = new AudioEngine();
@@ -524,9 +526,13 @@ export function DiscGolfGame() {
     careerEventRef.current = ev;
     careerFieldRef.current = careerFieldHoles(c, ev); // your card + the live board
     // Deterministic seed per (career, event) so a replay plays the same course.
-    let h = c.seed >>> 0;
-    for (let i = 0; i < ev.id.length; i++) h = (Math.imul(h, 31) + ev.id.charCodeAt(i)) >>> 0;
-    const seed = h | 0;
+    // Tour events carry their own course seed (it also drives the venue + par).
+    let seed = ev.seed;
+    if (seed == null) {
+      let h = c.seed >>> 0;
+      for (let i = 0; i < ev.id.length; i++) h = (Math.imul(h, 31) + ev.id.charCodeAt(i)) >>> 0;
+      seed = h | 0;
+    }
     const roundHoles = buildRound(seed, ev.mode);
     const adv = advancedRef.current;
     const discIndex = validDiscIndex(adv, discIndexRef.current, unlockedRef.current);
@@ -3591,7 +3597,7 @@ function CareerPanel({ career, lastResult, notes, onClose, onStart, onPlay, onSi
           const r = resultFor(ev.id);
           const impColor = ev.importance === "championship" ? "text-[#f5d24a]" : ev.importance === "major" ? "text-[#5fb0e8]" : "text-gray-500";
           const impWord = ev.importance === "championship" ? "Championship" : ev.importance === "major" ? "Major" : "Tour";
-          const courseLabel = ev.mode === "winthrop" ? "Winthrop Lake" : ev.mode === "course" ? "Glendoveer" : "9-hole";
+          const courseLabel = ev.venue ?? (ev.mode === "winthrop" ? "Winthrop Lake" : ev.mode === "course" ? "Glendoveer" : "9-hole");
           return (
             <div key={ev.id} className="bg-[#1a1d23] border border-white/5 rounded-lg px-3 py-2">
               <div className="flex items-center justify-between gap-2">

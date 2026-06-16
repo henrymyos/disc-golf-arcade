@@ -3,7 +3,7 @@
 // Lake), and the pro tour. Events can be SIMULATED from your skills or PLAYED
 // as real rounds (your skills change how the disc flies — see skillMods). All
 // logic here is pure + deterministic so it's testable and resumes cleanly. ──
-import { mulberry32, CATCH_R, TOTAL_PAR, WINTHROP_PAR, type Mode, type TournLiveRow, type GhostRacer } from "./engine";
+import { mulberry32, CATCH_R, TOTAL_PAR, WINTHROP_PAR, tourPars, type Mode, type TournLiveRow, type GhostRacer } from "./engine";
 
 export type CareerSkills = { power: number; control: number; putt: number; mental: number };
 export const SKILL_KEYS: (keyof CareerSkills)[] = ["power", "control", "putt", "mental"];
@@ -41,6 +41,8 @@ export type CareerEvent = {
   importance: "minor" | "major" | "championship";
   fieldSize: number;
   fieldMean: number; // mean rating of the field
+  seed?: number;    // course seed (for generated "tour" venues)
+  venue?: string;   // venue name for generated tour courses
 };
 
 export type EventResult = {
@@ -194,7 +196,24 @@ export const rivalRating = (r: Rival): number => careerRating(r.skills);
 function parForMode(mode: Mode): { par: number; holes: number } {
   if (mode === "winthrop") return { par: WINTHROP_PAR, holes: 18 };
   if (mode === "course") return { par: TOTAL_PAR, holes: 18 };
+  if (mode === "tour") return { par: 70, holes: 18 }; // placeholder; tour events set real par from the seed
   return { par: 27, holes: 9 }; // daily-style 9-hole event (par ~27)
+}
+
+// Named venues for generated pro "tour" courses. The seed picks one (and builds
+// the actual 18 holes), so the pro tour visits many distinct courses a season.
+const VENUE_NAMES = [
+  "Pinecrest Ridge", "Granite Falls", "Harbor Pines", "Copperhead GC", "Whitetail Run",
+  "Sandstone Mesa", "Cedar Hollow", "Iron Mountain", "Blue Heron Park", "Timber Ridge",
+  "Cypress Bend", "Eagle Bluff", "Riverbend Commons", "Foxglove Meadows", "Lakeshore Links",
+  "Birchwood Trace", "Coyote Canyon", "Maplewood Estate", "Silver Creek", "Thunder Valley",
+  "Heron Marsh", "Oakmont Acres", "Sunset Dunes", "Wolf Ridge", "Aspen Glade", "Stonebriar",
+];
+function tourCourseSeed(careerSeed: number, fullId: string): number {
+  return (careerSeed ^ hashId(fullId) ^ 0x51ed270b) >>> 0;
+}
+function tourVenue(seed: number): string {
+  return VENUE_NAMES[seed % VENUE_NAMES.length];
 }
 
 // The events on offer this season, by stage. Deterministic from seed + season.
@@ -202,8 +221,14 @@ export function seasonSchedule(c: Career): CareerEvent[] {
   const rng = mulberry32((c.seed * 2654435761 + c.season * 40503) >>> 0);
   const pick = <T,>(arr: T[]) => arr[Math.floor(rng() * arr.length)];
   const ev = (id: string, name: string, mode: Mode, importance: CareerEvent["importance"], fieldSize: number, fieldMean: number): CareerEvent => {
+    const fullId = `${c.season}-${id}`;
+    if (mode === "tour") {
+      const seed = tourCourseSeed(c.seed, fullId);
+      const par = tourPars(seed).reduce((a, b) => a + b, 0);
+      return { id: fullId, name, mode, holes: 18, par, importance, fieldSize, fieldMean, seed, venue: tourVenue(seed) };
+    }
     const { par, holes } = parForMode(mode);
-    return { id: `${c.season}-${id}`, name, mode, holes, par, importance, fieldSize, fieldMean };
+    return { id: fullId, name, mode, holes, par, importance, fieldSize, fieldMean };
   };
   const ramp = c.season * 0.6; // the field slowly toughens season over season within a stage
   switch (c.stage) {
@@ -220,15 +245,18 @@ export function seasonSchedule(c: Career): CareerEvent[] {
       ];
     case "college":
       return [
-        ev("co1", pick(["Conference Opener", "Autumn Collegiate", "Sunbelt Showdown"]), "course", "minor", 28, 50 + ramp),
+        ev("co1", pick(["Conference Opener", "Autumn Collegiate", "Sunbelt Showdown"]), "tour", "minor", 28, 50 + ramp),
         ev("co2", "Conference Championship", "winthrop", "major", 32, 55 + ramp),
         ev("con", "College Nationals", "winthrop", "championship", 36, 60 + ramp),
       ];
     case "pro": {
+      // The pro tour rolls through a rotating slate of generated venues, with the
+      // World Championship at classic Glendoveer every other season.
       const out: CareerEvent[] = [
-        ev("pt1", pick(["Spring Open", "Maple Hill Tour Stop", "Emerald Cup", "Music City Open"]), pick(["course", "daily"]) as Mode, "minor", 72, 66 + ramp * 0.4),
-        ev("pt2", pick(["Ledgestone Open", "Discraft Classic", "Portland Open"]), "course", "minor", 72, 68 + ramp * 0.4),
-        ev("maj", pick(["The Memorial Major", "European Open", "Pro Worlds Qualifier"]), "winthrop", "major", 90, 72 + ramp * 0.4),
+        ev("pt1", pick(["Spring Open", "Maple Hill Tour Stop", "Emerald Cup", "Music City Open"]), "tour", "minor", 72, 66 + ramp * 0.4),
+        ev("pt2", pick(["Ledgestone Open", "Discraft Classic", "Portland Open", "Las Vegas Challenge"]), "tour", "minor", 72, 68 + ramp * 0.4),
+        ev("pt3", pick(["Jonesboro Open", "Texas States", "Kansas City Wide Open"]), "tour", "minor", 80, 70 + ramp * 0.4),
+        ev("maj", pick(["The Memorial Major", "European Open", "Champions Cup"]), "tour", "major", 90, 72 + ramp * 0.4),
       ];
       // A World Championship lands every other season once you're established.
       if (c.season % 2 === 1) out.push(ev("wc", "World Championship", "course", "championship", 96, 76 + ramp * 0.4));

@@ -388,7 +388,9 @@ function tournStandings(t: Tournament): TournRow[] {
 // (Hole 9 is zoned in its template instead: downhill first half, uphill second.)
 const HOLE_ELEV = [0, -2, 0, 0, -2, -2, 2, -1, 0, 0, -2, -1, 1, -1, 0, 0, 0, 0];
 
-type Mode = "daily" | "course" | "winthrop";
+// "tour" = a procedurally-generated 18-hole pro course (built from a seed; named
+// venues live in the Career schedule). Lets the pro tour visit many courses.
+type Mode = "daily" | "course" | "winthrop" | "tour";
 
 // Achievements — evaluated from a finished round's per-hole scores.
 type Achievement = { id: string; name: string; emoji: string; desc: string };
@@ -784,11 +786,16 @@ function pointOnPath(pts: Vec[], t: number): Vec {
   return pts[pts.length - 1];
 }
 // Procedurally author one hole (template space) from the RNG: a forward-running
-// curved fairway with doglegs, guard trees, and the odd pond/sand.
-function genDailyHole(rng: () => number): Hole {
+// curved fairway with doglegs, guard trees, and the odd pond/sand. `opts.par`
+// forces the par (else it's picked); `opts.tighten` (<1) narrows the fairway and
+// adds guards/hazards for a tougher pro hole. With no opts, byte-for-byte the
+// original daily-hole generator (so existing daily courses are unchanged).
+function genDailyHole(rng: () => number, opts: { par?: number; tighten?: number } = {}): Hole {
   const r = (a: number, b: number) => a + rng() * (b - a);
   const pickN = (arr: number[]) => arr[Math.floor(rng() * arr.length)];
-  const par = pickN([3, 3, 3, 4, 4, 4, 4, 5, 5]);
+  const par = opts.par ?? pickN([3, 3, 3, 4, 4, 4, 4, 5, 5]);
+  const tighten = opts.tighten ?? 1;
+  const pro = tighten < 1;
   const basketX = Math.round(r(74, 246));
   const basketY = Math.round(r(72, 138));
   const nBends = par <= 3 ? 1 : par === 4 ? (rng() < 0.5 ? 1 : 2) : 2;
@@ -801,7 +808,7 @@ function genDailyHole(rng: () => number): Hole {
     pts.push({ x: prevX, y });
   }
   pts.push({ x: basketX, y: basketY });
-  let fwWidth = Math.round(par <= 3 ? r(104, 124) : par === 4 ? r(112, 140) : r(122, 150));
+  let fwWidth = Math.round((par <= 3 ? r(104, 124) : par === 4 ? r(112, 140) : r(122, 150)) * tighten);
   if (rng() < 0.2) fwWidth = Math.round(fwWidth * 0.82); // occasional tunnel
   const elev = pickN([-2, -1, -1, 0, 0, 1, 1, 2]);
 
@@ -816,7 +823,7 @@ function genDailyHole(rng: () => number): Hole {
     const turn = Math.sign((pts[i + 1].x - p.x) - (p.x - pts[i - 1].x)) || (rng() < 0.5 ? 1 : -1);
     addTree(p, -turn, r(0, 10)); // guard the inside of the dogleg
   }
-  const nExtra = Math.floor(r(1, 3));
+  const nExtra = Math.floor(r(1, pro ? 4 : 3));
   for (let k = 0; k < nExtra; k++) addTree(pointOnPath(pts, r(0.25, 0.8)), rng() < 0.5 ? 1 : -1, r(2, 16));
 
   const sideBox = (p: Vec, wMin: number, wMax: number, hMin: number, hMax: number, inset: number): Water => {
@@ -827,8 +834,8 @@ function genDailyHole(rng: () => number): Hole {
     const x = Math.round(Math.max(8, Math.min(300 - w, cxp - (side < 0 ? w : 0))));
     return { x, y: Math.round(p.y - h / 2), w, h };
   };
-  const water: Water[] = rng() < 0.35 ? [sideBox(pointOnPath(pts, r(0.4, 0.72)), 46, 74, 26, 44, 6)] : [];
-  const hazard: Water[] = rng() < 0.32 ? [sideBox(pointOnPath(pts, r(0.3, 0.78)), 24, 36, 18, 26, 10)] : [];
+  const water: Water[] = rng() < (pro ? 0.4 : 0.35) ? [sideBox(pointOnPath(pts, r(0.4, 0.72)), 46, 74, 26, 44, 6)] : [];
+  const hazard: Water[] = rng() < (pro ? 0.42 : 0.32) ? [sideBox(pointOnPath(pts, r(0.3, 0.78)), 24, 36, 18, 26, 10)] : [];
 
   return materializeHole({ par, tee: TEE, basket: { x: basketX, y: basketY }, fairway: pts, fwWidth, trees, water, hazard, elev });
 }
@@ -842,11 +849,31 @@ function generateDailyCourse(rng: () => number): Hole[] {
   }
   return holes;
 }
-// Build one playable round. Daily = a new 9-hole course; course = the 18 fixed
-// Glendoveer holes with seeded wind + a jittered pin. Same seed ⇒ same round.
+// The 18 pars of a generated pro course — cheap to compute (own RNG), so the
+// Career schedule can show a course's par without building all its geometry.
+function tourPars(seed: number): number[] {
+  const rng = mulberry32((seed ^ 0x6f4e3d2c) >>> 0);
+  const bag = [3, 3, 4, 4, 4, 4, 4, 5]; // pro mix → par ~68–71 over 18
+  return Array.from({ length: 18 }, () => bag[Math.floor(rng() * bag.length)]);
+}
+// A procedurally-generated 18-hole pro "tour" course: tougher than the daily
+// (narrower, more guards), with the pars from tourPars(seed). Deterministic.
+function generateTourCourse(seed: number): Hole[] {
+  const pars = tourPars(seed);
+  const rng = mulberry32((seed ^ 0x2545f491) >>> 0);
+  return pars.map((par) => {
+    const h = genDailyHole(rng, { par, tighten: 0.92 });
+    const { wind, windMag } = seededWind(rng);
+    return { ...h, wind, windMag };
+  });
+}
+// Build one playable round. Daily = a new 9-hole course; tour = a generated
+// 18-hole pro course; course = the 18 fixed Glendoveer holes with seeded wind +
+// a jittered pin. Same seed ⇒ same round.
 function buildRound(seed: number, mode: Mode): Hole[] {
   const rng = mulberry32(seed);
   if (mode === "daily") return generateDailyCourse(rng);
+  if (mode === "tour") return generateTourCourse(seed);
   const course = mode === "winthrop" ? WINTHROP_HOLES : HOLES;
   return course.map((h, i) => {
     const { wind, windMag } = seededWind(rng);
@@ -1154,6 +1181,8 @@ export {
   pointOnPath,
   genDailyHole,
   generateDailyCourse,
+  tourPars,
+  generateTourCourse,
   buildRound,
   SLOPE_PULL,
   elevGroundFriction,

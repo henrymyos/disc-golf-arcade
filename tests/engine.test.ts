@@ -19,6 +19,8 @@ import {
   tournLiveStandings,
   TOURN_NAMES,
   materializeHole,
+  tourPars,
+  generateTourCourse,
   buildTournGhosts,
   ghostPosAt,
   type Tournament,
@@ -94,6 +96,32 @@ describe("buildRound determinism", () => {
   });
   it("daily generates a 9-hole course", () => {
     expect(buildRound(999, "daily")).toHaveLength(9);
+  });
+  it("tour generates an 18-hole pro course, deterministic and pin-fair", () => {
+    const a = buildRound(4242, "tour");
+    expect(a).toHaveLength(18);
+    expect(JSON.stringify(a)).toBe(JSON.stringify(buildRound(4242, "tour")));
+    expect(JSON.stringify(a)).not.toBe(JSON.stringify(buildRound(4243, "tour")));
+    for (const h of a) {
+      expect(h.basket.y).toBeLessThan(h.tee.y);
+      expect(h.worldH).toBeGreaterThan(448);
+    }
+  });
+});
+
+describe("tour course pars", () => {
+  it("tourPars gives 18 pro pars (3–5) summing to a realistic total", () => {
+    const pars = tourPars(777);
+    expect(pars).toHaveLength(18);
+    pars.forEach((p) => expect([3, 4, 5]).toContain(p));
+    const sum = pars.reduce((a, b) => a + b, 0);
+    expect(sum).toBeGreaterThanOrEqual(62);
+    expect(sum).toBeLessThanOrEqual(75);
+  });
+  it("a built tour course's hole pars match tourPars(seed)", () => {
+    const seed = 31337;
+    const built = generateTourCourse(seed).map((h) => h.par);
+    expect(built).toEqual(tourPars(seed));
   });
   it("keeps jittered pins inside the fairway corridor", () => {
     const round = buildRound(777, "course");
