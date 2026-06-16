@@ -20,6 +20,7 @@ import {
   TOURN_NAMES,
   materializeHole,
   tourPars,
+  tourCharacter,
   generateTourCourse,
   buildTournGhosts,
   ghostPosAt,
@@ -122,6 +123,19 @@ describe("tour course pars", () => {
     const seed = 31337;
     const built = generateTourCourse(seed).map((h) => h.par);
     expect(built).toEqual(tourPars(seed));
+  });
+  it("each venue has a character that actually shapes the course", () => {
+    // seed 0 → Wooded style, seed 8 → Water-laden style ((seed>>>3) % 6).
+    expect(tourCharacter(0).character).toBe("Wooded");
+    expect(tourCharacter(8).character).toBe("Water-laden");
+    expect(tourCharacter(8)).toEqual(tourCharacter(8)); // deterministic
+
+    const wooded = generateTourCourse(0);
+    const watery = generateTourCourse(8);
+    const trees = (c: typeof wooded) => c.reduce((n, h) => n + h.trees.length, 0);
+    const water = (c: typeof wooded) => c.reduce((n, h) => n + h.water.length, 0);
+    expect(trees(wooded)).toBeGreaterThan(trees(watery)); // wooded = more trees
+    expect(water(watery)).toBeGreaterThan(water(wooded)); // water-laden = more ponds
   });
   it("keeps jittered pins inside the fairway corridor", () => {
     const round = buildRound(777, "course");

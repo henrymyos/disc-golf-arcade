@@ -88,7 +88,7 @@ type GameState = {
   party?: { names: string[]; current: number; scores: (number | null)[][] }; // hot-seat pass-and-play
   online?: boolean; // online Friendly Challenge round (scores synced over Realtime)
   advanced: boolean; // advanced bag (real discs) vs simple (putter/mid/driver)
-  career?: { eventId: string; eventName: string }; // round is a played Career event
+  career?: { eventId: string; eventName: string; venue?: string; character?: string; emoji?: string }; // round is a played Career event
   skill: SkillMods; // Career skill effects on flight (identity for normal play)
   seed: number; // round seed (drives wind + pins)
   roundHoles: Hole[]; // this round's holes (wind/pins baked in)
@@ -540,7 +540,8 @@ export function DiscGolfGame() {
     setDiscIndex(discIndex);
     stateRef.current = {
       holeIndex: 0, scores: [], discIndex, roundPaths: [],
-      mode: ev.mode, advanced: adv, skill: skillMods(c.skills), career: { eventId: ev.id, eventName: ev.name },
+      mode: ev.mode, advanced: adv, skill: skillMods(c.skills),
+      career: { eventId: ev.id, eventName: ev.name, venue: ev.venue, character: ev.character, emoji: ev.emoji },
       seed, roundHoles, ...freshHole(roundHoles[0]),
     };
     ghostRef.current = null;
@@ -2095,16 +2096,28 @@ export function DiscGolfGame() {
       // Intro caption — hole, par, and the slope (so elevation is read up front).
       if (g.phase === "intro") {
         const elev = hole.elev ?? 0;
+        const venue = g.career?.venue;
         ctx.fillStyle = "rgba(0,0,0,0.55)";
-        ctx.fillRect(0, H / 2 - 20, W, 40);
+        ctx.fillRect(0, H / 2 - (venue ? 32 : 20), W, venue ? 52 : 40);
+        ctx.textAlign = "center";
+        if (venue) {
+          // Career venue + its character (wooded, water-laden, links, …).
+          ctx.fillStyle = "#f5d24a";
+          ctx.font = "bold 9px monospace";
+          ctx.fillText(`${g.career?.emoji ?? ""} ${venue}`.trim().toUpperCase(), W / 2, H / 2 - 21);
+          if (g.career?.character) {
+            ctx.fillStyle = "#9ab";
+            ctx.font = "8px monospace";
+            ctx.fillText(g.career.character, W / 2, H / 2 - 12);
+          }
+        }
         ctx.fillStyle = "#fff";
         ctx.font = "10px monospace";
-        ctx.textAlign = "center";
         ctx.fillText(
           g.party
             ? `${g.party.names[g.party.current].toUpperCase().slice(0, 12)}  ·  HOLE ${g.holeIndex + 1}  ·  PAR ${hole.par}`
             : `HOLE ${g.practiceHole ?? g.holeIndex + 1}  ·  PAR ${hole.par}${g.practice ? "  ·  PRACTICE" : ""}`,
-          W / 2, H / 2 - 6,
+          W / 2, H / 2 - (venue ? 2 : 6),
         );
         if (hole.elevZones?.length) {
           // Changing slope, e.g. "▼ DOWNHILL EARLY — UPHILL LATE ▲"
@@ -3604,6 +3617,7 @@ function CareerPanel({ career, lastResult, notes, onClose, onStart, onPlay, onSi
                 <div className="min-w-0">
                   <p className="text-white text-sm font-semibold truncate">{ev.name}</p>
                   <p className="text-[10px] text-gray-500"><span className={impColor}>{impWord}</span> · {courseLabel} · {ev.fieldSize} players</p>
+                  {ev.character && <p className="text-[10px] text-gray-500 truncate">{ev.emoji} {ev.character}</p>}
                 </div>
                 {r ? (
                   <span className={`shrink-0 text-xs font-bold ${r.win ? "text-[#f5d24a]" : "text-gray-300"}`} title={r.played ? "played" : "simmed"}>{placeLabel(r.placed)} <span className="text-gray-500 font-normal">{r.played ? "▶" : "⚡"}</span></span>

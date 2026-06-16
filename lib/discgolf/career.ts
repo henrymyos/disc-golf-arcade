@@ -3,7 +3,7 @@
 // Lake), and the pro tour. Events can be SIMULATED from your skills or PLAYED
 // as real rounds (your skills change how the disc flies — see skillMods). All
 // logic here is pure + deterministic so it's testable and resumes cleanly. ──
-import { mulberry32, CATCH_R, TOTAL_PAR, WINTHROP_PAR, tourPars, type Mode, type TournLiveRow, type GhostRacer } from "./engine";
+import { mulberry32, CATCH_R, TOTAL_PAR, WINTHROP_PAR, tourPars, tourCharacter, type Mode, type TournLiveRow, type GhostRacer } from "./engine";
 
 export type CareerSkills = { power: number; control: number; putt: number; mental: number };
 export const SKILL_KEYS: (keyof CareerSkills)[] = ["power", "control", "putt", "mental"];
@@ -43,6 +43,8 @@ export type CareerEvent = {
   fieldMean: number; // mean rating of the field
   seed?: number;    // course seed (for generated "tour" venues)
   venue?: string;   // venue name for generated tour courses
+  character?: string; // venue personality (wooded, water-laden, links, …)
+  emoji?: string;
 };
 
 export type EventResult = {
@@ -225,7 +227,8 @@ export function seasonSchedule(c: Career): CareerEvent[] {
     if (mode === "tour") {
       const seed = tourCourseSeed(c.seed, fullId);
       const par = tourPars(seed).reduce((a, b) => a + b, 0);
-      return { id: fullId, name, mode, holes: 18, par, importance, fieldSize, fieldMean, seed, venue: tourVenue(seed) };
+      const { character, emoji } = tourCharacter(seed);
+      return { id: fullId, name, mode, holes: 18, par, importance, fieldSize, fieldMean, seed, venue: tourVenue(seed), character, emoji };
     }
     const { par, holes } = parForMode(mode);
     return { id: fullId, name, mode, holes, par, importance, fieldSize, fieldMean };
