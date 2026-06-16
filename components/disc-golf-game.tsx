@@ -2375,28 +2375,22 @@ export function DiscGolfGame() {
 
               {/* Primary actions */}
               <div className={`w-full flex flex-col gap-2 ${challenge || resumeRound ? "mt-2" : "mt-5"}`}>
-                <button type="button" onClick={() => startGame("daily")}
-                  className="w-full rounded-xl bg-[#36D7B7] hover:bg-[#2bc4a6] active:scale-[0.99] text-[#0f1117] font-bold py-3 transition flex items-center justify-center gap-2">
-                  <span>🔥 Daily Challenge</span>
+                <button type="button" onClick={() => startGame("daily")} className={titleCard}>
+                  🔥 Daily Challenge
                 </button>
-                <button type="button" onClick={() => setCoursesOpen(true)}
-                  className="w-full rounded-xl bg-[#4B3DFF] hover:bg-[#3a2ee0] active:scale-[0.99] text-white font-bold py-3 transition">
+                <button type="button" onClick={() => setCoursesOpen(true)} className={titleCard}>
                   ⛳ Play Courses · {FIXED_COURSES.length}
                 </button>
-                <button type="button" onClick={() => { setCareerLastResult(null); setCareerNotes([]); setCareerOpen(true); }}
-                  className="w-full rounded-xl bg-gradient-to-r from-[#e0923b] to-[#e2453b] hover:brightness-110 active:scale-[0.99] text-white font-bold py-3 transition">
+                <button type="button" onClick={() => { setCareerLastResult(null); setCareerNotes([]); setCareerOpen(true); }} className={titleCard}>
                   🌟 Career{career && !career.retired ? ` · ${STAGE_LABEL[career.stage]}, age ${career.age}` : ""}
                 </button>
-                <button type="button" onClick={() => setTournamentOpen(true)}
-                  className="w-full rounded-xl border border-[#f5d24a]/40 bg-[#f5d24a]/10 hover:bg-[#f5d24a]/20 active:scale-[0.99] text-white font-bold py-3 transition">
+                <button type="button" onClick={() => setTournamentOpen(true)} className={titleCard}>
                   🏟 Tournament{tournament && !tournament.finished ? ` · R${tournament.myTotals.length + 1}` : ""}
                 </button>
-                <button type="button" onClick={() => setChallengeOpen(true)}
-                  className="w-full rounded-xl border border-white/15 bg-white/5 hover:bg-white/10 active:scale-[0.99] text-white font-bold py-3 transition">
+                <button type="button" onClick={() => setChallengeOpen(true)} className={titleCard}>
                   👥 Challenge Friends
                 </button>
-                <button type="button" onClick={() => setTutorialOpen(true)}
-                  className="w-full rounded-xl border border-white/15 bg-white/5 hover:bg-white/10 active:scale-[0.99] text-white font-bold py-3 transition">
+                <button type="button" onClick={() => setTutorialOpen(true)} className={titleCard}>
                   📖 How to Play
                 </button>
               </div>
@@ -2404,27 +2398,22 @@ export function DiscGolfGame() {
 
               {/* Secondary actions */}
               <div className="w-full flex gap-2 mt-4">
-                <button type="button" onClick={() => setBoardsOpen(true)}
-                  className="flex-1 rounded-lg border border-white/10 hover:border-white/25 text-gray-300 hover:text-white text-xs font-semibold py-2 transition">
+                <button type="button" onClick={() => setBoardsOpen(true)} className={titleCardSm}>
                   🏆 Leaders
                 </button>
-                <button type="button" onClick={() => setPracticeOpen(true)}
-                  className="flex-1 rounded-lg border border-white/10 hover:border-white/25 text-gray-300 hover:text-white text-xs font-semibold py-2 transition">
+                <button type="button" onClick={() => setPracticeOpen(true)} className={titleCardSm}>
                   🎯 Practice
                 </button>
-                <button type="button" onClick={() => setStatsOpen(true)}
-                  className="flex-1 rounded-lg border border-white/10 hover:border-white/25 text-gray-300 hover:text-white text-xs font-semibold py-2 transition">
+                <button type="button" onClick={() => setStatsOpen(true)} className={titleCardSm}>
                   📊 Stats
                 </button>
               </div>
               <div className="w-full flex gap-2 mt-2">
-                <button type="button" onClick={() => setSettingsOpen(true)}
-                  className="flex-1 rounded-lg border border-white/10 hover:border-white/25 text-gray-300 hover:text-white text-xs font-semibold py-2 transition">
+                <button type="button" onClick={() => setSettingsOpen(true)} className={titleCardSm}>
                   ⚙ Settings
                 </button>
                 {supa && (
-                  <button type="button" onClick={() => { setAuthErr(null); setAuthMsg(null); setAuthOpen(true); }}
-                    className="flex-1 rounded-lg border border-white/10 hover:border-white/25 text-gray-300 hover:text-white text-xs font-semibold py-2 transition truncate px-2">
+                  <button type="button" onClick={() => { setAuthErr(null); setAuthMsg(null); setAuthOpen(true); }} className={`${titleCardSm} truncate px-2`}>
                     {user ? `👤 ${user.email}` : "👤 Log in"}
                   </button>
                 )}
@@ -3040,6 +3029,12 @@ export function DiscGolfGame() {
 
 const btn =
   "mt-1 bg-[#4B3DFF] hover:bg-[#3a2ee0] text-white font-bold px-6 py-3 rounded-lg transition";
+
+// Uniform title-screen action cards: one dark fill, a green outline.
+const titleCard =
+  "w-full rounded-xl border border-[#36D7B7]/55 bg-[#1a1d23] hover:border-[#36D7B7] hover:bg-[#20262f] active:scale-[0.99] text-white font-bold py-3 transition";
+const titleCardSm =
+  "flex-1 rounded-lg border border-[#36D7B7]/45 bg-[#1a1d23] hover:border-[#36D7B7] text-gray-200 hover:text-white text-xs font-semibold py-2 transition";
 
 function Overlay({ children }: { children: React.ReactNode }) {
   return (
