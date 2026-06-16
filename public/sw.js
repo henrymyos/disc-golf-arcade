@@ -1,6 +1,6 @@
 // Minimal offline support: network-first for pages (so deploys land quickly),
 // cache-first for hashed static assets. Same-origin GETs only.
-const CACHE = "dga-v1";
+const CACHE = "dga-v2";
 
 self.addEventListener("install", () => {
   self.skipWaiting();

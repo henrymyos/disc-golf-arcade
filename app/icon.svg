@@ -1,12 +1,22 @@
-<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-  <rect width="32" height="32" rx="7" fill="#0f1117"/>
-  <!-- motion lines trailing the disc -->
-  <g stroke="#2a7d70" stroke-width="2" stroke-linecap="round">
-    <line x1="3" y1="12.5" x2="9" y2="12.5"/>
-    <line x1="2" y1="18" x2="8" y2="18"/>
-  </g>
-  <!-- flying disc (side view): darker underside + lighter top rim -->
-  <ellipse cx="18.5" cy="16.5" rx="11" ry="5" fill="#1f9e8c"/>
-  <ellipse cx="18.5" cy="14.8" rx="11" ry="5" fill="#36D7B7"/>
-  <ellipse cx="18.5" cy="14" rx="6.5" ry="2.4" fill="#5fe6d2"/>
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#232c40"/>
+      <stop offset="62%" stop-color="#0f1117"/>
+    </linearGradient>
+    <linearGradient id="disc" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#6cebd7"/>
+      <stop offset="100%" stop-color="#21a48f"/>
+    </linearGradient>
+  </defs>
+  <!-- Full-bleed background (the OS adds the rounded/circle mask) -->
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <!-- Flight trail (comet dashes), kept inside the maskable safe zone -->
+  <path d="M138 360 C 184 286, 252 246, 352 228" fill="none" stroke="#2f8a7c" stroke-width="15" stroke-linecap="round" stroke-dasharray="2 30" opacity="0.85"/>
+  <!-- Ground shadow -->
+  <ellipse cx="262" cy="318" rx="112" ry="24" fill="#000000" opacity="0.22"/>
+  <!-- Flying disc: underside, top face, rim highlight -->
+  <ellipse cx="256" cy="266" rx="126" ry="50" fill="#1b8f7e"/>
+  <ellipse cx="256" cy="246" rx="126" ry="50" fill="url(#disc)"/>
+  <ellipse cx="256" cy="235" rx="72" ry="23" fill="#92f3e3"/>
 </svg>
