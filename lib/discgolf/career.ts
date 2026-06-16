@@ -116,6 +116,8 @@ export type Career = {
   cash: number;
   sponsors: Sponsor[];
   rivals: Rival[];
+  pdgaRating: number;     // official rating (≈700–1050), tracks recent rounds
+  roundRatings: number[]; // recent rated rounds (oldest → newest)
 };
 
 const clamp = (n: number, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, n));
@@ -161,12 +163,40 @@ function generateRivals(seed: number): Rival[] {
   });
 }
 
+// ── PDGA rating (real-world scale ≈ 700–1050). An internal 0–100 skill maps to
+// a player rating; each rated round produces a round rating from your score, and
+// the player rating is a recency-weighted average of recent rounds — so it
+// climbs slowly as you post better tournament rounds, like the real thing. ──
+const RATED_WINDOW = 16; // rounds kept in the rating window
+function pdgaFromInternal(internal: number): number {
+  return Math.round(700 + Math.max(0, Math.min(105, internal)) * 3.5); // 0→700, 100→1050
+}
+// A single round's rating from how far under/over par you went (course "SSA" is
+// implicit — every event is calibrated the same way).
+function roundRating(toPar: number, holes: number): number {
+  const effective = 50 - toPar / (0.28 * (holes / 18));
+  return Math.max(650, Math.min(1085, pdgaFromInternal(effective)));
+}
+// Recency-weighted average of recent rounds (most-recent quarter double-weighted,
+// PDGA-style); blended toward the skill estimate while you have few rounds.
+function computePdga(rounds: number[], skillEstimate: number): number {
+  if (rounds.length === 0) return skillEstimate;
+  const n = rounds.length;
+  const recent = Math.max(1, Math.round(n * 0.25));
+  let sum = 0, w = 0;
+  rounds.forEach((r, i) => { const weight = i >= n - recent ? 2 : 1; sum += r * weight; w += weight; });
+  let avg = sum / w;
+  if (n < 6) avg = (avg * n + skillEstimate * (6 - n)) / 6; // smooth the early career
+  return Math.round(avg);
+}
+
 export function newCareer(name: string, seed: number): Career {
   const rng = mulberry32((seed ^ 0x5bd1e995) >>> 0);
   const talent = rng(); // 0..1 overall ceiling shift
   const pot = (base: number) => Math.round(clamp(base + talent * 26 + rng() * 16, 40, 99));
   const start = (lo: number, hi: number) => Math.round(lo + rng() * (hi - lo));
-  const skills: CareerSkills = { power: start(14, 24), control: start(16, 26), putt: start(16, 26), mental: start(20, 30) };
+  // A high-school freshman: more developed than a 10-year-old, plenty of upside.
+  const skills: CareerSkills = { power: start(22, 32), control: start(24, 34), putt: start(24, 34), mental: start(28, 38) };
   const potential: CareerSkills = {
     power: Math.max(skills.power + 15, pot(58)),
     control: Math.max(skills.control + 15, pot(58)),
@@ -175,14 +205,15 @@ export function newCareer(name: string, seed: number): Career {
   };
   return {
     v: 1, name: name.trim().slice(0, 16) || "Rookie", seed: seed >>> 0,
-    age: 10, season: 0, stage: "youth", skills, potential, trainPts: TRAIN_PER_SEASON,
+    age: 14, season: 0, stage: "highschool", skills, potential, trainPts: TRAIN_PER_SEASON,
     done: [], results: [], titles: [], seasonPoints: 0, careerPoints: 0, majors: 0,
     worldRank: null, bestWorldRank: null, seasonsAtNo1: 0, achievements: [], retired: false,
     cash: 0, sponsors: [], rivals: generateRivals(seed),
+    pdgaRating: pdgaFromInternal(careerRating(skills)), roundRatings: [],
   };
 }
 
-// Backfill new fields on a save from before economy/rivals existed.
+// Backfill new fields on a save from before economy/rivals/PDGA existed.
 export function normalizeCareer(c: Career): Career {
   let rivals = c.rivals;
   if (!rivals || rivals.length === 0) {
@@ -190,8 +221,15 @@ export function normalizeCareer(c: Career): Career {
     // age the rivals up to the career's current season so they're peers, not kids
     for (let s = 0; s < c.season; s++) rivals = rivals.map((r) => growRival(r, 11 + s));
   }
-  return { ...c, cash: c.cash ?? 0, sponsors: c.sponsors ?? [], rivals };
+  return {
+    ...c, cash: c.cash ?? 0, sponsors: c.sponsors ?? [], rivals,
+    pdgaRating: c.pdgaRating ?? pdgaFromInternal(careerRating(c.skills)),
+    roundRatings: c.roundRatings ?? [],
+  };
 }
+
+// PDGA rating expected for an internal skill level (used as the early-career seed).
+export const pdgaEstimate = (s: CareerSkills): number => pdgaFromInternal(careerRating(s));
 
 export const rivalRating = (r: Rival): number => careerRating(r.skills);
 
@@ -397,6 +435,12 @@ export function recordResult(c: Career, ev: CareerEvent, score: number, played: 
   if (win && ev.id.endsWith("con")) ach.add("college_champ");
   if (win && ev.id.endsWith("wc")) ach.add("world_champ");
   if (win && ev.importance !== "minor") ach.add("big_title");
+
+  // This round's rating → the recency-weighted PDGA rating creeps up over time.
+  const roundRatings = [...c.roundRatings, roundRating(result.toPar, ev.holes)].slice(-RATED_WINDOW);
+  const pdgaRating = computePdga(roundRatings, pdgaFromInternal(careerRating(c.skills)));
+  if (pdgaRating >= 1000) ach.add("rated_1000");
+
   const career: Career = {
     ...c,
     done: [...c.done, ev.id],
@@ -407,6 +451,7 @@ export function recordResult(c: Career, ev: CareerEvent, score: number, played: 
     careerPoints: c.careerPoints + points,
     majors: c.majors + (win && ev.importance !== "minor" ? 1 : 0),
     achievements: [...ach],
+    roundRatings, pdgaRating,
   };
   return { career, result };
 }

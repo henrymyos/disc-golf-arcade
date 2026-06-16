@@ -30,15 +30,18 @@ import {
 import { CATCH_R } from "../lib/discgolf/engine";
 
 describe("newCareer", () => {
-  it("starts a 10-year-old junior with low skills and headroom", () => {
+  it("starts a 14-year-old high-school freshman with headroom and a starter PDGA", () => {
     const c = newCareer("Kid", 123);
-    expect(c.age).toBe(10);
-    expect(c.stage).toBe("youth");
+    expect(c.age).toBe(14);
+    expect(c.stage).toBe("highschool");
     expect(c.retired).toBe(false);
     for (const k of ["power", "control", "putt", "mental"] as (keyof CareerSkills)[]) {
-      expect(c.skills[k]).toBeLessThan(35);
+      expect(c.skills[k]).toBeLessThan(45);
       expect(c.potential[k]).toBeGreaterThan(c.skills[k]);
     }
+    expect(c.pdgaRating).toBeGreaterThanOrEqual(740); // a beginner-ish rating
+    expect(c.pdgaRating).toBeLessThanOrEqual(860);
+    expect(c.roundRatings).toEqual([]);
   });
   it("is deterministic for a given name + seed", () => {
     expect(JSON.stringify(newCareer("A", 7))).toBe(JSON.stringify(newCareer("A", 7)));
@@ -140,7 +143,7 @@ describe("advanceSeason", () => {
     const c = newCareer("Kid", 21);
     const before = c.skills.power;
     const { career } = advanceSeason(c, { power: 6 });
-    expect(career.age).toBe(11);
+    expect(career.age).toBe(15); // starts at 14 (high school)
     expect(career.season).toBe(1);
     expect(career.skills.power).toBeGreaterThan(before); // youth + training grows it
     expect(career.trainPts).toBe(6); // refilled
@@ -290,15 +293,44 @@ describe("economy + sponsors", () => {
   });
 });
 
+describe("PDGA rating", () => {
+  it("climbs with strong rounds, dips with poor ones, and stays in a real range", () => {
+    const c = newCareer("Kid", 200);
+    const start = c.pdgaRating;
+    expect(start).toBeGreaterThan(700);
+    const ev = seasonSchedule(c).find((e) => e.holes === 18) ?? seasonSchedule(c)[0];
+
+    let hot = c;
+    for (let i = 0; i < 8; i++) hot = recordResult(hot, { ...ev, id: `h${i}` }, ev.par - 12, false).career;
+    expect(hot.pdgaRating).toBeGreaterThan(start);
+    expect(hot.pdgaRating).toBeLessThanOrEqual(1085);
+    expect(hot.roundRatings.length).toBeGreaterThan(0);
+
+    let cold = c;
+    for (let i = 0; i < 8; i++) cold = recordResult(cold, { ...ev, id: `c${i}` }, ev.par + 15, false).career;
+    expect(cold.pdgaRating).toBeLessThan(start);
+    expect(cold.pdgaRating).toBeGreaterThanOrEqual(650);
+  });
+  it("moves slowly — one great round doesn't spike the rating", () => {
+    const c = newCareer("Kid", 201);
+    const ev = seasonSchedule(c).find((e) => e.holes === 18) ?? seasonSchedule(c)[0];
+    const after = recordResult(c, ev, ev.par - 14, false).career;
+    expect(after.pdgaRating - c.pdgaRating).toBeLessThan(120); // smoothed, not a jump to ~1050
+    expect(after.pdgaRating).toBeGreaterThan(c.pdgaRating);
+  });
+});
+
 describe("normalizeCareer (migration)", () => {
   it("backfills cash, sponsors and rivals on an old save", () => {
     const old = newCareer("Old", 20);
     // simulate a pre-economy save
-    const stripped = { ...old, cash: undefined, sponsors: undefined, rivals: [] } as unknown as Career;
+    const stripped = { ...old, cash: undefined, sponsors: undefined, rivals: [], pdgaRating: undefined, roundRatings: undefined } as unknown as Career;
     const fixed = normalizeCareer(stripped);
     expect(fixed.cash).toBe(0);
     expect(fixed.sponsors).toEqual([]);
     expect(fixed.rivals).toHaveLength(6);
+    expect(fixed.pdgaRating).toBeGreaterThan(700); // PDGA backfilled from skills
+    expect(fixed.roundRatings).toEqual([]);
   });
 });
 

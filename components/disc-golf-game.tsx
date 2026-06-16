@@ -17,7 +17,7 @@ import type {
 } from "@/lib/discgolf/engine";
 import { challengeParam } from "@/lib/discgolf/challenge";
 import {
-  newCareer, normalizeCareer, skillMods, careerRating, seasonSchedule, simEvent, recordResult, advanceSeason, retire, seasonComplete,
+  newCareer, normalizeCareer, skillMods, seasonSchedule, simEvent, recordResult, advanceSeason, retire, seasonComplete,
   placeLabel, STAGE_LABEL, SKILL_KEYS, SKILL_LABEL, IDENTITY_MODS,
   availableSponsors, signSponsor, trainingPointCost, buyTrainingPoint, topRivals, rivalRating, fmtCash, SPONSOR_CAP,
   careerFieldHoles, careerCardRacers, careerLiveStandings,
@@ -3477,14 +3477,12 @@ function CareerPanel({ career, lastResult, notes, onClose, onStart, onPlay, onSi
           <h2 className="text-white font-black text-xl">🌟 Career</h2>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
-        <p className="text-gray-300 text-sm">Start as a 10-year-old with a bag and a dream. Build your <span className="text-white">power, control, putting</span> and <span className="text-white">mental</span> game over the years — junior events, high school, college (Nationals at Winthrop Lake), then the pro tour. Play the big rounds yourself; sim the rest.</p>
+        <p className="text-gray-300 text-sm">Start as a 14-year-old high-school freshman with a bag and a dream. Build your <span className="text-white">power, control, putting</span> and <span className="text-white">mental</span> game over the years — high school, college (Nationals at Winthrop Lake), then the pro tour. Your <span className="text-[#f5d24a]">PDGA rating</span> climbs as you post better tournament rounds. Play the big rounds yourself; sim the rest.</p>
         <input type="text" value={name} maxLength={16} onChange={(e) => setName(e.target.value)} placeholder="Your name" className="w-full bg-[#1a1d23] border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-[#e0923b]" />
         <button type="button" onClick={() => onStart(name)} className={`${btn} w-full`}>Begin career</button>
       </div></div>
     );
   }
-
-  const rating = Math.round(careerRating(career.skills));
   const sched = seasonSchedule(career);
   const resultFor = (id: string) => career.results.find((r) => r.eventId === id);
   const spent = SKILL_KEYS.reduce((s, k) => s + alloc[k], 0);
@@ -3504,7 +3502,7 @@ function CareerPanel({ career, lastResult, notes, onClose, onStart, onPlay, onSi
           <h2 className="text-white font-black text-xl">🏁 {career.name}</h2>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
-        <p className="text-gray-400 text-xs -mt-2">Retired at age {career.age} · {career.season} seasons · peak rating {rating} · earned {fmtCash(career.cash)}</p>
+        <p className="text-gray-400 text-xs -mt-2">Retired at age {career.age} · {career.season} seasons · PDGA {career.pdgaRating} · earned {fmtCash(career.cash)}</p>
         <div className="grid grid-cols-2 gap-2 text-center">
           <CareerStat label="Titles" v={career.titles.length} />
           <CareerStat label="Majors" v={career.majors} />
@@ -3532,6 +3530,10 @@ function CareerPanel({ career, lastResult, notes, onClose, onStart, onPlay, onSi
           <p className="text-gray-400 text-[11px]">{STAGE_LABEL[career.stage]} · Age {career.age} · Season {career.season + 1}{career.stage === "pro" && career.worldRank ? ` · World #${career.worldRank}` : ""}</p>
         </div>
         <div className="shrink-0 flex items-center gap-2">
+          <span className="text-right leading-tight">
+            <span className="block text-[#f5d24a] font-black text-base font-mono leading-none">{career.pdgaRating}</span>
+            <span className="block text-gray-500 text-[8px] uppercase tracking-wide">PDGA</span>
+          </span>
           <span className="text-[#36D7B7] font-bold text-sm font-mono">{fmtCash(career.cash)}</span>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
@@ -3549,7 +3551,7 @@ function CareerPanel({ career, lastResult, notes, onClose, onStart, onPlay, onSi
       {/* Skills + training */}
       <div className="bg-[#1a1d23] border border-white/5 rounded-xl p-3 space-y-2">
         <div className="flex items-center justify-between">
-          <p className="text-gray-400 text-xs font-bold uppercase tracking-wide">Skills · rating {rating}</p>
+          <p className="text-gray-400 text-xs font-bold uppercase tracking-wide">Skills · PDGA {career.pdgaRating}</p>
           <p className="text-[11px] text-gray-400">Training <span className={remaining > 0 ? "text-[#36D7B7] font-bold" : "text-gray-500"}>{remaining}</span>/{career.trainPts}</p>
         </div>
         {SKILL_KEYS.map((k) => {
