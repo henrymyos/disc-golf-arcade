@@ -168,8 +168,20 @@ function generateRivals(seed: number): Rival[] {
 // the player rating is a recency-weighted average of recent rounds — so it
 // climbs slowly as you post better tournament rounds, like the real thing. ──
 const RATED_WINDOW = 16; // rounds kept in the rating window
+// Internal skill (0–100) → PDGA rating, via anchor points tuned so a typical
+// career hits the real milestones: ~800 starting high school (internal ~28),
+// ~900 starting college (~64), ~1000 turning pro (~81), elite peaks ~1050.
+const PDGA_ANCHORS: [number, number][] = [[0, 700], [28, 800], [48, 900], [70, 1000], [88, 1050], [105, 1075]];
 function pdgaFromInternal(internal: number): number {
-  return Math.round(700 + Math.max(0, Math.min(105, internal)) * 3.5); // 0→700, 100→1050
+  const x = Math.max(0, internal);
+  for (let i = 1; i < PDGA_ANCHORS.length; i++) {
+    const [x1, y1] = PDGA_ANCHORS[i];
+    if (x <= x1) {
+      const [x0, y0] = PDGA_ANCHORS[i - 1];
+      return Math.round(y0 + (y1 - y0) * (x - x0) / (x1 - x0));
+    }
+  }
+  return PDGA_ANCHORS[PDGA_ANCHORS.length - 1][1];
 }
 // A single round's rating from how far under/over par you went (course "SSA" is
 // implicit — every event is calibrated the same way).
