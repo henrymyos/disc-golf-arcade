@@ -77,6 +77,8 @@ export type Rival = {
   titles: number;
   beat: number; // events where you outscored them
   lost: number; // events where they outscored you
+  pdgaRating: number;     // tracked just like yours (lagged round average) — comparable
+  roundRatings: number[];
 };
 
 // ── Sponsorships + economy: prize money (pro), sponsor signing bonuses and
@@ -159,7 +161,7 @@ function generateRivals(seed: number): Rival[] {
       power: Math.max(skills.power + 14, pot(2)), control: Math.max(skills.control + 14, pot(0)),
       putt: Math.max(skills.putt + 14, pot(0)), mental: Math.max(skills.mental + 12, pot(-4)),
     };
-    return { id: `r${i}`, name: names[i], color: RIVAL_PALETTE[i % RIVAL_PALETTE.length], skills, potential, titles: 0, beat: 0, lost: 0 };
+    return { id: `r${i}`, name: names[i], color: RIVAL_PALETTE[i % RIVAL_PALETTE.length], skills, potential, titles: 0, beat: 0, lost: 0, pdgaRating: pdgaFromInternal(careerRating(skills)), roundRatings: [] };
   });
 }
 
@@ -233,6 +235,7 @@ export function normalizeCareer(c: Career): Career {
     // age the rivals up to the career's current season so they're peers, not kids
     for (let s = 0; s < c.season; s++) rivals = rivals.map((r) => growRival(r, 11 + s));
   }
+  rivals = rivals.map((r) => ({ ...r, pdgaRating: r.pdgaRating ?? pdgaFromInternal(rivalRating(r)), roundRatings: r.roundRatings ?? [] }));
   return {
     ...c, cash: c.cash ?? 0, sponsors: c.sponsors ?? [], rivals,
     pdgaRating: c.pdgaRating ?? pdgaFromInternal(careerRating(c.skills)),
@@ -431,7 +434,11 @@ export function recordResult(c: Career, ev: CareerEvent, score: number, played: 
     const youBeat = score < rTotal;
     let titles = r.titles;
     if (!win && !titleGiven && rTotal === fieldMin && rTotal < score) { titles += 1; winnerName = r.name; titleGiven = true; }
-    return { ...r, beat: r.beat + (youBeat ? 1 : 0), lost: r.lost + (youBeat ? 0 : 1), titles };
+    // Track each rival's PDGA the same way as yours (a recency-weighted round
+    // average) so the numbers are directly comparable.
+    const rRounds = [...(r.roundRatings ?? []), roundRating(rTotal - ev.par, ev.holes)].slice(-RATED_WINDOW);
+    const rPdga = computePdga(rRounds, pdgaFromInternal(rivalRating(r)));
+    return { ...r, beat: r.beat + (youBeat ? 1 : 0), lost: r.lost + (youBeat ? 0 : 1), titles, roundRatings: rRounds, pdgaRating: rPdga };
   });
 
   const prize = c.stage === "pro" ? prizeFor(ev, placed) : 0;

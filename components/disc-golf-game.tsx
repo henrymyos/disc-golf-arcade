@@ -19,7 +19,7 @@ import { challengeParam } from "@/lib/discgolf/challenge";
 import {
   newCareer, normalizeCareer, skillMods, seasonSchedule, simEvent, recordResult, advanceSeason, retire, seasonComplete,
   placeLabel, STAGE_LABEL, SKILL_KEYS, SKILL_LABEL, IDENTITY_MODS,
-  availableSponsors, signSponsor, trainingPointCost, buyTrainingPoint, topRivals, rivalRating, fmtCash, SPONSOR_CAP,
+  availableSponsors, signSponsor, trainingPointCost, buyTrainingPoint, topRivals, fmtCash, SPONSOR_CAP,
   careerFieldHoles, careerCardRacers, careerLiveStandings,
   type Career, type CareerEvent, type EventResult, type CareerSkills, type SkillMods, type FieldPlayer,
 } from "@/lib/discgolf/career";
@@ -3635,16 +3635,19 @@ function CareerPanel({ career, lastResult, notes, onClose, onStart, onPlay, onSi
         })}
       </div>
 
-      {/* Rivals board */}
+      {/* Rivals board — PDGA tracked the same way as yours, so it's comparable */}
       <div className="space-y-1">
-        <p className="text-gray-400 text-xs font-bold uppercase tracking-wide">Rivals · your record</p>
-        {rivals.map((r) => (
+        <div className="flex items-baseline justify-between">
+          <p className="text-gray-400 text-xs font-bold uppercase tracking-wide">Rivals · PDGA · record</p>
+          <p className="text-[10px] text-gray-500">you: <span className="text-[#f5d24a] font-mono">{career.pdgaRating}</span></p>
+        </div>
+        {[...rivals].sort((a, b) => b.pdgaRating - a.pdgaRating).map((r) => (
           <div key={r.id} className="flex items-center gap-2 bg-[#1a1d23] border border-white/5 rounded-lg px-3 py-1.5 text-xs">
             <span className="w-2 h-2 rounded-full shrink-0" style={{ background: r.color }} />
             <span className="text-white font-semibold flex-1 truncate">{r.name}</span>
             {r.titles > 0 && <span className="text-[#f5d24a] text-[10px]">🏆{r.titles}</span>}
-            <span className="text-gray-500 text-[10px]">rtg {Math.round(rivalRating(r))}</span>
-            <span className="font-mono text-[11px]"><span className="text-[#36D7B7]">{r.beat}</span><span className="text-gray-600">-</span><span className="text-[#e2453b]">{r.lost}</span></span>
+            <span className={`font-mono text-[11px] w-9 text-right ${r.pdgaRating > career.pdgaRating ? "text-[#e0923b]" : "text-[#36D7B7]"}`}>{r.pdgaRating}</span>
+            <span className="font-mono text-[11px] w-9 text-right"><span className="text-[#36D7B7]">{r.beat}</span><span className="text-gray-600">-</span><span className="text-[#e2453b]">{r.lost}</span></span>
           </div>
         ))}
       </div>

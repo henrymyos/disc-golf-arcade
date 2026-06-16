@@ -181,6 +181,18 @@ describe("rivals", () => {
     expect(new Set(c.rivals.map((r) => r.name)).size).toBe(6);
     c.rivals.forEach((r) => { expect(r.beat).toBe(0); expect(r.lost).toBe(0); });
   });
+  it("rivals carry a comparable, tracked PDGA rating", () => {
+    const c = newCareer("Kid", 4);
+    c.rivals.forEach((r) => {
+      expect(r.pdgaRating).toBeGreaterThan(700); // starter-level, like the player
+      expect(r.pdgaRating).toBeLessThan(900);
+      expect(r.roundRatings).toEqual([]);
+    });
+    // resolving an event records a round rating for each rival
+    const ev = seasonSchedule(c)[0];
+    const after = recordResult(c, ev, 40, false).career;
+    after.rivals.forEach((r) => expect(r.roundRatings).toHaveLength(1));
+  });
   it("recordResult updates head-to-head and tallies beaten rivals", () => {
     const c = newCareer("Kid", 50);
     const ev = seasonSchedule(c)[0];
