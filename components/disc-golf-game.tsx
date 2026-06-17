@@ -18,7 +18,7 @@ import type {
 import { challengeParam } from "@/lib/discgolf/challenge";
 import {
   newCareer, normalizeCareer, skillMods, seasonSchedule, simEvent, recordResult, advanceSeason, retire, seasonComplete,
-  placeLabel, STAGE_LABEL, SKILL_KEYS, SKILL_LABEL, IDENTITY_MODS,
+  placeLabel, STAGE_LABEL, SKILL_KEYS, SKILL_LABEL, SKILL_DESC, IDENTITY_MODS,
   availableSponsors, signSponsor, trainingPointCost, buyTrainingPoint, topRivals, fmtCash, SPONSOR_CAP,
   careerFieldForRound, careerCardRacers, careerLiveStandings,
   type Career, type CareerEvent, type EventResult, type CareerSkills, type SkillMods, type FieldPlayer,
@@ -3508,6 +3508,14 @@ function CareerPanel({ career, lastResult, notes, onClose, onStart, onPlay, onSi
   const sponsorOffers = availableSponsors(career);
   const trainCost = trainingPointCost(career);
   const rivals = topRivals(career);
+  // Current in-play effect of each skill, so the benefit of training is concrete.
+  const mods = skillMods(career.skills);
+  const effectFor = (k: keyof CareerSkills): string => {
+    if (k === "power") { const p = Math.round((mods.speedMul - 1) * 100); return `${p >= 0 ? "+" : ""}${p}% dist`; }
+    if (k === "control") return `wind ×${mods.windMul.toFixed(2)}`;
+    if (k === "putt") return `catch ${mods.catchR.toFixed(1)}`;
+    return "overall";
+  };
 
   // Retired legacy screen.
   if (career.retired) {
@@ -3560,6 +3568,7 @@ function CareerPanel({ career, lastResult, notes, onClose, onStart, onPlay, onSi
           <div>{lastResult.name}: <span className="font-bold">{placeLabel(lastResult.placed)}</span> of {lastResult.field} · {toPar(lastResult.toPar)} ({lastResult.score}){lastResult.prize > 0 && <span className="text-[#36D7B7]"> · +{fmtCash(lastResult.prize)}</span>}</div>
           <div className="text-[10px] text-gray-400 mt-0.5">
             Beat {lastResult.beatRivals}/{lastResult.rivalCount} rivals{lastResult.winnerName ? ` · ${lastResult.winnerName} took the title` : ""}
+            {lastResult.trainBonus > 0 && <span className="text-[#36D7B7]"> · +{lastResult.trainBonus} training pt{lastResult.trainBonus > 1 ? "s" : ""}</span>}
           </div>
         </div>
       )}
@@ -3589,8 +3598,17 @@ function CareerPanel({ career, lastResult, notes, onClose, onStart, onPlay, onSi
             </div>
           );
         })}
-        <div className="flex items-center justify-between gap-2 pt-0.5">
-          <p className="text-gray-600 text-[10px] flex-1">Training applies when you advance. The tick marks potential.</p>
+        {/* What each skill does + its current in-play effect */}
+        <div className="space-y-0.5 pt-1.5 border-t border-white/5">
+          {SKILL_KEYS.map((k) => (
+            <div key={k} className="flex items-baseline justify-between gap-2 text-[9px] leading-tight">
+              <span className="text-gray-500 truncate"><span className="text-gray-300 font-semibold">{SKILL_LABEL[k]}</span> — {SKILL_DESC[k]}</span>
+              <span className="text-[#36D7B7] font-mono shrink-0">{effectFor(k)}</span>
+            </div>
+          ))}
+        </div>
+        <div className="flex items-center justify-between gap-2 pt-1">
+          <p className="text-gray-500 text-[10px] flex-1 leading-snug">Skills <span className="text-gray-300">only rise when you train them</span> — finish events well to earn bonus points. The tick marks potential.</p>
           <button type="button" onClick={onBuyTrain} disabled={career.cash < trainCost}
             className="shrink-0 rounded bg-[#36D7B7]/15 border border-[#36D7B7]/40 text-[#36D7B7] text-[11px] font-bold px-2 py-1 disabled:opacity-30 disabled:border-white/10 disabled:text-gray-500">
             +1 pt · {fmtCash(trainCost)}

@@ -150,6 +150,14 @@ describe("advanceSeason", () => {
     expect(career.trainPts).toBe(6); // refilled
     expect(career.done).toHaveLength(0);
   });
+  it("skills only move when you train them", () => {
+    const c = newCareer("Kid", 33);
+    const idle = advanceSeason(c, {}).career;
+    expect(idle.skills).toEqual(c.skills); // no free yearly growth
+    const trained = advanceSeason(c, { power: 4 }).career;
+    expect(trained.skills.power).toBeGreaterThan(c.skills.power);
+    expect(trained.skills.control).toBe(c.skills.control); // an untrained skill stays put
+  });
   it("transitions youth → high school → college → pro at the right ages", () => {
     let c: Career = { ...newCareer("X", 3), age: 13, stage: "youth" };
     expect(advanceSeason(c, {}).career.stage).toBe("highschool");
@@ -220,6 +228,16 @@ describe("rivals", () => {
     const before = rivalRating(topRivals(c)[0]);
     const after = advanceSeason(c, {}).career;
     expect(rivalRating(topRivals(after)[0])).toBeGreaterThan(before);
+  });
+  it("a strong finish grants bonus training points", () => {
+    const c = newCareer("Kid", 6);
+    const ev = seasonSchedule(c)[1]; // a major
+    const winRes = recordResult(c, ev, 1, false); // win it
+    expect(winRes.result.trainBonus).toBeGreaterThan(0);
+    expect(winRes.career.trainPts).toBe(c.trainPts + winRes.result.trainBonus);
+    const poor = recordResult(c, ev, 999, false); // dead last
+    expect(poor.result.trainBonus).toBe(0);
+    expect(poor.career.trainPts).toBe(c.trainPts);
   });
   it("careerCard is a group of 3 rivals; racers carry their hole scores", () => {
     const c = newCareer("Kid", 3);

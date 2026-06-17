@@ -10,14 +10,23 @@ export const SKILL_KEYS: (keyof CareerSkills)[] = ["power", "control", "putt", "
 export const SKILL_LABEL: Record<keyof CareerSkills, string> = {
   power: "Power", control: "Control", putt: "Putting", mental: "Mental",
 };
+// What each skill does when you PLAY a round — shown in the hub so the benefit
+// of training is obvious.
+export const SKILL_DESC: Record<keyof CareerSkills, string> = {
+  power: "Throw distance",
+  control: "Hold your line in wind",
+  putt: "Make more putts (wider catch)",
+  mental: "Clutch + a bit of everything",
+};
 
 // How skills bend the real game when you PLAY an event.
 export type SkillMods = { speedMul: number; catchR: number; windMul: number };
 export const IDENTITY_MODS: SkillMods = { speedMul: 1, catchR: CATCH_R, windMul: 1 };
 export function skillMods(s: CareerSkills): SkillMods {
+  const mental = clamp(s.mental) / 100; // composure gives a small all-round lift
   return {
-    speedMul: 0.8 + (clamp(s.power) / 100) * 0.42, // a kid carries ~30% short; a maxed pro bombs it
-    catchR: CATCH_R * (0.7 + (clamp(s.putt) / 100) * 0.62), // small catch radius → harder to hole out
+    speedMul: 0.8 + (clamp(s.power) / 100) * 0.42 + mental * 0.04, // a kid carries ~30% short; a maxed pro bombs it
+    catchR: CATCH_R * (0.7 + (clamp(s.putt) / 100) * 0.58 + mental * 0.08), // small catch radius → harder to hole out
     windMul: 1.3 - (clamp(s.control) / 100) * 0.85, // low control → the wind shoves you around
   };
 }
@@ -63,6 +72,7 @@ export type EventResult = {
   rivalCount: number;
   winnerName?: string; // a rival's name if a rival took the event
   prize: number; // cash earned (pro events only)
+  trainBonus: number; // extra training points earned for a strong finish
 };
 
 // ── Recurring rivals: a fixed generation of named players who turn up at every
@@ -478,9 +488,15 @@ export function recordResult(c: Career, ev: CareerEvent, score: number, played: 
   });
 
   const prize = c.stage === "pro" ? prizeFor(ev, placed) : 0;
+  // Strong finishes earn extra training points — play well, develop faster.
+  const trainBonus =
+    placed === 1 ? (ev.importance === "championship" ? 4 : ev.importance === "major" ? 3 : 2)
+      : placed <= 3 ? 1
+      : placed <= Math.ceil(fieldN * 0.1) ? 1
+      : 0;
   const result: EventResult = {
     eventId: ev.id, name: ev.name, season: c.season, age: c.age, stage: c.stage,
-    score, toPar: score - ev.par, placed, field: fieldN, played, win, beatRivals, rivalCount: c.rivals.length, winnerName, prize,
+    score, toPar: score - ev.par, placed, field: fieldN, played, win, beatRivals, rivalCount: c.rivals.length, winnerName, prize, trainBonus,
   };
   const impMult = ev.importance === "championship" ? 3 : ev.importance === "major" ? 2 : 1;
   const points = Math.max(0, fieldN - placed + 1) * impMult;
@@ -502,6 +518,7 @@ export function recordResult(c: Career, ev: CareerEvent, score: number, played: 
     results: [...c.results, result].slice(-RESULT_CAP),
     titles, rivals,
     cash: c.cash + prize,
+    trainPts: c.trainPts + trainBonus,
     seasonPoints: c.seasonPoints + points,
     careerPoints: c.careerPoints + points,
     majors: c.majors + (win && ev.importance !== "minor" ? 1 : 0),
@@ -521,17 +538,17 @@ function prizeFor(ev: CareerEvent, placed: number): number {
 // Per-skill decline speed once you age past your prime (power fades fastest).
 const DECLINE: CareerSkills = { power: 1.35, control: 0.95, putt: 0.7, mental: -0.2 };
 
+// Skills only move when you TRAIN them — there's no free yearly growth. Younger
+// players develop more per point; gains shrink as you approach your potential.
+// Past 30, untrained skills decline (training a skill offsets its decline).
+const GROW_RATE = 4.2;
 function growSkill(skill: number, pot: number, age: number, invested: number, declineRate: number): number {
-  if (age <= 30) {
-    const youth = age < 15 ? 1.6 : age < 19 ? 1.3 : age < 24 ? 1.05 : 0.7;
-    const room = Math.max(0, pot - skill);
-    const natural = room * 0.1 * youth;
-    const trained = invested * (1.7 + room * 0.015);
-    return clamp(skill + natural + trained, 0, pot + 2);
-  }
-  // Past 30: gentle decline, softened by how much you train the skill.
-  const loss = Math.max(0, (age - 30) * 0.55 * declineRate - invested * 0.45);
-  return clamp(skill - loss, 8, pot + 2);
+  const youth = age < 16 ? 1.5 : age < 20 ? 1.2 : age < 26 ? 0.9 : age <= 30 ? 0.65 : 0.45;
+  const room = Math.max(0, pot - skill);
+  const gain = invested > 0 ? invested * youth * GROW_RATE * (0.45 + Math.min(room, 45) * 0.012) : 0;
+  let next = skill + gain;
+  if (age > 30) next -= Math.max(0, (age - 30) * 0.55 * declineRate - invested * 0.55);
+  return clamp(next, 8, pot + 2);
 }
 
 // Rivals improve on their own each season (a little focused work, no allocation).
