@@ -92,6 +92,7 @@ type GameState = {
   online?: boolean; // online Friendly Challenge round (scores synced over Realtime)
   advanced: boolean; // advanced bag (real discs) vs simple (putter/mid/driver)
   career?: { eventId: string; eventName: string; venue?: string; character?: string; emoji?: string }; // round is a played Career event
+  mini?: { kind: "putt" | "target"; station: number; makes: number; best: number; points: number; attempts: number; total: number; lastPts?: number }; // practice mini-game
   skill: SkillMods; // Career skill effects on flight (identity for normal play)
   seed: number; // round seed (drives wind + pins)
   roundHoles: Hole[]; // this round's holes (wind/pins baked in)
@@ -143,6 +144,25 @@ function freshHole(hole: Hole) {
     introT: 0,
     flash: null as { text: string; at: number } | null,
   };
+}
+
+// ── Practice mini-games: flat, wide-open single-target "holes" that reuse the
+// throw engine. Putting = sink a putt to advance to a longer one (miss ends the
+// run). Target = land near the bullseye for points over a fixed set of throws. ──
+function puttFeet(station: number): number { return 15 + station * 5; }
+function puttHole(station: number): Hole {
+  const distPx = 40 + station * 13;
+  const tee: Vec = { x: 160, y: 420 };
+  const basket: Vec = { x: 160, y: Math.max(36, 420 - distPx) };
+  return { par: 1, worldH: H, tee, basket, fairway: [tee, basket], fwWidth: 640, trees: [], water: [], hazard: [], elev: 0 };
+}
+function targetRadiusPx(station: number): number { return Math.max(13, 34 - station * 2.4); }
+function targetHole(station: number): Hole {
+  const distPx = 80 + station * 16;
+  const side = (Math.random() * 2 - 1) * Math.min(90, 30 + station * 8);
+  const tee: Vec = { x: 160, y: 420 };
+  const basket: Vec = { x: Math.max(44, Math.min(276, 160 + side)), y: Math.max(58, 420 - distPx) };
+  return { par: 1, worldH: H, tee, basket, fairway: [tee, basket], fwWidth: 640, trees: [], water: [], hazard: [], elev: 0 };
 }
 
 // Every fixed course in the app (shown on the "Play Courses" page). Add new
@@ -334,6 +354,7 @@ export function DiscGolfGame() {
   const [today, setToday] = useState(0); // current day number (set on mount; avoids Date.now() in render)
   const [dailyClaim, setDailyClaim] = useState<{ coins: number; streak: number } | null>(null);
   const [coinReward, setCoinReward] = useState(0); // coins earned by the round just finished
+  const [miniResult, setMiniResult] = useState<{ kind: "putt" | "target"; makes: number; best: number; points: number; coins: number } | null>(null);
   // Add coins (or spend, with a negative amount): updates state, storage, cloud.
   const addCoins = useCallback((delta: number) => {
     const next = Math.max(0, Math.round(coinsRef.current + delta));
@@ -695,6 +716,33 @@ export function DiscGolfGame() {
     setPartyView(null);
     setOnlineView(null);
     setSettingsOpen(false);
+    setScreen("playing");
+    syncHud();
+  }, [muted, musicVolume, syncHud]);
+
+  // Putting / Target practice mini-game.
+  const startMini = useCallback((kind: "putt" | "target") => {
+    if (!audioRef.current) {
+      audioRef.current = new AudioEngine();
+      audioRef.current.setMusicVolume(musicVolume);
+    }
+    audioRef.current.resume();
+    audioRef.current.setMuted(muted);
+    audioRef.current.startMusic();
+    challengePlayRef.current = false; tournamentPlayRef.current = false; careerPlayRef.current = false;
+    const hole = kind === "putt" ? puttHole(0) : targetHole(0);
+    stateRef.current = {
+      holeIndex: 0, scores: [], discIndex: 0, roundPaths: [],
+      mode: "course", advanced: false, skill: IDENTITY_MODS, seed: 0, roundHoles: [hole], practice: true,
+      mini: { kind, station: 0, makes: 0, best: 0, points: 0, attempts: 0, total: 10 },
+      ...freshHole(hole),
+    };
+    if (stateRef.current) stateRef.current.phase = "aim"; // skip the fly-over intro
+    setDiscIndex(0);
+    ghostRef.current = null;
+    careerFieldRef.current = null;
+    setMiniResult(null);
+    setPartyView(null); setOnlineView(null); setSettingsOpen(false); setPracticeOpen(false);
     setScreen("playing");
     syncHud();
   }, [muted, musicVolume, syncHud]);
@@ -1383,7 +1431,41 @@ export function DiscGolfGame() {
           shake(2);
         }
 
-        if (res.status === "hole") {
+        if (g.mini && res.status !== "fly") {
+          const m = g.mini;
+          const endMini = (coins: number) => {
+            addCoins(coins);
+            audioRef.current?.sfx("win");
+            setMiniResult({ kind: m.kind, makes: m.makes, best: m.best, points: m.points, coins });
+            stateRef.current = null;
+            setScreen("title");
+          };
+          if (m.kind === "putt") {
+            if (res.status === "hole") {
+              d.vx = 0; d.vy = 0; d.x = hole.basket.x; d.y = hole.basket.y;
+              audioRef.current?.sfx("basket"); vibrate([15, 30, 15]); rattleRef.current = performance.now();
+              spawnBurst(hole.basket.x, hole.basket.y, ["#36D7B7", "#f5d24a", "#ffffff"], 50, 2.4, 0.05, 40);
+              m.makes += 1; m.best = puttFeet(m.station); m.station += 1;
+              const nh = puttHole(m.station); g.roundHoles[0] = nh;
+              Object.assign(g, freshHole(nh)); g.mini = m; g.phase = "aim"; g.discIndex = 0;
+              syncHud();
+            } else {
+              audioRef.current?.sfx("tree"); shake(2);
+              endMini(m.makes * 12 + Math.round(m.best * 0.5));
+            }
+          } else {
+            const tr = targetRadiusPx(m.station);
+            const distPx = Math.hypot(d.x - hole.basket.x, d.y - hole.basket.y);
+            const pts = res.status === "hole" ? 100 : distPx < tr ? Math.round((1 - distPx / tr) * 90) + 10 : 0;
+            m.points += pts; m.attempts += 1;
+            if (pts >= 80) { spawnBurst(d.x, d.y, ["#36D7B7", "#f5d24a", "#fff"], 40, 2, 0.05, 36); audioRef.current?.sfx("basket"); vibrate([15, 30, 15]); }
+            else if (pts > 0) { spawnBurst(d.x, d.y, ["#36D7B7", "#9cc4e8"], 16, 1.4); audioRef.current?.sfx("chains"); }
+            else { audioRef.current?.sfx("tree"); shake(2); }
+            m.lastPts = pts;
+            if (m.attempts >= m.total) endMini(Math.round(m.points / 2));
+            else { const nh = targetHole(m.station + 1); m.station += 1; g.roundHoles[0] = nh; Object.assign(g, freshHole(nh)); g.mini = m; g.phase = "aim"; g.discIndex = 0; syncHud(); }
+          }
+        } else if (res.status === "hole") {
           g.phase = "holed";
           g.holedAt = performance.now();
           d.vx = 0;
@@ -1731,6 +1813,15 @@ export function DiscGolfGame() {
 
       const rattleAge = performance.now() - rattleRef.current;
       const rattle = rattleAge < 420 ? Math.sin(rattleAge * 0.09) * (1 - rattleAge / 420) * 1.6 : 0;
+      // Target-practice rings (drawn on the ground around the bullseye basket).
+      if (g.mini?.kind === "target") {
+        const tx = hole.basket.x, ty = hole.basket.y - cam, tr = targetRadiusPx(g.mini.station);
+        const rings: [number, string][] = [[tr, "rgba(226,59,59,0.18)"], [tr * 0.66, "rgba(245,210,74,0.20)"], [tr * 0.33, "rgba(54,215,183,0.28)"]];
+        for (const [r, fill] of rings) {
+          ctx.fillStyle = fill; ctx.beginPath(); ctx.arc(tx, ty, r, 0, Math.PI * 2); ctx.fill();
+          ctx.strokeStyle = "rgba(255,255,255,0.35)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(tx, ty, r, 0, Math.PI * 2); ctx.stroke();
+        }
+      }
       drawBasket(ctx, hole.basket.x + rattle, hole.basket.y - cam, g.skill.catchR);
       for (const tr of hole.trees) drawTree(ctx, { x: tr.x, y: tr.y - cam, r: tr.r });
 
@@ -2123,11 +2214,22 @@ export function DiscGolfGame() {
         ctx.fillText(value, hx, hcy);
         hx += ctx.measureText(value).width + 9;
       };
-      if (g.party) hudItem("UP", g.party.names[g.party.current].slice(0, 8), "#f5d24a");
-      hudItem("HOLE", g.party ? `${g.holeIndex + 1}/${g.roundHoles.length}` : g.practice ? `P${g.practiceHole}` : `${g.holeIndex + 1}/${g.roundHoles.length}`, "#ffffff");
-      hudItem("PAR", `${hole.par}`, "#ffffff");
-      hudItem("THR", `${g.throws}`, "#ffffff");
-      hudItem("TO PAR", overStr, over < 0 ? "#36D7B7" : over > 0 ? "#e08a3b" : "#cbd5e1");
+      if (g.mini) {
+        if (g.mini.kind === "putt") {
+          hudItem("PUTT", `${puttFeet(g.mini.station)} ft`, "#36D7B7");
+          hudItem("MADE", `${g.mini.makes}`, "#ffffff");
+        } else {
+          hudItem("THROW", `${g.mini.attempts + 1}/${g.mini.total}`, "#ffffff");
+          hudItem("POINTS", `${g.mini.points}`, "#f5d24a");
+          if (g.mini.lastPts != null) hudItem("LAST", `+${g.mini.lastPts}`, g.mini.lastPts >= 80 ? "#36D7B7" : g.mini.lastPts > 0 ? "#cbd5e1" : "#e08a3b");
+        }
+      } else {
+        if (g.party) hudItem("UP", g.party.names[g.party.current].slice(0, 8), "#f5d24a");
+        hudItem("HOLE", g.party ? `${g.holeIndex + 1}/${g.roundHoles.length}` : g.practice ? `P${g.practiceHole}` : `${g.holeIndex + 1}/${g.roundHoles.length}`, "#ffffff");
+        hudItem("PAR", `${hole.par}`, "#ffffff");
+        hudItem("THR", `${g.throws}`, "#ffffff");
+        hudItem("TO PAR", overStr, over < 0 ? "#36D7B7" : over > 0 ? "#e08a3b" : "#cbd5e1");
+      }
       if (g.mode === "daily") {
         ctx.font = "bold 7px ui-monospace, monospace";
         const dw = ctx.measureText("DAILY").width + 8;
@@ -2228,7 +2330,7 @@ export function DiscGolfGame() {
     }
     rafRef.current = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [syncHud, persistResume]);
+  }, [syncHud, persistResume, addCoins]);
 
   useEffect(() => {
     return () => {
@@ -2668,6 +2770,7 @@ export function DiscGolfGame() {
           <PracticePanel
             onClose={() => setPracticeOpen(false)}
             onPick={(m, i) => { setPracticeOpen(false); startPractice(m, i); }}
+            onMini={(k) => { setPracticeOpen(false); startMini(k); }}
           />
         )}
 
@@ -2855,7 +2958,7 @@ export function DiscGolfGame() {
               </button>
               <button
                 type="button"
-                onClick={() => { const g = stateRef.current; setPauseMenu({ canRestart: !!g && !g.online && !tournamentPlayRef.current && !careerPlayRef.current }); }}
+                onClick={() => { const g = stateRef.current; setPauseMenu({ canRestart: !!g && !g.online && !g.mini && !tournamentPlayRef.current && !careerPlayRef.current }); }}
                 aria-label="Menu"
                 className="shrink-0 w-10 h-[34px] flex items-center justify-center bg-[#0f1117] border border-white/10 hover:border-white/25 text-white rounded-lg active:bg-white/10 transition"
               >
@@ -2867,6 +2970,26 @@ export function DiscGolfGame() {
       )}
 
       {/* Results: scorecard + save + leaderboard */}
+      {/* Practice mini-game results */}
+      {miniResult && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0f1117]/95 backdrop-blur-sm p-6">
+          <div className="w-full max-w-xs text-center space-y-3">
+            <p className="text-5xl">{miniResult.kind === "putt" ? "⛳" : "🎯"}</p>
+            <h2 className="text-white font-black text-2xl">{miniResult.kind === "putt" ? "Putting Practice" : "Target Practice"}</h2>
+            {miniResult.kind === "putt" ? (
+              <p className="text-gray-300">You sank <span className="text-[#36D7B7] font-bold">{miniResult.makes}</span> putt{miniResult.makes === 1 ? "" : "s"} — longest <span className="text-white font-bold">{miniResult.best} ft</span>.</p>
+            ) : (
+              <p className="text-gray-300">You scored <span className="text-[#f5d24a] font-bold">{miniResult.points}</span> points over 10 throws.</p>
+            )}
+            <p className="text-[#f5d24a] font-bold text-lg">+{miniResult.coins} 🪙</p>
+            <div className="flex flex-col gap-2 pt-1">
+              <button type="button" onClick={() => startMini(miniResult.kind)} className={`${btn} w-full`}>↻ Play again</button>
+              <button type="button" onClick={() => { audioRef.current?.stopMusic(); setMiniResult(null); }} className="w-full bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white font-bold py-3 rounded-lg transition">🏠 Done</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {screen === "gameComplete" && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm p-4 flex items-start sm:items-center justify-center">
           <div className="w-full max-w-lg space-y-4 my-auto">
@@ -3980,9 +4103,10 @@ function StatsPanel({ onClose }: { onClose: () => void }) {
 
 // Pick any hole on either course and grind it — practice rounds don't count
 // toward bests, history, achievements, or leaderboards.
-function PracticePanel({ onClose, onPick }: {
+function PracticePanel({ onClose, onPick, onMini }: {
   onClose: () => void;
   onPick: (m: Mode, holeIdx: number) => void;
+  onMini: (kind: "putt" | "target") => void;
 }) {
   const [course, setCourse] = useState<Mode>("course");
   // Glendoveer per-hole bests, read once when the panel opens.
@@ -4002,6 +4126,18 @@ function PracticePanel({ onClose, onPick }: {
           <h2 className="text-white font-black text-xl">Practice</h2>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
+        {/* Skill mini-games */}
+        <div className="flex gap-2">
+          <button type="button" onClick={() => onMini("putt")} className="flex-1 rounded-lg bg-[#1a1d23] border border-[#36D7B7]/50 hover:border-[#36D7B7] py-2.5 transition">
+            <span className="block text-white font-bold text-sm">⛳ Putting</span>
+            <span className="block text-gray-500 text-[10px]">sink it to advance</span>
+          </button>
+          <button type="button" onClick={() => onMini("target")} className="flex-1 rounded-lg bg-[#1a1d23] border border-[#36D7B7]/50 hover:border-[#36D7B7] py-2.5 transition">
+            <span className="block text-white font-bold text-sm">🎯 Target</span>
+            <span className="block text-gray-500 text-[10px]">hit the bullseye</span>
+          </button>
+        </div>
+        <p className="text-gray-500 text-[11px] font-semibold uppercase tracking-wide pt-1">Or grind a hole</p>
         <div className="flex gap-1 bg-[#1a1d23] border border-white/10 rounded-lg p-1">
           <button type="button" onClick={() => setCourse("course")} className={seg(course === "course")}>Glendoveer</button>
           <button type="button" onClick={() => setCourse("winthrop")} className={seg(course === "winthrop")}>Winthrop</button>
