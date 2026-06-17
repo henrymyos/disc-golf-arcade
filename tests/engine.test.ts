@@ -15,7 +15,12 @@ import {
   ADV_DISCS,
   validDiscIndex,
   isDiscUnlocked,
+  discUnlockLevel,
   DISC_PRICE,
+  DISC_LEVEL,
+  TOUR_COURSES,
+  tourVenue,
+  leaderboardCourse,
   tournStandings,
   tournLiveStandings,
   TOURN_NAMES,
@@ -209,13 +214,53 @@ describe("disc unlocks", () => {
     const idx = ADV_DISCS.indexOf(zone);
     expect(validDiscIndex(true, idx, [], ["zone"])).toBe(idx);
   });
-  it("every priced disc is a real advanced disc that is gated by default", () => {
+  it("every priced disc is a real disc (either bag) that is gated by default", () => {
+    const all = [...DISCS, ...ADV_DISCS];
     for (const key of Object.keys(DISC_PRICE)) {
-      const d = ADV_DISCS.find((x) => x.key === key)!;
-      expect(d, `priced disc ${key} exists in ADV_DISCS`).toBeTruthy();
+      const d = all.find((x) => x.key === key)!;
+      expect(d, `priced disc ${key} exists in a bag`).toBeTruthy();
       expect(DISC_PRICE[key]).toBeGreaterThan(0);
-      expect(isDiscUnlocked(d, [], [])).toBe(false); // not free
+      expect(isDiscUnlocked(d, [], [], 1)).toBe(false); // not free at level 1
     }
+  });
+});
+
+describe("starting bag + level unlocks", () => {
+  it("a new player (level 1) starts with only a putter + a midrange in each bag", () => {
+    const free = (bag: typeof DISCS) => bag.filter((d) => isDiscUnlocked(d, [], [], 1)).map((d) => d.key);
+    expect(free(DISCS).sort()).toEqual(["mid", "putter"]); // driver is gated
+    expect(free(ADV_DISCS).sort()).toEqual(["aviar", "buzzz"]); // putter + mid molds
+  });
+  it("leveling up frees a disc without spending coins", () => {
+    const driver = DISCS.find((d) => d.key === "driver")!;
+    expect(discUnlockLevel(driver)).toBe(DISC_LEVEL.driver);
+    expect(isDiscUnlocked(driver, [], [], 1)).toBe(false);
+    expect(isDiscUnlocked(driver, [], [], DISC_LEVEL.driver)).toBe(true);
+  });
+  it("buying a disc unlocks it even below its level", () => {
+    const driver = DISCS.find((d) => d.key === "driver")!;
+    expect(isDiscUnlocked(driver, [], ["driver"], 1)).toBe(true);
+  });
+  it("validDiscIndex falls back to a core disc (Buzzz) on the advanced bag at level 1", () => {
+    const teebird = ADV_DISCS.findIndex((d) => d.key === "teebird");
+    const idx = validDiscIndex(true, teebird, [], [], 1); // Teebird now gated
+    expect(ADV_DISCS[idx].key).toBe("buzzz");
+  });
+});
+
+describe("pro-tour courses", () => {
+  it("exposes a roster of distinct, real 18-hole venues", () => {
+    expect(TOUR_COURSES.length).toBeGreaterThanOrEqual(6);
+    expect(new Set(TOUR_COURSES.map((c) => c.name)).size).toBe(TOUR_COURSES.length); // distinct
+    for (const c of TOUR_COURSES) {
+      expect(c.holes).toBe(18);
+      expect(c.par).toBeGreaterThan(50);
+      expect(tourVenue(c.seed)).toBe(c.name); // name matches the seed's venue
+    }
+  });
+  it("each tour course gets its own leaderboard board keyed by seed", () => {
+    const c = TOUR_COURSES[0];
+    expect(leaderboardCourse("tour", c.seed)).toBe(`tour-${c.seed}`);
   });
 });
 

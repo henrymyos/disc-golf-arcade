@@ -22,7 +22,7 @@ import {
   weeklyChallenges, roundsThisWeek, challengeDone, eventClaimKey, type EventRound,
 } from "@/lib/discgolf/events";
 import {
-  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, TOTAL_PAR, WINTHROP_HOLES, WINTHROP_PAR, leaderboardCourse, TOURN_KEY, TOURN_NAMES, tournFieldRound, tournLiveStandings, tournStandings, ACHIEVEMENTS, earnedAchievements, scoreLabel, STRAIGHT_SPEED_MUL, releaseSpeedMul, DISCS, ADV_DISCS, activeDiscs, DISC_PRICE, isDiscUnlocked, validDiscIndex, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, inRect, inHazard, offRibbons, dailySeed, buildRound, elevAt, vibrate, fullPowerRange, lastInBoundsLie, stepFlight,
+  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, TOTAL_PAR, WINTHROP_HOLES, WINTHROP_PAR, leaderboardCourse, TOURN_KEY, TOURN_NAMES, tournFieldRound, tournLiveStandings, tournStandings, ACHIEVEMENTS, earnedAchievements, scoreLabel, STRAIGHT_SPEED_MUL, releaseSpeedMul, DISCS, ADV_DISCS, activeDiscs, DISC_PRICE, isDiscUnlocked, discUnlockLevel, validDiscIndex, TOUR_COURSES, tourVenue, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, inRect, inHazard, offRibbons, dailySeed, buildRound, elevAt, vibrate, fullPowerRange, lastInBoundsLie, stepFlight,
 } from "@/lib/discgolf/engine";
 import type {
   Vec, Tree, Hole, Mode, Tournament, TournLiveRow, Achievement, FlightPath, Release, Flight, GhostState,
@@ -51,6 +51,8 @@ import {
 // state worth keeping is the seed, the completed-hole scores, and the bag. On
 // the title screen this offers "Resume" and reconstructs the round exactly. ──
 const RESUME_KEY = "discgolf.resume.v1";
+const TOURBEST_KEY = "discgolf.tourbests.v1"; // best score per pro-tour venue (by seed)
+const ENTRY_KEY = "discgolf.entry.v1"; // "offline" | "auth" — which front-door choice was made
 type ResumeSnap = { v: 1; mode: Mode; seed: number; scores: number[]; advanced: boolean };
 function holesForMode(mode: Mode): number {
   return mode === "daily" ? 9 : 18;
@@ -89,7 +91,7 @@ function makeClientId(): string {
 
 // "intro" plays a short basket → tee fly-over before you take the tee shot.
 type Phase = "intro" | "aim" | "fly" | "holed";
-type Screen = "title" | "playing" | "holeComplete" | "gameComplete";
+type Screen = "landing" | "title" | "playing" | "holeComplete" | "gameComplete";
 
 type GameState = {
   holeIndex: number;
@@ -175,12 +177,19 @@ function targetHole(station: number): Hole {
 }
 
 // Every fixed course in the app (shown on the "Play Courses" page). Add new
-// hand-authored courses here.
-type CourseInfo = { mode: Mode; name: string; holes: number; par: number; blurb: string };
+// hand-authored courses here. `seed` is set for procedural pro-tour venues
+// (mode "tour"); the two hand-authored layouts need none.
+type CourseInfo = { mode: Mode; name: string; holes: number; par: number; blurb: string; seed?: number };
 const FIXED_COURSES: CourseInfo[] = [
   { mode: "course", name: "Glendoveer East", holes: 18, par: TOTAL_PAR, blurb: "Northwest Championship — a center pond, hard doglegs and tree-gate greens." },
   { mode: "winthrop", name: "Winthrop Lake", holes: 18, par: WINTHROP_PAR, blurb: "College Nationals — the lake guards the whole front, rope-hazard golf in the middle." },
 ];
+// The standalone pro-tour venues — the same procedural courses the Career tour
+// visits, now playable on their own. Built from the engine's fixed roster.
+const TOUR_COURSE_INFOS: CourseInfo[] = TOUR_COURSES.map((c) => ({
+  mode: "tour", name: c.name, holes: c.holes, par: c.par, seed: c.seed,
+  blurb: `${c.emoji} ${c.character} — a pro-tour course from the Career circuit.`,
+}));
 
 export function DiscGolfGame() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -200,7 +209,11 @@ export function DiscGolfGame() {
   const audioRef = useRef<AudioEngine | null>(null);
   const rafRef = useRef<number>(0);
 
-  const [screen, setScreen] = useState<Screen>("title");
+  // First load shows a "landing" front door (Play offline / Log in). An effect
+  // skips it for returning visitors (and when auth isn't even configured). The
+  // static initial value keeps SSR/CSR markup identical — the flag is read in an
+  // effect, never during render.
+  const [screen, setScreen] = useState<Screen>("landing");
   const [muted, setMuted] = useState(false);
   const [discIndex, setDiscIndex] = useState(1); // Mid by default
   const [throwStyle, setThrowStyle] = useState<"BH" | "FH">("BH");
@@ -423,6 +436,15 @@ export function DiscGolfGame() {
     try { localStorage.setItem(OWNED_KEY, JSON.stringify(next)); } catch { /* ignore */ }
   }, [addCoins]);
 
+  // ── Player level (drives disc unlocks). Single source of truth; the ref lets
+  // the game loop / round-start callbacks read it without re-creating. ──
+  const playerLevel = levelFromXp(playerXp(roundsPlayed, unlocked.length, owned.length)).level;
+  const levelRef = useRef(1);
+  useEffect(() => { levelRef.current = playerLevel; }, [playerLevel]);
+
+  // Per-venue best scores for the standalone pro-tour courses (keyed by seed).
+  const [tourBests, setTourBests] = useState<Record<number, number>>({});
+
   // Read all persisted progress from localStorage into state/refs. Runs once on
   // mount and again after a cloud sync overwrites localStorage.
   const loadLocal = useCallback(() => {
@@ -469,6 +491,8 @@ export function DiscGolfGame() {
         const st: RankedState = { rp: rk.rp, bestToPar: typeof rk.bestToPar === "number" ? rk.bestToPar : null, rounds: typeof rk.rounds === "number" ? rk.rounds : 0 };
         rankedRef.current = st; setRanked(st);
       }
+      const tb = JSON.parse(localStorage.getItem(TOURBEST_KEY) || "{}");
+      if (tb && typeof tb === "object") setTourBests(tb);
     } catch {
       /* ignore */
     }
@@ -494,6 +518,15 @@ export function DiscGolfGame() {
 
   // ── Optional login + cloud progress (Supabase auth user_metadata) ──
   const supa = getSupabase();
+  // Skip the landing front door for returning visitors, or when auth isn't
+  // configured (then there's no "log in" choice to offer).
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    let skip = !supa;
+    try { if (localStorage.getItem(ENTRY_KEY)) skip = true; } catch { /* ignore */ }
+    if (skip) setScreen((s) => (s === "landing" ? "title" : s));
+  }, [supa]);
+  /* eslint-enable react-hooks/set-state-in-effect */
   const [user, setUser] = useState<{ email: string } | null>(null);
   const [authOpen, setAuthOpen] = useState(false);
   const [authEmail, setAuthEmail] = useState("");
@@ -569,7 +602,19 @@ export function DiscGolfGame() {
     if (!supa) return;
     await supa.auth.signOut();
     setUser(null);
+    // Drop them back at the front door so they can re-choose offline vs login.
+    try { localStorage.removeItem(ENTRY_KEY); } catch { /* ignore */ }
+    setAuthOpen(false);
+    setScreen("landing");
   }, [supa]);
+
+  // Front-door choice: remember it and enter the game (opening the login panel
+  // when they picked "Log in / Sign up").
+  const chooseEntry = useCallback((choice: "offline" | "auth") => {
+    try { localStorage.setItem(ENTRY_KEY, choice); } catch { /* ignore */ }
+    setScreen("title");
+    if (choice === "auth") { setAuthErr(null); setAuthMsg(null); setAuthOpen(true); }
+  }, []);
 
   // Persist settings + push the music volume to the live engine.
   useEffect(() => {
@@ -610,7 +655,7 @@ export function DiscGolfGame() {
     const seed = seedOverride ?? (m === "daily" ? dailySeed() : m === "ranked" ? weekSeed(Date.now()) : (Math.random() * 1e9) | 0);
     const roundHoles = buildRound(seed, m);
     const adv = advancedRef.current;
-    const discIndex = validDiscIndex(adv, discIndexRef.current, unlockedRef.current, ownedRef.current);
+    const discIndex = validDiscIndex(adv, discIndexRef.current, unlockedRef.current, ownedRef.current, levelRef.current);
     discIndexRef.current = discIndex;
     setDiscIndex(discIndex);
     stateRef.current = {
@@ -663,7 +708,7 @@ export function DiscGolfGame() {
     // The field reacts to this course's wind/slope/hazards (card + live board).
     careerFieldRef.current = careerFieldForRound(c, ev, roundHoles);
     const adv = advancedRef.current;
-    const discIndex = validDiscIndex(adv, discIndexRef.current, unlockedRef.current, ownedRef.current);
+    const discIndex = validDiscIndex(adv, discIndexRef.current, unlockedRef.current, ownedRef.current, levelRef.current);
     discIndexRef.current = discIndex;
     setDiscIndex(discIndex);
     stateRef.current = {
@@ -726,7 +771,7 @@ export function DiscGolfGame() {
     const roundHoles = buildRound(snap.seed, snap.mode);
     const holeIndex = Math.min(snap.scores.length, roundHoles.length - 1);
     const adv = snap.advanced;
-    const discIndex = validDiscIndex(adv, discIndexRef.current, unlockedRef.current, ownedRef.current);
+    const discIndex = validDiscIndex(adv, discIndexRef.current, unlockedRef.current, ownedRef.current, levelRef.current);
     discIndexRef.current = discIndex;
     setDiscIndex(discIndex);
     stateRef.current = {
@@ -763,7 +808,7 @@ export function DiscGolfGame() {
     const seed = (Math.random() * 1e9) | 0;
     const roundHoles = [buildRound(seed, m)[holeIdx]];
     const adv = advancedRef.current;
-    const discIndex = validDiscIndex(adv, discIndexRef.current, unlockedRef.current, ownedRef.current);
+    const discIndex = validDiscIndex(adv, discIndexRef.current, unlockedRef.current, ownedRef.current, levelRef.current);
     discIndexRef.current = discIndex;
     setDiscIndex(discIndex);
     stateRef.current = {
@@ -826,7 +871,7 @@ export function DiscGolfGame() {
     const seed = m === "daily" ? dailySeed() : (Math.random() * 1e9) | 0;
     const roundHoles = buildRound(seed, m);
     const adv = advancedRef.current;
-    const discIndex = validDiscIndex(adv, discIndexRef.current, unlockedRef.current, ownedRef.current);
+    const discIndex = validDiscIndex(adv, discIndexRef.current, unlockedRef.current, ownedRef.current, levelRef.current);
     discIndexRef.current = discIndex;
     setDiscIndex(discIndex);
     stateRef.current = {
@@ -871,7 +916,7 @@ export function DiscGolfGame() {
     tournamentPlayRef.current = false;
     const roundHoles = buildRound(seed, m);
     const adv = advancedRef.current;
-    const discIndex = validDiscIndex(adv, discIndexRef.current, unlockedRef.current, ownedRef.current);
+    const discIndex = validDiscIndex(adv, discIndexRef.current, unlockedRef.current, ownedRef.current, levelRef.current);
     discIndexRef.current = discIndex;
     setDiscIndex(discIndex);
     onlineScoresRef.current = { [o.myId]: { name: o.myName, scores: [], total: 0, thru: 0 } };
@@ -968,8 +1013,9 @@ export function DiscGolfGame() {
   }, [supa]);
 
   const selectDisc = useCallback((i: number) => {
-    // Locked advanced discs can't be selected until earned or bought.
-    if (advancedRef.current && ADV_DISCS[i] && !isDiscUnlocked(ADV_DISCS[i], unlockedRef.current, ownedRef.current)) return;
+    // Locked discs (level/price-gated) can't be selected until unlocked.
+    const bag = advancedRef.current ? ADV_DISCS : DISCS;
+    if (bag[i] && !isDiscUnlocked(bag[i], unlockedRef.current, ownedRef.current, levelRef.current)) { setShopOpen(true); return; }
     setDiscIndex(i);
     if (stateRef.current) stateRef.current.discIndex = i;
     rangeFlashRef.current = performance.now(); // emphasize the reach line briefly
@@ -979,7 +1025,7 @@ export function DiscGolfGame() {
   // line up index-for-index).
   const handleSetAdvanced = useCallback((v: boolean) => {
     setAdvanced(v);
-    const def = validDiscIndex(v, v ? 6 : 1, unlockedRef.current, ownedRef.current); // Teebird / Mid
+    const def = validDiscIndex(v, v ? 3 : 1, unlockedRef.current, ownedRef.current, levelRef.current); // Buzzz / Mid (core)
     setDiscIndex(def);
     if (stateRef.current) stateRef.current.discIndex = def;
   }, []);
@@ -1085,6 +1131,19 @@ export function DiscGolfGame() {
           localStorage.setItem(`discgolf.ghost.${mode}`, JSON.stringify(paths));
         } catch { /* ignore */ }
       }
+    } else if (!practice && mode === "tour" && g) {
+      // Standalone pro-tour venues track a personal best per seed.
+      const seed = g.seed;
+      let map: Record<number, number> = {};
+      try { map = JSON.parse(localStorage.getItem(TOURBEST_KEY) || "{}"); } catch { /* ignore */ }
+      const prior = map[seed];
+      const newBest = prior == null || total < prior;
+      if (newBest) {
+        map[seed] = total;
+        try { localStorage.setItem(TOURBEST_KEY, JSON.stringify(map)); } catch { /* ignore */ }
+        setTourBests(map);
+      }
+      setIsNewBest(newBest);
     } else {
       setIsNewBest(false);
     }
@@ -1203,7 +1262,7 @@ export function DiscGolfGame() {
       holeIndex: 0,
       scores: [],
       roundPaths: [],
-      discIndex: validDiscIndex(g.advanced, discIndexRef.current, unlockedRef.current, ownedRef.current),
+      discIndex: validDiscIndex(g.advanced, discIndexRef.current, unlockedRef.current, ownedRef.current, levelRef.current),
       party: g.party ? { names: g.party.names, current: 0, scores: g.party.names.map(() => Array(g.roundHoles.length).fill(null)) } : undefined,
       ...freshHole(g.roundHoles[0]),
     };
@@ -1256,7 +1315,7 @@ export function DiscGolfGame() {
     const over = total - parTotal;
     const nHoles = finalPars.length;
     const isDaily = finalMode === "daily";
-    const courseLabel = isDaily ? "Daily Challenge" : finalMode === "winthrop" ? "Winthrop Lake" : finalMode === "ranked" ? "Ranked · Weekly" : "Glendoveer East";
+    const courseLabel = isDaily ? "Daily Challenge" : finalMode === "winthrop" ? "Winthrop Lake" : finalMode === "ranked" ? "Ranked · Weekly" : finalMode === "tour" ? tourVenue(finalSeed) : "Glendoveer East";
     const courseName = `${courseLabel} · ${nHoles} holes · par ${parTotal}`;
     const os = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
     const cv = document.createElement("canvas");
@@ -1325,7 +1384,7 @@ export function DiscGolfGame() {
         resolve();
       }, "image/png");
     });
-  }, [finalTotal, finalPars, finalMode, scorecard]);
+  }, [finalTotal, finalPars, finalMode, finalSeed, scorecard]);
 
   // Share a challenge link that replays this exact round (same seed ⇒ same pins
   // + wind). Friends open it and play to beat your score; the link unfurls with
@@ -1335,7 +1394,7 @@ export function DiscGolfGame() {
     const name = nameInput.trim() || "A friend";
     const param = challengeParam(finalMode, finalSeed, finalTotal, name);
     const url = `${location.origin}/?ch=${param}`;
-    const label = finalMode === "winthrop" ? "Winthrop Lake" : finalMode === "daily" ? "today's Daily" : finalMode === "ranked" ? "this week's Ranked" : "Glendoveer East";
+    const label = finalMode === "winthrop" ? "Winthrop Lake" : finalMode === "daily" ? "today's Daily" : finalMode === "ranked" ? "this week's Ranked" : finalMode === "tour" ? tourVenue(finalSeed) : "Glendoveer East";
     try {
       const nav = navigator as Navigator & { share?: (d: { title?: string; text?: string; url?: string }) => Promise<void> };
       if (nav.share) {
@@ -2502,7 +2561,7 @@ export function DiscGolfGame() {
   const finalOver = finalTotal - finalParTotal;
   const finalIsDaily = finalMode === "daily";
   // The personal best for the course just played (null for the daily).
-  const finalBest = finalMode === "course" ? bestScore : finalMode === "winthrop" ? winthropBest : null;
+  const finalBest = finalMode === "course" ? bestScore : finalMode === "winthrop" ? winthropBest : finalMode === "tour" ? (tourBests[finalSeed] ?? null) : null;
   const overStr = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
 
   return (
@@ -2517,6 +2576,46 @@ export function DiscGolfGame() {
           className="max-h-full max-w-full rounded-lg border border-white/10 bg-[#4a8a3a]"
           style={{ imageRendering: "pixelated", touchAction: "none" }}
         />
+
+        {screen === "landing" && (
+          <div className="absolute inset-0 overflow-y-auto rounded-lg bg-gradient-to-b from-[#1c2233] via-[#141926] to-[#0f1117]">
+            <div
+              className="min-h-full flex items-center justify-center px-5"
+              style={{ paddingTop: "max(env(safe-area-inset-top), 0.75rem)", paddingBottom: "max(env(safe-area-inset-bottom), 0.75rem)" }}
+            >
+              <div className="w-full max-w-[290px] flex flex-col items-center text-center py-6">
+                <svg width="56" height="56" viewBox="0 0 32 32" aria-hidden className="drop-shadow">
+                  <g stroke="#2a7d70" strokeWidth="2" strokeLinecap="round">
+                    <line x1="2" y1="12.5" x2="8" y2="12.5" /><line x1="1" y1="18" x2="7" y2="18" />
+                  </g>
+                  <ellipse cx="18.5" cy="16.5" rx="11" ry="5" fill="#1f9e8c" />
+                  <ellipse cx="18.5" cy="14.8" rx="11" ry="5" fill="#36D7B7" />
+                  <ellipse cx="18.5" cy="14" rx="6.5" ry="2.4" fill="#5fe6d2" />
+                </svg>
+                <h1 className="text-white font-black text-[28px] leading-tight tracking-tight mt-3">
+                  Disc Golf <span className="text-[#36D7B7]">Arcade</span>
+                </h1>
+                <p className="text-gray-300 text-sm mt-2 font-medium">How do you want to play?</p>
+
+                <div className="w-full flex flex-col gap-2.5 mt-6">
+                  <button type="button" onClick={() => chooseEntry("offline")} className={titleCard}>
+                    🎮 Play offline
+                  </button>
+                  {supa && (
+                    <button type="button" onClick={() => chooseEntry("auth")} className={titleCard}>
+                      👤 Log in / Sign up
+                    </button>
+                  )}
+                </div>
+                <p className="text-gray-500 text-[11px] mt-4 leading-snug">
+                  {supa
+                    ? "Offline saves to this device. Log in to sync your bag, coins and bests across devices — you can switch anytime from the menu."
+                    : "Your scores save right here on this device."}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {screen === "title" && (
           <div className="absolute inset-0 overflow-y-auto rounded-lg bg-gradient-to-b from-[#1c2233] via-[#141926] to-[#0f1117]">
@@ -2636,7 +2735,7 @@ export function DiscGolfGame() {
                   🔥 Daily Challenge
                 </button>
                 <button type="button" onClick={() => setCoursesOpen(true)} className={titleCard}>
-                  ⛳ Play Courses · {FIXED_COURSES.length}
+                  ⛳ Play Courses · {FIXED_COURSES.length + TOUR_COURSE_INFOS.length}
                 </button>
                 <button type="button" onClick={() => { setCareerLastResult(null); setCareerNotes([]); setCareerOpen(true); }} className={titleCard}>
                   🌟 Career{career && !career.retired ? ` · ${STAGE_LABEL[career.stage]}, age ${career.age}` : ""}
@@ -2870,14 +2969,16 @@ export function DiscGolfGame() {
         {coursesOpen && (
           <CoursesPanel
             courses={FIXED_COURSES}
+            tourCourses={TOUR_COURSE_INFOS}
             bests={{ course: bestScore, winthrop: winthropBest }}
+            tourBests={tourBests}
             onClose={() => setCoursesOpen(false)}
-            onPlay={(m) => { setCoursesOpen(false); startGame(m); }}
+            onPlay={(m, seed) => { setCoursesOpen(false); startGame(m, seed); }}
           />
         )}
 
         {shopOpen && (
-          <ShopPanel coins={coins} unlocked={unlocked} owned={owned} onBuy={buyItem} onClose={() => setShopOpen(false)} />
+          <ShopPanel coins={coins} unlocked={unlocked} owned={owned} level={playerLevel} onBuy={buyItem} onClose={() => setShopOpen(false)} />
         )}
 
         {profileOpen && (
@@ -2978,16 +3079,15 @@ export function DiscGolfGame() {
                 <span className="text-[10px] text-gray-400 font-medium truncate">
                   {advanced ? `${ADV_DISCS[discIndex]?.brand ?? ""} ${ADV_DISCS[discIndex]?.name ?? ""}` : "Drag back from the disc to throw"}
                 </span>
-                {advanced && (
-                  <button type="button" onClick={() => setShopOpen(true)} className="shrink-0 text-[10px] font-bold text-[#f5d24a] hover:brightness-110">🛒 Shop</button>
-                )}
+                <button type="button" onClick={() => setShopOpen(true)} className="shrink-0 text-[10px] font-bold text-[#f5d24a] hover:brightness-110">🛒 Shop</button>
               </span>
             </div>
             {advanced ? (
               <div className="flex gap-2 overflow-x-auto pb-0.5 -mx-1 px-1" style={{ scrollbarWidth: "thin" }}>
                 {ADV_DISCS.map((d, i) => {
-                  const locked = !isDiscUnlocked(d, unlocked, owned);
+                  const locked = !isDiscUnlocked(d, unlocked, owned, playerLevel);
                   const price = DISC_PRICE[d.key];
+                  const lvl = discUnlockLevel(d);
                   return (
                   <button
                     key={d.key}
@@ -3004,29 +3104,35 @@ export function DiscGolfGame() {
                         {locked ? "🔒 " : ""}{d.name}
                       </span>
                     </span>
-                    <span className="block text-[9px] text-gray-500 mt-0.5">{locked ? `${price} 🪙` : d.brand}</span>
-                    <span className="block text-[9px] font-mono text-gray-400 leading-tight">{locked ? "tap to buy" : d.blurb.split("· ")[1]}</span>
+                    <span className="block text-[9px] text-gray-500 mt-0.5">{locked ? (price != null ? `${price} 🪙` : d.brand) : d.brand}</span>
+                    <span className="block text-[9px] font-mono text-gray-400 leading-tight">{locked ? (lvl != null ? `Lv ${lvl} or buy` : "tap to buy") : d.blurb.split("· ")[1]}</span>
                   </button>
                   );
                 })}
               </div>
             ) : (
               <div className="grid grid-cols-3 gap-2">
-                {DISCS.map((d, i) => (
+                {DISCS.map((d, i) => {
+                  const locked = !isDiscUnlocked(d, unlocked, owned, playerLevel);
+                  const price = DISC_PRICE[d.key];
+                  const lvl = discUnlockLevel(d);
+                  return (
                   <button
                     key={d.key}
                     type="button"
-                    onClick={() => selectDisc(i)}
-                    title={d.blurb}
+                    onClick={() => (locked ? setShopOpen(true) : selectDisc(i))}
+                    title={locked ? `${d.name} — ${lvl != null ? `reach Lv ${lvl}` : "locked"}${price != null ? ` or buy for ${price} coins` : ""}` : d.blurb}
                     className={`rounded-lg border px-2 py-2 flex items-center gap-1.5 text-xs font-bold transition ${
-                      i === discIndex ? "border-[#36D7B7]/70 bg-[#36D7B7]/10 text-white" : "border-white/10 text-gray-300 hover:border-white/25 bg-white/[0.02]"
+                      locked ? "border-[#f5d24a]/25 text-gray-400 opacity-80 hover:opacity-100 bg-white/[0.02]"
+                        : i === discIndex ? "border-[#36D7B7]/70 bg-[#36D7B7]/10 text-white" : "border-white/10 text-gray-300 hover:border-white/25 bg-white/[0.02]"
                     }`}
                   >
-                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: d.color }} />
-                    <span className="truncate">{d.name}</span>
-                    <span className="ml-auto text-[10px] text-gray-600">{i + 1}</span>
+                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: locked ? "#444" : d.color }} />
+                    <span className="truncate">{locked ? "🔒 " : ""}{d.name}</span>
+                    <span className="ml-auto text-[10px] text-gray-600">{locked && price != null ? `${price}🪙` : i + 1}</span>
                   </button>
-                ))}
+                  );
+                })}
               </div>
             )}
 
@@ -3156,7 +3262,9 @@ export function DiscGolfGame() {
                     ? `Today's course · ${finalPars.length} holes · par ${finalParTotal}`
                     : finalMode === "ranked"
                       ? `🏅 Ranked · this week's course · ${finalPars.length} holes · par ${finalParTotal}`
-                      : `${finalMode === "winthrop" ? "Winthrop Lake" : "Glendoveer East"} · 18 holes · par ${finalParTotal}`}
+                      : finalMode === "tour"
+                        ? `🏆 ${tourVenue(finalSeed)} · ${finalPars.length} holes · par ${finalParTotal}`
+                        : `${finalMode === "winthrop" ? "Winthrop Lake" : "Glendoveer East"} · 18 holes · par ${finalParTotal}`}
               </p>
               {/* Personal headline only for solo rounds — in Pass & Play / online
                   the standings tables below are the real result (finalTotal is
@@ -3315,7 +3423,7 @@ export function DiscGolfGame() {
 
             <div className="bg-[#1a1d23] border border-white/5 rounded-2xl overflow-hidden">
               <p className="text-white font-bold text-sm px-4 py-2.5 border-b border-white/5">
-                🏆 {finalIsDaily ? "Today's leaderboard" : `${finalMode === "winthrop" ? "Winthrop Lake" : "Glendoveer East"} leaderboard`}
+                🏆 {finalIsDaily ? "Today's leaderboard" : finalMode === "ranked" ? "This week's ranked board" : finalMode === "tour" ? `${tourVenue(finalSeed)} leaderboard` : `${finalMode === "winthrop" ? "Winthrop Lake" : "Glendoveer East"} leaderboard`}
               </p>
               {leaderboard.length === 0 ? (
                 <p className="text-gray-400 text-sm text-center py-6">No scores yet — be the first!</p>
@@ -3349,7 +3457,7 @@ export function DiscGolfGame() {
                   🎉 Back to lobby
                 </button>
               ) : (
-                <button type="button" onClick={() => startGame()} className={btn}>↻ Play again</button>
+                <button type="button" onClick={() => (finalMode === "tour" ? startGame("tour", finalSeed) : startGame())} className={btn}>↻ Play again</button>
               )}
               <button type="button" onClick={shareCard} className="mt-1 bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white font-bold px-6 py-3 rounded-lg transition">
                 📤 Share card
@@ -4182,14 +4290,16 @@ function ProfilePanel({ profile, coins, owned, unlocked, roundsPlayed, bestScore
 }
 
 // Disc shop — buy advanced discs (and skip achievement grinds) with coins.
-function ShopPanel({ coins, unlocked, owned, onBuy, onClose }: {
+function ShopPanel({ coins, unlocked, owned, level, onBuy, onClose }: {
   coins: number;
   unlocked: string[];
   owned: string[];
+  level: number;
   onBuy: (key: string, price: number) => void;
   onClose: () => void;
 }) {
-  const items = ADV_DISCS.filter((d) => DISC_PRICE[d.key] != null);
+  // Every priced disc across both bags, cheapest first.
+  const items = [...DISCS, ...ADV_DISCS].filter((d) => DISC_PRICE[d.key] != null).sort((a, b) => DISC_PRICE[a.key] - DISC_PRICE[b.key]);
   return (
     <div className="absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm p-4 flex items-start justify-center rounded-lg">
       <div className="w-full max-w-xs space-y-2.5 my-auto text-left">
@@ -4200,10 +4310,12 @@ function ShopPanel({ coins, unlocked, owned, onBuy, onClose }: {
             <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
           </div>
         </div>
-        <p className="text-gray-500 text-[11px]">Earn coins from daily rewards, rounds and practice. Discs you own work in every mode.</p>
+        <p className="text-gray-500 text-[11px]">You start with a putter + a midrange. Unlock the rest by leveling up (you&apos;re Lv {level}) or buy them here. Discs work in every mode.</p>
         {items.map((d) => {
-          const have = isDiscUnlocked(d, unlocked, owned);
-          const byAch = have && !owned.includes(d.key); // earned via achievement
+          const have = isDiscUnlocked(d, unlocked, owned, level);
+          const bought = owned.includes(d.key);
+          const lvl = discUnlockLevel(d);
+          const byLevel = have && !bought && lvl != null && level >= lvl; // unlocked by leveling
           const price = DISC_PRICE[d.key];
           const afford = coins >= price;
           return (
@@ -4211,10 +4323,10 @@ function ShopPanel({ coins, unlocked, owned, onBuy, onClose }: {
               <span className="w-3 h-3 rounded-full shrink-0" style={{ background: d.color }} />
               <div className="min-w-0 flex-1">
                 <p className="text-white text-sm font-bold truncate">{d.name} <span className="text-gray-500 font-normal text-[10px]">{d.brand}</span></p>
-                <p className="text-[10px] font-mono text-gray-500">{d.blurb.split("· ")[1]} · {d.flight === "overstable" ? "overstable" : "straight"}</p>
+                <p className="text-[10px] font-mono text-gray-500">{d.blurb.split("· ")[1] ?? d.blurb}{lvl != null ? ` · unlocks Lv ${lvl}` : ""}</p>
               </div>
               {have ? (
-                <span className="shrink-0 text-[11px] font-bold text-[#36D7B7]">{byAch ? "Earned ✓" : "Owned ✓"}</span>
+                <span className="shrink-0 text-[11px] font-bold text-[#36D7B7]">{bought ? "Owned ✓" : byLevel ? `Lv ${lvl} ✓` : "Earned ✓"}</span>
               ) : (
                 <button type="button" onClick={() => onBuy(d.key, price)} disabled={!afford}
                   className="shrink-0 rounded-lg bg-[#f5d24a] hover:brightness-110 text-[#0f1117] text-xs font-bold px-2.5 py-1.5 disabled:opacity-40 disabled:bg-white/10 disabled:text-gray-500">
@@ -4232,13 +4344,30 @@ function ShopPanel({ coins, unlocked, owned, onBuy, onClose }: {
 
 // Every fixed course in the app on one page — keeps the title screen short and
 // scales as new courses are added to FIXED_COURSES.
-function CoursesPanel({ courses, bests, onClose, onPlay }: {
+function CoursesPanel({ courses, tourCourses, bests, tourBests, onClose, onPlay }: {
   courses: CourseInfo[];
+  tourCourses: CourseInfo[];
   bests: Record<string, number | null>;
+  tourBests: Record<number, number>;
   onClose: () => void;
-  onPlay: (m: Mode) => void;
+  onPlay: (m: Mode, seed?: number) => void;
 }) {
   const over = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
+  const card = (c: CourseInfo, best: number | null | undefined) => (
+    <div key={c.seed != null ? `tour-${c.seed}` : c.mode} className="rounded-xl bg-[#1a1d23] border border-white/10 p-3">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-white font-bold text-sm truncate">{c.name}</span>
+        <span className="text-gray-500 text-[10px] shrink-0">{c.holes} holes · par {c.par}</span>
+      </div>
+      <p className="text-gray-500 text-[11px] mt-0.5 leading-snug">{c.blurb}</p>
+      <div className="flex items-center justify-between mt-2.5">
+        <span className="text-[11px] text-gray-400">
+          {best != null ? <>Best <span className="text-[#36D7B7] font-bold">{best}</span> <span className="text-gray-500">({over(best - c.par)})</span></> : "Not played yet"}
+        </span>
+        <button type="button" onClick={() => onPlay(c.mode, c.seed)} className="rounded-lg bg-[#4B3DFF] hover:bg-[#3a2ee0] text-white text-sm font-bold px-5 py-1.5 transition">▶ Play</button>
+      </div>
+    </div>
+  );
   return (
     <div className="absolute inset-0 z-20 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm p-4 flex items-start justify-center rounded-lg">
       <div className="w-full max-w-xs space-y-3 my-auto text-left">
@@ -4246,25 +4375,10 @@ function CoursesPanel({ courses, bests, onClose, onPlay }: {
           <h2 className="text-white font-black text-xl">⛳ Play Courses</h2>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
-        <p className="text-gray-500 text-[11px]">Every course in the app — more on the way.</p>
-        {courses.map((c) => {
-          const best = bests[c.mode];
-          return (
-            <div key={c.mode} className="rounded-xl bg-[#1a1d23] border border-white/10 p-3">
-              <div className="flex items-baseline justify-between gap-2">
-                <span className="text-white font-bold text-sm truncate">{c.name}</span>
-                <span className="text-gray-500 text-[10px] shrink-0">{c.holes} holes · par {c.par}</span>
-              </div>
-              <p className="text-gray-500 text-[11px] mt-0.5 leading-snug">{c.blurb}</p>
-              <div className="flex items-center justify-between mt-2.5">
-                <span className="text-[11px] text-gray-400">
-                  {best != null ? <>Best <span className="text-[#36D7B7] font-bold">{best}</span> <span className="text-gray-500">({over(best - c.par)})</span></> : "Not played yet"}
-                </span>
-                <button type="button" onClick={() => onPlay(c.mode)} className="rounded-lg bg-[#4B3DFF] hover:bg-[#3a2ee0] text-white text-sm font-bold px-5 py-1.5 transition">▶ Play</button>
-              </div>
-            </div>
-          );
-        })}
+        <p className="text-gray-500 text-[11px]">The two championship layouts — plus the pro-tour venues from Career, now playable on their own.</p>
+        {courses.map((c) => card(c, bests[c.mode]))}
+        <p className="text-gray-400 text-xs font-bold uppercase tracking-wide pt-1">🏆 Pro Tour Venues</p>
+        {tourCourses.map((c) => card(c, c.seed != null ? tourBests[c.seed] : null))}
         <button type="button" onClick={onClose} className={`${btn} w-full`}>Done</button>
       </div>
     </div>

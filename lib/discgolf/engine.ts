@@ -286,7 +286,7 @@ const WINTHROP_PAR = WINTHROP_HOLES.reduce((s, h) => s + h.par, 0);
 // Winthrop's personal best lives in its own key (WBEST_KEY, from @/lib/progress).
 // Leaderboards are per course; each daily seed gets its own board.
 function leaderboardCourse(mode: Mode, seed: number): string {
-  return mode === "course" ? "glendoveer" : mode === "winthrop" ? "winthrop" : mode === "ranked" ? `ranked-${seed}` : `daily-${seed}`;
+  return mode === "course" ? "glendoveer" : mode === "winthrop" ? "winthrop" : mode === "ranked" ? `ranked-${seed}` : mode === "tour" ? `tour-${seed}` : `daily-${seed}`;
 }
 
 // ── Tournament mode: 3 rounds at Winthrop Lake (College Nationals) against a
@@ -512,8 +512,10 @@ function activeDiscs(advanced: boolean): Disc[] {
   return advanced ? ADV_DISCS : DISCS;
 }
 // Some advanced discs are earned, not given: each maps to the achievement that
-// unlocks it. The simple bag and the advanced core (Aviar/Buzzz/Teebird) are
-// always available.
+// unlocks it. Every player STARTS with just a putter + a midrange — the simple
+// Putter/Mid and the advanced Aviar/Buzzz — and unlocks the rest by leveling up
+// (DISC_LEVEL) or buying them with coins (DISC_PRICE). Achievements are a third,
+// optional shortcut.
 const DISC_UNLOCKS: Record<string, { ach: string; label: string } | undefined> = {
   zone: { ach: "birdie", label: "score a birdie" },
   swarm: { ach: "bogeyfree9", label: "bogey-free nine" },
@@ -521,32 +523,49 @@ const DISC_UNLOCKS: Record<string, { ach: string; label: string } | undefined> =
   nukeos: { ach: "eagle", label: "score an eagle" },
   destroyer: { ach: "underpar", label: "round under par" },
 };
-// Coin price to buy a disc in the shop. Achievement discs can also be bought to
-// skip the grind; the extra molds are coins-only.
-const DISC_PRICE: Record<string, number> = {
-  zone: 250, swarm: 450, firebird: 650, nukeos: 1100, destroyer: 1400,
-  harp: 300, roc: 400, river: 550, pd: 800, wraith: 1000, zeus: 1600,
+// Player level at which each disc unlocks for free (just by playing). Discs not
+// listed here and not priced are core — available from the very first round.
+const DISC_LEVEL: Record<string, number> = {
+  // Simple bag — start with Putter + Mid; the Driver is the first unlock.
+  driver: 2,
+  // Advanced bag — a steady climb from the Aviar/Buzzz core up to distance.
+  zone: 2, harp: 3, teebird: 3, swarm: 4, roc: 4,
+  firebird: 5, river: 5, pd: 6, wraith: 7, nukeos: 7, destroyer: 8, zeus: 9,
 };
-// A disc is usable if it's core (no lock + no price), already bought (`owned`),
-// or its achievement is earned.
-function isDiscUnlocked(disc: Disc, unlocked: string[], owned: string[] = []): boolean {
+// Coin price to buy a disc in the shop (skips the level requirement). Every
+// non-core disc is purchasable; achievement discs can also be bought to skip
+// the grind.
+const DISC_PRICE: Record<string, number> = {
+  driver: 200,
+  zone: 250, harp: 300, teebird: 350, swarm: 450, roc: 400,
+  firebird: 650, river: 550, pd: 800, wraith: 1000, nukeos: 1100, destroyer: 1400, zeus: 1600,
+};
+// A disc is usable if it's core (no lock, price or level gate), already bought
+// (`owned`), its achievement is earned, or the player has reached its level.
+function isDiscUnlocked(disc: Disc, unlocked: string[], owned: string[] = [], level = 1): boolean {
   const lock = DISC_UNLOCKS[disc.key];
   const priced = DISC_PRICE[disc.key] != null;
-  if (!lock && !priced) return true;
-  if (owned.includes(disc.key)) return true;
-  return !!lock && unlocked.includes(lock.ach);
+  const lvl = DISC_LEVEL[disc.key];
+  if (!lock && !priced && lvl == null) return true; // core
+  if (owned.includes(disc.key)) return true; // bought
+  if (lvl != null && level >= lvl) return true; // leveled up to it
+  return !!lock && unlocked.includes(lock.ach); // earned via achievement
+}
+// Smallest player level that frees a disc (null if it has no level gate).
+function discUnlockLevel(disc: Disc): number | null {
+  return DISC_LEVEL[disc.key] ?? null;
 }
 // Clamp a remembered disc index to one that's both in range for this bag AND
 // usable. Guards the reload case where the advanced bag is on but the saved
 // index lands on a still-locked disc (its default index isn't restored), which
 // would otherwise start a round with a locked disc selected.
-function validDiscIndex(advanced: boolean, idx: number, unlocked: string[], owned: string[] = []): number {
+function validDiscIndex(advanced: boolean, idx: number, unlocked: string[], owned: string[] = [], level = 1): number {
   const bag = activeDiscs(advanced);
   const i = Math.min(Math.max(0, idx | 0), bag.length - 1);
-  if (isDiscUnlocked(bag[i], unlocked, owned)) return i;
-  const def = advanced ? 6 : 1; // Teebird / Mid — always usable
-  if (bag[def] && isDiscUnlocked(bag[def], unlocked, owned)) return def;
-  const first = bag.findIndex((d) => isDiscUnlocked(d, unlocked, owned));
+  if (isDiscUnlocked(bag[i], unlocked, owned, level)) return i;
+  const def = advanced ? 3 : 1; // Buzzz / Mid — always usable (core)
+  if (bag[def] && isDiscUnlocked(bag[def], unlocked, owned, level)) return def;
+  const first = bag.findIndex((d) => isDiscUnlocked(d, unlocked, owned, level));
   return first >= 0 ? first : 0;
 }
 // Most the flight path may bend over a single throw (~46°) — keeps fade
@@ -916,6 +935,43 @@ function generateTourCourse(seed: number): Hole[] {
     return { ...h, wind: { x: wind.x * style.windMul, y: wind.y * style.windMul }, windMag: windMag * style.windMul };
   });
 }
+// Named venues for generated pro "tour" courses. The seed picks one (and builds
+// the actual 18 holes), so the pro tour visits many distinct courses a season.
+const VENUE_NAMES = [
+  "Pinecrest Ridge", "Granite Falls", "Harbor Pines", "Copperhead GC", "Whitetail Run",
+  "Sandstone Mesa", "Cedar Hollow", "Iron Mountain", "Blue Heron Park", "Timber Ridge",
+  "Cypress Bend", "Eagle Bluff", "Riverbend Commons", "Foxglove Meadows", "Lakeshore Links",
+  "Birchwood Trace", "Coyote Canyon", "Maplewood Estate", "Silver Creek", "Thunder Valley",
+  "Heron Marsh", "Oakmont Acres", "Sunset Dunes", "Wolf Ridge", "Aspen Glade", "Stonebriar",
+];
+function tourVenue(seed: number): string {
+  return VENUE_NAMES[seed % VENUE_NAMES.length];
+}
+// A fixed roster of pro-tour venues, playable standalone from "Play Courses"
+// (the same procedurally-generated layouts the Career tour visits). Built by
+// walking seeds until we have a set of distinct, varied venues — deterministic,
+// so a venue's layout never changes between sessions.
+export type TourCourse = { seed: number; name: string; character: string; emoji: string; par: number; holes: number };
+function buildTourRoster(count: number): TourCourse[] {
+  const out: TourCourse[] = [];
+  const names = new Set<string>();
+  const chars = new Map<string, number>();
+  let seed = 0x1a2b3c4d >>> 0;
+  // Bound the walk so a bad parameterization can never spin forever.
+  for (let guard = 0; guard < 5000 && out.length < count; guard++) {
+    seed = (seed + 0x9e3779b1) >>> 0;
+    const name = tourVenue(seed);
+    if (names.has(name)) continue;
+    const { character, emoji } = tourCharacter(seed);
+    // Keep the roster varied: at most two venues of the same character.
+    if ((chars.get(character) ?? 0) >= 2) continue;
+    names.add(name);
+    chars.set(character, (chars.get(character) ?? 0) + 1);
+    out.push({ seed, name, character, emoji, par: tourPars(seed).reduce((a, b) => a + b, 0), holes: 18 });
+  }
+  return out;
+}
+const TOUR_COURSES: TourCourse[] = buildTourRoster(8);
 // Build one playable round. Daily = a new 9-hole course; tour = a generated
 // 18-hole pro course; course = the 18 fixed Glendoveer holes with seeded wind +
 // a jittered pin. Same seed ⇒ same round.
@@ -1212,7 +1268,9 @@ export {
   activeDiscs,
   DISC_UNLOCKS,
   DISC_PRICE,
+  DISC_LEVEL,
   isDiscUnlocked,
+  discUnlockLevel,
   validDiscIndex,
   MAX_FADE_TURN,
   aimAt,
@@ -1233,7 +1291,9 @@ export {
   generateDailyCourse,
   tourPars,
   tourCharacter,
+  tourVenue,
   generateTourCourse,
+  TOUR_COURSES,
   buildRound,
   SLOPE_PULL,
   elevGroundFriction,

@@ -3,7 +3,7 @@
 // Lake), and the pro tour. Events can be SIMULATED from your skills or PLAYED
 // as real rounds (your skills change how the disc flies — see skillMods). All
 // logic here is pure + deterministic so it's testable and resumes cleanly. ──
-import { mulberry32, CATCH_R, TOTAL_PAR, WINTHROP_PAR, tourPars, tourCharacter, type Mode, type Hole, type TournLiveRow, type GhostRacer } from "./engine";
+import { mulberry32, CATCH_R, TOTAL_PAR, WINTHROP_PAR, tourPars, tourCharacter, tourVenue, type Mode, type Hole, type TournLiveRow, type GhostRacer } from "./engine";
 
 export type CareerSkills = { power: number; control: number; putt: number; mental: number };
 export const SKILL_KEYS: (keyof CareerSkills)[] = ["power", "control", "putt", "mental"];
@@ -265,20 +265,11 @@ function parForMode(mode: Mode): { par: number; holes: number } {
   return { par: 27, holes: 9 }; // daily-style 9-hole event (par ~27)
 }
 
-// Named venues for generated pro "tour" courses. The seed picks one (and builds
-// the actual 18 holes), so the pro tour visits many distinct courses a season.
-const VENUE_NAMES = [
-  "Pinecrest Ridge", "Granite Falls", "Harbor Pines", "Copperhead GC", "Whitetail Run",
-  "Sandstone Mesa", "Cedar Hollow", "Iron Mountain", "Blue Heron Park", "Timber Ridge",
-  "Cypress Bend", "Eagle Bluff", "Riverbend Commons", "Foxglove Meadows", "Lakeshore Links",
-  "Birchwood Trace", "Coyote Canyon", "Maplewood Estate", "Silver Creek", "Thunder Valley",
-  "Heron Marsh", "Oakmont Acres", "Sunset Dunes", "Wolf Ridge", "Aspen Glade", "Stonebriar",
-];
+// Venue naming + the procedural layouts live in the engine (tourVenue /
+// tourPars / tourCharacter / generateTourCourse), so the same courses are
+// playable standalone from "Play Courses".
 function tourCourseSeed(careerSeed: number, fullId: string): number {
   return (careerSeed ^ hashId(fullId) ^ 0x51ed270b) >>> 0;
-}
-function tourVenue(seed: number): string {
-  return VENUE_NAMES[seed % VENUE_NAMES.length];
 }
 
 // The events on offer this season, by stage. Deterministic from seed + season.
