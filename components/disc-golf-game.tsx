@@ -6,14 +6,14 @@ import { submitArcadeScore, getArcadeLeaderboard } from "@/actions/arcade";
 import type { ArcadeScore } from "@/lib/arcade-types";
 import { getSupabase } from "@/lib/supabase/browser";
 import {
-  BEST_KEY, WBEST_KEY, HOLEBEST_KEY, SETTINGS_KEY, ACH_KEY, HIST_KEY, CAREER_KEY, COINS_KEY, DAILY_KEY,
+  BEST_KEY, WBEST_KEY, HOLEBEST_KEY, SETTINGS_KEY, ACH_KEY, HIST_KEY, CAREER_KEY, COINS_KEY, DAILY_KEY, OWNED_KEY,
   readLocalProgress, applyProgress, mergeProgress, type Progress,
 } from "@/lib/progress";
 import {
   dayNumber, claimDailyReward, dailyAvailable, coinsForRound, fmtCoins, type DailyReward,
 } from "@/lib/discgolf/wallet";
 import {
-  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, TOTAL_PAR, WINTHROP_HOLES, WINTHROP_PAR, leaderboardCourse, TOURN_KEY, TOURN_NAMES, tournFieldRound, tournLiveStandings, tournStandings, ACHIEVEMENTS, earnedAchievements, scoreLabel, STRAIGHT_SPEED_MUL, releaseSpeedMul, DISCS, ADV_DISCS, activeDiscs, DISC_UNLOCKS, validDiscIndex, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, inRect, inHazard, offRibbons, dailySeed, buildRound, elevAt, vibrate, fullPowerRange, lastInBoundsLie, stepFlight,
+  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, TOTAL_PAR, WINTHROP_HOLES, WINTHROP_PAR, leaderboardCourse, TOURN_KEY, TOURN_NAMES, tournFieldRound, tournLiveStandings, tournStandings, ACHIEVEMENTS, earnedAchievements, scoreLabel, STRAIGHT_SPEED_MUL, releaseSpeedMul, DISCS, ADV_DISCS, activeDiscs, DISC_PRICE, isDiscUnlocked, validDiscIndex, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, inRect, inHazard, offRibbons, dailySeed, buildRound, elevAt, vibrate, fullPowerRange, lastInBoundsLie, stepFlight,
 } from "@/lib/discgolf/engine";
 import type {
   Vec, Tree, Hole, Mode, Tournament, TournLiveRow, Achievement, FlightPath, Release, Flight, GhostState,
@@ -371,6 +371,19 @@ export function DiscGolfGame() {
     setDailyClaim({ coins: res.coins, streak: res.reward.streak });
   }, [daily, addCoins]);
 
+  // Owned discs (purchased in the shop) — usable on top of achievement unlocks.
+  const [owned, setOwned] = useState<string[]>([]);
+  const ownedRef = useRef<string[]>([]);
+  const [shopOpen, setShopOpen] = useState(false);
+  const buyDisc = useCallback((key: string, price: number) => {
+    if (coinsRef.current < price || ownedRef.current.includes(key)) return;
+    addCoins(-price);
+    const next = [...ownedRef.current, key];
+    ownedRef.current = next;
+    setOwned(next);
+    try { localStorage.setItem(OWNED_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+  }, [addCoins]);
+
   // Read all persisted progress from localStorage into state/refs. Runs once on
   // mount and again after a cloud sync overwrites localStorage.
   const loadLocal = useCallback(() => {
@@ -406,6 +419,8 @@ export function DiscGolfGame() {
       coinsRef.current = co; setCoins(co);
       setDaily(JSON.parse(localStorage.getItem(DAILY_KEY) || "null"));
       setToday(dayNumber(Date.now()));
+      const ow = JSON.parse(localStorage.getItem(OWNED_KEY) || "[]");
+      ownedRef.current = Array.isArray(ow) ? ow : []; setOwned(ownedRef.current);
     } catch {
       /* ignore */
     }
@@ -520,8 +535,8 @@ export function DiscGolfGame() {
   // Sync the career save to the cloud whenever it changes (debounced; no-op
   // when signed out). localStorage is already written by saveCareer.
   useEffect(() => { if (career) saveProgress(); }, [career, saveProgress]);
-  // Sync coins + daily-reward state to the cloud when they change.
-  useEffect(() => { saveProgress(); }, [coins, daily, saveProgress]);
+  // Sync coins + daily-reward + owned discs to the cloud when they change.
+  useEffect(() => { saveProgress(); }, [coins, daily, owned, saveProgress]);
 
   const syncHud = useCallback(() => {
     const g = stateRef.current;
@@ -547,7 +562,7 @@ export function DiscGolfGame() {
     const seed = seedOverride ?? (m === "daily" ? dailySeed() : (Math.random() * 1e9) | 0);
     const roundHoles = buildRound(seed, m);
     const adv = advancedRef.current;
-    const discIndex = validDiscIndex(adv, discIndexRef.current, unlockedRef.current);
+    const discIndex = validDiscIndex(adv, discIndexRef.current, unlockedRef.current, ownedRef.current);
     discIndexRef.current = discIndex;
     setDiscIndex(discIndex);
     stateRef.current = {
@@ -600,7 +615,7 @@ export function DiscGolfGame() {
     // The field reacts to this course's wind/slope/hazards (card + live board).
     careerFieldRef.current = careerFieldForRound(c, ev, roundHoles);
     const adv = advancedRef.current;
-    const discIndex = validDiscIndex(adv, discIndexRef.current, unlockedRef.current);
+    const discIndex = validDiscIndex(adv, discIndexRef.current, unlockedRef.current, ownedRef.current);
     discIndexRef.current = discIndex;
     setDiscIndex(discIndex);
     stateRef.current = {
@@ -663,7 +678,7 @@ export function DiscGolfGame() {
     const roundHoles = buildRound(snap.seed, snap.mode);
     const holeIndex = Math.min(snap.scores.length, roundHoles.length - 1);
     const adv = snap.advanced;
-    const discIndex = validDiscIndex(adv, discIndexRef.current, unlockedRef.current);
+    const discIndex = validDiscIndex(adv, discIndexRef.current, unlockedRef.current, ownedRef.current);
     discIndexRef.current = discIndex;
     setDiscIndex(discIndex);
     stateRef.current = {
@@ -700,7 +715,7 @@ export function DiscGolfGame() {
     const seed = (Math.random() * 1e9) | 0;
     const roundHoles = [buildRound(seed, m)[holeIdx]];
     const adv = advancedRef.current;
-    const discIndex = validDiscIndex(adv, discIndexRef.current, unlockedRef.current);
+    const discIndex = validDiscIndex(adv, discIndexRef.current, unlockedRef.current, ownedRef.current);
     discIndexRef.current = discIndex;
     setDiscIndex(discIndex);
     stateRef.current = {
@@ -763,7 +778,7 @@ export function DiscGolfGame() {
     const seed = m === "daily" ? dailySeed() : (Math.random() * 1e9) | 0;
     const roundHoles = buildRound(seed, m);
     const adv = advancedRef.current;
-    const discIndex = validDiscIndex(adv, discIndexRef.current, unlockedRef.current);
+    const discIndex = validDiscIndex(adv, discIndexRef.current, unlockedRef.current, ownedRef.current);
     discIndexRef.current = discIndex;
     setDiscIndex(discIndex);
     stateRef.current = {
@@ -808,7 +823,7 @@ export function DiscGolfGame() {
     tournamentPlayRef.current = false;
     const roundHoles = buildRound(seed, m);
     const adv = advancedRef.current;
-    const discIndex = validDiscIndex(adv, discIndexRef.current, unlockedRef.current);
+    const discIndex = validDiscIndex(adv, discIndexRef.current, unlockedRef.current, ownedRef.current);
     discIndexRef.current = discIndex;
     setDiscIndex(discIndex);
     onlineScoresRef.current = { [o.myId]: { name: o.myName, scores: [], total: 0, thru: 0 } };
@@ -905,11 +920,8 @@ export function DiscGolfGame() {
   }, [supa]);
 
   const selectDisc = useCallback((i: number) => {
-    // Locked advanced discs can't be selected until their achievement is earned.
-    if (advancedRef.current) {
-      const lock = DISC_UNLOCKS[ADV_DISCS[i]?.key ?? ""];
-      if (lock && !unlockedRef.current.includes(lock.ach)) return;
-    }
+    // Locked advanced discs can't be selected until earned or bought.
+    if (advancedRef.current && ADV_DISCS[i] && !isDiscUnlocked(ADV_DISCS[i], unlockedRef.current, ownedRef.current)) return;
     setDiscIndex(i);
     if (stateRef.current) stateRef.current.discIndex = i;
     rangeFlashRef.current = performance.now(); // emphasize the reach line briefly
@@ -919,9 +931,9 @@ export function DiscGolfGame() {
   // line up index-for-index).
   const handleSetAdvanced = useCallback((v: boolean) => {
     setAdvanced(v);
-    const def = v ? 4 : 1; // Teebird / Mid
+    const def = validDiscIndex(v, v ? 6 : 1, unlockedRef.current, ownedRef.current); // Teebird / Mid
     setDiscIndex(def);
-    if (stateRef.current) stateRef.current.discIndex = Math.min(def, activeDiscs(v).length - 1);
+    if (stateRef.current) stateRef.current.discIndex = def;
   }, []);
 
   const throwDisc = useCallback(() => {
@@ -1129,7 +1141,7 @@ export function DiscGolfGame() {
       holeIndex: 0,
       scores: [],
       roundPaths: [],
-      discIndex: validDiscIndex(g.advanced, discIndexRef.current, unlockedRef.current),
+      discIndex: validDiscIndex(g.advanced, discIndexRef.current, unlockedRef.current, ownedRef.current),
       party: g.party ? { names: g.party.names, current: 0, scores: g.party.names.map(() => Array(g.roundHoles.length).fill(null)) } : undefined,
       ...freshHole(g.roundHoles[0]),
     };
@@ -2766,6 +2778,10 @@ export function DiscGolfGame() {
           />
         )}
 
+        {shopOpen && (
+          <ShopPanel coins={coins} unlocked={unlocked} owned={owned} onBuy={buyDisc} onClose={() => setShopOpen(false)} />
+        )}
+
         {practiceOpen && (
           <PracticePanel
             onClose={() => setPracticeOpen(false)}
@@ -2826,23 +2842,27 @@ export function DiscGolfGame() {
             {/* Disc selector */}
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-gray-500">Disc</span>
-              <span className="text-[10px] text-gray-400 font-medium truncate ml-2">
-                {advanced ? `${ADV_DISCS[discIndex]?.brand ?? ""} ${ADV_DISCS[discIndex]?.name ?? ""}` : "Drag back from the disc to throw"}
+              <span className="flex items-center gap-2 ml-2 min-w-0">
+                <span className="text-[10px] text-gray-400 font-medium truncate">
+                  {advanced ? `${ADV_DISCS[discIndex]?.brand ?? ""} ${ADV_DISCS[discIndex]?.name ?? ""}` : "Drag back from the disc to throw"}
+                </span>
+                {advanced && (
+                  <button type="button" onClick={() => setShopOpen(true)} className="shrink-0 text-[10px] font-bold text-[#f5d24a] hover:brightness-110">🛒 Shop</button>
+                )}
               </span>
             </div>
             {advanced ? (
               <div className="flex gap-2 overflow-x-auto pb-0.5 -mx-1 px-1" style={{ scrollbarWidth: "thin" }}>
                 {ADV_DISCS.map((d, i) => {
-                  const lock = DISC_UNLOCKS[d.key];
-                  const locked = !!lock && !unlocked.includes(lock.ach);
+                  const locked = !isDiscUnlocked(d, unlocked, owned);
+                  const price = DISC_PRICE[d.key];
                   return (
                   <button
                     key={d.key}
                     type="button"
-                    onClick={() => selectDisc(i)}
-                    disabled={locked}
+                    onClick={() => (locked ? setShopOpen(true) : selectDisc(i))}
                     className={`shrink-0 w-[90px] rounded-lg border px-2 py-1.5 text-left transition ${
-                      locked ? "border-white/5 bg-white/[0.02] opacity-50"
+                      locked ? "border-[#f5d24a]/25 bg-white/[0.02] opacity-70 hover:opacity-100"
                         : i === discIndex ? "border-[#36D7B7]/70 bg-[#36D7B7]/10" : "border-white/10 hover:border-white/25 bg-white/[0.02]"
                     }`}
                   >
@@ -2852,8 +2872,8 @@ export function DiscGolfGame() {
                         {locked ? "🔒 " : ""}{d.name}
                       </span>
                     </span>
-                    <span className="block text-[9px] text-gray-500 mt-0.5">{locked ? lock!.label : d.brand}</span>
-                    <span className="block text-[9px] font-mono text-gray-400 leading-tight">{locked ? "to unlock" : d.blurb.split("· ")[1]}</span>
+                    <span className="block text-[9px] text-gray-500 mt-0.5">{locked ? `${price} 🪙` : d.brand}</span>
+                    <span className="block text-[9px] font-mono text-gray-400 leading-tight">{locked ? "tap to buy" : d.blurb.split("· ")[1]}</span>
                   </button>
                   );
                 })}
@@ -3900,6 +3920,55 @@ function CareerPanel({ career, lastResult, notes, onClose, onStart, onPlay, onSi
         )}
       </div>
     </div></div>
+  );
+}
+
+// Disc shop — buy advanced discs (and skip achievement grinds) with coins.
+function ShopPanel({ coins, unlocked, owned, onBuy, onClose }: {
+  coins: number;
+  unlocked: string[];
+  owned: string[];
+  onBuy: (key: string, price: number) => void;
+  onClose: () => void;
+}) {
+  const items = ADV_DISCS.filter((d) => DISC_PRICE[d.key] != null);
+  return (
+    <div className="absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm p-4 flex items-start justify-center rounded-lg">
+      <div className="w-full max-w-xs space-y-2.5 my-auto text-left">
+        <div className="flex items-center justify-between">
+          <h2 className="text-white font-black text-xl">🛒 Disc Shop</h2>
+          <div className="flex items-center gap-2">
+            <span className="text-[#f5d24a] font-bold font-mono text-sm">{fmtCoins(coins)} 🪙</span>
+            <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
+          </div>
+        </div>
+        <p className="text-gray-500 text-[11px]">Earn coins from daily rewards, rounds and practice. Discs you own work in every mode.</p>
+        {items.map((d) => {
+          const have = isDiscUnlocked(d, unlocked, owned);
+          const byAch = have && !owned.includes(d.key); // earned via achievement
+          const price = DISC_PRICE[d.key];
+          const afford = coins >= price;
+          return (
+            <div key={d.key} className="flex items-center gap-2.5 bg-[#1a1d23] border border-white/5 rounded-lg px-3 py-2">
+              <span className="w-3 h-3 rounded-full shrink-0" style={{ background: d.color }} />
+              <div className="min-w-0 flex-1">
+                <p className="text-white text-sm font-bold truncate">{d.name} <span className="text-gray-500 font-normal text-[10px]">{d.brand}</span></p>
+                <p className="text-[10px] font-mono text-gray-500">{d.blurb.split("· ")[1]} · {d.flight === "overstable" ? "overstable" : "straight"}</p>
+              </div>
+              {have ? (
+                <span className="shrink-0 text-[11px] font-bold text-[#36D7B7]">{byAch ? "Earned ✓" : "Owned ✓"}</span>
+              ) : (
+                <button type="button" onClick={() => onBuy(d.key, price)} disabled={!afford}
+                  className="shrink-0 rounded-lg bg-[#f5d24a] hover:brightness-110 text-[#0f1117] text-xs font-bold px-2.5 py-1.5 disabled:opacity-40 disabled:bg-white/10 disabled:text-gray-500">
+                  {price} 🪙
+                </button>
+              )}
+            </div>
+          );
+        })}
+        <button type="button" onClick={onClose} className={`${btn} w-full`}>Done</button>
+      </div>
+    </div>
   );
 }
 

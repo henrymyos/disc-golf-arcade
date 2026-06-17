@@ -490,21 +490,28 @@ const ADV_DISCS: Disc[] = [
   // Putt & approach — straight Aviar vs overstable Zone (putter tier)
   advDisc("aviar", "Aviar", "Innova", "#36D7B7", DISCS[0], "straight", "2 / 3 / 0 / 1"),
   advDisc("zone", "Zone", "Discraft", "#e07b3b", DISCS[0], "overstable", "4 / 3 / 0 / 3"),
+  advDisc("harp", "Harp", "Westside", "#d6b85c", DISCS[0], "overstable", "3 / 1 / 0 / 4"),
   // Midrange — straight Buzzz vs overstable Swarm (mid tier)
   advDisc("buzzz", "Buzzz", "Discraft", "#f5d24a", DISCS[1], "straight", "5 / 4 / 0 / 1"),
   advDisc("swarm", "Swarm", "Discraft", "#b85cd6", DISCS[1], "overstable", "5 / 4 / 0 / 3"),
+  advDisc("roc", "Roc3", "Innova", "#7ad17a", DISCS[1], "overstable", "5 / 4 / 0 / 3"),
   // Fairway / control — straight Teebird vs overstable Firebird (fairway tier)
   advDisc("teebird", "Teebird", "Innova", "#5fb0e8", FAIRWAY_BASE, "straight", "7 / 5 / 0 / 2"),
   advDisc("firebird", "Firebird", "Innova", "#e2453b", FAIRWAY_BASE, "overstable", "9 / 3 / 0 / 4"),
+  advDisc("river", "River", "Latitude 64", "#5fd6c8", FAIRWAY_BASE, "straight", "7 / 7 / -1 / 1"),
+  advDisc("pd", "PD", "Discmania", "#3b6fe2", FAIRWAY_BASE, "overstable", "9 / 4 / 0 / 3"),
   // Distance — overstable Nuke OS vs straight-flying Destroyer (driver tier)
   advDisc("nukeos", "Nuke OS", "Discraft", "#2f6fe0", DISCS[2], "overstable", "13 / 5 / 0 / 4"),
   advDisc("destroyer", "Destroyer", "Innova", "#e23b7b", DISCS[2], "straight", "12 / 5 / -1 / 3"),
+  advDisc("wraith", "Wraith", "Innova", "#e2843b", DISCS[2], "straight", "11 / 5 / -1 / 3"),
+  advDisc("zeus", "Zeus", "Discraft", "#9b3be2", DISCS[2], "overstable", "12 / 5 / -1 / 3"),
 ];
 function activeDiscs(advanced: boolean): Disc[] {
   return advanced ? ADV_DISCS : DISCS;
 }
 // Some advanced discs are earned, not given: each maps to the achievement that
-// unlocks it (the simple bag and the advanced core are always available).
+// unlocks it. The simple bag and the advanced core (Aviar/Buzzz/Teebird) are
+// always available.
 const DISC_UNLOCKS: Record<string, { ach: string; label: string } | undefined> = {
   zone: { ach: "birdie", label: "score a birdie" },
   swarm: { ach: "bogeyfree9", label: "bogey-free nine" },
@@ -512,21 +519,32 @@ const DISC_UNLOCKS: Record<string, { ach: string; label: string } | undefined> =
   nukeos: { ach: "eagle", label: "score an eagle" },
   destroyer: { ach: "underpar", label: "round under par" },
 };
-function isDiscUnlocked(disc: Disc, unlocked: string[]): boolean {
+// Coin price to buy a disc in the shop. Achievement discs can also be bought to
+// skip the grind; the extra molds are coins-only.
+const DISC_PRICE: Record<string, number> = {
+  zone: 250, swarm: 450, firebird: 650, nukeos: 1100, destroyer: 1400,
+  harp: 300, roc: 400, river: 550, pd: 800, wraith: 1000, zeus: 1600,
+};
+// A disc is usable if it's core (no lock + no price), already bought (`owned`),
+// or its achievement is earned.
+function isDiscUnlocked(disc: Disc, unlocked: string[], owned: string[] = []): boolean {
   const lock = DISC_UNLOCKS[disc.key];
-  return !lock || unlocked.includes(lock.ach);
+  const priced = DISC_PRICE[disc.key] != null;
+  if (!lock && !priced) return true;
+  if (owned.includes(disc.key)) return true;
+  return !!lock && unlocked.includes(lock.ach);
 }
 // Clamp a remembered disc index to one that's both in range for this bag AND
-// unlocked. Guards the reload case where the advanced bag is on but the saved
+// usable. Guards the reload case where the advanced bag is on but the saved
 // index lands on a still-locked disc (its default index isn't restored), which
 // would otherwise start a round with a locked disc selected.
-function validDiscIndex(advanced: boolean, idx: number, unlocked: string[]): number {
+function validDiscIndex(advanced: boolean, idx: number, unlocked: string[], owned: string[] = []): number {
   const bag = activeDiscs(advanced);
   const i = Math.min(Math.max(0, idx | 0), bag.length - 1);
-  if (isDiscUnlocked(bag[i], unlocked)) return i;
-  const def = advanced ? 4 : 1; // Teebird / Mid — always unlocked
-  if (bag[def] && isDiscUnlocked(bag[def], unlocked)) return def;
-  const first = bag.findIndex((d) => isDiscUnlocked(d, unlocked));
+  if (isDiscUnlocked(bag[i], unlocked, owned)) return i;
+  const def = advanced ? 6 : 1; // Teebird / Mid — always usable
+  if (bag[def] && isDiscUnlocked(bag[def], unlocked, owned)) return def;
+  const first = bag.findIndex((d) => isDiscUnlocked(d, unlocked, owned));
   return first >= 0 ? first : 0;
 }
 // Most the flight path may bend over a single throw (~46°) — keeps fade
@@ -1191,6 +1209,7 @@ export {
   ADV_DISCS,
   activeDiscs,
   DISC_UNLOCKS,
+  DISC_PRICE,
   isDiscUnlocked,
   validDiscIndex,
   MAX_FADE_TURN,

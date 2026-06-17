@@ -15,6 +15,7 @@ import {
   ADV_DISCS,
   validDiscIndex,
   isDiscUnlocked,
+  DISC_PRICE,
   tournStandings,
   tournLiveStandings,
   TOURN_NAMES,
@@ -199,6 +200,22 @@ describe("disc unlocks", () => {
   it("validDiscIndex clamps out-of-range indices", () => {
     expect(validDiscIndex(false, 99, [])).toBeLessThan(DISCS.length);
     expect(validDiscIndex(false, -5, [])).toBeGreaterThanOrEqual(0);
+  });
+  it("a purchased (owned) disc counts as unlocked even with no achievements", () => {
+    const zone = ADV_DISCS.find((d) => d.key === "zone")!;
+    expect(isDiscUnlocked(zone, [], [])).toBe(false);
+    expect(isDiscUnlocked(zone, [], ["zone"])).toBe(true);
+    // owning it keeps the selected index valid on the advanced bag
+    const idx = ADV_DISCS.indexOf(zone);
+    expect(validDiscIndex(true, idx, [], ["zone"])).toBe(idx);
+  });
+  it("every priced disc is a real advanced disc that is gated by default", () => {
+    for (const key of Object.keys(DISC_PRICE)) {
+      const d = ADV_DISCS.find((x) => x.key === key)!;
+      expect(d, `priced disc ${key} exists in ADV_DISCS`).toBeTruthy();
+      expect(DISC_PRICE[key]).toBeGreaterThan(0);
+      expect(isDiscUnlocked(d, [], [])).toBe(false); // not free
+    }
   });
 });
 
