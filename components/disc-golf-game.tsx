@@ -6,12 +6,15 @@ import { submitArcadeScore, getArcadeLeaderboard } from "@/actions/arcade";
 import type { ArcadeScore } from "@/lib/arcade-types";
 import { getSupabase } from "@/lib/supabase/browser";
 import {
-  BEST_KEY, WBEST_KEY, HOLEBEST_KEY, SETTINGS_KEY, ACH_KEY, HIST_KEY, CAREER_KEY, COINS_KEY, DAILY_KEY, OWNED_KEY,
+  BEST_KEY, WBEST_KEY, HOLEBEST_KEY, SETTINGS_KEY, ACH_KEY, HIST_KEY, CAREER_KEY, COINS_KEY, DAILY_KEY, OWNED_KEY, PROFILE_KEY,
   readLocalProgress, applyProgress, mergeProgress, type Progress,
 } from "@/lib/progress";
 import {
   dayNumber, claimDailyReward, dailyAvailable, coinsForRound, fmtCoins, type DailyReward,
 } from "@/lib/discgolf/wallet";
+import {
+  AVATARS, DEFAULT_AVATAR, avatarOwnKey, avatarUnlocked, playerXp, levelFromXp, type PlayerProfile,
+} from "@/lib/discgolf/profile";
 import {
   W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, TOTAL_PAR, WINTHROP_HOLES, WINTHROP_PAR, leaderboardCourse, TOURN_KEY, TOURN_NAMES, tournFieldRound, tournLiveStandings, tournStandings, ACHIEVEMENTS, earnedAchievements, scoreLabel, STRAIGHT_SPEED_MUL, releaseSpeedMul, DISCS, ADV_DISCS, activeDiscs, DISC_PRICE, isDiscUnlocked, validDiscIndex, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, inRect, inHazard, offRibbons, dailySeed, buildRound, elevAt, vibrate, fullPowerRange, lastInBoundsLie, stepFlight,
 } from "@/lib/discgolf/engine";
@@ -371,18 +374,28 @@ export function DiscGolfGame() {
     setDailyClaim({ coins: res.coins, streak: res.reward.streak });
   }, [daily, addCoins]);
 
-  // Owned discs (purchased in the shop) — usable on top of achievement unlocks.
+  // Owned discs + cosmetics (purchased with coins) — discs are keyed by their
+  // disc key, avatars by "avatar:<key>". Usable on top of achievement unlocks.
   const [owned, setOwned] = useState<string[]>([]);
   const ownedRef = useRef<string[]>([]);
   const [shopOpen, setShopOpen] = useState(false);
-  const buyDisc = useCallback((key: string, price: number) => {
-    if (coinsRef.current < price || ownedRef.current.includes(key)) return;
+  const buyItem = useCallback((ownKey: string, price: number) => {
+    if (coinsRef.current < price || ownedRef.current.includes(ownKey)) return;
     addCoins(-price);
-    const next = [...ownedRef.current, key];
+    const next = [...ownedRef.current, ownKey];
     ownedRef.current = next;
     setOwned(next);
     try { localStorage.setItem(OWNED_KEY, JSON.stringify(next)); } catch { /* ignore */ }
   }, [addCoins]);
+
+  // Player profile (display name + chosen avatar). Persisted + cloud-synced.
+  const [profile, setProfile] = useState<PlayerProfile>({ name: "", avatar: DEFAULT_AVATAR });
+  const [profileOpen, setProfileOpen] = useState(false);
+  const saveProfile = useCallback((next: PlayerProfile) => {
+    setProfile(next);
+    try { localStorage.setItem(PROFILE_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+  }, []);
+  const buyAvatar = useCallback((key: string, price: number) => buyItem(avatarOwnKey(key), price), [buyItem]);
 
   // Read all persisted progress from localStorage into state/refs. Runs once on
   // mount and again after a cloud sync overwrites localStorage.
@@ -421,6 +434,10 @@ export function DiscGolfGame() {
       setToday(dayNumber(Date.now()));
       const ow = JSON.parse(localStorage.getItem(OWNED_KEY) || "[]");
       ownedRef.current = Array.isArray(ow) ? ow : []; setOwned(ownedRef.current);
+      const prof = JSON.parse(localStorage.getItem(PROFILE_KEY) || "null");
+      if (prof && typeof prof === "object") {
+        setProfile({ name: typeof prof.name === "string" ? prof.name : "", avatar: typeof prof.avatar === "string" ? prof.avatar : DEFAULT_AVATAR });
+      }
     } catch {
       /* ignore */
     }
@@ -535,8 +552,8 @@ export function DiscGolfGame() {
   // Sync the career save to the cloud whenever it changes (debounced; no-op
   // when signed out). localStorage is already written by saveCareer.
   useEffect(() => { if (career) saveProgress(); }, [career, saveProgress]);
-  // Sync coins + daily-reward + owned discs to the cloud when they change.
-  useEffect(() => { saveProgress(); }, [coins, daily, owned, saveProgress]);
+  // Sync coins + daily-reward + owned items + profile to the cloud when they change.
+  useEffect(() => { saveProgress(); }, [coins, daily, owned, profile, saveProgress]);
 
   const syncHud = useCallback(() => {
     const g = stateRef.current;
@@ -2480,6 +2497,29 @@ export function DiscGolfGame() {
               <p className="text-gray-300 text-xs mt-2.5 font-medium">Pixel disc golf — wind, hills &amp; water.</p>
               <p className="text-gray-500 text-[11px] mt-1">Drag back from the disc to aim &amp; throw.</p>
 
+              {/* Player profile chip — avatar, name, level + xp-to-next bar */}
+              {(() => {
+                const lvl = levelFromXp(playerXp(roundsPlayed, unlocked.length, owned.length));
+                return (
+                  <button
+                    type="button"
+                    onClick={() => setProfileOpen(true)}
+                    className="w-full mt-3 flex items-center gap-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 px-3 py-2 transition text-left"
+                  >
+                    <span className="text-2xl leading-none shrink-0">{profile.avatar || DEFAULT_AVATAR}</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="text-white font-bold text-sm truncate">{profile.name?.trim() || "Set up profile"}</span>
+                        <span className="text-[#36D7B7] font-bold text-[11px] shrink-0">Lv {lvl.level}</span>
+                      </div>
+                      <div className="mt-1 h-1.5 bg-white/10 rounded overflow-hidden">
+                        <div className="h-full bg-[#36D7B7] rounded" style={{ width: `${lvl.need ? Math.round((lvl.into / lvl.need) * 100) : 100}%` }} />
+                      </div>
+                    </div>
+                  </button>
+                );
+              })()}
+
               {/* Stat pills */}
               {(bestScore != null || winthropBest != null || roundsPlayed > 0) && (
                 <div className="flex gap-2 mt-3">
@@ -2779,7 +2819,22 @@ export function DiscGolfGame() {
         )}
 
         {shopOpen && (
-          <ShopPanel coins={coins} unlocked={unlocked} owned={owned} onBuy={buyDisc} onClose={() => setShopOpen(false)} />
+          <ShopPanel coins={coins} unlocked={unlocked} owned={owned} onBuy={buyItem} onClose={() => setShopOpen(false)} />
+        )}
+
+        {profileOpen && (
+          <ProfilePanel
+            profile={profile}
+            coins={coins}
+            owned={owned}
+            unlocked={unlocked}
+            roundsPlayed={roundsPlayed}
+            bestScore={bestScore}
+            winthropBest={winthropBest}
+            onSave={saveProfile}
+            onBuyAvatar={buyAvatar}
+            onClose={() => setProfileOpen(false)}
+          />
         )}
 
         {practiceOpen && (
@@ -3920,6 +3975,128 @@ function CareerPanel({ career, lastResult, notes, onClose, onStart, onPlay, onSi
         )}
       </div>
     </div></div>
+  );
+}
+
+// Player profile — pick an avatar, set a name, see your level and badges.
+function ProfilePanel({ profile, coins, owned, unlocked, roundsPlayed, bestScore, winthropBest, onSave, onBuyAvatar, onClose }: {
+  profile: PlayerProfile;
+  coins: number;
+  owned: string[];
+  unlocked: string[];
+  roundsPlayed: number;
+  bestScore: number | null;
+  winthropBest: number | null;
+  onSave: (p: PlayerProfile) => void;
+  onBuyAvatar: (key: string, price: number) => void;
+  onClose: () => void;
+}) {
+  const discsOwned = owned.filter((k) => !k.startsWith("avatar:")).length;
+  const lvl = levelFromXp(playerXp(roundsPlayed, unlocked.length, discsOwned));
+  const pct = lvl.need ? Math.round((lvl.into / lvl.need) * 100) : 100;
+  const over = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
+  return (
+    <div className="absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm p-4 flex items-start justify-center rounded-lg">
+      <div className="w-full max-w-xs space-y-3.5 my-auto text-left">
+        <div className="flex items-center justify-between">
+          <h2 className="text-white font-black text-xl">👤 Profile</h2>
+          <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
+        </div>
+
+        {/* Identity card */}
+        <div className="flex items-center gap-3 bg-[#1a1d23] border border-white/10 rounded-xl px-3 py-3">
+          <span className="text-4xl leading-none shrink-0">{profile.avatar || DEFAULT_AVATAR}</span>
+          <div className="min-w-0 flex-1">
+            <input
+              value={profile.name}
+              onChange={(e) => onSave({ ...profile, name: e.target.value.slice(0, 16) })}
+              placeholder="Your name"
+              maxLength={16}
+              className="w-full bg-transparent text-white font-bold text-base outline-none border-b border-white/10 focus:border-[#36D7B7] pb-0.5"
+            />
+            <div className="flex items-center justify-between mt-1.5">
+              <span className="text-[#36D7B7] font-bold text-xs">Level {lvl.level}</span>
+              <span className="text-gray-500 font-mono text-[10px]">{lvl.into}/{lvl.need} XP</span>
+            </div>
+            <div className="mt-1 h-1.5 bg-white/10 rounded overflow-hidden">
+              <div className="h-full bg-[#36D7B7] rounded" style={{ width: `${pct}%` }} />
+            </div>
+          </div>
+        </div>
+
+        {/* Lifetime stats */}
+        <div className="grid grid-cols-4 gap-1.5 text-center">
+          {[
+            { v: roundsPlayed, l: "Rounds" },
+            { v: bestScore != null ? over(bestScore - TOTAL_PAR) : "–", l: "GE Best" },
+            { v: winthropBest != null ? over(winthropBest - WINTHROP_PAR) : "–", l: "WL Best" },
+            { v: discsOwned, l: "Discs" },
+          ].map((s) => (
+            <div key={s.l} className="rounded-lg bg-white/5 border border-white/10 px-1 py-1.5">
+              <p className="text-white font-bold text-sm leading-none">{s.v}</p>
+              <p className="text-gray-500 text-[8px] mt-1 uppercase tracking-wide">{s.l}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Avatar picker */}
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <p className="text-gray-400 text-xs font-semibold">Avatar</p>
+            <span className="text-[#f5d24a] font-bold font-mono text-[11px]">{fmtCoins(coins)} 🪙</span>
+          </div>
+          <div className="grid grid-cols-6 gap-1.5">
+            {AVATARS.map((a) => {
+              const have = avatarUnlocked(a, owned);
+              const selected = (profile.avatar || DEFAULT_AVATAR) === a.emoji;
+              const afford = coins >= a.price;
+              return (
+                <button
+                  key={a.key}
+                  type="button"
+                  onClick={() => (have ? onSave({ ...profile, avatar: a.emoji }) : afford ? onBuyAvatar(a.key, a.price) : undefined)}
+                  disabled={!have && !afford}
+                  title={have ? a.key : `${a.price} coins`}
+                  className={`relative aspect-square rounded-lg flex items-center justify-center text-xl transition ${
+                    selected ? "bg-[#36D7B7]/25 ring-2 ring-[#36D7B7]" : "bg-white/5 hover:bg-white/10"
+                  } ${!have && !afford ? "opacity-40" : ""}`}
+                >
+                  <span className={have ? "" : "grayscale opacity-70"}>{a.emoji}</span>
+                  {!have && (
+                    <span className="absolute -bottom-0.5 inset-x-0 text-center text-[7px] font-mono text-[#f5d24a] leading-none">{a.price}</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-gray-600 text-[10px] mt-1.5">Tap a locked avatar to buy it with coins, then tap again to wear it.</p>
+        </div>
+
+        {/* Badges */}
+        <div>
+          <p className="text-gray-400 text-xs font-semibold mb-1.5">Badges ({unlocked.length}/{ACHIEVEMENTS.length})</p>
+          <div className="grid grid-cols-3 gap-1.5">
+            {ACHIEVEMENTS.map((a) => {
+              const earned = unlocked.includes(a.id);
+              return (
+                <div
+                  key={a.id}
+                  title={a.desc}
+                  className={`rounded-lg px-1.5 py-2 text-center border ${
+                    earned ? "bg-[#f5d24a]/10 border-[#f5d24a]/30" : "bg-white/5 border-white/5"
+                  }`}
+                >
+                  <div className={`text-lg leading-none ${earned ? "" : "grayscale opacity-40"}`}>{a.emoji}</div>
+                  <div className={`text-[8px] mt-1 leading-tight ${earned ? "text-gray-300" : "text-gray-600"}`}>{a.name}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <button type="button" onClick={onClose} className={`${btn} w-full`}>Done</button>
+      </div>
+    </div>
   );
 }
 
