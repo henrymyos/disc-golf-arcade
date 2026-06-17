@@ -286,7 +286,7 @@ const WINTHROP_PAR = WINTHROP_HOLES.reduce((s, h) => s + h.par, 0);
 // Winthrop's personal best lives in its own key (WBEST_KEY, from @/lib/progress).
 // Leaderboards are per course; each daily seed gets its own board.
 function leaderboardCourse(mode: Mode, seed: number): string {
-  return mode === "course" ? "glendoveer" : mode === "winthrop" ? "winthrop" : `daily-${seed}`;
+  return mode === "course" ? "glendoveer" : mode === "winthrop" ? "winthrop" : mode === "ranked" ? `ranked-${seed}` : `daily-${seed}`;
 }
 
 // ── Tournament mode: 3 rounds at Winthrop Lake (College Nationals) against a
@@ -390,7 +390,9 @@ const HOLE_ELEV = [0, -2, 0, 0, -2, -2, 2, -1, 0, 0, -2, -1, 1, -1, 0, 0, 0, 0];
 
 // "tour" = a procedurally-generated 18-hole pro course (built from a seed; named
 // venues live in the Career schedule). Lets the pro tour visit many courses.
-type Mode = "daily" | "course" | "winthrop" | "tour";
+// "ranked" = a weekly procedurally-generated 18-hole course shared by everyone
+// that week (the async global ranked ladder); built like a tour course.
+type Mode = "daily" | "course" | "winthrop" | "tour" | "ranked";
 
 // Achievements — evaluated from a finished round's per-hole scores.
 type Achievement = { id: string; name: string; emoji: string; desc: string };
@@ -920,7 +922,7 @@ function generateTourCourse(seed: number): Hole[] {
 function buildRound(seed: number, mode: Mode): Hole[] {
   const rng = mulberry32(seed);
   if (mode === "daily") return generateDailyCourse(rng);
-  if (mode === "tour") return generateTourCourse(seed);
+  if (mode === "tour" || mode === "ranked") return generateTourCourse(seed);
   const course = mode === "winthrop" ? WINTHROP_HOLES : HOLES;
   return course.map((h, i) => {
     const { wind, windMag } = seededWind(rng);

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { mergeProgress, type Progress } from "../lib/progress";
 
-const base: Progress = { best: null, winthropBest: null, holeBest: [], achievements: [], history: [], settings: null, career: null, coins: 0, daily: null, owned: [], profile: null };
+const base: Progress = { best: null, winthropBest: null, holeBest: [], achievements: [], history: [], settings: null, career: null, coins: 0, daily: null, owned: [], profile: null, ranked: null };
 
 describe("mergeProgress", () => {
   it("keeps the lower (better) best score for each course", () => {
@@ -56,6 +56,17 @@ describe("mergeProgress", () => {
     const b: Progress = { ...base, career: late as unknown as Progress["career"] };
     expect(mergeProgress(a, b).career).toBe(b.career);
     expect(mergeProgress(b, a).career).toBe(b.career);
+  });
+  it("keeps the most ranked progress: highest rp, best to-par, most rounds", () => {
+    const a: Progress = { ...base, ranked: { rp: 500, bestToPar: -2, rounds: 4 } };
+    const b: Progress = { ...base, ranked: { rp: 300, bestToPar: -7, rounds: 6 } };
+    const m = mergeProgress(a, b);
+    expect(m.ranked).toEqual({ rp: 500, bestToPar: -7, rounds: 6 });
+  });
+  it("takes whichever ranked state exists when only one is present", () => {
+    const only = { rp: 120, bestToPar: 1, rounds: 1 };
+    expect(mergeProgress({ ...base, ranked: only }, base).ranked).toBe(only);
+    expect(mergeProgress(base, { ...base, ranked: only }).ranked).toBe(only);
   });
   it("takes whichever career exists when only one is present", () => {
     const only = { season: 0, results: [], careerPoints: 0 } as unknown as Progress["career"];

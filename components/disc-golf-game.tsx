@@ -6,7 +6,7 @@ import { submitArcadeScore, getArcadeLeaderboard } from "@/actions/arcade";
 import type { ArcadeScore } from "@/lib/arcade-types";
 import { getSupabase } from "@/lib/supabase/browser";
 import {
-  BEST_KEY, WBEST_KEY, HOLEBEST_KEY, SETTINGS_KEY, ACH_KEY, HIST_KEY, CAREER_KEY, COINS_KEY, DAILY_KEY, OWNED_KEY, PROFILE_KEY,
+  BEST_KEY, WBEST_KEY, HOLEBEST_KEY, SETTINGS_KEY, ACH_KEY, HIST_KEY, CAREER_KEY, COINS_KEY, DAILY_KEY, OWNED_KEY, PROFILE_KEY, RANKED_KEY,
   readLocalProgress, applyProgress, mergeProgress, type Progress,
 } from "@/lib/progress";
 import {
@@ -15,6 +15,9 @@ import {
 import {
   AVATARS, DEFAULT_AVATAR, avatarOwnKey, avatarUnlocked, playerXp, levelFromXp, type PlayerProfile,
 } from "@/lib/discgolf/profile";
+import {
+  weekSeed, rankedCourseKey, roundRP, applyRankedRound, tierFromRP, type RankedState,
+} from "@/lib/discgolf/ranked";
 import {
   W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, TOTAL_PAR, WINTHROP_HOLES, WINTHROP_PAR, leaderboardCourse, TOURN_KEY, TOURN_NAMES, tournFieldRound, tournLiveStandings, tournStandings, ACHIEVEMENTS, earnedAchievements, scoreLabel, STRAIGHT_SPEED_MUL, releaseSpeedMul, DISCS, ADV_DISCS, activeDiscs, DISC_PRICE, isDiscUnlocked, validDiscIndex, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, inRect, inHazard, offRibbons, dailySeed, buildRound, elevAt, vibrate, fullPowerRange, lastInBoundsLie, stepFlight,
 } from "@/lib/discgolf/engine";
@@ -397,6 +400,12 @@ export function DiscGolfGame() {
   }, []);
   const buyAvatar = useCallback((key: string, price: number) => buyItem(avatarOwnKey(key), price), [buyItem]);
 
+  // ── Ranked ladder (lifetime RP + tier, persisted + cloud-synced) ──
+  const [ranked, setRanked] = useState<RankedState | null>(null);
+  const rankedRef = useRef<RankedState | null>(null);
+  const [rankedOpen, setRankedOpen] = useState(false);
+  const [rankedGain, setRankedGain] = useState<number | null>(null); // RP gained by the round just finished
+
   // Read all persisted progress from localStorage into state/refs. Runs once on
   // mount and again after a cloud sync overwrites localStorage.
   const loadLocal = useCallback(() => {
@@ -437,6 +446,11 @@ export function DiscGolfGame() {
       const prof = JSON.parse(localStorage.getItem(PROFILE_KEY) || "null");
       if (prof && typeof prof === "object") {
         setProfile({ name: typeof prof.name === "string" ? prof.name : "", avatar: typeof prof.avatar === "string" ? prof.avatar : DEFAULT_AVATAR });
+      }
+      const rk = JSON.parse(localStorage.getItem(RANKED_KEY) || "null");
+      if (rk && typeof rk === "object" && typeof rk.rp === "number") {
+        const st: RankedState = { rp: rk.rp, bestToPar: typeof rk.bestToPar === "number" ? rk.bestToPar : null, rounds: typeof rk.rounds === "number" ? rk.rounds : 0 };
+        rankedRef.current = st; setRanked(st);
       }
     } catch {
       /* ignore */
@@ -552,8 +566,8 @@ export function DiscGolfGame() {
   // Sync the career save to the cloud whenever it changes (debounced; no-op
   // when signed out). localStorage is already written by saveCareer.
   useEffect(() => { if (career) saveProgress(); }, [career, saveProgress]);
-  // Sync coins + daily-reward + owned items + profile to the cloud when they change.
-  useEffect(() => { saveProgress(); }, [coins, daily, owned, profile, saveProgress]);
+  // Sync coins + daily-reward + owned items + profile + ranked to the cloud on change.
+  useEffect(() => { saveProgress(); }, [coins, daily, owned, profile, ranked, saveProgress]);
 
   const syncHud = useCallback(() => {
     const g = stateRef.current;
@@ -576,7 +590,7 @@ export function DiscGolfGame() {
     challengePlayRef.current = false; // the challenge button re-arms this after calling
     tournamentPlayRef.current = false; // ditto for the tournament launcher
     careerPlayRef.current = false;
-    const seed = seedOverride ?? (m === "daily" ? dailySeed() : (Math.random() * 1e9) | 0);
+    const seed = seedOverride ?? (m === "daily" ? dailySeed() : m === "ranked" ? weekSeed(Date.now()) : (Math.random() * 1e9) | 0);
     const roundHoles = buildRound(seed, m);
     const adv = advancedRef.current;
     const discIndex = validDiscIndex(adv, discIndexRef.current, unlockedRef.current, ownedRef.current);
@@ -989,6 +1003,7 @@ export function DiscGolfGame() {
   const finishGame = useCallback((scores: number[]) => {
     const g = stateRef.current;
     setCoinReward(0);
+    setRankedGain(null);
     // A played Career event: record the result against the career and pop back
     // to the hub instead of the normal results / leaderboard flow.
     if (g?.career && careerPlayRef.current) {
@@ -1125,6 +1140,17 @@ export function DiscGolfGame() {
     setFinalChallenge(challengePlayRef.current ? challengeRef.current : null);
     setLeaderboard([]);
     if (!practice) void getArcadeLeaderboard(leaderboardCourse(mode, g?.seed ?? 0)).then(setLeaderboard).catch(() => {});
+    // Ranked round: award lifetime RP and track the best to-par. The score also
+    // lands on this week's shared ranked board via the normal save flow.
+    if (!practice && mode === "ranked") {
+      const toPar = total - pars.reduce((s, n) => s + n, 0);
+      const next = applyRankedRound(rankedRef.current, toPar);
+      rankedRef.current = next; setRanked(next);
+      try { localStorage.setItem(RANKED_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+      setRankedGain(roundRP(toPar));
+    } else {
+      setRankedGain(null);
+    }
     if (!practice) saveProgress(); // sync best/achievements/history to the cloud if signed in
     // Coins for a counting round (more for going low). Career events pay cash,
     // not coins, and are handled in their own branch above.
@@ -1211,7 +1237,7 @@ export function DiscGolfGame() {
     const over = total - parTotal;
     const nHoles = finalPars.length;
     const isDaily = finalMode === "daily";
-    const courseLabel = isDaily ? "Daily Challenge" : finalMode === "winthrop" ? "Winthrop Lake" : "Glendoveer East";
+    const courseLabel = isDaily ? "Daily Challenge" : finalMode === "winthrop" ? "Winthrop Lake" : finalMode === "ranked" ? "Ranked · Weekly" : "Glendoveer East";
     const courseName = `${courseLabel} · ${nHoles} holes · par ${parTotal}`;
     const os = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
     const cv = document.createElement("canvas");
@@ -1290,7 +1316,7 @@ export function DiscGolfGame() {
     const name = nameInput.trim() || "A friend";
     const param = challengeParam(finalMode, finalSeed, finalTotal, name);
     const url = `${location.origin}/?ch=${param}`;
-    const label = finalMode === "winthrop" ? "Winthrop Lake" : finalMode === "daily" ? "today's Daily" : "Glendoveer East";
+    const label = finalMode === "winthrop" ? "Winthrop Lake" : finalMode === "daily" ? "today's Daily" : finalMode === "ranked" ? "this week's Ranked" : "Glendoveer East";
     try {
       const nav = navigator as Navigator & { share?: (d: { title?: string; text?: string; url?: string }) => Promise<void> };
       if (nav.share) {
@@ -2599,6 +2625,9 @@ export function DiscGolfGame() {
                 <button type="button" onClick={() => setTournamentOpen(true)} className={titleCard}>
                   🏟 Tournament{tournament && !tournament.finished ? ` · R${tournament.myTotals.length + 1}` : ""}
                 </button>
+                <button type="button" onClick={() => setRankedOpen(true)} className={titleCard}>
+                  🏅 Ranked · {tierFromRP(ranked?.rp ?? 0).tier.emoji} {tierFromRP(ranked?.rp ?? 0).tier.name}
+                </button>
                 <button type="button" onClick={() => setChallengeOpen(true)} className={titleCard}>
                   👥 Challenge Friends
                 </button>
@@ -2834,6 +2863,15 @@ export function DiscGolfGame() {
             onSave={saveProfile}
             onBuyAvatar={buyAvatar}
             onClose={() => setProfileOpen(false)}
+          />
+        )}
+
+        {rankedOpen && (
+          <RankedPanel
+            ranked={ranked}
+            playerName={profile.name}
+            onPlay={() => { setRankedOpen(false); startGame("ranked"); }}
+            onClose={() => setRankedOpen(false)}
           />
         )}
 
@@ -3077,7 +3115,9 @@ export function DiscGolfGame() {
                   ? `${finalMode === "winthrop" ? "Winthrop Lake" : "Glendoveer East"} · hole ${finalPracticeHole} · par ${finalParTotal}`
                   : finalIsDaily
                     ? `Today's course · ${finalPars.length} holes · par ${finalParTotal}`
-                    : `${finalMode === "winthrop" ? "Winthrop Lake" : "Glendoveer East"} · 18 holes · par ${finalParTotal}`}
+                    : finalMode === "ranked"
+                      ? `🏅 Ranked · this week's course · ${finalPars.length} holes · par ${finalParTotal}`
+                      : `${finalMode === "winthrop" ? "Winthrop Lake" : "Glendoveer East"} · 18 holes · par ${finalParTotal}`}
               </p>
               {/* Personal headline only for solo rounds — in Pass & Play / online
                   the standings tables below are the real result (finalTotal is
@@ -3090,7 +3130,9 @@ export function DiscGolfGame() {
                 {finalBest != null && !isNewBest && (
                   <p className="text-gray-400 text-xs mt-0.5">Your best: {finalBest} ({overStr(finalBest - finalParTotal)})</p>
                 )}
-                {coinReward > 0 && <p className="text-[#f5d24a] text-sm font-bold mt-1">+{coinReward} 🪙</p>}
+                {coinReward > 0 && (
+                  <p className="text-[#f5d24a] text-sm font-bold mt-1">+{coinReward} 🪙{rankedGain != null ? <span className="text-[#36D7B7] ml-2">+{rankedGain} RP 🏅</span> : null}</p>
+                )}
               </>)}
               {finalChallenge && (
                 <p className={`text-sm font-bold mt-1.5 ${finalTotal < finalChallenge.score ? "text-[#36D7B7]" : finalTotal === finalChallenge.score ? "text-gray-300" : "text-[#e08a3b]"}`}>
@@ -4194,6 +4236,94 @@ function CoursesPanel({ courses, bests, onClose, onPlay }: {
 // (before per-hole scores were recorded) still count toward totals/averages.
 // Browse the global (Supabase) leaderboard for any course from the title
 // screen. Daily uses today's seed; Glendoveer & Winthrop are all-time.
+// Async global ranked ladder. Everyone plays the SAME 18-hole course this week
+// and competes on a shared weekly board; lifetime RP maps to a climbing tier.
+function RankedPanel({ ranked, playerName, onPlay, onClose }: {
+  ranked: RankedState | null;
+  playerName: string;
+  onPlay: () => void;
+  onClose: () => void;
+}) {
+  // Date.now() is fine in a lazy useState initializer (runs once, not in render).
+  const [week] = useState(() => weekSeed(Date.now()));
+  const [par] = useState(() => buildRound(week, "ranked").reduce((s, h) => s + h.par, 0));
+  const [rows, setRows] = useState<ArcadeScore[] | null>(null);
+  const over = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
+  const rp = ranked?.rp ?? 0;
+  const t = tierFromRP(rp);
+  const pct = t.need ? Math.round((t.into / t.need) * 100) : 100;
+  const me = (playerName ?? "").trim().slice(0, 16) || "Anon";
+  useEffect(() => {
+    let active = true;
+    getArcadeLeaderboard(rankedCourseKey(week), 25).then((r) => { if (active) setRows(r); }).catch(() => { if (active) setRows([]); });
+    return () => { active = false; };
+  }, [week]);
+  return (
+    <div className="absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm p-4 flex items-start justify-center rounded-lg">
+      <div className="w-full max-w-xs space-y-3 my-auto text-left">
+        <div className="flex items-center justify-between">
+          <h2 className="text-white font-black text-xl">🏅 Ranked</h2>
+          <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
+        </div>
+
+        {/* Tier card */}
+        <div className="flex items-center gap-3 bg-[#1a1d23] border border-white/10 rounded-xl px-3 py-3">
+          <span className="text-4xl leading-none shrink-0">{t.tier.emoji}</span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-baseline justify-between">
+              <span className="font-bold text-base" style={{ color: t.tier.color }}>{t.tier.name}</span>
+              <span className="text-gray-400 font-mono text-[11px]">{rp} RP</span>
+            </div>
+            <div className="mt-1.5 h-1.5 bg-white/10 rounded overflow-hidden">
+              <div className="h-full rounded" style={{ width: `${pct}%`, background: t.tier.color }} />
+            </div>
+            <p className="text-gray-500 text-[10px] mt-1">{t.next ? `${t.need - t.into} RP to ${t.next.name}` : "Top tier reached 👑"}</p>
+          </div>
+        </div>
+
+        <p className="text-gray-400 text-[11px] leading-snug">
+          One 18-hole course per week — the same for everyone. Post your best on the global board; it resets every Monday. Each round earns RP toward your next tier.
+        </p>
+
+        <button type="button" onClick={onPlay} className={`${btn} w-full`}>
+          ▶ Play this week&apos;s ranked round
+        </button>
+
+        {/* Live weekly board */}
+        <div>
+          <p className="text-gray-400 text-xs font-semibold mb-1.5">This week · par {par}{ranked?.bestToPar != null ? ` · your best ${over(ranked.bestToPar)}` : ""}</p>
+          <div className="bg-[#1a1d23] border border-white/5 rounded-2xl overflow-hidden">
+            {rows === null ? (
+              <p className="text-gray-400 text-sm text-center py-6">Loading…</p>
+            ) : rows.length === 0 ? (
+              <p className="text-gray-400 text-sm text-center py-6">No scores yet — be the first this week!</p>
+            ) : (
+              <ol>
+                {rows.map((row, i) => {
+                  const mine = row.name === me;
+                  return (
+                    <li
+                      key={`${row.name}-${row.created_at}`}
+                      className={`flex items-center gap-3 px-4 py-2 text-sm ${i !== 0 ? "border-t border-white/5" : ""} ${mine ? "bg-[#36D7B7]/15" : ""}`}
+                    >
+                      <span className={`font-mono w-6 text-right ${i === 0 ? "text-[#f5d24a]" : "text-gray-400"}`}>{i + 1}</span>
+                      <span className={`flex-1 truncate ${mine ? "text-[#36D7B7] font-bold" : "text-white"}`}>{i === 0 ? "👑 " : ""}{row.name}{mine ? " (you)" : ""}</span>
+                      <span className="text-gray-400 font-mono">{over(row.strokes - par)}</span>
+                      <span className="text-white font-mono font-bold w-8 text-right">{row.strokes}</span>
+                    </li>
+                  );
+                })}
+              </ol>
+            )}
+          </div>
+        </div>
+
+        <button type="button" onClick={onClose} className={`${btn} w-full`}>Done</button>
+      </div>
+    </div>
+  );
+}
+
 function LeaderboardPanel({ onClose }: { onClose: () => void }) {
   type Board = { key: "course" | "winthrop" | "daily"; label: string; courseKey: string; par: number };
   const [boards] = useState<Board[]>(() => {

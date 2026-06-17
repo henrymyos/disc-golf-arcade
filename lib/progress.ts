@@ -4,6 +4,7 @@
 
 import type { Career } from "./discgolf/career";
 import type { DailyReward } from "./discgolf/wallet";
+import type { RankedState } from "./discgolf/ranked";
 
 export const BEST_KEY = "discgolf.best.glendoveer18";
 export const WBEST_KEY = "discgolf.best.winthrop18";
@@ -16,6 +17,7 @@ export const COINS_KEY = "discgolf.coins.v1";
 export const DAILY_KEY = "discgolf.dailyreward.v1";
 export const OWNED_KEY = "discgolf.owned.v1"; // unlocked discs + cosmetics
 export const PROFILE_KEY = "discgolf.profile.v1";
+export const RANKED_KEY = "discgolf.ranked.v1";
 
 export type HistoryRow = { mode: string; total: number; date: number; scores?: number[]; pars?: number[] };
 export type Progress = {
@@ -30,6 +32,7 @@ export type Progress = {
   daily: DailyReward | null;
   owned: string[];
   profile: Record<string, unknown> | null;
+  ranked: RankedState | null;
 };
 
 // Of two career saves, keep the one further along (more seasons, then events).
@@ -49,7 +52,7 @@ function parse<T>(raw: string | null, fallback: T): T {
 
 export function readLocalProgress(): Progress {
   if (typeof localStorage === "undefined") {
-    return { best: null, winthropBest: null, holeBest: [], achievements: [], history: [], settings: null, career: null, coins: 0, daily: null, owned: [], profile: null };
+    return { best: null, winthropBest: null, holeBest: [], achievements: [], history: [], settings: null, career: null, coins: 0, daily: null, owned: [], profile: null, ranked: null };
   }
   const bestRaw = localStorage.getItem(BEST_KEY);
   const best = bestRaw != null && Number.isFinite(Number(bestRaw)) ? Number(bestRaw) : null;
@@ -65,7 +68,8 @@ export function readLocalProgress(): Progress {
   const daily = parse<DailyReward | null>(localStorage.getItem(DAILY_KEY), null);
   const owned = parse<string[]>(localStorage.getItem(OWNED_KEY), []);
   const profile = parse<Record<string, unknown> | null>(localStorage.getItem(PROFILE_KEY), null);
-  return { best, winthropBest, holeBest, achievements, history, settings, career, coins, daily, owned, profile };
+  const ranked = parse<RankedState | null>(localStorage.getItem(RANKED_KEY), null);
+  return { best, winthropBest, holeBest, achievements, history, settings, career, coins, daily, owned, profile, ranked };
 }
 
 export function applyProgress(p: Progress) {
@@ -82,6 +86,7 @@ export function applyProgress(p: Progress) {
     if (p.daily) localStorage.setItem(DAILY_KEY, JSON.stringify(p.daily));
     localStorage.setItem(OWNED_KEY, JSON.stringify(p.owned ?? []));
     if (p.profile) localStorage.setItem(PROFILE_KEY, JSON.stringify(p.profile));
+    if (p.ranked) localStorage.setItem(RANKED_KEY, JSON.stringify(p.ranked));
   } catch { /* ignore */ }
 }
 
@@ -115,6 +120,15 @@ export function mergeProgress(a: Progress, b: Progress): Progress {
   const da = a.daily ?? null, db = b.daily ?? null;
   const daily = !da ? db : !db ? da : da.day !== db.day ? (da.day > db.day ? da : db) : (da.streak >= db.streak ? da : db);
 
+  // Ranked ladder: keep the most progress — highest lifetime RP, best (lowest)
+  // to-par, and most rounds — so nothing is lost across devices.
+  const ra = a.ranked ?? null, rb = b.ranked ?? null;
+  const ranked: RankedState | null = !ra ? rb : !rb ? ra : {
+    rp: Math.max(ra.rp ?? 0, rb.rp ?? 0),
+    bestToPar: ra.bestToPar == null ? rb.bestToPar : rb.bestToPar == null ? ra.bestToPar : Math.min(ra.bestToPar, rb.bestToPar),
+    rounds: Math.max(ra.rounds ?? 0, rb.rounds ?? 0),
+  };
+
   return {
     best: minDefined(a.best, b.best),
     winthropBest: minDefined(a.winthropBest, b.winthropBest),
@@ -127,5 +141,6 @@ export function mergeProgress(a: Progress, b: Progress): Progress {
     daily,
     owned: Array.from(new Set([...(a.owned ?? []), ...(b.owned ?? [])])),
     profile: b.profile ?? a.profile, // prefer cloud profile on conflict
+    ranked,
   };
 }
