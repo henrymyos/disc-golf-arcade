@@ -3,7 +3,7 @@
 // Lake), and the pro tour. Events can be SIMULATED from your skills or PLAYED
 // as real rounds (your skills change how the disc flies — see skillMods). All
 // logic here is pure + deterministic so it's testable and resumes cleanly. ──
-import { mulberry32, CATCH_R, TOTAL_PAR, WINTHROP_PAR, tourPars, tourCharacter, type Mode, type TournLiveRow, type GhostRacer } from "./engine";
+import { mulberry32, CATCH_R, TOTAL_PAR, WINTHROP_PAR, tourPars, tourCharacter, type Mode, type Hole, type TournLiveRow, type GhostRacer } from "./engine";
 
 export type CareerSkills = { power: number; control: number; putt: number; mental: number };
 export const SKILL_KEYS: (keyof CareerSkills)[] = ["power", "control", "putt", "mental"];
@@ -323,20 +323,41 @@ export function seasonSchedule(c: Career): CareerEvent[] {
   }
 }
 
-// Expected strokes for a rating on a course (better rating ⇒ lower), with noise.
+// Expected strokes for a rating on a course (better rating ⇒ lower), with a
+// little round-to-round noise (kept modest so difficulty is consistent).
 function scoreFromRating(rating: number, ev: CareerEvent, rng: () => number): number {
-  const toPar = (50 - rating) * 0.28 * (ev.holes / 18) + (rng() * 2 - 1) * 2.6;
+  const toPar = (50 - rating) * 0.28 * (ev.holes / 18) + (rng() * 2 - 1) * 1.8;
   return Math.max(Math.round(ev.par * 0.5), Math.round(ev.par + toPar));
+}
+
+// One anonymous opponent's rating for an event. Bigger events draw a stronger
+// field AND a deeper top end: majors/championships lift the whole field and add
+// more "stars" (near-elite players), so the marquee events are genuinely hard to
+// win — you can't just shoot a hot round and run away with it.
+function fieldOpponentRating(ev: CareerEvent, rng: () => number): number {
+  const lift = ev.importance === "championship" ? 5 : ev.importance === "major" ? 3 : 0;
+  const starChance = ev.importance === "championship" ? 0.12 : ev.importance === "major" ? 0.08 : 0.05;
+  const star = rng() < starChance ? 6 + rng() * 9 : 0; // a tail of standout players
+  return clamp(ev.fieldMean + lift + star + (rng() * 2 - 1) * 8, 5, 99);
 }
 
 // The field's scores for an event (deterministic per career/season/event).
 export function genField(c: Career, ev: CareerEvent): number[] {
   const rng = mulberry32((c.seed ^ hashId(ev.id) ^ 0x9e3779b9) >>> 0);
-  const spread = 11;
-  return Array.from({ length: ev.fieldSize }, () => {
-    const r = clamp(ev.fieldMean + (rng() * 2 - 1) * spread, 5, 99);
-    return scoreFromRating(r, ev, rng);
-  });
+  return Array.from({ length: ev.fieldSize }, () => scoreFromRating(fieldOpponentRating(ev, rng), ev, rng));
+}
+
+// How much harder a hole plays for the field (extra strokes), from its wind,
+// uphill slope, water/sand and a tight fairway. Used so the bots' scores — and
+// the on-course ghosts' shot counts — respond to conditions like you do.
+function holeDifficulty(h: Hole): number {
+  const wind = (h.windMag ?? 0) / 0.018; // 0..1
+  const elev = h.elevZones?.length ? h.elevZones.reduce((s, z) => s + z.elev, 0) / h.elevZones.length : (h.elev ?? 0);
+  const up = Math.max(0, elev) / 2; // 0..1 (uphill plays longer)
+  const water = (h.water?.length ?? 0) > 0 ? 0.4 : 0;
+  const sand = Math.min(3, h.hazard?.length ?? 0) * 0.12;
+  const narrow = Math.max(0, (118 - h.fwWidth) / 118); // tighter corridor → harder
+  return wind * 0.6 + up * 0.5 + water + sand + narrow * 0.5;
 }
 
 function hashId(id: string): number {
@@ -374,25 +395,38 @@ function anonName(seed: number, i: number): string {
   const h = (seed ^ Math.imul(i + 1, 2654435761)) >>> 0;
   return `${ANON_FIRST[h % ANON_FIRST.length]} ${ANON_LAST[(h >>> 5) % ANON_LAST.length]}`;
 }
-// Per-hole scores for a rating, summing to roughly scoreFromRating's total.
-function simHoleScores(rating: number, ev: CareerEvent, rng: () => number): number[] {
+// Per-hole scores for a rating. `diff[i]` (optional) adds the hole's conditions
+// difficulty so windy/uphill/tight holes cost the field more strokes there too;
+// better players (lower perHoleToPar) shrug some of it off.
+function simHoleScores(rating: number, ev: CareerEvent, rng: () => number, diff?: number[]): number[] {
   const parPerHole = ev.par / ev.holes;
   const perHoleToPar = (50 - rating) * 0.28 / 18;
-  return Array.from({ length: ev.holes }, () => Math.max(1, Math.round(parPerHole + perHoleToPar + (rng() * 2 - 1) * 0.85)));
+  const grit = 1 - (rating - 50) / 140; // skill cushions conditions a little
+  return Array.from({ length: ev.holes }, (_, i) =>
+    Math.max(1, Math.round(parPerHole + perHoleToPar + (diff ? diff[i] * Math.max(0.45, grit) : 0) + (rng() * 2 - 1) * 0.65)),
+  );
 }
-export function careerFieldHoles(c: Career, ev: CareerEvent): FieldPlayer[] {
+// `diff` (optional) carries per-hole conditions difficulty for a PLAYED round, so
+// the field (and the ghosts you watch) react to wind/slope/hazards like you do.
+function buildField(c: Career, ev: CareerEvent, diff?: number[]): FieldPlayer[] {
   const field: FieldPlayer[] = c.rivals.map((r) => {
-    const holes = simHoleScores(rivalRating(r), ev, mulberry32((c.seed ^ hashId(ev.id) ^ hashId(r.id)) >>> 0));
+    const holes = simHoleScores(rivalRating(r), ev, mulberry32((c.seed ^ hashId(ev.id) ^ hashId(r.id)) >>> 0), diff);
     return { name: r.name, isRival: true, color: r.color, holes, total: holes.reduce((a, b) => a + b, 0) };
   });
   const anonCount = Math.max(0, ev.fieldSize - c.rivals.length);
   const rng = mulberry32((c.seed ^ hashId(ev.id) ^ 0x9e3779b9) >>> 0);
   for (let i = 0; i < anonCount; i++) {
-    const rating = clamp(ev.fieldMean + (rng() * 2 - 1) * 11, 5, 99);
-    const holes = simHoleScores(rating, ev, rng);
+    const holes = simHoleScores(fieldOpponentRating(ev, rng), ev, rng, diff);
     field.push({ name: anonName((c.seed ^ hashId(ev.id)) >>> 0, i), isRival: false, color: "#7a808a", holes, total: holes.reduce((a, b) => a + b, 0) });
   }
   return field;
+}
+export function careerFieldHoles(c: Career, ev: CareerEvent): FieldPlayer[] {
+  return buildField(c, ev);
+}
+// The field for a PLAYED round, where each hole's wind/slope/hazards bump scores.
+export function careerFieldForRound(c: Career, ev: CareerEvent, roundHoles: Hole[]): FieldPlayer[] {
+  return buildField(c, ev, roundHoles.map(holeDifficulty));
 }
 
 // Your on-course "card": the three best-placed rivals you're grouped with.
@@ -416,8 +450,10 @@ export function careerLiveStandings(field: FieldPlayer[], myName: string, myScor
 
 // Record a finished event (played or simmed). Folds in your recurring rivals
 // (placement, head-to-head, who actually won), prize money, points + titles.
-export function recordResult(c: Career, ev: CareerEvent, score: number, played: boolean): { career: Career; result: EventResult } {
-  const field = careerFieldHoles(c, ev);
+// `field` may be supplied (a played round's conditions-aware field) so placement
+// matches the live leaderboard you saw; otherwise the statistical field is used.
+export function recordResult(c: Career, ev: CareerEvent, score: number, played: boolean, field?: FieldPlayer[]): { career: Career; result: EventResult } {
+  field = field ?? careerFieldHoles(c, ev);
   const nRivals = c.rivals.length;
   const others = field.map((p) => p.total);
   const placed = 1 + others.filter((s) => s < score).length;

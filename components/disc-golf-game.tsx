@@ -20,7 +20,7 @@ import {
   newCareer, normalizeCareer, skillMods, seasonSchedule, simEvent, recordResult, advanceSeason, retire, seasonComplete,
   placeLabel, STAGE_LABEL, SKILL_KEYS, SKILL_LABEL, IDENTITY_MODS,
   availableSponsors, signSponsor, trainingPointCost, buyTrainingPoint, topRivals, fmtCash, SPONSOR_CAP,
-  careerFieldHoles, careerCardRacers, careerLiveStandings,
+  careerFieldForRound, careerCardRacers, careerLiveStandings,
   type Career, type CareerEvent, type EventResult, type CareerSkills, type SkillMods, type FieldPlayer,
 } from "@/lib/discgolf/career";
 
@@ -533,7 +533,6 @@ export function DiscGolfGame() {
     tournamentPlayRef.current = false;
     careerPlayRef.current = true;
     careerEventRef.current = ev;
-    careerFieldRef.current = careerFieldHoles(c, ev); // your card + the live board
     // Deterministic seed per (career, event) so a replay plays the same course.
     // Tour events carry their own course seed (it also drives the venue + par).
     let seed = ev.seed;
@@ -543,6 +542,8 @@ export function DiscGolfGame() {
       seed = h | 0;
     }
     const roundHoles = buildRound(seed, ev.mode);
+    // The field reacts to this course's wind/slope/hazards (card + live board).
+    careerFieldRef.current = careerFieldForRound(c, ev, roundHoles);
     const adv = advancedRef.current;
     const discIndex = validDiscIndex(adv, discIndexRef.current, unlockedRef.current);
     discIndexRef.current = discIndex;
@@ -884,7 +885,8 @@ export function DiscGolfGame() {
       const c = careerRef.current;
       const ev = careerEventRef.current;
       if (c && ev && !c.done.includes(ev.id)) {
-        const { career: nc, result } = recordResult(c, ev, total, true);
+        // Use the same conditions-aware field the live leaderboard was built from.
+        const { career: nc, result } = recordResult(c, ev, total, true, careerFieldRef.current ?? undefined);
         saveCareer(nc);
         setCareerLastResult(result);
       }

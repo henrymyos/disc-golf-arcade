@@ -27,7 +27,8 @@ import {
   type Career,
   type CareerSkills,
 } from "../lib/discgolf/career";
-import { CATCH_R } from "../lib/discgolf/engine";
+import { careerFieldForRound } from "../lib/discgolf/career";
+import { CATCH_R, buildRound } from "../lib/discgolf/engine";
 
 describe("newCareer", () => {
   it("starts a 14-year-old high-school freshman with headroom and a starter PDGA", () => {
@@ -257,6 +258,43 @@ describe("career field + live standings", () => {
     expect(rows.find((r) => r.you)!.rank).toBeLessThanOrEqual(3);
     // sorted ascending by total
     for (let i = 1; i < rows.length; i++) expect(rows[i].total).toBeGreaterThanOrEqual(rows[i - 1].total);
+  });
+});
+
+describe("field difficulty", () => {
+  const c = newCareer("Pro", 5);
+  const base = { name: "Event", mode: "course" as const, par: 66, holes: 18, fieldSize: 90, fieldMean: 70 };
+  // Average winning score across many event seeds for an importance tier.
+  const meanBest = (importance: "minor" | "major" | "championship") => {
+    let s = 0;
+    const n = 16;
+    for (let i = 0; i < n; i++) {
+      const f = careerFieldHoles(c, { ...base, id: `${importance}${i}`, importance });
+      s += Math.min(...f.map((p) => p.total));
+    }
+    return s / n;
+  };
+  it("bigger events draw stronger fields (lower winning scores)", () => {
+    const minor = meanBest("minor");
+    const major = meanBest("major");
+    const champ = meanBest("championship");
+    expect(major).toBeLessThan(minor); // a major is harder than a minor
+    expect(champ).toBeLessThan(major); // the championship is the hardest of all
+  });
+});
+
+describe("field reacts to course conditions (wind / slope / hazards)", () => {
+  const c = newCareer("Pro", 9);
+  const holes = buildRound(123, "course");
+  const ev = { id: "cond", name: "Conditions", mode: "course" as const, par: 66, holes: 18, fieldSize: 40, fieldMean: 70, importance: "minor" as const };
+  const calm = holes.map((h) => ({ ...h, windMag: 0, elev: 0, elevZones: undefined, water: [], hazard: [] }));
+  const stormy = holes.map((h) => ({ ...h, windMag: 0.018, elev: 2, elevZones: undefined, water: h.water, hazard: h.hazard }));
+  const avgTotal = (f: ReturnType<typeof careerFieldForRound>) => f.reduce((s, p) => s + p.total, 0) / f.length;
+
+  it("the same field scores worse in tough conditions", () => {
+    const easy = avgTotal(careerFieldForRound(c, ev, calm));
+    const hard = avgTotal(careerFieldForRound(c, ev, stormy));
+    expect(hard).toBeGreaterThan(easy); // wind + uphill cost the bots strokes too
   });
 });
 
