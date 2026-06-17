@@ -19,6 +19,9 @@ import {
   weekSeed, rankedCourseKey, roundRP, applyRankedRound, tierFromRP, type RankedState,
 } from "@/lib/discgolf/ranked";
 import {
+  weeklyChallenges, roundsThisWeek, challengeDone, eventClaimKey, type EventRound,
+} from "@/lib/discgolf/events";
+import {
   W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, TOTAL_PAR, WINTHROP_HOLES, WINTHROP_PAR, leaderboardCourse, TOURN_KEY, TOURN_NAMES, tournFieldRound, tournLiveStandings, tournStandings, ACHIEVEMENTS, earnedAchievements, scoreLabel, STRAIGHT_SPEED_MUL, releaseSpeedMul, DISCS, ADV_DISCS, activeDiscs, DISC_PRICE, isDiscUnlocked, validDiscIndex, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, inRect, inHazard, offRibbons, dailySeed, buildRound, elevAt, vibrate, fullPowerRange, lastInBoundsLie, stepFlight,
 } from "@/lib/discgolf/engine";
 import type {
@@ -351,6 +354,7 @@ export function DiscGolfGame() {
   const [newAchievements, setNewAchievements] = useState<Achievement[]>([]);
   const [roundsPlayed, setRoundsPlayed] = useState(0);
   const roundsPlayedRef = useRef(0);
+  const [history, setHistory] = useState<EventRound[]>([]); // recorded rounds (for weekly events)
 
   // ── Coins economy + daily reward (persisted + cloud-synced) ──
   const [coins, setCoins] = useState(0);
@@ -406,6 +410,19 @@ export function DiscGolfGame() {
   const [rankedOpen, setRankedOpen] = useState(false);
   const [rankedGain, setRankedGain] = useState<number | null>(null); // RP gained by the round just finished
 
+  // ── Recurring weekly events (rotating challenges that pay coins) ──
+  const [eventsOpen, setEventsOpen] = useState(false);
+  // Claiming marks the reward in `owned` (cloud-synced, union-merged) so it
+  // can't be double-claimed, and pays the coins.
+  const claimEvent = useCallback((week: number, id: string, reward: number) => {
+    const key = eventClaimKey(week, id);
+    if (ownedRef.current.includes(key)) return;
+    addCoins(reward);
+    const next = [...ownedRef.current, key];
+    ownedRef.current = next; setOwned(next);
+    try { localStorage.setItem(OWNED_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+  }, [addCoins]);
+
   // Read all persisted progress from localStorage into state/refs. Runs once on
   // mount and again after a cloud sync overwrites localStorage.
   const loadLocal = useCallback(() => {
@@ -430,7 +447,7 @@ export function DiscGolfGame() {
       const ach = JSON.parse(localStorage.getItem(ACH_KEY) || "[]");
       if (Array.isArray(ach)) { unlockedRef.current = ach; setUnlocked(ach); }
       const hist = JSON.parse(localStorage.getItem(HIST_KEY) || "[]");
-      if (Array.isArray(hist)) { roundsPlayedRef.current = hist.length; setRoundsPlayed(hist.length); }
+      if (Array.isArray(hist)) { roundsPlayedRef.current = hist.length; setRoundsPlayed(hist.length); setHistory(hist); }
       const tourn = JSON.parse(localStorage.getItem(TOURN_KEY) || "null");
       if (tourn && typeof tourn.seed === "number" && Array.isArray(tourn.myTotals)) setTournament(tourn);
       setResumeRound(readResume());
@@ -1077,9 +1094,11 @@ export function DiscGolfGame() {
       let hist: { mode: Mode; total: number; date: number; scores?: number[]; pars?: number[] }[] = [];
       try { hist = JSON.parse(localStorage.getItem(HIST_KEY) || "[]"); } catch { /* ignore */ }
       hist.push({ mode, total, date: Date.now(), scores, pars });
-      try { localStorage.setItem(HIST_KEY, JSON.stringify(hist.slice(-100))); } catch { /* ignore */ }
+      const trimmed = hist.slice(-100);
+      try { localStorage.setItem(HIST_KEY, JSON.stringify(trimmed)); } catch { /* ignore */ }
       roundsPlayedRef.current = hist.length;
       setRoundsPlayed(hist.length);
+      setHistory(trimmed);
 
       const earned = earnedAchievements(scores, pars, mode, hist.length);
       const fresh = earned.filter((id) => !unlockedRef.current.includes(id));
@@ -2628,6 +2647,16 @@ export function DiscGolfGame() {
                 <button type="button" onClick={() => setRankedOpen(true)} className={titleCard}>
                   🏅 Ranked · {tierFromRP(ranked?.rp ?? 0).tier.emoji} {tierFromRP(ranked?.rp ?? 0).tier.name}
                 </button>
+                {(() => {
+                  const wk = weekSeed(today * 86_400_000); // today is the day number; *DAY_MS lands in this week
+                  const rows = roundsThisWeek(history as EventRound[], wk);
+                  const claimable = weeklyChallenges(wk).filter((c) => challengeDone(c, rows) && !owned.includes(eventClaimKey(wk, c.id))).length;
+                  return (
+                    <button type="button" onClick={() => setEventsOpen(true)} className={titleCard}>
+                      🎟 Weekly Events{claimable > 0 ? ` · ${claimable} reward${claimable === 1 ? "" : "s"} ready!` : ""}
+                    </button>
+                  );
+                })()}
                 <button type="button" onClick={() => setChallengeOpen(true)} className={titleCard}>
                   👥 Challenge Friends
                 </button>
@@ -2872,6 +2901,16 @@ export function DiscGolfGame() {
             playerName={profile.name}
             onPlay={() => { setRankedOpen(false); startGame("ranked"); }}
             onClose={() => setRankedOpen(false)}
+          />
+        )}
+
+        {eventsOpen && (
+          <EventsPanel
+            history={history}
+            owned={owned}
+            coins={coins}
+            onClaim={claimEvent}
+            onClose={() => setEventsOpen(false)}
           />
         )}
 
@@ -4033,7 +4072,7 @@ function ProfilePanel({ profile, coins, owned, unlocked, roundsPlayed, bestScore
   onBuyAvatar: (key: string, price: number) => void;
   onClose: () => void;
 }) {
-  const discsOwned = owned.filter((k) => !k.startsWith("avatar:")).length;
+  const discsOwned = owned.filter((k) => !k.includes(":")).length; // exclude avatar:/event: cosmetics
   const lvl = levelFromXp(playerXp(roundsPlayed, unlocked.length, discsOwned));
   const pct = lvl.need ? Math.round((lvl.into / lvl.need) * 100) : 100;
   const over = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
@@ -4236,6 +4275,74 @@ function CoursesPanel({ courses, bests, onClose, onPlay }: {
 // (before per-hole scores were recorded) still count toward totals/averages.
 // Browse the global (Supabase) leaderboard for any course from the title
 // screen. Daily uses today's seed; Glendoveer & Winthrop are all-time.
+// Recurring weekly events — three rotating challenges that pay coins and reset
+// each week. Progress is read from saved round history; claims are marked in the
+// owned set so they survive a refresh and can't be claimed twice.
+function EventsPanel({ history, owned, coins, onClaim, onClose }: {
+  history: EventRound[];
+  owned: string[];
+  coins: number;
+  onClaim: (week: number, id: string, reward: number) => void;
+  onClose: () => void;
+}) {
+  const [week] = useState(() => weekSeed(Date.now()));
+  const challenges = weeklyChallenges(week);
+  const rows = roundsThisWeek(history, week);
+  return (
+    <div className="absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm p-4 flex items-start justify-center rounded-lg">
+      <div className="w-full max-w-xs space-y-3 my-auto text-left">
+        <div className="flex items-center justify-between">
+          <h2 className="text-white font-black text-xl">🎟 Weekly Events</h2>
+          <div className="flex items-center gap-2">
+            <span className="text-[#f5d24a] font-bold font-mono text-sm">{fmtCoins(coins)} 🪙</span>
+            <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
+          </div>
+        </div>
+        <p className="text-gray-500 text-[11px]">Three fresh challenges every week. Finish them in any mode to earn coins — they reset Monday.</p>
+        {challenges.map((c) => {
+          const have = Math.min(c.measure(rows), c.goal);
+          const done = have >= c.goal;
+          const claimed = owned.includes(eventClaimKey(week, c.id));
+          const pct = Math.round((have / c.goal) * 100);
+          return (
+            <div key={c.id} className="bg-[#1a1d23] border border-white/10 rounded-xl px-3 py-2.5">
+              <div className="flex items-center gap-2.5">
+                <span className="text-2xl leading-none shrink-0">{c.emoji}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="text-white font-bold text-sm truncate">{c.title}</span>
+                    <span className="text-[#f5d24a] font-bold text-[11px] shrink-0">+{c.reward} 🪙</span>
+                  </div>
+                  <p className="text-gray-500 text-[11px]">{c.desc}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 mt-2">
+                <div className="flex-1 h-1.5 bg-white/10 rounded overflow-hidden">
+                  <div className="h-full rounded bg-[#36D7B7]" style={{ width: `${pct}%` }} />
+                </div>
+                <span className="text-gray-400 font-mono text-[10px] w-9 text-right">{have}/{c.goal}</span>
+                {claimed ? (
+                  <span className="shrink-0 text-[11px] font-bold text-[#36D7B7] w-16 text-center">Claimed ✓</span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => onClaim(week, c.id, c.reward)}
+                    disabled={!done}
+                    className="shrink-0 w-16 rounded-lg bg-[#36D7B7] hover:bg-[#2bc4a6] text-[#0f1117] text-[11px] font-bold py-1.5 disabled:opacity-30 disabled:bg-white/10 disabled:text-gray-500"
+                  >
+                    {done ? "Claim" : "Locked"}
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+        <button type="button" onClick={onClose} className={`${btn} w-full`}>Done</button>
+      </div>
+    </div>
+  );
+}
+
 // Async global ranked ladder. Everyone plays the SAME 18-hole course this week
 // and competes on a shared weekly board; lifetime RP maps to a climbing tier.
 function RankedPanel({ ranked, playerName, onPlay, onClose }: {
