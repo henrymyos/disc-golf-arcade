@@ -3,6 +3,7 @@
 // user_metadata (no table/RLS needed). These helpers gather/scatter/merge it.
 
 import type { Career } from "./discgolf/career";
+import type { DailyReward } from "./discgolf/wallet";
 
 export const BEST_KEY = "discgolf.best.glendoveer18";
 export const WBEST_KEY = "discgolf.best.winthrop18";
@@ -11,6 +12,10 @@ export const SETTINGS_KEY = "discgolf.settings.v1";
 export const ACH_KEY = "discgolf.achievements.v1";
 export const HIST_KEY = "discgolf.history.v1";
 export const CAREER_KEY = "discgolf.career.v1";
+export const COINS_KEY = "discgolf.coins.v1";
+export const DAILY_KEY = "discgolf.dailyreward.v1";
+export const OWNED_KEY = "discgolf.owned.v1"; // unlocked discs + cosmetics
+export const PROFILE_KEY = "discgolf.profile.v1";
 
 export type HistoryRow = { mode: string; total: number; date: number; scores?: number[]; pars?: number[] };
 export type Progress = {
@@ -21,6 +26,10 @@ export type Progress = {
   history: HistoryRow[];
   settings: Record<string, unknown> | null;
   career: Career | null;
+  coins: number;
+  daily: DailyReward | null;
+  owned: string[];
+  profile: Record<string, unknown> | null;
 };
 
 // Of two career saves, keep the one further along (more seasons, then events).
@@ -40,7 +49,7 @@ function parse<T>(raw: string | null, fallback: T): T {
 
 export function readLocalProgress(): Progress {
   if (typeof localStorage === "undefined") {
-    return { best: null, winthropBest: null, holeBest: [], achievements: [], history: [], settings: null, career: null };
+    return { best: null, winthropBest: null, holeBest: [], achievements: [], history: [], settings: null, career: null, coins: 0, daily: null, owned: [], profile: null };
   }
   const bestRaw = localStorage.getItem(BEST_KEY);
   const best = bestRaw != null && Number.isFinite(Number(bestRaw)) ? Number(bestRaw) : null;
@@ -51,7 +60,12 @@ export function readLocalProgress(): Progress {
   const history = parse<HistoryRow[]>(localStorage.getItem(HIST_KEY), []);
   const settings = parse<Record<string, unknown> | null>(localStorage.getItem(SETTINGS_KEY), null);
   const career = parse<Career | null>(localStorage.getItem(CAREER_KEY), null);
-  return { best, winthropBest, holeBest, achievements, history, settings, career };
+  const coinsRaw = localStorage.getItem(COINS_KEY);
+  const coins = coinsRaw != null && Number.isFinite(Number(coinsRaw)) ? Number(coinsRaw) : 0;
+  const daily = parse<DailyReward | null>(localStorage.getItem(DAILY_KEY), null);
+  const owned = parse<string[]>(localStorage.getItem(OWNED_KEY), []);
+  const profile = parse<Record<string, unknown> | null>(localStorage.getItem(PROFILE_KEY), null);
+  return { best, winthropBest, holeBest, achievements, history, settings, career, coins, daily, owned, profile };
 }
 
 export function applyProgress(p: Progress) {
@@ -64,6 +78,10 @@ export function applyProgress(p: Progress) {
     localStorage.setItem(HIST_KEY, JSON.stringify((p.history ?? []).slice(-100)));
     if (p.settings) localStorage.setItem(SETTINGS_KEY, JSON.stringify(p.settings));
     if (p.career) localStorage.setItem(CAREER_KEY, JSON.stringify(p.career));
+    localStorage.setItem(COINS_KEY, String(Math.max(0, Math.round(p.coins ?? 0))));
+    if (p.daily) localStorage.setItem(DAILY_KEY, JSON.stringify(p.daily));
+    localStorage.setItem(OWNED_KEY, JSON.stringify(p.owned ?? []));
+    if (p.profile) localStorage.setItem(PROFILE_KEY, JSON.stringify(p.profile));
   } catch { /* ignore */ }
 }
 
@@ -93,6 +111,10 @@ export function mergeProgress(a: Progress, b: Progress): Progress {
   }
   history.sort((x, y) => x.date - y.date);
 
+  // Most-recent daily-reward state (higher day; break ties by longer streak).
+  const da = a.daily ?? null, db = b.daily ?? null;
+  const daily = !da ? db : !db ? da : da.day !== db.day ? (da.day > db.day ? da : db) : (da.streak >= db.streak ? da : db);
+
   return {
     best: minDefined(a.best, b.best),
     winthropBest: minDefined(a.winthropBest, b.winthropBest),
@@ -101,5 +123,9 @@ export function mergeProgress(a: Progress, b: Progress): Progress {
     history: history.slice(-100),
     settings: b.settings ?? a.settings, // prefer cloud settings on conflict
     career: moreAdvancedCareer(a.career ?? null, b.career ?? null),
+    coins: Math.max(a.coins ?? 0, b.coins ?? 0), // keep the higher balance so coins aren't lost
+    daily,
+    owned: Array.from(new Set([...(a.owned ?? []), ...(b.owned ?? [])])),
+    profile: b.profile ?? a.profile, // prefer cloud profile on conflict
   };
 }

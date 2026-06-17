@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { mergeProgress, type Progress } from "../lib/progress";
 
-const base: Progress = { best: null, winthropBest: null, holeBest: [], achievements: [], history: [], settings: null, career: null };
+const base: Progress = { best: null, winthropBest: null, holeBest: [], achievements: [], history: [], settings: null, career: null, coins: 0, daily: null, owned: [], profile: null };
 
 describe("mergeProgress", () => {
   it("keeps the lower (better) best score for each course", () => {

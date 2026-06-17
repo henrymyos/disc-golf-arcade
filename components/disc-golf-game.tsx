@@ -6,9 +6,12 @@ import { submitArcadeScore, getArcadeLeaderboard } from "@/actions/arcade";
 import type { ArcadeScore } from "@/lib/arcade-types";
 import { getSupabase } from "@/lib/supabase/browser";
 import {
-  BEST_KEY, WBEST_KEY, HOLEBEST_KEY, SETTINGS_KEY, ACH_KEY, HIST_KEY, CAREER_KEY,
+  BEST_KEY, WBEST_KEY, HOLEBEST_KEY, SETTINGS_KEY, ACH_KEY, HIST_KEY, CAREER_KEY, COINS_KEY, DAILY_KEY,
   readLocalProgress, applyProgress, mergeProgress, type Progress,
 } from "@/lib/progress";
+import {
+  dayNumber, claimDailyReward, dailyAvailable, coinsForRound, fmtCoins, type DailyReward,
+} from "@/lib/discgolf/wallet";
 import {
   W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, TOTAL_PAR, WINTHROP_HOLES, WINTHROP_PAR, leaderboardCourse, TOURN_KEY, TOURN_NAMES, tournFieldRound, tournLiveStandings, tournStandings, ACHIEVEMENTS, earnedAchievements, scoreLabel, STRAIGHT_SPEED_MUL, releaseSpeedMul, DISCS, ADV_DISCS, activeDiscs, DISC_UNLOCKS, validDiscIndex, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, inRect, inHazard, offRibbons, dailySeed, buildRound, elevAt, vibrate, fullPowerRange, lastInBoundsLie, stepFlight,
 } from "@/lib/discgolf/engine";
@@ -323,6 +326,30 @@ export function DiscGolfGame() {
   const [roundsPlayed, setRoundsPlayed] = useState(0);
   const roundsPlayedRef = useRef(0);
 
+  // ── Coins economy + daily reward (persisted + cloud-synced) ──
+  const [coins, setCoins] = useState(0);
+  const coinsRef = useRef(0);
+  useEffect(() => { coinsRef.current = coins; }, [coins]);
+  const [daily, setDaily] = useState<DailyReward | null>(null);
+  const [today, setToday] = useState(0); // current day number (set on mount; avoids Date.now() in render)
+  const [dailyClaim, setDailyClaim] = useState<{ coins: number; streak: number } | null>(null);
+  const [coinReward, setCoinReward] = useState(0); // coins earned by the round just finished
+  // Add coins (or spend, with a negative amount): updates state, storage, cloud.
+  const addCoins = useCallback((delta: number) => {
+    const next = Math.max(0, Math.round(coinsRef.current + delta));
+    coinsRef.current = next;
+    setCoins(next);
+    try { localStorage.setItem(COINS_KEY, String(next)); } catch { /* ignore */ }
+  }, []);
+  const claimDaily = useCallback(() => {
+    const res = claimDailyReward(daily, dayNumber(Date.now()));
+    if (!res) return;
+    addCoins(res.coins);
+    setDaily(res.reward);
+    try { localStorage.setItem(DAILY_KEY, JSON.stringify(res.reward)); } catch { /* ignore */ }
+    setDailyClaim({ coins: res.coins, streak: res.reward.streak });
+  }, [daily, addCoins]);
+
   // Read all persisted progress from localStorage into state/refs. Runs once on
   // mount and again after a cloud sync overwrites localStorage.
   const loadLocal = useCallback(() => {
@@ -353,6 +380,11 @@ export function DiscGolfGame() {
       setResumeRound(readResume());
       const car = JSON.parse(localStorage.getItem(CAREER_KEY) || "null");
       if (car && car.v === 1 && car.skills) { const nc = normalizeCareer(car); setCareer(nc); careerRef.current = nc; }
+      const coinRaw = localStorage.getItem(COINS_KEY);
+      const co = coinRaw != null && Number.isFinite(Number(coinRaw)) ? Number(coinRaw) : 0;
+      coinsRef.current = co; setCoins(co);
+      setDaily(JSON.parse(localStorage.getItem(DAILY_KEY) || "null"));
+      setToday(dayNumber(Date.now()));
     } catch {
       /* ignore */
     }
@@ -467,6 +499,8 @@ export function DiscGolfGame() {
   // Sync the career save to the cloud whenever it changes (debounced; no-op
   // when signed out). localStorage is already written by saveCareer.
   useEffect(() => { if (career) saveProgress(); }, [career, saveProgress]);
+  // Sync coins + daily-reward state to the cloud when they change.
+  useEffect(() => { saveProgress(); }, [coins, daily, saveProgress]);
 
   const syncHud = useCallback(() => {
     const g = stateRef.current;
@@ -877,6 +911,7 @@ export function DiscGolfGame() {
 
   const finishGame = useCallback((scores: number[]) => {
     const g = stateRef.current;
+    setCoinReward(0);
     // A played Career event: record the result against the career and pop back
     // to the hub instead of the normal results / leaderboard flow.
     if (g?.career && careerPlayRef.current) {
@@ -1014,7 +1049,10 @@ export function DiscGolfGame() {
     setLeaderboard([]);
     if (!practice) void getArcadeLeaderboard(leaderboardCourse(mode, g?.seed ?? 0)).then(setLeaderboard).catch(() => {});
     if (!practice) saveProgress(); // sync best/achievements/history to the cloud if signed in
-  }, [saveProgress, saveTournament, clearResume, saveCareer]);
+    // Coins for a counting round (more for going low). Career events pay cash,
+    // not coins, and are handled in their own branch above.
+    if (!practice) { setCoinReward(coinsForRound(total - pars.reduce((s, n) => s + n, 0), pars.length)); addCoins(coinsForRound(total - pars.reduce((s, n) => s + n, 0), pars.length)); }
+  }, [saveProgress, saveTournament, clearResume, saveCareer, addCoins]);
 
   const nextHole = useCallback(() => {
     const g = stateRef.current;
@@ -2352,6 +2390,24 @@ export function DiscGolfGame() {
                 </div>
               )}
 
+              {/* Coins + daily reward */}
+              <div className="w-full flex items-center gap-2 mt-3">
+                <div className="flex items-center gap-1 rounded-lg bg-[#f5d24a]/10 border border-[#f5d24a]/30 px-2.5 py-1.5">
+                  <span>🪙</span>
+                  <span className="text-[#f5d24a] font-bold text-sm font-mono">{fmtCoins(coins)}</span>
+                </div>
+                {dailyAvailable(daily, today) ? (
+                  <button type="button" onClick={claimDaily}
+                    className="flex-1 rounded-lg bg-[#36D7B7] hover:bg-[#2bc4a6] active:scale-[0.99] text-[#0f1117] font-bold text-sm py-2 transition animate-pulse">
+                    🎁 Claim daily reward
+                  </button>
+                ) : (
+                  <div className="flex-1 rounded-lg border border-white/10 text-gray-400 text-xs font-semibold py-2 text-center">
+                    🎁 Daily claimed · 🔥 {daily?.streak ?? 0}-day streak
+                  </div>
+                )}
+              </div>
+
               {/* A pending challenge from a shared link */}
               {challenge && (
                 <button
@@ -2568,6 +2624,17 @@ export function DiscGolfGame() {
               tournamentPlayRef.current = true;
             }}
           />
+        )}
+
+        {dailyClaim && (
+          <div className="absolute inset-0 z-40 flex items-center justify-center bg-[#0f1117]/85 backdrop-blur-sm rounded-lg px-6" onClick={() => setDailyClaim(null)}>
+            <div className="text-center">
+              <p className="text-6xl mb-2">🎁</p>
+              <p className="text-[#f5d24a] font-black text-4xl">+{dailyClaim.coins} 🪙</p>
+              <p className="text-gray-300 text-sm mt-2">Daily reward · 🔥 {dailyClaim.streak}-day streak</p>
+              <button type="button" onClick={() => setDailyClaim(null)} className={`${btn} mt-4`}>Nice!</button>
+            </div>
+          </div>
         )}
 
         {careerOpen && (
@@ -2825,6 +2892,7 @@ export function DiscGolfGame() {
                 {finalBest != null && !isNewBest && (
                   <p className="text-gray-400 text-xs mt-0.5">Your best: {finalBest} ({overStr(finalBest - finalParTotal)})</p>
                 )}
+                {coinReward > 0 && <p className="text-[#f5d24a] text-sm font-bold mt-1">+{coinReward} 🪙</p>}
               </>)}
               {finalChallenge && (
                 <p className={`text-sm font-bold mt-1.5 ${finalTotal < finalChallenge.score ? "text-[#36D7B7]" : finalTotal === finalChallenge.score ? "text-gray-300" : "text-[#e08a3b]"}`}>
