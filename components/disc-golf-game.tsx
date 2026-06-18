@@ -432,6 +432,15 @@ export function DiscGolfGame() {
   const levelRef = useRef(1);
   useEffect(() => { levelRef.current = playerLevel; }, [playerLevel]);
 
+  // Title-screen navigation: a small hub so the menu isn't a wall of buttons.
+  const [hub, setHub] = useState<"home" | "solo" | "online">("home");
+  // How many weekly-event rewards are ready to claim (badged on the hub).
+  const claimableEvents = (() => {
+    const wk = weekSeed(today * 86_400_000); // `today` is a day number → land in this week
+    const rows = roundsThisWeek(history as EventRound[], wk);
+    return weeklyChallenges(wk).filter((c) => challengeDone(c, rows) && !owned.includes(eventClaimKey(wk, c.id))).length;
+  })();
+
   // Per-venue best scores for the standalone pro-tour courses (keyed by seed).
   const [tourBests, setTourBests] = useState<Record<number, number>>({});
 
@@ -2701,64 +2710,93 @@ export function DiscGolfGame() {
                 </button>
               )}
 
-              {/* Primary actions */}
-              <div className={`w-full flex flex-col gap-2 ${challenge || resumeRound ? "mt-2" : "mt-5"}`}>
-                <button type="button" onClick={() => startGame("daily")} className={titleCard}>
-                  🔥 Daily Challenge
-                </button>
-                <button type="button" onClick={() => setCoursesOpen(true)} className={titleCard}>
-                  ⛳ Play Courses · {FIXED_COURSES.length + TOUR_COURSE_INFOS.length}
-                </button>
-                <button type="button" onClick={() => { setCareerLastResult(null); setCareerNotes([]); setCareerOpen(true); }} className={titleCard}>
-                  🌟 Career{career && !career.retired ? ` · ${STAGE_LABEL[career.stage]}, age ${career.age}` : ""}
-                </button>
-                <button type="button" onClick={() => setTournamentOpen(true)} className={titleCard}>
-                  🏟 Tournament{tournament && !tournament.finished ? ` · R${tournament.myTotals.length + 1}` : ""}
-                </button>
-                <button type="button" onClick={() => setRankedOpen(true)} className={titleCard}>
-                  🏅 Ranked · {tierFromRP(ranked?.rp ?? 0).tier.emoji} {tierFromRP(ranked?.rp ?? 0).tier.name}
-                </button>
-                {(() => {
-                  const wk = weekSeed(today * 86_400_000); // today is the day number; *DAY_MS lands in this week
-                  const rows = roundsThisWeek(history as EventRound[], wk);
-                  const claimable = weeklyChallenges(wk).filter((c) => challengeDone(c, rows) && !owned.includes(eventClaimKey(wk, c.id))).length;
-                  return (
-                    <button type="button" onClick={() => setEventsOpen(true)} className={titleCard}>
-                      🎟 Weekly Events{claimable > 0 ? ` · ${claimable} reward${claimable === 1 ? "" : "s"} ready!` : ""}
+              {/* Hub: three category cards keep the menu uncluttered */}
+              {hub === "home" && (
+                <>
+                  <div className={`w-full flex flex-col gap-2 ${challenge || resumeRound ? "mt-2" : "mt-5"}`}>
+                    <button type="button" onClick={() => setHub("solo")} className={hubCard}>
+                      <span className="text-2xl leading-none shrink-0">🎮</span>
+                      <span className="flex-1 text-left min-w-0">
+                        <span className="block font-bold text-sm">Single Player</span>
+                        <span className="block text-[11px] text-gray-400 truncate">Daily, Courses, Career &amp; Tournament</span>
+                      </span>
+                      <span className="text-gray-500 text-lg shrink-0">›</span>
                     </button>
-                  );
-                })()}
-                <button type="button" onClick={() => setChallengeOpen(true)} className={titleCard}>
-                  👥 Challenge Friends
-                </button>
-                <button type="button" onClick={() => setTutorialOpen(true)} className={titleCard}>
-                  📖 How to Play
-                </button>
-              </div>
-              <p className="text-gray-500 text-[10px] mt-1.5">Daily = a fresh 9-hole course, same for everyone</p>
+                    <button type="button" onClick={() => setHub("online")} className={hubCard}>
+                      <span className="text-2xl leading-none shrink-0">🏆</span>
+                      <span className="flex-1 text-left min-w-0">
+                        <span className="block font-bold text-sm">Online &amp; Compete</span>
+                        <span className="block text-[11px] text-gray-400 truncate">Friends, Ranked, Events &amp; Leaders</span>
+                      </span>
+                      {claimableEvents > 0 && (
+                        <span className="shrink-0 min-w-[18px] h-[18px] px-1 rounded-full bg-[#f5d24a] text-[#0f1117] text-[10px] font-black flex items-center justify-center">{claimableEvents}</span>
+                      )}
+                      <span className="text-gray-500 text-lg shrink-0">›</span>
+                    </button>
+                    <button type="button" onClick={() => setPracticeOpen(true)} className={hubCard}>
+                      <span className="text-2xl leading-none shrink-0">🎯</span>
+                      <span className="flex-1 text-left min-w-0">
+                        <span className="block font-bold text-sm">Practice</span>
+                        <span className="block text-[11px] text-gray-400 truncate">Putting, targets &amp; single holes</span>
+                      </span>
+                      <span className="text-gray-500 text-lg shrink-0">›</span>
+                    </button>
+                  </div>
 
-              {/* Secondary actions */}
-              <div className="w-full flex gap-2 mt-4">
-                <button type="button" onClick={() => setBoardsOpen(true)} className={titleCardSm}>
-                  🏆 Leaders
-                </button>
-                <button type="button" onClick={() => setPracticeOpen(true)} className={titleCardSm}>
-                  🎯 Practice
-                </button>
-                <button type="button" onClick={() => setStatsOpen(true)} className={titleCardSm}>
-                  📊 Stats
-                </button>
-              </div>
-              <div className="w-full flex gap-2 mt-2">
-                <button type="button" onClick={() => setSettingsOpen(true)} className={titleCardSm}>
-                  ⚙ Settings
-                </button>
-                {supa && (
-                  <button type="button" onClick={() => { setAuthErr(null); setAuthMsg(null); setAuthOpen(true); }} className={`${titleCardSm} truncate px-2`}>
-                    {user ? `👤 ${user.email}` : "👤 Log in"}
+                  {/* Utilities */}
+                  <div className="w-full flex gap-2 mt-4">
+                    <button type="button" onClick={() => setStatsOpen(true)} className={titleCardSm}>📊 Stats</button>
+                    <button type="button" onClick={() => setTutorialOpen(true)} className={titleCardSm}>📖 How to Play</button>
+                  </div>
+                  <div className="w-full flex gap-2 mt-2">
+                    <button type="button" onClick={() => setSettingsOpen(true)} className={titleCardSm}>⚙ Settings</button>
+                    {supa && (
+                      <button type="button" onClick={() => { setAuthErr(null); setAuthMsg(null); setAuthOpen(true); }} className={`${titleCardSm} truncate px-2`}>
+                        {user ? `👤 ${user.email}` : "👤 Log in"}
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {/* Single Player page */}
+              {hub === "solo" && (
+                <div className={`w-full flex flex-col gap-2 ${challenge || resumeRound ? "mt-2" : "mt-5"}`}>
+                  <button type="button" onClick={() => setHub("home")} className={`${titleCardSm} !flex-none self-start px-3`}>‹ Back</button>
+                  <button type="button" onClick={() => startGame("daily")} className={titleCard}>
+                    🔥 Daily Challenge
                   </button>
-                )}
-              </div>
+                  <p className="text-gray-500 text-[10px] -mt-1 mb-0.5">A fresh 9-hole course, same for everyone each day</p>
+                  <button type="button" onClick={() => setCoursesOpen(true)} className={titleCard}>
+                    ⛳ Play Courses · {FIXED_COURSES.length + TOUR_COURSE_INFOS.length}
+                  </button>
+                  <button type="button" onClick={() => { setCareerLastResult(null); setCareerNotes([]); setCareerOpen(true); }} className={titleCard}>
+                    🌟 Career{career && !career.retired ? ` · ${STAGE_LABEL[career.stage]}, age ${career.age}` : ""}
+                  </button>
+                  <button type="button" onClick={() => setTournamentOpen(true)} className={titleCard}>
+                    🏟 Tournament{tournament && !tournament.finished ? ` · R${tournament.myTotals.length + 1}` : ""}
+                  </button>
+                </div>
+              )}
+
+              {/* Online & Compete page */}
+              {hub === "online" && (
+                <div className={`w-full flex flex-col gap-2 ${challenge || resumeRound ? "mt-2" : "mt-5"}`}>
+                  <button type="button" onClick={() => setHub("home")} className={`${titleCardSm} !flex-none self-start px-3`}>‹ Back</button>
+                  <button type="button" onClick={() => setChallengeOpen(true)} className={titleCard}>
+                    👥 Challenge Friends
+                  </button>
+                  <button type="button" onClick={() => setRankedOpen(true)} className={titleCard}>
+                    🏅 Ranked · {tierFromRP(ranked?.rp ?? 0).tier.emoji} {tierFromRP(ranked?.rp ?? 0).tier.name}
+                  </button>
+                  <button type="button" onClick={() => setEventsOpen(true)} className={titleCard}>
+                    🎟 Weekly Events{claimableEvents > 0 ? ` · ${claimableEvents} reward${claimableEvents === 1 ? "" : "s"} ready!` : ""}
+                  </button>
+                  <button type="button" onClick={() => setBoardsOpen(true)} className={titleCard}>
+                    🏆 Leaderboards
+                  </button>
+                </div>
+              )}
             </div>
             </div>
           </div>
@@ -3411,6 +3449,9 @@ const titleCard =
   "w-full rounded-xl border border-[#36D7B7]/55 bg-[#1a1d23] hover:border-[#36D7B7] hover:bg-[#20262f] active:scale-[0.99] text-white font-bold py-3 transition";
 const titleCardSm =
   "flex-1 rounded-lg border border-[#36D7B7]/45 bg-[#1a1d23] hover:border-[#36D7B7] text-gray-200 hover:text-white text-xs font-semibold py-2 transition";
+// Big hub category card: emoji + title + subtitle + chevron.
+const hubCard =
+  "w-full flex items-center gap-3 rounded-xl border border-[#36D7B7]/55 bg-[#1a1d23] hover:border-[#36D7B7] hover:bg-[#20262f] active:scale-[0.99] text-white px-3.5 py-3 transition";
 
 function Overlay({ children }: { children: React.ReactNode }) {
   return (
