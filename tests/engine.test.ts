@@ -19,6 +19,7 @@ import {
   DISC_LEVEL,
   TOUR_COURSES,
   tourVenue,
+  offRibbons,
   leaderboardCourse,
   tournStandings,
   tournLiveStandings,
@@ -153,6 +154,40 @@ describe("tour course pars", () => {
       }
       expect(min).toBeLessThanOrEqual(half);
     }
+  });
+});
+
+describe("generated obstacles stay in bounds", () => {
+  // A box (water / sand) overlaps the in-bounds corridor if any sampled point on
+  // it sits within fwWidth/2 of a fairway centerline (i.e. !offRibbons).
+  const boxInCorridor = (hole: ReturnType<typeof generateTourCourse>[number], b: { x: number; y: number; w: number; h: number }) => {
+    for (const fx of [0, 0.25, 0.5, 0.75, 1])
+      for (const fy of [0, 0.25, 0.5, 0.75, 1])
+        if (!offRibbons(hole, b.x + fx * b.w, b.y + fy * b.h)) return true;
+    return false;
+  };
+  const checkHole = (hole: ReturnType<typeof generateTourCourse>[number], label: string) => {
+    for (const t of hole.trees)
+      expect(offRibbons(hole, t.x, t.y), `${label}: tree at ${t.x},${t.y} is out of bounds`).toBe(false);
+    for (const w of hole.water)
+      expect(boxInCorridor(hole, w), `${label}: a water box never reaches the in-bounds corridor`).toBe(true);
+    for (const h of hole.hazard ?? [])
+      expect(boxInCorridor(hole, h), `${label}: a sand box never reaches the in-bounds corridor`).toBe(true);
+  };
+
+  it("Daily courses keep every tree, pond and bunker in play", () => {
+    for (let seed = 0; seed < 60; seed++)
+      buildRound(seed, "daily").forEach((h, i) => checkHole(h, `daily seed ${seed} hole ${i + 1}`));
+  });
+  it("the listed pro-tour venues keep every obstacle in play", () => {
+    for (const c of TOUR_COURSES)
+      generateTourCourse(c.seed).forEach((h, i) => checkHole(h, `${c.name} hole ${i + 1}`));
+  });
+  it("tour & ranked courses keep obstacles in play across every venue style", () => {
+    // generateTourCourse also backs Ranked (a weekly seed) — sweep many seeds so
+    // all six venue characters and a wide spread of layouts are covered.
+    for (let seed = 0; seed < 240; seed++)
+      generateTourCourse(seed).forEach((h, i) => checkHole(h, `tour seed ${seed} hole ${i + 1}`));
   });
 });
 
