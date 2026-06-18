@@ -821,8 +821,9 @@ function pointOnPath(pts: Vec[], t: number): Vec {
 // curved fairway with doglegs, guard trees, and the odd pond/sand. `opts.par`
 // forces the par (else it's picked); `opts.tighten` (<1) narrows the fairway;
 // waterChance/hazardChance/Max and extraTreesHi shape a venue's character (lots
-// of water, sand, or trees). With no opts, byte-for-byte the original daily-hole
-// generator (so existing daily courses are unchanged).
+// of water, sand, or trees). Obstacles are placed INSIDE the fairway corridor
+// (within ±fwWidth/2 of the centerline) so they're real hazards to navigate,
+// not scenery sitting out in the already-OB rough.
 type GenOpts = { par?: number; tighten?: number; waterChance?: number; waterMax?: number; hazardChance?: number; hazardMax?: number; extraTreesHi?: number };
 function genDailyHole(rng: () => number, opts: GenOpts = {}): Hole {
   const r = (a: number, b: number) => a + rng() * (b - a);
@@ -847,35 +848,40 @@ function genDailyHole(rng: () => number, opts: GenOpts = {}): Hole {
   const elev = pickN([-2, -1, -1, 0, 0, 1, 1, 2]);
 
   const trees: Tree[] = [];
-  const addTree = (p: Vec, side: number, extra: number) => {
-    const tx = Math.round(p.x + side * (fwWidth / 2 + extra));
+  // `off` is an absolute distance from the centerline (kept under fwWidth/2 so
+  // the tree is in-bounds — a gate to throw around, not a fence in the rough).
+  const addTree = (p: Vec, side: number, off: number) => {
+    const tx = Math.round(p.x + side * off);
     if (tx < 16 || tx > 304 || p.y > 348 || p.y < 96) return;
     trees.push({ x: tx, y: Math.round(p.y), r: Math.round(r(9, 11)) });
   };
   for (let i = 1; i <= nBends; i++) {
     const p = pts[i];
     const turn = Math.sign((pts[i + 1].x - p.x) - (p.x - pts[i - 1].x)) || (rng() < 0.5 ? 1 : -1);
-    addTree(p, -turn, r(0, 10)); // guard the inside of the dogleg
+    addTree(p, -turn, fwWidth / 2 - r(4, 14)); // guard the inside of the dogleg, just inside the line
   }
   const nExtra = Math.floor(r(1, opts.extraTreesHi ?? (pro ? 4 : 3)));
-  for (let k = 0; k < nExtra; k++) addTree(pointOnPath(pts, r(0.25, 0.8)), rng() < 0.5 ? 1 : -1, r(2, 16));
+  for (let k = 0; k < nExtra; k++) addTree(pointOnPath(pts, r(0.25, 0.8)), rng() < 0.5 ? 1 : -1, fwWidth * r(0.15, 0.42));
 
-  const sideBox = (p: Vec, wMin: number, wMax: number, hMin: number, hMax: number, inset: number): Water => {
+  // A water/sand box that fills ONE side of the corridor — from at-or-near the
+  // centerline out toward (and a touch past) the edge — so it overlaps the
+  // in-bounds line and must be carried or skirted, while the opposite half
+  // stays a clear landing lane.
+  const sideBox = (p: Vec, wMin: number, wMax: number, hMin: number, hMax: number): Water => {
     const side = rng() < 0.5 ? 1 : -1;
     const w = Math.round(r(wMin, wMax));
     const h = Math.round(r(hMin, hMax));
-    const cxp = p.x + side * (fwWidth / 2 - inset);
-    const x = Math.round(Math.max(8, Math.min(300 - w, cxp - (side < 0 ? w : 0))));
+    const near = p.x + side * r(0, (fwWidth / 2) * 0.35); // near edge: at-or-just-off the centerline
+    const left = side > 0 ? near : near - w;              // box's left edge (it extends `side`-ward)
+    const x = Math.round(Math.max(8, Math.min(300 - w, left)));
     return { x, y: Math.round(p.y - h / 2), w, h };
   };
-  // Default chances reproduce the original (single box) exactly; a venue style
-  // can raise the chance and allow a second body of water / sand.
   const waterChance = opts.waterChance ?? (pro ? 0.4 : 0.35);
   const hazardChance = opts.hazardChance ?? (pro ? 0.42 : 0.32);
   const water: Water[] = [];
-  for (let i = 0; i < (opts.waterMax ?? 1); i++) if (rng() < waterChance) water.push(sideBox(pointOnPath(pts, r(0.4, 0.72)), 46, 74, 26, 44, 6));
+  for (let i = 0; i < (opts.waterMax ?? 1); i++) if (rng() < waterChance) water.push(sideBox(pointOnPath(pts, r(0.4, 0.72)), 46, 74, 26, 44));
   const hazard: Water[] = [];
-  for (let i = 0; i < (opts.hazardMax ?? 1); i++) if (rng() < hazardChance) hazard.push(sideBox(pointOnPath(pts, r(0.3, 0.78)), 24, 36, 18, 26, 10));
+  for (let i = 0; i < (opts.hazardMax ?? 1); i++) if (rng() < hazardChance) hazard.push(sideBox(pointOnPath(pts, r(0.3, 0.78)), 24, 36, 18, 26));
 
   return materializeHole({ par, tee: TEE, basket: { x: basketX, y: basketY }, fairway: pts, fwWidth, trees, water, hazard, elev });
 }
