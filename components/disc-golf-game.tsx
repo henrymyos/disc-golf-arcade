@@ -769,8 +769,10 @@ export function DiscGolfGame() {
   const stateRef = useRef<GameState | null>(null);
   const keysRef = useRef<Set<string>>(new Set());
   // Drag-to-throw (Wii-golf style): pull back to set power + aim, release to throw.
-  const dragRef = useRef<{ active: boolean; cx: number; cy: number }>({ active: false, cx: 0, cy: 0 });
-  const camRef = useRef(0); // current camera scroll, mirrored for the pointer handlers
+  // The swipe can start ANYWHERE on the canvas; `sx,sy` is where it began (the
+  // anchor) and `cx,cy` is the current pointer. Power/aim come from the vector
+  // between them, so you don't have to grab the disc itself.
+  const dragRef = useRef<{ active: boolean; sx: number; sy: number; cx: number; cy: number }>({ active: false, sx: 0, sy: 0, cx: 0, cy: 0 });
   const rangeFlashRef = useRef(0); // when a disc was last switched (brightens the reach line)
   const audioRef = useRef<AudioEngine | null>(null);
   const rafRef = useRef<number>(0);
@@ -1193,14 +1195,12 @@ export function DiscGolfGame() {
           g.camY = maxCam;
           g.phase = "aim";
         }
-        camRef.current = g.camY;
         return;
       }
 
       // Camera follows the disc, keeping it ~66% down so the fairway ahead shows.
       const camTarget = Math.min(maxCam, Math.max(0, g.disc.y - H * 0.66));
       g.camY += (camTarget - g.camY) * 0.16;
-      camRef.current = g.camY;
 
       if (g.phase === "aim") {
         // Aim + power are driven by the pointer drag handlers; nothing to do here.
@@ -1411,18 +1411,22 @@ export function DiscGolfGame() {
           }
         }
 
+        // The pull-back is drawn from where the swipe began (the anchor); when
+        // idle it rests just below the disc as an affordance.
+        const ax = dr.active ? dr.sx : dsx;
+        const ay = dr.active ? dr.sy : dsy;
         let kx: number;
         let ky: number;
         let power: number;
         if (dr.active) {
-          let pullX = dr.cx - dsx;
-          let pullY = dr.cy - dsy;
+          let pullX = dr.cx - ax;
+          let pullY = dr.cy - ay;
           const dist = Math.hypot(pullX, pullY) || 0.0001;
           const cl = Math.min(dist, MAX_DRAG);
           pullX = (pullX / dist) * cl;
           pullY = (pullY / dist) * cl;
-          kx = dsx + pullX;
-          ky = dsy + pullY;
+          kx = ax + pullX;
+          ky = ay + pullY;
           power = cl / MAX_DRAG;
         } else {
           kx = dsx;
@@ -1437,7 +1441,7 @@ export function DiscGolfGame() {
           ctx.lineWidth = 1.5;
           ctx.setLineDash([3, 3]);
           ctx.beginPath();
-          ctx.arc(dsx, dsy, CANCEL_R, 0, Math.PI * 2);
+          ctx.arc(ax, ay, CANCEL_R, 0, Math.PI * 2);
           if (inCancel) {
             ctx.fillStyle = "rgba(226,59,59,0.22)";
             ctx.fill();
@@ -1452,7 +1456,7 @@ export function DiscGolfGame() {
             ctx.fillStyle = "rgba(226,59,59,0.95)";
             ctx.font = "bold 7px ui-monospace, monospace";
             ctx.textAlign = "center";
-            ctx.fillText("CANCEL", dsx, dsy - CANCEL_R - 3);
+            ctx.fillText("CANCEL", ax, ay - CANCEL_R - 3);
             ctx.textAlign = "left";
           }
         }
@@ -1490,7 +1494,7 @@ export function DiscGolfGame() {
         ctx.strokeStyle = "rgba(255,255,255,0.55)";
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.moveTo(dsx, dsy);
+        ctx.moveTo(ax, ay);
         ctx.lineTo(kx, ky);
         ctx.stroke();
         const pc = inCancel ? "#e23b3b" : power < 0.5 ? "#36D7B7" : power < 0.85 ? "#f5d24a" : "#e23b3b";
@@ -1739,11 +1743,13 @@ export function DiscGolfGame() {
     const r = c.getBoundingClientRect();
     return { x: (clientX - r.left) * (W / r.width), y: (clientY - r.top) * (H / r.height) };
   }, []);
-  // Pull is measured from the disc itself, so the slider/knob stays attached to
-  // it: drag the knob back, aim by its direction, release to throw the opposite way.
+  // Pull is measured from where the swipe STARTED (the anchor), so you can begin
+  // the gesture anywhere: drag away to set power, aim by the swipe direction,
+  // release to throw the opposite way.
   const applyDrag = useCallback((g: GameState, px: number, py: number) => {
-    const pullX = px - g.disc.x;
-    const pullY = py - (g.disc.y - camRef.current); // disc's on-screen Y
+    const dr = dragRef.current;
+    const pullX = px - dr.sx;
+    const pullY = py - dr.sy;
     const dist = Math.hypot(pullX, pullY);
     g.power = Math.min(1, dist / MAX_DRAG);
     if (dist > 4) g.angle = Math.atan2(-pullY, -pullX); // throw opposite the pull
@@ -1753,7 +1759,7 @@ export function DiscGolfGame() {
     const g = stateRef.current;
     if (!g || g.phase !== "aim") return;
     const p = clientToCanvas(e.clientX, e.clientY);
-    dragRef.current = { active: true, cx: p.x, cy: p.y };
+    dragRef.current = { active: true, sx: p.x, sy: p.y, cx: p.x, cy: p.y };
     applyDrag(g, p.x, p.y);
   }
 
@@ -1818,7 +1824,7 @@ export function DiscGolfGame() {
               <span className="text-[#36D7B7]">DISC</span> GOLF
             </h1>
             <p className="text-gray-300 text-xs sm:text-sm max-w-xs">
-              <span className="text-white font-semibold">Drag back</span> from the disc to aim &amp; set
+              <span className="text-white font-semibold">Drag back anywhere</span> on screen to aim &amp; set
               power, then release. Mind the wind, hills &amp; OB lines.
             </p>
             {roundsPlayed > 0 && (
