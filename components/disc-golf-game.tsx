@@ -3496,29 +3496,30 @@ function TutorialPanel({ onClose }: { onClose: () => void }) {
     },
     {
       title: "Pick your disc",
-      caption: "Tap a disc in the rack below the screen — any time, even mid-hole. Putters are short but controlled, mids are balanced, drivers fly farthest. When you switch, a tick flashes on the fairway showing that disc's max reach.",
+      caption: "Tap a disc in the rack below the screen — any time, even mid-hole. Putters are short and controlled, midranges accurate, fairways and distance drivers fly farthest. When you switch, a tick flashes on the fairway showing that disc's max reach.",
       art: (
         <svg viewBox="0 0 220 130" className={illo}>
           {([
-            { name: "Putter", color: "#36D7B7", len: 55, y: 30 },
-            { name: "Mid", color: "#f5d24a", len: 82, y: 65 },
-            { name: "Driver", color: "#e23b3b", len: 120, y: 100 },
+            { name: "Putter", color: "#36D7B7", len: 48, y: 24 },
+            { name: "Midrange", color: "#f5d24a", len: 74, y: 52 },
+            { name: "Fairway", color: "#5fb0e8", len: 100, y: 80 },
+            { name: "Driver", color: "#e23b3b", len: 124, y: 108 },
           ] as const).map((d) => (
             <g key={d.name}>
-              <circle cx="24" cy={d.y} r="8" fill={d.color} />
-              <text x="38" y={d.y + 3} fill="#e7ebf0" fontSize="10" fontWeight="bold">{d.name}</text>
-              <rect x="86" y={d.y - 3.5} height="7" rx="3.5" fill={d.color} opacity="0.85">
+              <circle cx="20" cy={d.y} r="7" fill={d.color} />
+              <text x="32" y={d.y + 3} fill="#e7ebf0" fontSize="9" fontWeight="bold">{d.name}</text>
+              <rect x="86" y={d.y - 3} height="6" rx="3" fill={d.color} opacity="0.85">
                 <animate attributeName="width" values={`0;${d.len};${d.len}`} keyTimes="0;0.55;1" dur="2.8s" repeatCount="indefinite" />
               </rect>
-              <line x1={86 + d.len} y1={d.y - 7} x2={86 + d.len} y2={d.y + 7} stroke={d.color} strokeWidth="2" />
+              <line x1={86 + d.len} y1={d.y - 6} x2={86 + d.len} y2={d.y + 6} stroke={d.color} strokeWidth="2" />
             </g>
           ))}
         </svg>
       ),
     },
     {
-      title: "Flight shape",
-      caption: "Overstable bends steadily one way — reliable in wind. Straight holds its line and carries farther. Toggle it next to the disc rack. (Advanced bag: each real disc has its own baked-in shape instead.)",
+      title: "Every disc flies its own shape",
+      caption: "There's no flight toggle — each real disc has its line baked in. Overstable discs (Zone, Firebird) bend steadily one way — dependable in wind. Straight discs (Aviar, Destroyer) hold their line and carry farther. Choose the shape by choosing the disc.",
       art: (
         <svg viewBox="0 0 220 130" className={illo}>
           <path d="M70 112 C 70 85, 56 55, 42 32" fill="none" stroke="#e08a3b" strokeWidth="2.5" strokeDasharray="5 4">
@@ -3536,8 +3537,8 @@ function TutorialPanel({ onClose }: { onClose: () => void }) {
       ),
     },
     {
-      title: "Stance",
-      caption: "Backhand (BH) fades left at the end of the flight; forehand (FH) fades right. Pick per throw next to the disc rack to shape shots around trees and doglegs. Left-handed? Flip it in Settings and everything mirrors.",
+      title: "Stance & angle",
+      caption: "Backhand fades left at the end of the flight; forehand fades right — pick per throw next to the rack. Set the release Angle (Hyzer / Flat / Anny) to tilt the disc out of your hand and shape shots around trees and doglegs. Left-handed? Flip it in Settings and everything mirrors.",
       art: (
         <svg viewBox="0 0 220 130" className={illo}>
           <path d="M110 110 C 104 75, 86 45, 68 28" fill="none" stroke="#36D7B7" strokeWidth="2.5" strokeDasharray="5 4">
@@ -3549,6 +3550,45 @@ function TutorialPanel({ onClose }: { onClose: () => void }) {
           <circle cx="110" cy="110" r="6" fill="#fff" />
           <text x="42" y="20" fill="#36D7B7" fontSize="9">BH fades left</text>
           <text x="128" y="20" fill="#f5d24a" fontSize="9">FH fades right</text>
+        </svg>
+      ),
+    },
+    {
+      title: "Unlock discs & earn coins",
+      caption: "You start with just a putter and a midrange. Earn coins from rounds, the daily reward, practice and weekly events — then unlock new discs for free by leveling up, or buy them straight away in the Shop. Whatever's in your bag works in every mode.",
+      art: (
+        <svg viewBox="0 0 220 130" className={illo}>
+          <circle cx="32" cy="30" r="13" fill="#f5d24a" stroke="#c9a52e" strokeWidth="2" />
+          <text x="32" y="35" textAnchor="middle" fill="#7a5c00" fontSize="13" fontWeight="bold">$</text>
+          <text x="52" y="34" fill="#9aa4b2" fontSize="9">earn coins</text>
+          <text x="20" y="66" fill="#36D7B7" fontSize="9" fontWeight="bold">LEVEL UP</text>
+          <rect x="20" y="72" width="180" height="10" rx="5" fill="#1e2630" />
+          <rect x="20" y="72" height="10" rx="5" fill="#36D7B7">
+            <animate attributeName="width" values="0;180;180" keyTimes="0;0.7;1" dur="2.8s" repeatCount="indefinite" />
+          </rect>
+          <circle cx="30" cy="108" r="9" fill="#444">
+            <animate attributeName="fill" values="#444;#444;#36D7B7" keyTimes="0;0.65;0.8" dur="2.8s" repeatCount="indefinite" />
+          </circle>
+          <text x="46" y="112" fill="#9aa4b2" fontSize="9">new disc unlocked</text>
+        </svg>
+      ),
+    },
+    {
+      title: "Modes & menu",
+      caption: "From the menu: Single Player (Daily Challenge, Courses, Career, Tournament), Online & Compete (challenge friends, the ranked ladder, weekly events, leaderboards), and Practice (putting, targets, single holes). Log in to sync your bag, coins and best scores across devices.",
+      art: (
+        <svg viewBox="0 0 220 130" className={illo}>
+          {([
+            { label: "Single Player", color: "#36D7B7", y: 12 },
+            { label: "Online & Compete", color: "#f5d24a", y: 50 },
+            { label: "Practice", color: "#e08a3b", y: 88 },
+          ] as const).map((c) => (
+            <g key={c.label}>
+              <rect x="22" y={c.y} width="176" height="30" rx="7" fill="#1a1d23" stroke={c.color} strokeWidth="1.5" />
+              <circle cx="40" cy={c.y + 15} r="6" fill={c.color} />
+              <text x="56" y={c.y + 19} fill="#e7ebf0" fontSize="11" fontWeight="bold">{c.label}</text>
+            </g>
+          ))}
         </svg>
       ),
     },
