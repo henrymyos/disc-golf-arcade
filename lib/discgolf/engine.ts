@@ -464,53 +464,50 @@ function releaseSpeedMul(r: Release) {
   return r === "hyzer" ? 0.94 : r === "anny" ? 1.04 : 1;
 }
 
-// Disc bag — power scales throw speed, `fade` is how many radians an overstable
-// flight curves per frame (backhand left, forehand right); `turn`/`sFade` are
-// the climb-turn / descent-fade for a straight flight; friction is glide
-// (higher = floats/rolls farther). Curving is capped per throw (MAX_FADE_TURN)
-// so a disc can never loop or fade backward.
+// Disc physics — power scales throw speed, `fade` is how many radians an
+// overstable flight curves per frame (backhand left, forehand right);
+// `turn`/`sFade` are the climb-turn / descent-fade for a straight flight;
+// friction is glide (higher = floats/rolls farther). Curving is capped per
+// throw (MAX_FADE_TURN) so a disc can never loop or fade backward.
 type Disc = { key: string; name: string; brand?: string; power: number; arc: number; fade: number; turn: number; sFade: number; friction: number; color: string; blurb: string; flight?: FlightPath };
-const DISCS: Disc[] = [
-  // `arc` is the vertical launch per unit power. The putter flies flat so it
-  // stays low and reaches the basket near the ground (high chance to catch);
-  // the driver climbs to sail over hazards.
+// Hidden tier base stats (putter / mid / driver). Not a playable bag of their
+// own — every real disc in ADV_DISCS borrows one of these tiers' physics.
+// `arc` is the vertical launch per unit power: the putter flies flat and low
+// (lands near the ground, easy to catch); the driver climbs to clear hazards.
+const TIER_BASE: Disc[] = [
   { key: "putter", name: "Putter", power: 0.82, arc: 1.2, fade: 0.004, turn: 0.004, sFade: 0.006, friction: 0.975, color: "#36D7B7", blurb: "Flat, controlled" },
   { key: "mid", name: "Mid", power: 1.0, arc: 2.2, fade: 0.008, turn: 0.0, sFade: 0.002, friction: 0.984, color: "#f5d24a", blurb: "Balanced" },
   { key: "driver", name: "Driver", power: 1.34, arc: 2.9, fade: 0.014, turn: 0.011, sFade: 0.015, friction: 0.990, color: "#e23b3b", blurb: "Far, S-flight" },
 ];
 
-// Advanced bag — real discs that fly the simple bag's proven lines. Each disc
-// borrows a simple-bag tier's stats (putter / mid / fairway / driver) plus a
-// baked-in flight shape: "overstable" bends steadily one way, "straight" flies
-// the farther S-line — exactly like the simple bag's toggle, just per-disc.
-// The fairway tier sits halfway between mid and driver for distance.
+// The disc bag — real discs, each borrowing a tier's stats (putter / mid /
+// fairway / driver) plus a baked-in flight shape: "overstable" bends steadily
+// one way, "straight" flies the farther S-line. The fairway tier sits halfway
+// between mid and driver for distance.
 const FAIRWAY_BASE: Disc = { key: "fairway", name: "Fairway", power: 1.17, arc: 2.55, fade: 0.011, turn: 0.0055, sFade: 0.0085, friction: 0.987, color: "", blurb: "" };
 function advDisc(key: string, name: string, brand: string, color: string, base: Disc, flight: FlightPath, nums: string): Disc {
   return { ...base, key, name, brand, color, flight, blurb: `${brand} · ${nums}` };
 }
 const ADV_DISCS: Disc[] = [
   // Putt & approach — straight Aviar vs overstable Zone (putter tier)
-  advDisc("aviar", "Aviar", "Innova", "#36D7B7", DISCS[0], "straight", "2 / 3 / 0 / 1"),
-  advDisc("zone", "Zone", "Discraft", "#e07b3b", DISCS[0], "overstable", "4 / 3 / 0 / 3"),
-  advDisc("harp", "Harp", "Westside", "#d6b85c", DISCS[0], "overstable", "3 / 1 / 0 / 4"),
+  advDisc("aviar", "Aviar", "Innova", "#36D7B7", TIER_BASE[0], "straight", "2 / 3 / 0 / 1"),
+  advDisc("zone", "Zone", "Discraft", "#e07b3b", TIER_BASE[0], "overstable", "4 / 3 / 0 / 3"),
+  advDisc("harp", "Harp", "Westside", "#d6b85c", TIER_BASE[0], "overstable", "3 / 1 / 0 / 4"),
   // Midrange — straight Buzzz vs overstable Swarm (mid tier)
-  advDisc("buzzz", "Buzzz", "Discraft", "#f5d24a", DISCS[1], "straight", "5 / 4 / 0 / 1"),
-  advDisc("swarm", "Swarm", "Discraft", "#b85cd6", DISCS[1], "overstable", "5 / 4 / 0 / 3"),
-  advDisc("roc", "Roc3", "Innova", "#7ad17a", DISCS[1], "overstable", "5 / 4 / 0 / 3"),
+  advDisc("buzzz", "Buzzz", "Discraft", "#f5d24a", TIER_BASE[1], "straight", "5 / 4 / 0 / 1"),
+  advDisc("swarm", "Swarm", "Discraft", "#b85cd6", TIER_BASE[1], "overstable", "5 / 4 / 0 / 3"),
+  advDisc("roc", "Roc3", "Innova", "#7ad17a", TIER_BASE[1], "overstable", "5 / 4 / 0 / 3"),
   // Fairway / control — straight Teebird vs overstable Firebird (fairway tier)
   advDisc("teebird", "Teebird", "Innova", "#5fb0e8", FAIRWAY_BASE, "straight", "7 / 5 / 0 / 2"),
   advDisc("firebird", "Firebird", "Innova", "#e2453b", FAIRWAY_BASE, "overstable", "9 / 3 / 0 / 4"),
   advDisc("river", "River", "Latitude 64", "#5fd6c8", FAIRWAY_BASE, "straight", "7 / 7 / -1 / 1"),
   advDisc("pd", "PD", "Discmania", "#3b6fe2", FAIRWAY_BASE, "overstable", "9 / 4 / 0 / 3"),
   // Distance — overstable Nuke OS vs straight-flying Destroyer (driver tier)
-  advDisc("nukeos", "Nuke OS", "Discraft", "#2f6fe0", DISCS[2], "overstable", "13 / 5 / 0 / 4"),
-  advDisc("destroyer", "Destroyer", "Innova", "#e23b7b", DISCS[2], "straight", "12 / 5 / -1 / 3"),
-  advDisc("wraith", "Wraith", "Innova", "#e2843b", DISCS[2], "straight", "11 / 5 / -1 / 3"),
-  advDisc("zeus", "Zeus", "Discraft", "#9b3be2", DISCS[2], "overstable", "12 / 5 / -1 / 3"),
+  advDisc("nukeos", "Nuke OS", "Discraft", "#2f6fe0", TIER_BASE[2], "overstable", "13 / 5 / 0 / 4"),
+  advDisc("destroyer", "Destroyer", "Innova", "#e23b7b", TIER_BASE[2], "straight", "12 / 5 / -1 / 3"),
+  advDisc("wraith", "Wraith", "Innova", "#e2843b", TIER_BASE[2], "straight", "11 / 5 / -1 / 3"),
+  advDisc("zeus", "Zeus", "Discraft", "#9b3be2", TIER_BASE[2], "overstable", "12 / 5 / -1 / 3"),
 ];
-function activeDiscs(advanced: boolean): Disc[] {
-  return advanced ? ADV_DISCS : DISCS;
-}
 // Some advanced discs are earned, not given: each maps to the achievement that
 // unlocks it. Every player STARTS with just a putter + a midrange — the simple
 // Putter/Mid and the advanced Aviar/Buzzz — and unlocks the rest by leveling up
@@ -525,10 +522,8 @@ const DISC_UNLOCKS: Record<string, { ach: string; label: string } | undefined> =
 };
 // Player level at which each disc unlocks for free (just by playing). Discs not
 // listed here and not priced are core — available from the very first round.
+// A steady climb from the Aviar/Buzzz core up to the distance drivers.
 const DISC_LEVEL: Record<string, number> = {
-  // Simple bag — start with Putter + Mid; the Driver is the first unlock.
-  driver: 2,
-  // Advanced bag — a steady climb from the Aviar/Buzzz core up to distance.
   zone: 2, harp: 3, teebird: 3, swarm: 4, roc: 4,
   firebird: 5, river: 5, pd: 6, wraith: 7, nukeos: 7, destroyer: 8, zeus: 9,
 };
@@ -536,7 +531,6 @@ const DISC_LEVEL: Record<string, number> = {
 // non-core disc is purchasable; achievement discs can also be bought to skip
 // the grind.
 const DISC_PRICE: Record<string, number> = {
-  driver: 200,
   zone: 250, harp: 300, teebird: 350, swarm: 450, roc: 400,
   firebird: 650, river: 550, pd: 800, wraith: 1000, nukeos: 1100, destroyer: 1400, zeus: 1600,
 };
@@ -555,16 +549,15 @@ function isDiscUnlocked(disc: Disc, unlocked: string[], owned: string[] = [], le
 function discUnlockLevel(disc: Disc): number | null {
   return DISC_LEVEL[disc.key] ?? null;
 }
-// Clamp a remembered disc index to one that's both in range for this bag AND
-// usable. Guards the reload case where the advanced bag is on but the saved
-// index lands on a still-locked disc (its default index isn't restored), which
-// would otherwise start a round with a locked disc selected.
-function validDiscIndex(advanced: boolean, idx: number, unlocked: string[], owned: string[] = [], level = 1): number {
-  const bag = activeDiscs(advanced);
+// Clamp a remembered disc index to one that's both in range for the bag AND
+// usable. Guards the reload case where the saved index lands on a still-locked
+// disc, which would otherwise start a round with a locked disc selected.
+const DEFAULT_DISC_INDEX = 3; // Buzzz — the free core midrange
+function validDiscIndex(idx: number, unlocked: string[], owned: string[] = [], level = 1): number {
+  const bag = ADV_DISCS;
   const i = Math.min(Math.max(0, idx | 0), bag.length - 1);
   if (isDiscUnlocked(bag[i], unlocked, owned, level)) return i;
-  const def = advanced ? 3 : 1; // Buzzz / Mid — always usable (core)
-  if (bag[def] && isDiscUnlocked(bag[def], unlocked, owned, level)) return def;
+  if (bag[DEFAULT_DISC_INDEX] && isDiscUnlocked(bag[DEFAULT_DISC_INDEX], unlocked, owned, level)) return DEFAULT_DISC_INDEX;
   const first = bag.findIndex((d) => isDiscUnlocked(d, unlocked, owned, level));
   return first >= 0 ? first : 0;
 }
@@ -1261,17 +1254,16 @@ export {
   scoreLabel,
   STRAIGHT_SPEED_MUL,
   releaseSpeedMul,
-  DISCS,
   FAIRWAY_BASE,
   advDisc,
   ADV_DISCS,
-  activeDiscs,
   DISC_UNLOCKS,
   DISC_PRICE,
   DISC_LEVEL,
   isDiscUnlocked,
   discUnlockLevel,
   validDiscIndex,
+  DEFAULT_DISC_INDEX,
   MAX_FADE_TURN,
   aimAt,
   camXFor,

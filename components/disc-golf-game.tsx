@@ -22,7 +22,7 @@ import {
   weeklyChallenges, roundsThisWeek, challengeDone, eventClaimKey, type EventRound,
 } from "@/lib/discgolf/events";
 import {
-  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, TOTAL_PAR, WINTHROP_HOLES, WINTHROP_PAR, leaderboardCourse, TOURN_KEY, TOURN_NAMES, tournFieldRound, tournLiveStandings, tournStandings, ACHIEVEMENTS, earnedAchievements, scoreLabel, STRAIGHT_SPEED_MUL, releaseSpeedMul, DISCS, ADV_DISCS, activeDiscs, DISC_PRICE, isDiscUnlocked, discUnlockLevel, validDiscIndex, TOUR_COURSES, tourVenue, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, inRect, inHazard, offRibbons, dailySeed, buildRound, elevAt, vibrate, fullPowerRange, lastInBoundsLie, stepFlight,
+  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, TOTAL_PAR, WINTHROP_HOLES, WINTHROP_PAR, leaderboardCourse, TOURN_KEY, TOURN_NAMES, tournFieldRound, tournLiveStandings, tournStandings, ACHIEVEMENTS, earnedAchievements, scoreLabel, STRAIGHT_SPEED_MUL, releaseSpeedMul, ADV_DISCS, DISC_PRICE, isDiscUnlocked, discUnlockLevel, validDiscIndex, DEFAULT_DISC_INDEX, TOUR_COURSES, tourVenue, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, inRect, inHazard, offRibbons, dailySeed, buildRound, elevAt, vibrate, fullPowerRange, lastInBoundsLie, stepFlight,
 } from "@/lib/discgolf/engine";
 import type {
   Vec, Tree, Hole, Mode, Tournament, TournLiveRow, Achievement, FlightPath, Release, Flight, GhostState,
@@ -53,7 +53,7 @@ import {
 const RESUME_KEY = "discgolf.resume.v1";
 const TOURBEST_KEY = "discgolf.tourbests.v1"; // best score per pro-tour venue (by seed)
 const ENTRY_KEY = "discgolf.entry.v1"; // "offline" | "auth" — which front-door choice was made
-type ResumeSnap = { v: 1; mode: Mode; seed: number; scores: number[]; advanced: boolean };
+type ResumeSnap = { v: 1; mode: Mode; seed: number; scores: number[] };
 function holesForMode(mode: Mode): number {
   return mode === "daily" ? 9 : 18;
 }
@@ -101,7 +101,6 @@ type GameState = {
   practiceHole?: number; // 1-based hole number being practiced
   party?: { names: string[]; current: number; scores: (number | null)[][] }; // hot-seat pass-and-play
   online?: boolean; // online Friendly Challenge round (scores synced over Realtime)
-  advanced: boolean; // advanced bag (real discs) vs simple (putter/mid/driver)
   career?: { eventId: string; eventName: string; venue?: string; character?: string; emoji?: string }; // round is a played Career event
   mini?: { kind: "putt" | "target"; station: number; makes: number; best: number; points: number; attempts: number; total: number; lastPts?: number }; // practice mini-game
   skill: SkillMods; // Career skill effects on flight (identity for normal play)
@@ -215,9 +214,8 @@ export function DiscGolfGame() {
   // effect, never during render.
   const [screen, setScreen] = useState<Screen>("landing");
   const [muted, setMuted] = useState(false);
-  const [discIndex, setDiscIndex] = useState(1); // Mid by default
+  const [discIndex, setDiscIndex] = useState(DEFAULT_DISC_INDEX); // Buzzz (core mid) by default
   const [throwStyle, setThrowStyle] = useState<"BH" | "FH">("BH");
-  const [flightPath, setFlightPath] = useState<FlightPath>("overstable");
   const [hud, setHud] = useState<{ hole: number; par: number; throws: number; holes: number; player?: string }>({ hole: 1, par: 3, throws: 0, holes: 18 });
 
   // An interrupted solo round to offer "Resume" on the title screen.
@@ -333,11 +331,6 @@ export function DiscGolfGame() {
     throwStyleRef.current = throwStyle;
   }, [throwStyle]);
 
-  const flightPathRef = useRef<FlightPath>("overstable");
-  useEffect(() => {
-    flightPathRef.current = flightPath;
-  }, [flightPath]);
-
   const [release, setRelease] = useState<Release>("flat");
   const releaseRef = useRef<Release>("flat");
   useEffect(() => {
@@ -354,9 +347,6 @@ export function DiscGolfGame() {
   useEffect(() => { showGhostRef.current = showGhost; }, [showGhost]);
   const leftHandedRef = useRef(false);
   useEffect(() => { leftHandedRef.current = leftHanded; }, [leftHanded]);
-  const [advanced, setAdvanced] = useState(false);
-  const advancedRef = useRef(false);
-  useEffect(() => { advancedRef.current = advanced; }, [advanced]);
   const modeRef = useRef<Mode>("course");
 
   // Best-per-hole, achievements, round history (all persisted).
@@ -456,12 +446,10 @@ export function DiscGolfGame() {
 
       const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
       if (s.throwStyle === "BH" || s.throwStyle === "FH") setThrowStyle(s.throwStyle);
-      if (s.flightPath === "overstable" || s.flightPath === "straight") setFlightPath(s.flightPath);
       if (s.release === "hyzer" || s.release === "flat" || s.release === "anny") setRelease(s.release);
       if (typeof s.musicVolume === "number") setMusicVolume(s.musicVolume);
       if (typeof s.leftHanded === "boolean") setLeftHanded(s.leftHanded);
       if (typeof s.showGhost === "boolean") setShowGhost(s.showGhost);
-      if (typeof s.advanced === "boolean") setAdvanced(s.advanced);
       if (typeof s.muted === "boolean") setMuted(s.muted);
 
       const hb = JSON.parse(localStorage.getItem(HOLEBEST_KEY) || "null");
@@ -503,7 +491,7 @@ export function DiscGolfGame() {
     if (g.practice || g.party || g.online || g.career || tournamentPlayRef.current || challengePlayRef.current || careerPlayRef.current) return;
     const scores = g.scores.slice(0, g.holeIndex + 1).map((n) => n ?? 0);
     try {
-      localStorage.setItem(RESUME_KEY, JSON.stringify({ v: 1, mode: g.mode, seed: g.seed, scores, advanced: g.advanced }));
+      localStorage.setItem(RESUME_KEY, JSON.stringify({ v: 1, mode: g.mode, seed: g.seed, scores }));
     } catch { /* ignore */ }
   }, []);
   const clearResume = useCallback(() => {
@@ -620,10 +608,10 @@ export function DiscGolfGame() {
   useEffect(() => {
     audioRef.current?.setMusicVolume(musicVolume);
     try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ throwStyle, flightPath, release, musicVolume, leftHanded, advanced, showGhost, muted }));
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ throwStyle, release, musicVolume, leftHanded, showGhost, muted }));
     } catch { /* ignore */ }
     saveProgress();
-  }, [throwStyle, flightPath, release, musicVolume, leftHanded, advanced, showGhost, muted, saveProgress]);
+  }, [throwStyle, release, musicVolume, leftHanded, showGhost, muted, saveProgress]);
 
   // Sync the career save to the cloud whenever it changes (debounced; no-op
   // when signed out). localStorage is already written by saveCareer.
@@ -654,13 +642,12 @@ export function DiscGolfGame() {
     careerPlayRef.current = false;
     const seed = seedOverride ?? (m === "daily" ? dailySeed() : m === "ranked" ? weekSeed(Date.now()) : (Math.random() * 1e9) | 0);
     const roundHoles = buildRound(seed, m);
-    const adv = advancedRef.current;
-    const discIndex = validDiscIndex(adv, discIndexRef.current, unlockedRef.current, ownedRef.current, levelRef.current);
+    const discIndex = validDiscIndex(discIndexRef.current, unlockedRef.current, ownedRef.current, levelRef.current);
     discIndexRef.current = discIndex;
     setDiscIndex(discIndex);
     stateRef.current = {
       holeIndex: 0, scores: [], discIndex, roundPaths: [],
-      mode: m, advanced: adv, skill: IDENTITY_MODS, seed, roundHoles, ...freshHole(roundHoles[0]),
+      mode: m, skill: IDENTITY_MODS, seed, roundHoles, ...freshHole(roundHoles[0]),
     };
     // Load this course's best-round ghost (drawn as faint gold lines).
     try {
@@ -707,13 +694,12 @@ export function DiscGolfGame() {
     const roundHoles = buildRound(seed, ev.mode);
     // The field reacts to this course's wind/slope/hazards (card + live board).
     careerFieldRef.current = careerFieldForRound(c, ev, roundHoles);
-    const adv = advancedRef.current;
-    const discIndex = validDiscIndex(adv, discIndexRef.current, unlockedRef.current, ownedRef.current, levelRef.current);
+    const discIndex = validDiscIndex(discIndexRef.current, unlockedRef.current, ownedRef.current, levelRef.current);
     discIndexRef.current = discIndex;
     setDiscIndex(discIndex);
     stateRef.current = {
       holeIndex: 0, scores: [], discIndex, roundPaths: [],
-      mode: ev.mode, advanced: adv, skill: skillMods(c.skills),
+      mode: ev.mode, skill: skillMods(c.skills),
       career: { eventId: ev.id, eventName: ev.name, venue: ev.venue, character: ev.character, emoji: ev.emoji },
       seed, roundHoles, ...freshHole(roundHoles[0]),
     };
@@ -770,13 +756,12 @@ export function DiscGolfGame() {
     tournamentPlayRef.current = false;
     const roundHoles = buildRound(snap.seed, snap.mode);
     const holeIndex = Math.min(snap.scores.length, roundHoles.length - 1);
-    const adv = snap.advanced;
-    const discIndex = validDiscIndex(adv, discIndexRef.current, unlockedRef.current, ownedRef.current, levelRef.current);
+    const discIndex = validDiscIndex(discIndexRef.current, unlockedRef.current, ownedRef.current, levelRef.current);
     discIndexRef.current = discIndex;
     setDiscIndex(discIndex);
     stateRef.current = {
       holeIndex, scores: snap.scores.slice(), discIndex, roundPaths: [],
-      mode: snap.mode, advanced: adv, skill: IDENTITY_MODS, seed: snap.seed, roundHoles, ...freshHole(roundHoles[holeIndex]),
+      mode: snap.mode, skill: IDENTITY_MODS, seed: snap.seed, roundHoles, ...freshHole(roundHoles[holeIndex]),
     };
     try {
       ghostRef.current = snap.mode === "course" || snap.mode === "winthrop" ? JSON.parse(localStorage.getItem(`discgolf.ghost.${snap.mode}`) || "null") : null;
@@ -807,13 +792,12 @@ export function DiscGolfGame() {
     challengePlayRef.current = false;
     const seed = (Math.random() * 1e9) | 0;
     const roundHoles = [buildRound(seed, m)[holeIdx]];
-    const adv = advancedRef.current;
-    const discIndex = validDiscIndex(adv, discIndexRef.current, unlockedRef.current, ownedRef.current, levelRef.current);
+    const discIndex = validDiscIndex(discIndexRef.current, unlockedRef.current, ownedRef.current, levelRef.current);
     discIndexRef.current = discIndex;
     setDiscIndex(discIndex);
     stateRef.current = {
       holeIndex: 0, scores: [], discIndex, roundPaths: [],
-      mode: m, advanced: adv, skill: IDENTITY_MODS, seed, roundHoles, practice: true, practiceHole: holeIdx + 1, ...freshHole(roundHoles[0]),
+      mode: m, skill: IDENTITY_MODS, seed, roundHoles, practice: true, practiceHole: holeIdx + 1, ...freshHole(roundHoles[0]),
     };
     ghostRef.current = null;
     setSaved(false);
@@ -841,7 +825,7 @@ export function DiscGolfGame() {
     const hole = kind === "putt" ? puttHole(0) : targetHole(0);
     stateRef.current = {
       holeIndex: 0, scores: [], discIndex: 0, roundPaths: [],
-      mode: "course", advanced: false, skill: IDENTITY_MODS, seed: 0, roundHoles: [hole], practice: true,
+      mode: "course", skill: IDENTITY_MODS, seed: 0, roundHoles: [hole], practice: true,
       mini: { kind, station: 0, makes: 0, best: 0, points: 0, attempts: 0, total: 10 },
       ...freshHole(hole),
     };
@@ -870,13 +854,12 @@ export function DiscGolfGame() {
     tournamentPlayRef.current = false;
     const seed = m === "daily" ? dailySeed() : (Math.random() * 1e9) | 0;
     const roundHoles = buildRound(seed, m);
-    const adv = advancedRef.current;
-    const discIndex = validDiscIndex(adv, discIndexRef.current, unlockedRef.current, ownedRef.current, levelRef.current);
+    const discIndex = validDiscIndex(discIndexRef.current, unlockedRef.current, ownedRef.current, levelRef.current);
     discIndexRef.current = discIndex;
     setDiscIndex(discIndex);
     stateRef.current = {
       holeIndex: 0, scores: [], discIndex, roundPaths: [],
-      mode: m, advanced: adv, skill: IDENTITY_MODS, seed, roundHoles, practice: true,
+      mode: m, skill: IDENTITY_MODS, seed, roundHoles, practice: true,
       party: { names, current: 0, scores: names.map(() => Array(roundHoles.length).fill(null)) },
       ...freshHole(roundHoles[0]),
     };
@@ -915,15 +898,14 @@ export function DiscGolfGame() {
     challengePlayRef.current = false;
     tournamentPlayRef.current = false;
     const roundHoles = buildRound(seed, m);
-    const adv = advancedRef.current;
-    const discIndex = validDiscIndex(adv, discIndexRef.current, unlockedRef.current, ownedRef.current, levelRef.current);
+    const discIndex = validDiscIndex(discIndexRef.current, unlockedRef.current, ownedRef.current, levelRef.current);
     discIndexRef.current = discIndex;
     setDiscIndex(discIndex);
     onlineScoresRef.current = { [o.myId]: { name: o.myName, scores: [], total: 0, thru: 0 } };
     setOnlineScores(onlineScoresRef.current);
     stateRef.current = {
       holeIndex: 0, scores: [], discIndex, roundPaths: [],
-      mode: m, advanced: adv, skill: IDENTITY_MODS, seed, roundHoles, online: true,
+      mode: m, skill: IDENTITY_MODS, seed, roundHoles, online: true,
       ...freshHole(roundHoles[0]),
     };
     ghostRef.current = null;
@@ -1014,29 +996,19 @@ export function DiscGolfGame() {
 
   const selectDisc = useCallback((i: number) => {
     // Locked discs (level/price-gated) can't be selected until unlocked.
-    const bag = advancedRef.current ? ADV_DISCS : DISCS;
-    if (bag[i] && !isDiscUnlocked(bag[i], unlockedRef.current, ownedRef.current, levelRef.current)) { setShopOpen(true); return; }
+    if (ADV_DISCS[i] && !isDiscUnlocked(ADV_DISCS[i], unlockedRef.current, ownedRef.current, levelRef.current)) { setShopOpen(true); return; }
     setDiscIndex(i);
     if (stateRef.current) stateRef.current.discIndex = i;
     rangeFlashRef.current = performance.now(); // emphasize the reach line briefly
   }, []);
 
-  // Toggling the advanced bag resets to a sensible default disc (the bags don't
-  // line up index-for-index).
-  const handleSetAdvanced = useCallback((v: boolean) => {
-    setAdvanced(v);
-    const def = validDiscIndex(v, v ? 3 : 1, unlockedRef.current, ownedRef.current, levelRef.current); // Buzzz / Mid (core)
-    setDiscIndex(def);
-    if (stateRef.current) stateRef.current.discIndex = def;
-  }, []);
-
   const throwDisc = useCallback(() => {
     const g = stateRef.current;
     if (!g || g.phase !== "aim") return;
-    const disc = activeDiscs(g.advanced)[g.discIndex];
-    // Advanced discs fly their baked-in shape (e.g. Nuke OS overstable,
-    // Destroyer straight); simple mode uses the overstable/straight toggle.
-    g.path = g.advanced ? disc.flight ?? "straight" : flightPathRef.current;
+    const disc = ADV_DISCS[g.discIndex];
+    // Each disc flies its baked-in shape (e.g. Nuke OS overstable, Destroyer
+    // straight).
+    g.path = disc.flight ?? "straight";
     g.release = releaseRef.current;
     // Slower launch + extra glide (disc friction) so it floats across the
     // fairway. Straight throws carry farther; the hole's slope acts on the
@@ -1262,7 +1234,7 @@ export function DiscGolfGame() {
       holeIndex: 0,
       scores: [],
       roundPaths: [],
-      discIndex: validDiscIndex(g.advanced, discIndexRef.current, unlockedRef.current, ownedRef.current, levelRef.current),
+      discIndex: validDiscIndex(discIndexRef.current, unlockedRef.current, ownedRef.current, levelRef.current),
       party: g.party ? { names: g.party.names, current: 0, scores: g.party.names.map(() => Array(g.roundHoles.length).fill(null)) } : undefined,
       ...freshHole(g.roundHoles[0]),
     };
@@ -1445,7 +1417,7 @@ export function DiscGolfGame() {
       keysRef.current.add(e.key);
       if (e.key >= "1" && e.key <= "9") {
         const n = Number(e.key) - 1;
-        if (n < activeDiscs(advancedRef.current).length) selectDisc(n);
+        if (n < ADV_DISCS.length) selectDisc(n);
       }
       if (e.key === "b" || e.key === "B") setThrowStyle("BH");
       if (e.key === "f" || e.key === "F") setThrowStyle("FH");
@@ -1547,7 +1519,7 @@ export function DiscGolfGame() {
         // Aim + power are driven by the pointer drag handlers; nothing to do here.
       } else if (g.phase === "fly") {
         const d = g.disc;
-        const disc = activeDiscs(g.advanced)[g.discIndex];
+        const disc = ADV_DISCS[g.discIndex];
         const f: Flight = { x: d.x, y: d.y, vx: d.vx, vy: d.vy, h: g.h, vh: g.vh, fadeTurn: g.fadeTurn };
         const res = stepFlight(f, disc, g.fadeSign, g.path, hole, g.release, { catchR: g.skill.catchR, windMul: g.skill.windMul });
         d.x = f.x;
@@ -2002,10 +1974,10 @@ export function DiscGolfGame() {
       // plus a visible pull-back slider/knob on the disc.
       if (g.phase === "aim") {
         const dr = dragRef.current;
-        const aimDisc = activeDiscs(g.advanced)[g.discIndex];
+        const aimDisc = ADV_DISCS[g.discIndex];
         const lh2 = leftHandedRef.current ? -1 : 1;
         const sign = (throwStyleRef.current === "BH" ? -1 : 1) * lh2;
-        const path: FlightPath = g.advanced ? aimDisc.flight ?? "straight" : flightPathRef.current;
+        const path: FlightPath = aimDisc.flight ?? "straight";
         const dsx = g.disc.x;
         const dsy = g.disc.y - cam; // disc screen position
 
@@ -2145,7 +2117,7 @@ export function DiscGolfGame() {
       }
 
       // Shadow on the ground + disc lifted by its height.
-      const disc = activeDiscs(g.advanced)[g.discIndex];
+      const disc = ADV_DISCS[g.discIndex];
       const dscreenY = g.disc.y - cam;
       const shadowR = Math.max(1.5, DISC_R - g.h * 0.03);
       ctx.fillStyle = "rgba(0,0,0,0.28)";
@@ -3027,11 +2999,9 @@ export function DiscGolfGame() {
           <SettingsPanel
             onClose={() => setSettingsOpen(false)}
             throwStyle={throwStyle} setThrowStyle={setThrowStyle}
-            flightPath={flightPath} setFlightPath={setFlightPath}
             musicVolume={musicVolume} setMusicVolume={setMusicVolume}
             leftHanded={leftHanded} setLeftHanded={setLeftHanded}
             showGhost={showGhost} setShowGhost={setShowGhost}
-            advanced={advanced} setAdvanced={handleSetAdvanced}
             unlocked={unlocked}
           />
         )}
@@ -3077,89 +3047,38 @@ export function DiscGolfGame() {
               <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-gray-500">Disc</span>
               <span className="flex items-center gap-2 ml-2 min-w-0">
                 <span className="text-[10px] text-gray-400 font-medium truncate">
-                  {advanced ? `${ADV_DISCS[discIndex]?.brand ?? ""} ${ADV_DISCS[discIndex]?.name ?? ""}` : "Drag back from the disc to throw"}
+                  {`${ADV_DISCS[discIndex]?.brand ?? ""} ${ADV_DISCS[discIndex]?.name ?? ""}`}
                 </span>
                 <button type="button" onClick={() => setShopOpen(true)} className="shrink-0 text-[10px] font-bold text-[#f5d24a] hover:brightness-110">🛒 Shop</button>
               </span>
             </div>
-            {advanced ? (
-              <div className="flex gap-2 overflow-x-auto pb-0.5 -mx-1 px-1" style={{ scrollbarWidth: "thin" }}>
-                {ADV_DISCS.map((d, i) => {
-                  const locked = !isDiscUnlocked(d, unlocked, owned, playerLevel);
-                  const price = DISC_PRICE[d.key];
-                  const lvl = discUnlockLevel(d);
-                  return (
-                  <button
-                    key={d.key}
-                    type="button"
-                    onClick={() => (locked ? setShopOpen(true) : selectDisc(i))}
-                    className={`shrink-0 w-[90px] rounded-lg border px-2 py-1.5 text-left transition ${
-                      locked ? "border-[#f5d24a]/25 bg-white/[0.02] opacity-70 hover:opacity-100"
-                        : i === discIndex ? "border-[#36D7B7]/70 bg-[#36D7B7]/10" : "border-white/10 hover:border-white/25 bg-white/[0.02]"
-                    }`}
-                  >
-                    <span className="flex items-center gap-1.5">
-                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: locked ? "#444" : d.color }} />
-                      <span className={`text-xs font-bold truncate ${i === discIndex && !locked ? "text-white" : "text-gray-300"}`}>
-                        {locked ? "🔒 " : ""}{d.name}
-                      </span>
-                    </span>
-                    <span className="block text-[9px] text-gray-500 mt-0.5">{locked ? (price != null ? `${price} 🪙` : d.brand) : d.brand}</span>
-                    <span className="block text-[9px] font-mono text-gray-400 leading-tight">{locked ? (lvl != null ? `Lv ${lvl} or buy` : "tap to buy") : d.blurb.split("· ")[1]}</span>
-                  </button>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="grid grid-cols-3 gap-2">
-                {DISCS.map((d, i) => {
-                  const locked = !isDiscUnlocked(d, unlocked, owned, playerLevel);
-                  const price = DISC_PRICE[d.key];
-                  const lvl = discUnlockLevel(d);
-                  return (
-                  <button
-                    key={d.key}
-                    type="button"
-                    onClick={() => (locked ? setShopOpen(true) : selectDisc(i))}
-                    title={locked ? `${d.name} — ${lvl != null ? `reach Lv ${lvl}` : "locked"}${price != null ? ` or buy for ${price} coins` : ""}` : d.blurb}
-                    className={`rounded-lg border px-2 py-2 flex items-center gap-1.5 text-xs font-bold transition ${
-                      locked ? "border-[#f5d24a]/25 text-gray-400 opacity-80 hover:opacity-100 bg-white/[0.02]"
-                        : i === discIndex ? "border-[#36D7B7]/70 bg-[#36D7B7]/10 text-white" : "border-white/10 text-gray-300 hover:border-white/25 bg-white/[0.02]"
-                    }`}
-                  >
+            <div className="flex gap-2 overflow-x-auto pb-0.5 -mx-1 px-1" style={{ scrollbarWidth: "thin" }}>
+              {ADV_DISCS.map((d, i) => {
+                const locked = !isDiscUnlocked(d, unlocked, owned, playerLevel);
+                const price = DISC_PRICE[d.key];
+                const lvl = discUnlockLevel(d);
+                return (
+                <button
+                  key={d.key}
+                  type="button"
+                  onClick={() => (locked ? setShopOpen(true) : selectDisc(i))}
+                  className={`shrink-0 w-[90px] rounded-lg border px-2 py-1.5 text-left transition ${
+                    locked ? "border-[#f5d24a]/25 bg-white/[0.02] opacity-70 hover:opacity-100"
+                      : i === discIndex ? "border-[#36D7B7]/70 bg-[#36D7B7]/10" : "border-white/10 hover:border-white/25 bg-white/[0.02]"
+                  }`}
+                >
+                  <span className="flex items-center gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: locked ? "#444" : d.color }} />
-                    <span className="truncate">{locked ? "🔒 " : ""}{d.name}</span>
-                    <span className="ml-auto text-[10px] text-gray-600">{locked && price != null ? `${price}🪙` : i + 1}</span>
-                  </button>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Flight (simple mode only) */}
-            {!advanced && (
-              <div className="flex items-center gap-2">
-                <span className="w-12 shrink-0 text-[10px] font-bold uppercase tracking-[0.1em] text-gray-500">Flight</span>
-                <div className="flex-1 flex gap-1 bg-[#0f1117] border border-white/10 rounded-lg p-1">
-                  {([
-                    { key: "overstable", label: "Overstable" },
-                    { key: "straight", label: "Straight" },
-                  ] as const).map((p) => (
-                    <button
-                      key={p.key}
-                      type="button"
-                      onClick={() => setFlightPath(p.key)}
-                      aria-pressed={flightPath === p.key}
-                      className={`flex-1 rounded-md px-2 py-1.5 text-xs font-bold transition ${
-                        flightPath === p.key ? "bg-[#36D7B7] text-[#0f1117] shadow" : "text-gray-400 hover:text-white"
-                      }`}
-                    >
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+                    <span className={`text-xs font-bold truncate ${i === discIndex && !locked ? "text-white" : "text-gray-300"}`}>
+                      {locked ? "🔒 " : ""}{d.name}
+                    </span>
+                  </span>
+                  <span className="block text-[9px] text-gray-500 mt-0.5">{locked ? (price != null ? `${price} 🪙` : d.brand) : d.brand}</span>
+                  <span className="block text-[9px] font-mono text-gray-400 leading-tight">{locked ? (lvl != null ? `Lv ${lvl} or buy` : "tap to buy") : d.blurb.split("· ")[1]}</span>
+                </button>
+                );
+              })}
+            </div>
 
             {/* Release angle */}
             <div className="flex items-center gap-2">
@@ -4299,7 +4218,7 @@ function ShopPanel({ coins, unlocked, owned, level, onBuy, onClose }: {
   onClose: () => void;
 }) {
   // Every priced disc across both bags, cheapest first.
-  const items = [...DISCS, ...ADV_DISCS].filter((d) => DISC_PRICE[d.key] != null).sort((a, b) => DISC_PRICE[a.key] - DISC_PRICE[b.key]);
+  const items = ADV_DISCS.filter((d) => DISC_PRICE[d.key] != null).sort((a, b) => DISC_PRICE[a.key] - DISC_PRICE[b.key]);
   return (
     <div className="absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm p-4 flex items-start justify-center rounded-lg">
       <div className="w-full max-w-xs space-y-2.5 my-auto text-left">
@@ -4767,19 +4686,15 @@ function SettingsPanel(props: {
   onClose: () => void;
   throwStyle: "BH" | "FH";
   setThrowStyle: (s: "BH" | "FH") => void;
-  flightPath: FlightPath;
-  setFlightPath: (p: FlightPath) => void;
   musicVolume: number;
   setMusicVolume: (v: number) => void;
   leftHanded: boolean;
   setLeftHanded: (b: boolean) => void;
   showGhost: boolean;
   setShowGhost: (b: boolean) => void;
-  advanced: boolean;
-  setAdvanced: (b: boolean) => void;
   unlocked: string[];
 }) {
-  const { onClose, throwStyle, setThrowStyle, flightPath, setFlightPath, musicVolume, setMusicVolume, leftHanded, setLeftHanded, showGhost, setShowGhost, advanced, setAdvanced, unlocked } = props;
+  const { onClose, throwStyle, setThrowStyle, musicVolume, setMusicVolume, leftHanded, setLeftHanded, showGhost, setShowGhost, unlocked } = props;
   const seg = (active: boolean) =>
     `flex-1 rounded-md px-2 py-2 text-xs font-bold transition ${active ? "bg-[#4B3DFF] text-white" : "text-gray-400 hover:text-white"}`;
   return (
@@ -4797,30 +4712,6 @@ function SettingsPanel(props: {
             <button type="button" onClick={() => setThrowStyle("FH")} className={seg(throwStyle === "FH")}>Forehand</button>
           </div>
         </div>
-
-        {!advanced && (
-          <div>
-            <p className="text-gray-400 text-xs font-semibold mb-1">Default flight</p>
-            <div className="flex gap-1 bg-[#1a1d23] border border-white/10 rounded-lg p-1">
-              <button type="button" onClick={() => setFlightPath("overstable")} className={seg(flightPath === "overstable")}>Overstable</button>
-              <button type="button" onClick={() => setFlightPath("straight")} className={seg(flightPath === "straight")}>Straight</button>
-            </div>
-          </div>
-        )}
-
-        <button
-          type="button"
-          onClick={() => setAdvanced(!advanced)}
-          className="w-full flex items-center justify-between bg-[#1a1d23] border border-white/10 rounded-lg px-3 py-2.5"
-        >
-          <span className="text-left">
-            <span className="block text-white text-sm font-semibold">Advanced discs</span>
-            <span className="block text-gray-500 text-[11px]">Throw real Innova / Discraft discs by their flight numbers</span>
-          </span>
-          <span className={`shrink-0 text-xs font-bold px-2 py-0.5 rounded ${advanced ? "bg-[#36D7B7] text-[#0f1117]" : "bg-white/10 text-gray-400"}`}>
-            {advanced ? "ON" : "OFF"}
-          </span>
-        </button>
 
         <button
           type="button"

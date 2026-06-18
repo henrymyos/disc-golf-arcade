@@ -11,7 +11,6 @@ import {
   inRect,
   distToSeg,
   fullPowerRange,
-  DISCS,
   ADV_DISCS,
   validDiscIndex,
   isDiscUnlocked,
@@ -176,15 +175,16 @@ describe("geometry", () => {
 });
 
 describe("fullPowerRange", () => {
+  const disc = (key: string) => ADV_DISCS.find((d) => d.key === key)!;
   it("a driver carries farther than a putter", () => {
-    const putter = fullPowerRange(DISCS[0], 0);
-    const driver = fullPowerRange(DISCS[2], 0);
+    const putter = fullPowerRange(disc("aviar"), 0);
+    const driver = fullPowerRange(disc("destroyer"), 0);
     expect(driver).toBeGreaterThan(putter);
   });
   it("uphill shortens carry, downhill lengthens it", () => {
-    const flat = fullPowerRange(DISCS[2], 0);
-    const uphill = fullPowerRange(DISCS[2], 2);
-    const downhill = fullPowerRange(DISCS[2], -2);
+    const flat = fullPowerRange(disc("destroyer"), 0);
+    const uphill = fullPowerRange(disc("destroyer"), 2);
+    const downhill = fullPowerRange(disc("destroyer"), -2);
     expect(uphill).toBeLessThan(flat);
     expect(downhill).toBeGreaterThan(flat);
   });
@@ -197,28 +197,27 @@ describe("disc unlocks", () => {
     expect(isDiscUnlocked(zone, [])).toBe(false);
     expect(isDiscUnlocked(zone, ["birdie"])).toBe(true);
   });
-  it("validDiscIndex avoids a locked disc on the advanced bag", () => {
-    // index 1 (Zone) is locked with no achievements -> falls back to an unlocked disc
-    const idx = validDiscIndex(true, 1, []);
+  it("validDiscIndex avoids a locked disc, falling back to an unlocked one", () => {
+    // index 1 (Zone) is locked with no achievements -> falls back to a usable disc
+    const idx = validDiscIndex(1, []);
     expect(isDiscUnlocked(ADV_DISCS[idx], [])).toBe(true);
   });
-  it("validDiscIndex clamps out-of-range indices", () => {
-    expect(validDiscIndex(false, 99, [])).toBeLessThan(DISCS.length);
-    expect(validDiscIndex(false, -5, [])).toBeGreaterThanOrEqual(0);
+  it("validDiscIndex clamps out-of-range indices into the bag", () => {
+    expect(validDiscIndex(99, [])).toBeLessThan(ADV_DISCS.length);
+    expect(validDiscIndex(-5, [])).toBeGreaterThanOrEqual(0);
   });
   it("a purchased (owned) disc counts as unlocked even with no achievements", () => {
     const zone = ADV_DISCS.find((d) => d.key === "zone")!;
     expect(isDiscUnlocked(zone, [], [])).toBe(false);
     expect(isDiscUnlocked(zone, [], ["zone"])).toBe(true);
-    // owning it keeps the selected index valid on the advanced bag
+    // owning it keeps the selected index valid
     const idx = ADV_DISCS.indexOf(zone);
-    expect(validDiscIndex(true, idx, [], ["zone"])).toBe(idx);
+    expect(validDiscIndex(idx, [], ["zone"])).toBe(idx);
   });
-  it("every priced disc is a real disc (either bag) that is gated by default", () => {
-    const all = [...DISCS, ...ADV_DISCS];
+  it("every priced disc is a real disc that is gated by default", () => {
     for (const key of Object.keys(DISC_PRICE)) {
-      const d = all.find((x) => x.key === key)!;
-      expect(d, `priced disc ${key} exists in a bag`).toBeTruthy();
+      const d = ADV_DISCS.find((x) => x.key === key)!;
+      expect(d, `priced disc ${key} exists`).toBeTruthy();
       expect(DISC_PRICE[key]).toBeGreaterThan(0);
       expect(isDiscUnlocked(d, [], [], 1)).toBe(false); // not free at level 1
     }
@@ -226,24 +225,23 @@ describe("disc unlocks", () => {
 });
 
 describe("starting bag + level unlocks", () => {
-  it("a new player (level 1) starts with only a putter + a midrange in each bag", () => {
-    const free = (bag: typeof DISCS) => bag.filter((d) => isDiscUnlocked(d, [], [], 1)).map((d) => d.key);
-    expect(free(DISCS).sort()).toEqual(["mid", "putter"]); // driver is gated
-    expect(free(ADV_DISCS).sort()).toEqual(["aviar", "buzzz"]); // putter + mid molds
+  it("a new player (level 1) starts with only a putter + a midrange", () => {
+    const free = ADV_DISCS.filter((d) => isDiscUnlocked(d, [], [], 1)).map((d) => d.key);
+    expect(free.sort()).toEqual(["aviar", "buzzz"]); // putter (Aviar) + mid (Buzzz)
   });
   it("leveling up frees a disc without spending coins", () => {
-    const driver = DISCS.find((d) => d.key === "driver")!;
-    expect(discUnlockLevel(driver)).toBe(DISC_LEVEL.driver);
-    expect(isDiscUnlocked(driver, [], [], 1)).toBe(false);
-    expect(isDiscUnlocked(driver, [], [], DISC_LEVEL.driver)).toBe(true);
+    const teebird = ADV_DISCS.find((d) => d.key === "teebird")!;
+    expect(discUnlockLevel(teebird)).toBe(DISC_LEVEL.teebird);
+    expect(isDiscUnlocked(teebird, [], [], 1)).toBe(false);
+    expect(isDiscUnlocked(teebird, [], [], DISC_LEVEL.teebird)).toBe(true);
   });
   it("buying a disc unlocks it even below its level", () => {
-    const driver = DISCS.find((d) => d.key === "driver")!;
-    expect(isDiscUnlocked(driver, [], ["driver"], 1)).toBe(true);
+    const teebird = ADV_DISCS.find((d) => d.key === "teebird")!;
+    expect(isDiscUnlocked(teebird, [], ["teebird"], 1)).toBe(true);
   });
-  it("validDiscIndex falls back to a core disc (Buzzz) on the advanced bag at level 1", () => {
+  it("validDiscIndex falls back to the core Buzzz when the saved disc is locked", () => {
     const teebird = ADV_DISCS.findIndex((d) => d.key === "teebird");
-    const idx = validDiscIndex(true, teebird, [], [], 1); // Teebird now gated
+    const idx = validDiscIndex(teebird, [], [], 1); // Teebird is gated at level 1
     expect(ADV_DISCS[idx].key).toBe("buzzz");
   });
 });
