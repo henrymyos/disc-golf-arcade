@@ -22,7 +22,7 @@ import {
   weeklyChallenges, roundsThisWeek, challengeDone, eventClaimKey, type EventRound,
 } from "@/lib/discgolf/events";
 import {
-  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, TOTAL_PAR, WINTHROP_HOLES, WINTHROP_PAR, leaderboardCourse, TOURN_KEY, TOURN_NAMES, tournFieldRound, tournLiveStandings, tournStandings, ACHIEVEMENTS, earnedAchievements, scoreLabel, STRAIGHT_SPEED_MUL, releaseSpeedMul, ADV_DISCS, DISC_PRICE, isDiscUnlocked, discUnlockLevel, validDiscIndex, DEFAULT_DISC_INDEX, TOUR_COURSES, tourVenue, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, inRect, inHazard, offRibbons, dailySeed, buildRound, elevAt, vibrate, fullPowerRange, lastInBoundsLie, stepFlight,
+  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, TOTAL_PAR, WINTHROP_HOLES, WINTHROP_PAR, leaderboardCourse, TOURN_KEY, TOURN_NAMES, tournFieldRound, tournLiveStandings, tournStandings, ACHIEVEMENTS, earnedAchievements, scoreLabel, courseStars, STRAIGHT_SPEED_MUL, releaseSpeedMul, ADV_DISCS, DISC_PRICE, isDiscUnlocked, discUnlockLevel, validDiscIndex, DEFAULT_DISC_INDEX, TOUR_COURSES, tourVenue, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, inRect, inHazard, offRibbons, dailySeed, buildRound, elevAt, vibrate, fullPowerRange, lastInBoundsLie, stepFlight,
 } from "@/lib/discgolf/engine";
 import type {
   Vec, Tree, Hole, Mode, Tournament, TournLiveRow, Achievement, FlightPath, Release, Flight, GhostState,
@@ -4365,34 +4365,54 @@ function CoursesPanel({ courses, tourCourses, bests, tourBests, onClose, onPlay 
   onClose: () => void;
   onPlay: (m: Mode, seed?: number) => void;
 }) {
+  const [tab, setTab] = useState<"championship" | "tour">("championship");
   const over = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
-  const card = (c: CourseInfo, best: number | null | undefined) => (
-    <div key={c.seed != null ? `tour-${c.seed}` : c.mode} className="rounded-xl bg-[#1a1d23] border border-white/10 p-3">
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="text-white font-bold text-sm truncate">{c.name}</span>
-        <span className="text-gray-500 text-[10px] shrink-0">{c.holes} holes · par {c.par}</span>
+  const seg = (active: boolean) =>
+    `flex-1 rounded-md px-2 py-2 text-xs font-bold transition ${active ? "bg-[#4B3DFF] text-white" : "text-gray-400 hover:text-white"}`;
+  const bestFor = (c: CourseInfo) => (c.seed != null ? tourBests[c.seed] ?? null : bests[c.mode] ?? null);
+  const list = tab === "championship" ? courses : tourCourses;
+  const card = (c: CourseInfo) => {
+    const best = bestFor(c);
+    const stars = courseStars(best, c.par);
+    return (
+      <div key={c.seed != null ? `tour-${c.seed}` : c.mode} className="rounded-xl bg-[#1a1d23] border border-white/10 p-3">
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="text-white font-bold text-sm truncate">{c.name}</span>
+          <span className="text-gray-500 text-[10px] shrink-0">{c.holes} holes · par {c.par}</span>
+        </div>
+        <p className="text-gray-500 text-[11px] mt-0.5 leading-snug">{c.blurb}</p>
+        <div className="flex items-center justify-between mt-2.5">
+          <div className="min-w-0">
+            <div className="text-sm leading-none tracking-wide" aria-label={`${stars} of 3 stars`}>
+              {[0, 1, 2].map((i) => (
+                <span key={i} className={i < stars ? "text-[#f5d24a]" : "text-white/15"}>★</span>
+              ))}
+            </div>
+            <span className="block text-[10px] text-gray-500 mt-1">
+              {best != null ? <>Best <span className="text-[#36D7B7] font-bold">{best}</span> ({over(best - c.par)})</> : "Not played yet"}
+            </span>
+          </div>
+          <button type="button" onClick={() => onPlay(c.mode, c.seed)} className="shrink-0 rounded-lg bg-[#4B3DFF] hover:bg-[#3a2ee0] text-white text-sm font-bold px-5 py-1.5 transition">▶ Play</button>
+        </div>
       </div>
-      <p className="text-gray-500 text-[11px] mt-0.5 leading-snug">{c.blurb}</p>
-      <div className="flex items-center justify-between mt-2.5">
-        <span className="text-[11px] text-gray-400">
-          {best != null ? <>Best <span className="text-[#36D7B7] font-bold">{best}</span> <span className="text-gray-500">({over(best - c.par)})</span></> : "Not played yet"}
-        </span>
-        <button type="button" onClick={() => onPlay(c.mode, c.seed)} className="rounded-lg bg-[#4B3DFF] hover:bg-[#3a2ee0] text-white text-sm font-bold px-5 py-1.5 transition">▶ Play</button>
-      </div>
-    </div>
-  );
+    );
+  };
   return (
-    <div className="absolute inset-0 z-20 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm p-4 flex items-start justify-center rounded-lg">
-      <div className="w-full max-w-xs space-y-3 my-auto text-left">
-        <div className="flex items-center justify-between">
+    <div className="absolute inset-0 z-20 bg-[#0f1117]/95 backdrop-blur-sm rounded-lg flex flex-col">
+      <div className="w-full max-w-xs mx-auto flex flex-col h-full p-4 text-left">
+        <div className="flex items-center justify-between shrink-0">
           <h2 className="text-white font-black text-xl">⛳ Play Courses</h2>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
-        <p className="text-gray-500 text-[11px]">The two championship layouts — plus the pro-tour venues from Career, now playable on their own.</p>
-        {courses.map((c) => card(c, bests[c.mode]))}
-        <p className="text-gray-400 text-xs font-bold uppercase tracking-wide pt-1">🏆 Pro Tour Venues</p>
-        {tourCourses.map((c) => card(c, c.seed != null ? tourBests[c.seed] : null))}
-        <button type="button" onClick={onClose} className={`${btn} w-full`}>Done</button>
+        <div className="flex gap-1 bg-[#1a1d23] border border-white/10 rounded-lg p-1 mt-3 shrink-0">
+          <button type="button" onClick={() => setTab("championship")} className={seg(tab === "championship")}>Championship</button>
+          <button type="button" onClick={() => setTab("tour")} className={seg(tab === "tour")}>🏆 Pro Tour</button>
+        </div>
+        <p className="text-gray-500 text-[11px] mt-2 shrink-0">Earn stars by going low: <span className="text-[#f5d24a]">★</span> even par · <span className="text-[#f5d24a]">★★</span> −9 · <span className="text-[#f5d24a]">★★★</span> −18.</p>
+        <div className="flex-1 overflow-y-auto mt-2 space-y-2.5 pr-0.5 -mr-0.5">
+          {list.map(card)}
+        </div>
+        <button type="button" onClick={onClose} className={`${btn} w-full shrink-0 mt-3`}>Done</button>
       </div>
     </div>
   );

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   scoreLabel,
+  courseStars,
   earnedAchievements,
   buildRound,
   HOLES,
@@ -48,6 +49,23 @@ describe("scoreLabel", () => {
   });
   it("falls back to +N for very high scores", () => {
     expect(scoreLabel(13, 3).name).toBe("+10");
+  });
+});
+
+describe("courseStars", () => {
+  const par = 54;
+  it("awards no stars for an unplayed or over-par course", () => {
+    expect(courseStars(null, par)).toBe(0);
+    expect(courseStars(undefined, par)).toBe(0);
+    expect(courseStars(par + 1, par)).toBe(0);
+  });
+  it("1★ at even par, 2★ at −9, 3★ at −18", () => {
+    expect(courseStars(par, par)).toBe(1); // even
+    expect(courseStars(par - 8, par)).toBe(1); // −8, not yet 2★
+    expect(courseStars(par - 9, par)).toBe(2); // −9
+    expect(courseStars(par - 17, par)).toBe(2); // −17, not yet 3★
+    expect(courseStars(par - 18, par)).toBe(3); // −18
+    expect(courseStars(par - 30, par)).toBe(3); // caps at 3
   });
 });
 

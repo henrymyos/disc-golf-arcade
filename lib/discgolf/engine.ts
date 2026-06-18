@@ -445,6 +445,17 @@ function scoreLabel(throws: number, par: number): { name: string; emoji: string;
   return { name: `+${d}`, emoji: "", tone: "bad" };
 }
 
+// Star rating for a course best (0–3): 1★ for even par, 2★ for −9, 3★ for −18.
+// `best` is the total strokes; null/over par earns no stars.
+function courseStars(best: number | null | undefined, par: number): 0 | 1 | 2 | 3 {
+  if (best == null) return 0;
+  const toPar = best - par;
+  if (toPar <= -18) return 3;
+  if (toPar <= -9) return 2;
+  if (toPar <= 0) return 1;
+  return 0;
+}
+
 // The two flight shapes you can pick per throw:
 //  • "overstable" — bends steadily one way the whole flight (uses `fade`).
 //  • "straight"   — flies straighter and FARTHER. On the climb it `turn`s the
@@ -1258,6 +1269,7 @@ export {
   earnedAchievements,
   BOGEY_PREFIX,
   scoreLabel,
+  courseStars,
   STRAIGHT_SPEED_MUL,
   releaseSpeedMul,
   FAIRWAY_BASE,
