@@ -441,6 +441,12 @@ export function DiscGolfGame() {
     return weeklyChallenges(wk).filter((c) => challengeDone(c, rows) && !owned.includes(eventClaimKey(wk, c.id))).length;
   })();
 
+  // A resumable Daily round takes over the Daily Challenge button (Single Player
+  // page); any other interrupted solo round shows as a banner above the menu.
+  const dailyResume = resumeRound && resumeRound.mode === "daily" ? resumeRound : null;
+  const resumeBanner = resumeRound && resumeRound.mode !== "daily" ? resumeRound : null;
+  const menuTopMargin = challenge || resumeBanner ? "mt-2" : "mt-5";
+
   // Per-venue best scores for the standalone pro-tour courses (keyed by seed).
   const [tourBests, setTourBests] = useState<Record<number, number>>({});
 
@@ -2699,21 +2705,22 @@ export function DiscGolfGame() {
                 </button>
               )}
 
-              {/* Resume an interrupted solo round */}
-              {resumeRound && (
+              {/* Resume an interrupted solo round (Daily resumes live on the
+                  Daily Challenge button instead — see the Single Player page). */}
+              {resumeBanner && (
                 <button
                   type="button"
-                  onClick={() => startResume(resumeRound)}
+                  onClick={() => startResume(resumeBanner)}
                   className="w-full rounded-xl border border-[#36D7B7]/60 bg-[#36D7B7]/15 hover:bg-[#36D7B7]/25 text-white font-bold py-3 px-3 mt-4 transition text-sm"
                 >
-                  ↻ Resume {resumeRound.mode === "course" ? "Glendoveer" : resumeRound.mode === "winthrop" ? "Winthrop Lake" : "Daily"} · hole {resumeRound.scores.length + 1}
+                  ↻ Resume {resumeBanner.mode === "course" ? "Glendoveer" : resumeBanner.mode === "winthrop" ? "Winthrop Lake" : resumeBanner.mode === "tour" ? tourVenue(resumeBanner.seed) : resumeBanner.mode === "ranked" ? "Ranked" : "round"} · hole {resumeBanner.scores.length + 1}
                 </button>
               )}
 
               {/* Hub: three category cards keep the menu uncluttered */}
               {hub === "home" && (
                 <>
-                  <div className={`w-full flex flex-col gap-2 ${challenge || resumeRound ? "mt-2" : "mt-5"}`}>
+                  <div className={`w-full flex flex-col gap-2 ${menuTopMargin}`}>
                     <button type="button" onClick={() => setHub("solo")} className={hubCard}>
                       <span className="text-2xl leading-none shrink-0">🎮</span>
                       <span className="flex-1 text-left min-w-0">
@@ -2761,11 +2768,17 @@ export function DiscGolfGame() {
 
               {/* Single Player page */}
               {hub === "solo" && (
-                <div className={`w-full flex flex-col gap-2 ${challenge || resumeRound ? "mt-2" : "mt-5"}`}>
+                <div className={`w-full flex flex-col gap-2 ${menuTopMargin}`}>
                   <button type="button" onClick={() => setHub("home")} className={`${titleCardSm} !flex-none self-start px-3`}>‹ Back</button>
-                  <button type="button" onClick={() => startGame("daily")} className={titleCard}>
-                    🔥 Daily Challenge
-                  </button>
+                  {dailyResume ? (
+                    <button type="button" onClick={() => startResume(dailyResume)} className={titleCard}>
+                      ↻ Resume Daily · hole {dailyResume.scores.length + 1}
+                    </button>
+                  ) : (
+                    <button type="button" onClick={() => startGame("daily")} className={titleCard}>
+                      🔥 Daily Challenge
+                    </button>
+                  )}
                   <p className="text-gray-500 text-[10px] -mt-1 mb-0.5">A fresh 9-hole course, same for everyone each day</p>
                   <button type="button" onClick={() => setCoursesOpen(true)} className={titleCard}>
                     ⛳ Play Courses · {FIXED_COURSES.length + TOUR_COURSE_INFOS.length}
@@ -2781,7 +2794,7 @@ export function DiscGolfGame() {
 
               {/* Online & Compete page */}
               {hub === "online" && (
-                <div className={`w-full flex flex-col gap-2 ${challenge || resumeRound ? "mt-2" : "mt-5"}`}>
+                <div className={`w-full flex flex-col gap-2 ${menuTopMargin}`}>
                   <button type="button" onClick={() => setHub("home")} className={`${titleCardSm} !flex-none self-start px-3`}>‹ Back</button>
                   <button type="button" onClick={() => setChallengeOpen(true)} className={titleCard}>
                     👥 Challenge Friends
