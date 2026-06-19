@@ -4465,9 +4465,10 @@ function LevelUpPanel({ level, choices, bagHasRoom, onPick }: {
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-[#0f1117]/85 backdrop-blur-sm p-5">
       <div className="w-full max-w-xs rounded-2xl bg-gradient-to-b from-[#1c2233] to-[#0f1117] border border-[#36D7B7]/30 p-5 text-center shadow-2xl">
-        <p className="text-[#f5d24a] font-black text-xs tracking-[0.2em]">⬆ LEVEL {level}</p>
-        <h2 className="text-white font-black text-xl mt-1.5">Pick a new disc</h2>
-        <p className="text-gray-400 text-[11px] mt-1">{bagHasRoom ? "It goes straight into your bag." : "Bag's full — it'll wait in your collection."}</p>
+        <p className="text-[#f5d24a] font-black text-xs tracking-[0.2em]">⬆ LEVEL UP</p>
+        <h2 className="text-white font-black text-3xl mt-0.5 leading-none">Level {level}</h2>
+        <p className="text-gray-300 text-sm font-semibold mt-2">Pick a new disc for your bag</p>
+        <p className="text-gray-500 text-[11px] mt-0.5">{bagHasRoom ? "It goes straight into your bag." : "Bag's full — it'll wait in your collection."}</p>
         <div className="flex flex-col gap-2.5 mt-4">
           {discs.map((d) => (
             <button
