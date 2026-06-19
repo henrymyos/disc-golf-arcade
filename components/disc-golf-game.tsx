@@ -6,7 +6,7 @@ import { submitArcadeScore, getArcadeLeaderboard } from "@/actions/arcade";
 import type { ArcadeScore } from "@/lib/arcade-types";
 import { getSupabase } from "@/lib/supabase/browser";
 import {
-  BEST_KEY, WBEST_KEY, HOLEBEST_KEY, SETTINGS_KEY, ACH_KEY, HIST_KEY, CAREER_KEY, COINS_KEY, DAILY_KEY, OWNED_KEY, PROFILE_KEY, RANKED_KEY, BAG_KEY, BAGSEEN_KEY,
+  BEST_KEY, WBEST_KEY, HOLEBEST_KEY, SETTINGS_KEY, ACH_KEY, HIST_KEY, CAREER_KEY, COINS_KEY, DAILY_KEY, OWNED_KEY, PROFILE_KEY, RANKED_KEY, BAG_KEY, BAGSEEN_KEY, LEVELREWARD_KEY,
   readLocalProgress, applyProgress, mergeProgress, type Progress,
 } from "@/lib/progress";
 import {
@@ -22,7 +22,7 @@ import {
   weeklyChallenges, roundsThisWeek, challengeDone, eventClaimKey, type EventRound,
 } from "@/lib/discgolf/events";
 import {
-  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, TOTAL_PAR, WINTHROP_HOLES, WINTHROP_PAR, leaderboardCourse, TOURN_KEY, TOURN_NAMES, tournFieldRound, tournLiveStandings, tournStandings, ACHIEVEMENTS, earnedAchievements, scoreLabel, courseStars, STRAIGHT_SPEED_MUL, releaseSpeedMul, ADV_DISCS, DISC_PRICE, isDiscUnlocked, discUnlockLevel, validDiscIndex, DEFAULT_DISC_INDEX, BAG_MAX, discByKey, discIndexByKey, unlockedDiscKeys, reconcileBag, TOUR_COURSES, tourVenue, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, inRect, inHazard, offRibbons, dailySeed, buildRound, elevAt, vibrate, fullPowerRange, pxToFeet, distBetween, autoDiscIndex, lastInBoundsLie, stepFlight,
+  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, TOTAL_PAR, WINTHROP_HOLES, WINTHROP_PAR, leaderboardCourse, TOURN_KEY, TOURN_NAMES, tournFieldRound, tournLiveStandings, tournStandings, ACHIEVEMENTS, earnedAchievements, scoreLabel, courseStars, STRAIGHT_SPEED_MUL, releaseSpeedMul, ADV_DISCS, DISC_PRICE, isDiscUnlocked, discUnlockLevel, discAvailableAtLevel, levelUpChoices, validDiscIndex, DEFAULT_DISC_INDEX, BAG_MAX, discByKey, discIndexByKey, unlockedDiscKeys, reconcileBag, TOUR_COURSES, tourVenue, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, inRect, inHazard, offRibbons, dailySeed, buildRound, elevAt, vibrate, fullPowerRange, pxToFeet, distBetween, autoDiscIndex, lastInBoundsLie, stepFlight,
 } from "@/lib/discgolf/engine";
 import type {
   Vec, Tree, Hole, Mode, Tournament, TournLiveRow, Achievement, FlightPath, Release, Flight, GhostState,
@@ -399,6 +399,10 @@ export function DiscGolfGame() {
   const [bagSeen, setBagSeen] = useState<string[]>([]);
   const [bagOpen, setBagOpen] = useState(false);
   const [bagLoaded, setBagLoaded] = useState(false); // gates auto-fill until storage is read
+  // Level-up disc draft: pick 1 of 2 discs each level. `levelRewarded` is the
+  // highest level already resolved (null until the first load migrates).
+  const [levelRewarded, setLevelRewarded] = useState<number | null>(null);
+  const [levelUp, setLevelUp] = useState<{ level: number; choices: string[] } | null>(null);
   // Move a disc between bag and collection (keeps at least 1 disc in the bag).
   const setBagDiscs = useCallback((next: string[]) => {
     bagRef.current = next; setBag(next);
@@ -423,14 +427,36 @@ export function DiscGolfGame() {
     [next[i], next[j]] = [next[j], next[i]];
     setBagDiscs(next);
   }, [setBagDiscs]);
+  const levelRef = useRef(1); // current player level (for purchase gating)
   const buyItem = useCallback((ownKey: string, price: number) => {
     if (coinsRef.current < price || ownedRef.current.includes(ownKey)) return;
+    const disc = discByKey(ownKey); // a disc can't be bought before its level
+    if (disc && !discAvailableAtLevel(disc, levelRef.current)) return;
     addCoins(-price);
     const next = [...ownedRef.current, ownKey];
     ownedRef.current = next;
     setOwned(next);
     try { localStorage.setItem(OWNED_KEY, JSON.stringify(next)); } catch { /* ignore */ }
   }, [addCoins]);
+  // Claim a disc from the level-up draft: own it, drop it in the bag if there's
+  // room (else it waits in the collection), and mark this level resolved.
+  const claimLevelUp = useCallback((key: string) => {
+    if (!ownedRef.current.includes(key)) {
+      const no = [...ownedRef.current, key];
+      ownedRef.current = no; setOwned(no);
+      try { localStorage.setItem(OWNED_KEY, JSON.stringify(no)); } catch { /* ignore */ }
+    }
+    if (!bagRef.current.includes(key) && bagRef.current.length < BAG_MAX) {
+      const nb = [...bagRef.current, key];
+      bagRef.current = nb; setBag(nb);
+      try { localStorage.setItem(BAG_KEY, JSON.stringify(nb)); } catch { /* ignore */ }
+    }
+    setLevelUp((lu) => {
+      const lvl = lu?.level ?? 0;
+      if (lvl) { setLevelRewarded(lvl); try { localStorage.setItem(LEVELREWARD_KEY, String(lvl)); } catch { /* ignore */ } }
+      return null;
+    });
+  }, []);
 
   // Player profile (display name + chosen avatar). Persisted + cloud-synced.
   const [profile, setProfile] = useState<PlayerProfile>({ name: "", avatar: DEFAULT_AVATAR });
@@ -460,22 +486,55 @@ export function DiscGolfGame() {
     try { localStorage.setItem(OWNED_KEY, JSON.stringify(next)); } catch { /* ignore */ }
   }, [addCoins]);
 
-  // Player level — drives which discs are unlocked into the collection.
+  // Player level — drives which discs are available + the level-up draft.
   const playerLevel = levelFromXp(playerXp(roundsPlayed, unlocked.length, owned.length)).level;
+  useEffect(() => { levelRef.current = playerLevel; }, [playerLevel]);
 
-  // Keep the bag reconciled with what's unlocked: auto-add freshly-unlocked
-  // discs until the bag is full, leaving the rest in the collection. Runs once
-  // on mount (seeds the starter bag) and whenever unlocks change.
+  // Level-up disc draft. On the first load under this system, grandfather every
+  // disc the player already had (so nothing's lost) and mark all past levels
+  // resolved. Thereafter, each new level offers a 1-of-2 disc choice (one popup
+  // per level, oldest first). Skips levels with nothing new to offer.
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    if (!bagLoaded) return; // wait until loadLocal has read the saved bag
+    if (!bagLoaded || levelUp) return; // wait for storage; resolve one popup at a time
+    if (levelRewarded == null) {
+      // Migration: own everything previously accessible (bagSeen captured it) so
+      // nothing's lost. Mark resolved at the POST-grandfather level (owning those
+      // discs adds XP) so existing players don't get a flood of retro drafts.
+      const grand = Array.from(new Set([...ownedRef.current, ...bagSeen]));
+      if (grand.length !== ownedRef.current.length) {
+        ownedRef.current = grand; setOwned(grand);
+        try { localStorage.setItem(OWNED_KEY, JSON.stringify(grand)); } catch { /* ignore */ }
+      }
+      const lvl = levelFromXp(playerXp(roundsPlayed, unlocked.length, grand.length)).level;
+      setLevelRewarded(lvl);
+      try { localStorage.setItem(LEVELREWARD_KEY, String(lvl)); } catch { /* ignore */ }
+      return;
+    }
+    if (playerLevel > levelRewarded) {
+      const next = levelRewarded + 1;
+      const choices = levelUpChoices(next, unlocked, owned);
+      if (choices.length === 0) {
+        setLevelRewarded(next); // nothing to draft at this level — advance
+        try { localStorage.setItem(LEVELREWARD_KEY, String(next)); } catch { /* ignore */ }
+      } else {
+        setLevelUp({ level: next, choices });
+      }
+    }
+  }, [bagLoaded, levelUp, levelRewarded, playerLevel, roundsPlayed, unlocked, owned, bagSeen]);
+
+  // Keep the bag reconciled with what's unlocked: auto-add freshly-unlocked
+  // discs until the bag is full, leaving the rest in the collection. Gated until
+  // the level-up migration has run so a saved bag is never stripped.
+  useEffect(() => {
+    if (!bagLoaded || levelRewarded == null) return;
     const unlockedKeys = unlockedDiscKeys(unlocked, owned, playerLevel);
     const res = reconcileBag(bagRef.current, bagSeen, unlockedKeys);
     const bagChanged = JSON.stringify(res.bag) !== JSON.stringify(bagRef.current);
     const seenChanged = res.seen.length !== bagSeen.length;
     if (bagChanged) { bagRef.current = res.bag; setBag(res.bag); try { localStorage.setItem(BAG_KEY, JSON.stringify(res.bag)); } catch { /* ignore */ } }
     if (seenChanged) { setBagSeen(res.seen); try { localStorage.setItem(BAGSEEN_KEY, JSON.stringify(res.seen)); } catch { /* ignore */ } }
-  }, [bagLoaded, unlocked, owned, playerLevel, bagSeen]);
+  }, [bagLoaded, levelRewarded, unlocked, owned, playerLevel, bagSeen]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   // Title-screen navigation: a small hub so the menu isn't a wall of buttons.
@@ -546,6 +605,8 @@ export function DiscGolfGame() {
       if (Array.isArray(sb)) { bagRef.current = sb; setBag(sb); }
       const ss = JSON.parse(localStorage.getItem(BAGSEEN_KEY) || "[]");
       if (Array.isArray(ss)) setBagSeen(ss);
+      const lr = localStorage.getItem(LEVELREWARD_KEY);
+      setLevelRewarded(lr != null && Number.isFinite(Number(lr)) ? Number(lr) : null);
     } catch {
       /* ignore */
     }
@@ -683,7 +744,7 @@ export function DiscGolfGame() {
   // when signed out). localStorage is already written by saveCareer.
   useEffect(() => { if (career) saveProgress(); }, [career, saveProgress]);
   // Sync coins + daily-reward + owned items + profile + ranked to the cloud on change.
-  useEffect(() => { saveProgress(); }, [coins, daily, owned, profile, ranked, bag, bagSeen, saveProgress]);
+  useEffect(() => { saveProgress(); }, [coins, daily, owned, profile, ranked, bag, bagSeen, levelRewarded, saveProgress]);
 
   const syncHud = useCallback(() => {
     const g = stateRef.current;
@@ -3277,6 +3338,10 @@ export function DiscGolfGame() {
 
       {/* Results: scorecard + save + leaderboard */}
       {/* Practice mini-game results */}
+      {levelUp && (
+        <LevelUpPanel level={levelUp.level} choices={levelUp.choices} bagHasRoom={bag.length < BAG_MAX} onPick={claimLevelUp} />
+      )}
+
       {miniResult && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0f1117]/95 backdrop-blur-sm p-6">
           <div className="w-full max-w-xs text-center space-y-3">
@@ -4389,6 +4454,42 @@ function ProfilePanel({ profile, coins, owned, unlocked, roundsPlayed, bestScore
   );
 }
 
+// Level-up reward: choose 1 of 2 discs. Shown over everything; you must pick.
+function LevelUpPanel({ level, choices, bagHasRoom, onPick }: {
+  level: number;
+  choices: string[];
+  bagHasRoom: boolean;
+  onPick: (key: string) => void;
+}) {
+  const discs = choices.map((k) => discByKey(k)).filter((d): d is NonNullable<typeof d> => !!d);
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-[#0f1117]/85 backdrop-blur-sm p-5">
+      <div className="w-full max-w-xs rounded-2xl bg-gradient-to-b from-[#1c2233] to-[#0f1117] border border-[#36D7B7]/30 p-5 text-center shadow-2xl">
+        <p className="text-[#f5d24a] font-black text-xs tracking-[0.2em]">⬆ LEVEL {level}</p>
+        <h2 className="text-white font-black text-xl mt-1.5">Pick a new disc</h2>
+        <p className="text-gray-400 text-[11px] mt-1">{bagHasRoom ? "It goes straight into your bag." : "Bag's full — it'll wait in your collection."}</p>
+        <div className="flex flex-col gap-2.5 mt-4">
+          {discs.map((d) => (
+            <button
+              key={d.key}
+              type="button"
+              onClick={() => onPick(d.key)}
+              className="flex items-center gap-3 rounded-xl bg-[#1a1d23] border border-white/10 hover:border-[#36D7B7] hover:bg-[#20262f] active:scale-[0.99] px-3 py-3 text-left transition"
+            >
+              <span className="w-4 h-4 rounded-full shrink-0" style={{ background: d.color }} />
+              <div className="min-w-0 flex-1">
+                <p className="text-white font-bold text-sm truncate">{d.name} <span className="text-gray-500 font-normal text-[10px]">{d.brand}</span></p>
+                <p className="text-[10px] font-mono text-gray-400 truncate">{d.blurb.split("· ")[1]} · {d.flight === "overstable" ? "overstable" : "straight"}</p>
+              </div>
+              <span className="text-[#36D7B7] text-xl shrink-0 leading-none">＋</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // The bag editor — carry up to BAG_MAX discs into a round. Unlocked discs sit in
 // the collection; add/remove to curate the bag (swap = remove one, add another).
 function BagPanel({ bag, unlocked, owned, level, onAdd, onRemove, onMove, onShop, onClose }: {
@@ -4456,12 +4557,13 @@ function BagPanel({ bag, unlocked, owned, level, onAdd, onRemove, onMove, onShop
               {locked.map((d) => {
                 const lvl = discUnlockLevel(d);
                 const price = DISC_PRICE[d.key];
+                const available = discAvailableAtLevel(d, level);
                 return (
                   <div key={d.key} className="flex items-center gap-2.5 bg-white/[0.02] border border-white/5 rounded-lg px-3 py-2 opacity-70">
                     <span className="w-3 h-3 rounded-full shrink-0 bg-[#444]" />
                     <div className="min-w-0 flex-1">
                       <p className="text-gray-300 text-sm font-bold truncate">🔒 {d.name} <span className="text-gray-600 font-normal text-[10px]">{d.brand}</span></p>
-                      <p className="text-[10px] font-mono text-gray-600">{lvl != null ? `Reach Lv ${lvl}` : "Locked"}{price != null ? ` · or ${price} 🪙` : ""}</p>
+                      <p className="text-[10px] font-mono text-gray-600">{available ? (price != null ? `In the Shop · ${price} 🪙` : "Earn it") : `Reach Lv ${lvl}${price != null ? ` · then ${price} 🪙` : ""}`}</p>
                     </div>
                   </div>
                 );
@@ -4496,28 +4598,30 @@ function ShopPanel({ coins, unlocked, owned, level, onBuy, onClose }: {
             <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
           </div>
         </div>
-        <p className="text-gray-500 text-[11px]">You start with a putter + a midrange. Unlock the rest by leveling up (you&apos;re Lv {level}) or buy them here. Discs work in every mode.</p>
+        <p className="text-gray-500 text-[11px]">Each disc opens up at its level — fairway drivers early, distance drivers around Lv 10. You&apos;re Lv {level}. Buy with coins, or draft one free each level-up.</p>
         {items.map((d) => {
-          const have = isDiscUnlocked(d, unlocked, owned, level);
           const bought = owned.includes(d.key);
+          const have = isDiscUnlocked(d, unlocked, owned, level); // owned or earned
           const lvl = discUnlockLevel(d);
-          const byLevel = have && !bought && lvl != null && level >= lvl; // unlocked by leveling
+          const available = discAvailableAtLevel(d, level);
           const price = DISC_PRICE[d.key];
           const afford = coins >= price;
           return (
             <div key={d.key} className="flex items-center gap-2.5 bg-[#1a1d23] border border-white/5 rounded-lg px-3 py-2">
-              <span className="w-3 h-3 rounded-full shrink-0" style={{ background: d.color }} />
+              <span className="w-3 h-3 rounded-full shrink-0" style={{ background: available ? d.color : "#444" }} />
               <div className="min-w-0 flex-1">
                 <p className="text-white text-sm font-bold truncate">{d.name} <span className="text-gray-500 font-normal text-[10px]">{d.brand}</span></p>
-                <p className="text-[10px] font-mono text-gray-500">{d.blurb.split("· ")[1] ?? d.blurb}{lvl != null ? ` · unlocks Lv ${lvl}` : ""}</p>
+                <p className="text-[10px] font-mono text-gray-500">{d.blurb.split("· ")[1] ?? d.blurb}{lvl != null ? ` · from Lv ${lvl}` : ""}</p>
               </div>
               {have ? (
-                <span className="shrink-0 text-[11px] font-bold text-[#36D7B7]">{bought ? "Owned ✓" : byLevel ? `Lv ${lvl} ✓` : "Earned ✓"}</span>
-              ) : (
+                <span className="shrink-0 text-[11px] font-bold text-[#36D7B7]">{bought ? "Owned ✓" : "Earned ✓"}</span>
+              ) : available ? (
                 <button type="button" onClick={() => onBuy(d.key, price)} disabled={!afford}
                   className="shrink-0 rounded-lg bg-[#f5d24a] hover:brightness-110 text-[#0f1117] text-xs font-bold px-2.5 py-1.5 disabled:opacity-40 disabled:bg-white/10 disabled:text-gray-500">
                   {price} 🪙
                 </button>
+              ) : (
+                <span className="shrink-0 text-[11px] font-bold text-gray-500">🔒 Lv {lvl}</span>
               )}
             </div>
           );

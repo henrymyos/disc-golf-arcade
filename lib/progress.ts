@@ -20,6 +20,7 @@ export const PROFILE_KEY = "discgolf.profile.v1";
 export const RANKED_KEY = "discgolf.ranked.v1";
 export const BAG_KEY = "discgolf.bag.v1"; // the ≤5 disc keys carried into rounds
 export const BAGSEEN_KEY = "discgolf.bagseen.v1"; // disc keys already auto-processed for the bag
+export const LEVELREWARD_KEY = "discgolf.levelreward.v1"; // highest level whose disc draft was resolved
 
 export type HistoryRow = { mode: string; total: number; date: number; scores?: number[]; pars?: number[] };
 export type Progress = {
@@ -37,6 +38,7 @@ export type Progress = {
   ranked: RankedState | null;
   bag: string[];
   bagSeen: string[];
+  levelRewarded: number | null;
 };
 
 // Of two career saves, keep the one further along (more seasons, then events).
@@ -56,7 +58,7 @@ function parse<T>(raw: string | null, fallback: T): T {
 
 export function readLocalProgress(): Progress {
   if (typeof localStorage === "undefined") {
-    return { best: null, winthropBest: null, holeBest: [], achievements: [], history: [], settings: null, career: null, coins: 0, daily: null, owned: [], profile: null, ranked: null, bag: [], bagSeen: [] };
+    return { best: null, winthropBest: null, holeBest: [], achievements: [], history: [], settings: null, career: null, coins: 0, daily: null, owned: [], profile: null, ranked: null, bag: [], bagSeen: [], levelRewarded: null };
   }
   const bestRaw = localStorage.getItem(BEST_KEY);
   const best = bestRaw != null && Number.isFinite(Number(bestRaw)) ? Number(bestRaw) : null;
@@ -75,7 +77,9 @@ export function readLocalProgress(): Progress {
   const ranked = parse<RankedState | null>(localStorage.getItem(RANKED_KEY), null);
   const bag = parse<string[]>(localStorage.getItem(BAG_KEY), []);
   const bagSeen = parse<string[]>(localStorage.getItem(BAGSEEN_KEY), []);
-  return { best, winthropBest, holeBest, achievements, history, settings, career, coins, daily, owned, profile, ranked, bag, bagSeen };
+  const lrRaw = localStorage.getItem(LEVELREWARD_KEY);
+  const levelRewarded = lrRaw != null && Number.isFinite(Number(lrRaw)) ? Number(lrRaw) : null;
+  return { best, winthropBest, holeBest, achievements, history, settings, career, coins, daily, owned, profile, ranked, bag, bagSeen, levelRewarded };
 }
 
 export function applyProgress(p: Progress) {
@@ -95,6 +99,7 @@ export function applyProgress(p: Progress) {
     if (p.ranked) localStorage.setItem(RANKED_KEY, JSON.stringify(p.ranked));
     if (p.bag?.length) localStorage.setItem(BAG_KEY, JSON.stringify(p.bag));
     if (p.bagSeen?.length) localStorage.setItem(BAGSEEN_KEY, JSON.stringify(p.bagSeen));
+    if (p.levelRewarded != null) localStorage.setItem(LEVELREWARD_KEY, String(p.levelRewarded));
   } catch { /* ignore */ }
 }
 
@@ -155,5 +160,7 @@ export function mergeProgress(a: Progress, b: Progress): Progress {
     // disc already processed on one device isn't re-auto-added on another.
     bag: (b.bag?.length ? b.bag : a.bag) ?? [],
     bagSeen: Array.from(new Set([...(a.bagSeen ?? []), ...(b.bagSeen ?? [])])),
+    // Highest resolved level-up draft — keep the further-along device's.
+    levelRewarded: a.levelRewarded == null ? b.levelRewarded : b.levelRewarded == null ? a.levelRewarded : Math.max(a.levelRewarded, b.levelRewarded),
   };
 }

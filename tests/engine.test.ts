@@ -22,6 +22,8 @@ import {
   BAG_MAX,
   isDiscUnlocked,
   discUnlockLevel,
+  discAvailableAtLevel,
+  levelUpChoices,
   DISC_PRICE,
   DISC_LEVEL,
   TOUR_COURSES,
@@ -252,9 +254,10 @@ describe("fullPowerRange", () => {
 describe("disc unlocks", () => {
   it("treats core discs as always unlocked and locked ones as gated", () => {
     expect(isDiscUnlocked(ADV_DISCS[0], [])).toBe(true); // Aviar (core)
-    const zone = ADV_DISCS.find((d) => d.key === "zone")!;
-    expect(isDiscUnlocked(zone, [])).toBe(false);
-    expect(isDiscUnlocked(zone, ["birdie"])).toBe(true);
+    const zone = ADV_DISCS.find((d) => d.key === "zone")!; // ach: birdie, min level 2
+    expect(isDiscUnlocked(zone, [], [], 2)).toBe(false); // available but not yet earned/owned
+    expect(isDiscUnlocked(zone, ["birdie"], [], 2)).toBe(true); // earned at/after its level
+    expect(isDiscUnlocked(zone, ["birdie"], [], 1)).toBe(false); // earned but below its level
   });
   it("validDiscIndex keeps an index that's in the bag", () => {
     const bag = ["aviar", "buzzz"];
@@ -323,20 +326,54 @@ describe("auto-caddie disc selection", () => {
   });
 });
 
-describe("starting bag + level unlocks", () => {
+describe("starting bag + disc availability", () => {
   it("a new player (level 1) starts with only a putter + a midrange", () => {
     const free = ADV_DISCS.filter((d) => isDiscUnlocked(d, [], [], 1)).map((d) => d.key);
     expect(free.sort()).toEqual(["aviar", "buzzz"]); // putter (Aviar) + mid (Buzzz)
   });
-  it("leveling up frees a disc without spending coins", () => {
+  it("reaching a level makes a disc AVAILABLE but does not hand it over for free", () => {
     const teebird = ADV_DISCS.find((d) => d.key === "teebird")!;
-    expect(discUnlockLevel(teebird)).toBe(DISC_LEVEL.teebird);
-    expect(isDiscUnlocked(teebird, [], [], 1)).toBe(false);
-    expect(isDiscUnlocked(teebird, [], [], DISC_LEVEL.teebird)).toBe(true);
+    expect(discAvailableAtLevel(teebird, 1)).toBe(false);
+    expect(discAvailableAtLevel(teebird, DISC_LEVEL.teebird)).toBe(true);
+    // available ≠ owned: you still have to draft or buy it
+    expect(isDiscUnlocked(teebird, [], [], DISC_LEVEL.teebird)).toBe(false);
+    expect(isDiscUnlocked(teebird, [], ["teebird"], 1)).toBe(true); // owned → yours
   });
-  it("buying a disc unlocks it even below its level", () => {
-    const teebird = ADV_DISCS.find((d) => d.key === "teebird")!;
-    expect(isDiscUnlocked(teebird, [], ["teebird"], 1)).toBe(true);
+  it("fairway drivers come early; distance drivers wait for ~level 10", () => {
+    const fairway = ["teebird", "river", "firebird", "pd"];
+    const distance = ["nukeos", "destroyer", "wraith", "zeus"];
+    for (const k of fairway) expect(DISC_LEVEL[k]).toBeLessThanOrEqual(6);
+    for (const k of distance) expect(DISC_LEVEL[k]).toBeGreaterThanOrEqual(10);
+  });
+  it("an achievement can't unlock a distance driver before its level", () => {
+    const destroyer = ADV_DISCS.find((d) => d.key === "destroyer")!; // ach: underpar, lvl 10
+    expect(isDiscUnlocked(destroyer, ["underpar"], [], 5)).toBe(false); // earned but too low
+    expect(isDiscUnlocked(destroyer, ["underpar"], [], DISC_LEVEL.destroyer)).toBe(true);
+  });
+});
+
+describe("level-up disc draft (levelUpChoices)", () => {
+  it("offers two available, not-yet-owned discs that differ in flight", () => {
+    const choices = levelUpChoices(3, [], []); // lvl 3: zone/swarm/harp/roc/teebird available
+    expect(choices).toHaveLength(2);
+    const discs = choices.map((k) => ADV_DISCS.find((d) => d.key === k)!);
+    expect(discs[0].flight).not.toBe(discs[1].flight); // a straight vs an overstable pick
+    for (const d of discs) expect(isDiscUnlocked(d, [], [], 3)).toBe(false);
+  });
+  it("never offers a distance driver before level 10", () => {
+    for (let lvl = 2; lvl < 10; lvl++)
+      for (const k of levelUpChoices(lvl, [], []))
+        expect(["nukeos", "destroyer", "wraith", "zeus"]).not.toContain(k);
+  });
+  it("offers a distance driver once level 10+ and the earlier discs are owned", () => {
+    const ownedEarly = ADV_DISCS.filter((d) => (DISC_LEVEL[d.key] ?? 0) < 10).map((d) => d.key);
+    const choices = levelUpChoices(10, [], ownedEarly);
+    expect(choices.length).toBeGreaterThan(0);
+    expect(choices.some((k) => ["nukeos", "destroyer", "wraith", "zeus"].includes(k))).toBe(true);
+  });
+  it("returns nothing when everything available is already owned", () => {
+    const all = ADV_DISCS.map((d) => d.key);
+    expect(levelUpChoices(99, [], all)).toEqual([]);
   });
 });
 

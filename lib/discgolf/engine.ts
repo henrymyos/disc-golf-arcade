@@ -531,34 +531,55 @@ const DISC_UNLOCKS: Record<string, { ach: string; label: string } | undefined> =
   nukeos: { ach: "eagle", label: "score an eagle" },
   destroyer: { ach: "underpar", label: "round under par" },
 };
-// Player level at which each disc unlocks for free (just by playing). Discs not
-// listed here and not priced are core — available from the very first round.
-// A steady climb from the Aviar/Buzzz core up to the distance drivers.
+// Minimum player level at which a disc becomes AVAILABLE — to draft at level-up
+// or buy in the shop. (Reaching the level no longer hands it over for free; you
+// choose discs as you level.) Putter/mid molds and the fairway drivers come
+// early; the distance drivers don't open up until ~level 10.
 const DISC_LEVEL: Record<string, number> = {
-  zone: 2, harp: 3, teebird: 3, swarm: 4, roc: 4,
-  firebird: 5, river: 5, pd: 6, wraith: 7, nukeos: 7, destroyer: 8, zeus: 9,
+  zone: 2, swarm: 2,
+  harp: 3, roc: 3, teebird: 3,
+  river: 4,
+  firebird: 5,
+  pd: 6,
+  // Distance drivers — held back until the double digits.
+  nukeos: 10, destroyer: 10, wraith: 11, zeus: 12,
 };
-// Coin price to buy a disc in the shop (skips the level requirement). Every
-// non-core disc is purchasable; achievement discs can also be bought to skip
-// the grind.
+// Coin price to buy a disc in the shop, once it's available at your level.
 const DISC_PRICE: Record<string, number> = {
   zone: 250, harp: 300, teebird: 350, swarm: 450, roc: 400,
   firebird: 650, river: 550, pd: 800, wraith: 1000, nukeos: 1100, destroyer: 1400, zeus: 1600,
 };
-// A disc is usable if it's core (no lock, price or level gate), already bought
-// (`owned`), its achievement is earned, or the player has reached its level.
+// A disc is unlocked (in your collection) if it's core (Aviar/Buzzz), already
+// acquired (`owned` — chosen at level-up or bought), or earned via its
+// achievement once you've reached its minimum level.
 function isDiscUnlocked(disc: Disc, unlocked: string[], owned: string[] = [], level = 1): boolean {
   const lock = DISC_UNLOCKS[disc.key];
   const priced = DISC_PRICE[disc.key] != null;
-  const lvl = DISC_LEVEL[disc.key];
-  if (!lock && !priced && lvl == null) return true; // core
-  if (owned.includes(disc.key)) return true; // bought
-  if (lvl != null && level >= lvl) return true; // leveled up to it
-  return !!lock && unlocked.includes(lock.ach); // earned via achievement
+  const minLvl = DISC_LEVEL[disc.key];
+  if (!lock && !priced && minLvl == null) return true; // core
+  if (owned.includes(disc.key)) return true; // chosen at level-up, or bought
+  return !!lock && unlocked.includes(lock.ach) && (minLvl == null || level >= minLvl); // earned (level-gated)
 }
-// Smallest player level that frees a disc (null if it has no level gate).
+// Smallest player level at which a disc can be obtained (null if no gate).
 function discUnlockLevel(disc: Disc): number | null {
   return DISC_LEVEL[disc.key] ?? null;
+}
+// Is this disc available to draft/buy at the given level yet?
+function discAvailableAtLevel(disc: Disc, level: number): boolean {
+  const minLvl = DISC_LEVEL[disc.key];
+  return minLvl == null || level >= minLvl;
+}
+// The two discs offered when reaching `level` — available, not-yet-owned discs,
+// lowest minimum-level first, biased so the pair differs in flight (a straight
+// vs. an overstable option) for a real choice. Returns 0–2 keys.
+function levelUpChoices(level: number, unlocked: string[], owned: string[] = []): string[] {
+  const cands = ADV_DISCS
+    .filter((d) => discAvailableAtLevel(d, level) && !isDiscUnlocked(d, unlocked, owned, level))
+    .sort((a, b) => (DISC_LEVEL[a.key] ?? 0) - (DISC_LEVEL[b.key] ?? 0) || ADV_DISCS.indexOf(a) - ADV_DISCS.indexOf(b));
+  if (!cands.length) return [];
+  const c1 = cands[0];
+  const c2 = cands.find((d) => d.key !== c1.key && d.flight !== c1.flight) ?? cands.find((d) => d.key !== c1.key);
+  return c2 ? [c1.key, c2.key] : [c1.key];
 }
 const DEFAULT_DISC_INDEX = 3; // Buzzz — the free core midrange
 
@@ -1340,6 +1361,8 @@ export {
   DISC_LEVEL,
   isDiscUnlocked,
   discUnlockLevel,
+  discAvailableAtLevel,
+  levelUpChoices,
   validDiscIndex,
   DEFAULT_DISC_INDEX,
   BAG_MAX,
