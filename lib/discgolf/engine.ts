@@ -544,10 +544,12 @@ const DISC_LEVEL: Record<string, number> = {
   // Distance drivers — held back until the double digits.
   nukeos: 10, destroyer: 10, wraith: 11, zeus: 12,
 };
-// Coin price to buy a disc in the shop, once it's available at your level.
+// Coin price to buy a disc in the shop. Every disc is buyable at any level —
+// the distance drivers are just steep, so they're a real grind to afford.
 const DISC_PRICE: Record<string, number> = {
   zone: 250, harp: 300, teebird: 350, swarm: 450, roc: 400,
-  firebird: 650, river: 550, pd: 800, wraith: 1000, nukeos: 1100, destroyer: 1400, zeus: 1600,
+  firebird: 650, river: 550, pd: 800,
+  wraith: 3000, nukeos: 3500, destroyer: 4000, zeus: 4500,
 };
 // A disc is unlocked (in your collection) if it's core (Aviar/Buzzz), already
 // acquired (`owned` — chosen at level-up or bought), or earned via its

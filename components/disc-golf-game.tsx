@@ -22,7 +22,7 @@ import {
   weeklyChallenges, roundsThisWeek, challengeDone, eventClaimKey, type EventRound,
 } from "@/lib/discgolf/events";
 import {
-  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, TOTAL_PAR, WINTHROP_HOLES, WINTHROP_PAR, leaderboardCourse, TOURN_KEY, TOURN_NAMES, tournFieldRound, tournLiveStandings, tournStandings, ACHIEVEMENTS, earnedAchievements, scoreLabel, courseStars, STRAIGHT_SPEED_MUL, releaseSpeedMul, ADV_DISCS, DISC_PRICE, isDiscUnlocked, discUnlockLevel, discAvailableAtLevel, levelUpChoices, validDiscIndex, DEFAULT_DISC_INDEX, BAG_MAX, discByKey, discIndexByKey, unlockedDiscKeys, reconcileBag, TOUR_COURSES, tourVenue, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, inRect, inHazard, offRibbons, dailySeed, buildRound, elevAt, vibrate, fullPowerRange, pxToFeet, distBetween, autoDiscIndex, lastInBoundsLie, stepFlight,
+  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, TOTAL_PAR, WINTHROP_HOLES, WINTHROP_PAR, leaderboardCourse, TOURN_KEY, TOURN_NAMES, tournFieldRound, tournLiveStandings, tournStandings, ACHIEVEMENTS, earnedAchievements, scoreLabel, courseStars, STRAIGHT_SPEED_MUL, releaseSpeedMul, ADV_DISCS, DISC_PRICE, isDiscUnlocked, levelUpChoices, validDiscIndex, DEFAULT_DISC_INDEX, BAG_MAX, discByKey, discIndexByKey, unlockedDiscKeys, reconcileBag, TOUR_COURSES, tourVenue, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, inRect, inHazard, offRibbons, dailySeed, buildRound, elevAt, vibrate, fullPowerRange, pxToFeet, distBetween, autoDiscIndex, lastInBoundsLie, stepFlight,
 } from "@/lib/discgolf/engine";
 import type {
   Vec, Tree, Hole, Mode, Tournament, TournLiveRow, Achievement, FlightPath, Release, Flight, GhostState,
@@ -427,11 +427,8 @@ export function DiscGolfGame() {
     [next[i], next[j]] = [next[j], next[i]];
     setBagDiscs(next);
   }, [setBagDiscs]);
-  const levelRef = useRef(1); // current player level (for purchase gating)
   const buyItem = useCallback((ownKey: string, price: number) => {
     if (coinsRef.current < price || ownedRef.current.includes(ownKey)) return;
-    const disc = discByKey(ownKey); // a disc can't be bought before its level
-    if (disc && !discAvailableAtLevel(disc, levelRef.current)) return;
     addCoins(-price);
     const next = [...ownedRef.current, ownKey];
     ownedRef.current = next;
@@ -486,9 +483,8 @@ export function DiscGolfGame() {
     try { localStorage.setItem(OWNED_KEY, JSON.stringify(next)); } catch { /* ignore */ }
   }, [addCoins]);
 
-  // Player level — drives which discs are available + the level-up draft.
+  // Player level — drives the level-up draft.
   const playerLevel = levelFromXp(playerXp(roundsPlayed, unlocked.length, owned.length)).level;
-  useEffect(() => { levelRef.current = playerLevel; }, [playerLevel]);
 
   // Level-up disc draft. On the first load under this system, grandfather every
   // disc the player already had (so nothing's lost) and mark all past levels
@@ -4556,15 +4552,13 @@ function BagPanel({ bag, unlocked, owned, level, onAdd, onRemove, onMove, onShop
                 <button type="button" onClick={onShop} className="text-[#f5d24a] text-[11px] font-bold hover:brightness-110">🛒 Shop ›</button>
               </div>
               {locked.map((d) => {
-                const lvl = discUnlockLevel(d);
                 const price = DISC_PRICE[d.key];
-                const available = discAvailableAtLevel(d, level);
                 return (
                   <div key={d.key} className="flex items-center gap-2.5 bg-white/[0.02] border border-white/5 rounded-lg px-3 py-2 opacity-70">
                     <span className="w-3 h-3 rounded-full shrink-0 bg-[#444]" />
                     <div className="min-w-0 flex-1">
                       <p className="text-gray-300 text-sm font-bold truncate">🔒 {d.name} <span className="text-gray-600 font-normal text-[10px]">{d.brand}</span></p>
-                      <p className="text-[10px] font-mono text-gray-600">{available ? (price != null ? `In the Shop · ${price} 🪙` : "Earn it") : `Reach Lv ${lvl}${price != null ? ` · then ${price} 🪙` : ""}`}</p>
+                      <p className="text-[10px] font-mono text-gray-600">{price != null ? `In the Shop · ${price} 🪙` : "Draft at level-up"}</p>
                     </div>
                   </div>
                 );
@@ -4599,30 +4593,26 @@ function ShopPanel({ coins, unlocked, owned, level, onBuy, onClose }: {
             <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
           </div>
         </div>
-        <p className="text-gray-500 text-[11px]">Each disc opens up at its level — fairway drivers early, distance drivers around Lv 10. You&apos;re Lv {level}. Buy with coins, or draft one free each level-up.</p>
+        <p className="text-gray-500 text-[11px]">Every disc is buyable at any level — distance drivers are just pricey. Or draft one free each level-up. Discs work in every mode.</p>
         {items.map((d) => {
           const bought = owned.includes(d.key);
           const have = isDiscUnlocked(d, unlocked, owned, level); // owned or earned
-          const lvl = discUnlockLevel(d);
-          const available = discAvailableAtLevel(d, level);
           const price = DISC_PRICE[d.key];
           const afford = coins >= price;
           return (
             <div key={d.key} className="flex items-center gap-2.5 bg-[#1a1d23] border border-white/5 rounded-lg px-3 py-2">
-              <span className="w-3 h-3 rounded-full shrink-0" style={{ background: available ? d.color : "#444" }} />
+              <span className="w-3 h-3 rounded-full shrink-0" style={{ background: d.color }} />
               <div className="min-w-0 flex-1">
                 <p className="text-white text-sm font-bold truncate">{d.name} <span className="text-gray-500 font-normal text-[10px]">{d.brand}</span></p>
-                <p className="text-[10px] font-mono text-gray-500">{d.blurb.split("· ")[1] ?? d.blurb}{lvl != null ? ` · from Lv ${lvl}` : ""}</p>
+                <p className="text-[10px] font-mono text-gray-500">{d.blurb.split("· ")[1] ?? d.blurb}</p>
               </div>
               {have ? (
                 <span className="shrink-0 text-[11px] font-bold text-[#36D7B7]">{bought ? "Owned ✓" : "Earned ✓"}</span>
-              ) : available ? (
+              ) : (
                 <button type="button" onClick={() => onBuy(d.key, price)} disabled={!afford}
                   className="shrink-0 rounded-lg bg-[#f5d24a] hover:brightness-110 text-[#0f1117] text-xs font-bold px-2.5 py-1.5 disabled:opacity-40 disabled:bg-white/10 disabled:text-gray-500">
                   {price} 🪙
                 </button>
-              ) : (
-                <span className="shrink-0 text-[11px] font-bold text-gray-500">🔒 Lv {lvl}</span>
               )}
             </div>
           );
