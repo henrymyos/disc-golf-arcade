@@ -320,10 +320,16 @@ describe("auto-caddie disc selection", () => {
     expect(["zone", "swarm"]).toContain(disc(autoDiscIndex(20, bag, 0)).key);
   });
 
-  it("pxToFeet scales world px to a sensible foot reading", () => {
+  it("pxToFeet reads realistic disc carries: mid ~300, fairway ~400, driver ~500 ft", () => {
     expect(pxToFeet(0)).toBe(0);
-    expect(pxToFeet(330)).toBeGreaterThan(250); // a par-3-length hole reads a few hundred feet
     expect(pxToFeet(100)).toBeLessThan(pxToFeet(200));
+    const carry = (key: string) => pxToFeet(fullPowerRange(ADV_DISCS.find((d) => d.key === key)!, 0, STRAIGHT_SPEED_MUL));
+    expect(carry("buzzz")).toBeGreaterThanOrEqual(270); // midrange ≈ 300
+    expect(carry("buzzz")).toBeLessThanOrEqual(330);
+    expect(carry("teebird")).toBeGreaterThanOrEqual(370); // fairway ≈ 400
+    expect(carry("teebird")).toBeLessThanOrEqual(430);
+    expect(carry("destroyer")).toBeGreaterThanOrEqual(490); // distance ≈ 500
+    expect(carry("destroyer")).toBeLessThanOrEqual(560);
   });
 });
 

@@ -1112,9 +1112,10 @@ function fullPowerRange(disc: Disc, elev: number | undefined, speedMul = 1): num
   }
   return y;
 }
-// World px → feet, for the on-screen distance readout. Tuned so a full-power
-// straight driver (~300px) reads ~270ft and a par-3 hole reads ~300ft.
-const FEET_PER_PX = 0.9;
+// World px → feet, for the on-screen distance readout. Tuned to realistic disc
+// golf carries: a full-power straight midrange (~160px) ≈ 290ft, a fairway
+// (~221px) ≈ 400ft, and a distance driver (~300px) ≈ 540ft.
+const FEET_PER_PX = 1.8;
 function pxToFeet(px: number): number {
   return Math.round(px * FEET_PER_PX);
 }
