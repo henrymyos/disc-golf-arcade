@@ -13,6 +13,7 @@ import {
   distToSeg,
   fullPowerRange,
   autoDiscIndex,
+  distBetween,
   pxToFeet,
   STRAIGHT_SPEED_MUL,
   ADV_DISCS,
@@ -111,7 +112,7 @@ describe("course data", () => {
   it("stretches every hole's basket above its tee", () => {
     for (const h of [...HOLES, ...WINTHROP_HOLES]) {
       expect(h.basket.y).toBeLessThan(h.tee.y);
-      expect(h.worldH).toBeGreaterThan(448);
+      expect(h.worldH).toBeGreaterThan(250); // short holes (lenMul) are still well-formed
     }
   });
 });
@@ -137,7 +138,7 @@ describe("buildRound determinism", () => {
     expect(JSON.stringify(a)).not.toBe(JSON.stringify(buildRound(4243, "tour")));
     for (const h of a) {
       expect(h.basket.y).toBeLessThan(h.tee.y);
-      expect(h.worldH).toBeGreaterThan(448);
+      expect(h.worldH).toBeGreaterThan(250); // short holes (lenMul) are still well-formed
     }
   });
 });
@@ -374,6 +375,38 @@ describe("level-up disc draft (levelUpChoices)", () => {
   it("returns nothing when everything available is already owned", () => {
     const all = ADV_DISCS.map((d) => d.key);
     expect(levelUpChoices(99, [], all)).toEqual([]);
+  });
+});
+
+describe("hole length: which disc the drive needs", () => {
+  const TIER: Record<string, string> = {
+    aviar: "putter", zone: "putter", harp: "putter",
+    buzzz: "mid", swarm: "mid", roc: "mid",
+    teebird: "fairway", firebird: "fairway", river: "fairway", pd: "fairway",
+    nukeos: "driver", destroyer: "driver", wraith: "driver", zeus: "driver",
+  };
+  const FULL_BAG = ADV_DISCS.map((d) => d.key);
+  const driveTier = (hole: { tee: { x: number; y: number }; basket: { x: number; y: number }; elev?: number }) =>
+    TIER[ADV_DISCS[autoDiscIndex(distBetween(hole.tee, hole.basket), FULL_BAG, hole.elev ?? 0)].key];
+
+  it("Winthrop holes 4, 11, 15, 16 drive with only a midrange", () => {
+    for (const h of [4, 11, 15, 16]) expect(driveTier(WINTHROP_HOLES[h - 1]), `hole ${h}`).toBe("mid");
+  });
+  it("Winthrop holes 3 and 12 drive with only a fairway", () => {
+    for (const h of [3, 12]) expect(driveTier(WINTHROP_HOLES[h - 1]), `hole ${h}`).toBe("fairway");
+  });
+  it("Winthrop's long holes still need a driver off the tee", () => {
+    for (const h of [1, 5, 8, 18]) expect(driveTier(WINTHROP_HOLES[h - 1]), `hole ${h}`).toBe("driver");
+  });
+  it("procedural courses mix in short mid/fairway holes — not all drivers", () => {
+    let shortDrives = 0, total = 0;
+    for (let seed = 0; seed < 30; seed++)
+      for (const h of buildRound(seed, "daily")) {
+        total++;
+        const t = driveTier(h);
+        if (t === "mid" || t === "fairway" || t === "putter") shortDrives++;
+      }
+    expect(shortDrives).toBeGreaterThan(total * 0.1); // a meaningful share are reachable without a driver
   });
 });
 
