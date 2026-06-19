@@ -560,17 +560,49 @@ function isDiscUnlocked(disc: Disc, unlocked: string[], owned: string[] = [], le
 function discUnlockLevel(disc: Disc): number | null {
   return DISC_LEVEL[disc.key] ?? null;
 }
-// Clamp a remembered disc index to one that's both in range for the bag AND
-// usable. Guards the reload case where the saved index lands on a still-locked
-// disc, which would otherwise start a round with a locked disc selected.
 const DEFAULT_DISC_INDEX = 3; // Buzzz — the free core midrange
-function validDiscIndex(idx: number, unlocked: string[], owned: string[] = [], level = 1): number {
-  const bag = ADV_DISCS;
-  const i = Math.min(Math.max(0, idx | 0), bag.length - 1);
-  if (isDiscUnlocked(bag[i], unlocked, owned, level)) return i;
-  if (bag[DEFAULT_DISC_INDEX] && isDiscUnlocked(bag[DEFAULT_DISC_INDEX], unlocked, owned, level)) return DEFAULT_DISC_INDEX;
-  const first = bag.findIndex((d) => isDiscUnlocked(d, unlocked, owned, level));
-  return first >= 0 ? first : 0;
+
+// ── The bag: players carry at most BAG_MAX discs into a round; only those are
+// selectable. Discs are unlocked (level / coins / achievements) into the
+// COLLECTION, and the player curates which ones ride in the bag. ──
+const BAG_MAX = 5;
+// Order newly-unlocked discs auto-fill the bag in — a balanced straight-disc
+// spread first (putter / mid / fairway / driver), then the rest.
+const BAG_PRIORITY = [
+  "aviar", "buzzz", "teebird", "destroyer", "wraith",
+  "river", "zone", "swarm", "firebird", "pd", "roc", "harp", "nukeos", "zeus",
+];
+function discByKey(key: string): Disc | undefined {
+  return ADV_DISCS.find((d) => d.key === key);
+}
+function discIndexByKey(key: string): number {
+  return ADV_DISCS.findIndex((d) => d.key === key);
+}
+// Every disc key the player has unlocked (core, owned, leveled, or earned).
+function unlockedDiscKeys(unlocked: string[], owned: string[] = [], level = 1): string[] {
+  return ADV_DISCS.filter((d) => isDiscUnlocked(d, unlocked, owned, level)).map((d) => d.key);
+}
+// Auto-fill the bag with newly-unlocked discs (priority order) until it's full;
+// discs unlocked beyond capacity stay in the collection. `seen` marks which
+// unlocks have already been auto-processed, so a disc the player removed from
+// the bag is never silently re-added. Pure + idempotent.
+function reconcileBag(bag: string[], seen: string[], unlockedKeys: string[]): { bag: string[]; seen: string[] } {
+  const valid = new Set(unlockedKeys);
+  const nb = bag.filter((k) => valid.has(k)).slice(0, BAG_MAX); // drop stale/locked, cap
+  const fresh = unlockedKeys.filter((k) => !seen.includes(k));
+  const add = (k: string) => { if (nb.length < BAG_MAX && fresh.includes(k) && !nb.includes(k)) nb.push(k); };
+  for (const k of BAG_PRIORITY) add(k);
+  for (const k of fresh) add(k); // any disc not in the priority list (safety)
+  const nextSeen = Array.from(new Set([...seen, ...unlockedKeys]));
+  return { bag: nb, seen: nextSeen };
+}
+// Clamp a remembered disc index to one that's actually in the bag, so a round
+// never starts on a disc the player isn't carrying.
+function validDiscIndex(idx: number, bag: string[]): number {
+  const i = idx | 0;
+  if (i >= 0 && i < ADV_DISCS.length && bag.includes(ADV_DISCS[i].key)) return i;
+  const first = ADV_DISCS.findIndex((d) => bag.includes(d.key));
+  return first >= 0 ? first : DEFAULT_DISC_INDEX;
 }
 // Most the flight path may bend over a single throw (~46°) — keeps fade
 // noticeable without ever curving back toward the thrower.
@@ -1057,19 +1089,22 @@ function pxToFeet(px: number): number {
 function distBetween(a: Vec, b: Vec): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
-// Auto-caddie: pick the disc to start the next shot with, based on how far the
-// basket still is. Always a STRAIGHT disc the player actually owns — the
-// shortest one whose full-power carry still reaches (so close shots get a
-// putter, mid shots a midrange, long drives a driver); if nothing reaches, the
-// longest straight disc available. Overstable discs are left for manual shaping.
-function autoDiscIndex(remaining: number, unlocked: string[], owned: string[] = [], level = 1, elev = 0): number {
-  const straight = ADV_DISCS
-    .map((d, i) => ({ i, d, reach: fullPowerRange(d, elev, STRAIGHT_SPEED_MUL) }))
-    .filter((x) => x.d.flight === "straight" && isDiscUnlocked(x.d, unlocked, owned, level))
-    .sort((a, b) => a.reach - b.reach);
-  if (!straight.length) return DEFAULT_DISC_INDEX; // Aviar+Buzzz are core, so unreachable
-  for (const x of straight) if (x.reach >= remaining) return x.i;
-  return straight[straight.length - 1].i; // nothing reaches → the longest straight disc
+// Auto-caddie: pick the disc to start the next shot with, from the player's BAG,
+// based on how far the basket still is. Prefers a STRAIGHT disc — the shortest
+// one whose full-power carry still reaches (so close shots get a putter, mid
+// shots a midrange, long drives a driver); if no straight disc reaches, the
+// longest straight in the bag; if the bag has no straight discs at all, the
+// best-fitting disc of any flight. Overstable discs aren't auto-picked when a
+// straight option exists (those are for manual shaping).
+function autoDiscIndex(remaining: number, bag: string[], elev = 0): number {
+  const inBag = ADV_DISCS
+    .map((d, i) => ({ i, d, reach: fullPowerRange(d, elev, d.flight === "straight" ? STRAIGHT_SPEED_MUL : 1) }))
+    .filter((x) => bag.includes(x.d.key));
+  if (!inBag.length) return DEFAULT_DISC_INDEX;
+  const straight = inBag.filter((x) => x.d.flight === "straight").sort((a, b) => a.reach - b.reach);
+  const pool = (straight.length ? straight : inBag.slice()).sort((a, b) => a.reach - b.reach);
+  for (const x of pool) if (x.reach >= remaining) return x.i;
+  return pool[pool.length - 1].i; // nothing reaches → the longest disc in the pool
 }
 // Where the disc was last in bounds. Walk the disc's recorded flight path
 // backward and return the last point that's in bounds — so OB plays from where
@@ -1307,6 +1342,11 @@ export {
   discUnlockLevel,
   validDiscIndex,
   DEFAULT_DISC_INDEX,
+  BAG_MAX,
+  discByKey,
+  discIndexByKey,
+  unlockedDiscKeys,
+  reconcileBag,
   MAX_FADE_TURN,
   aimAt,
   camXFor,

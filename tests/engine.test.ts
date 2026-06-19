@@ -17,6 +17,9 @@ import {
   STRAIGHT_SPEED_MUL,
   ADV_DISCS,
   validDiscIndex,
+  reconcileBag,
+  unlockedDiscKeys,
+  BAG_MAX,
   isDiscUnlocked,
   discUnlockLevel,
   DISC_PRICE,
@@ -253,22 +256,21 @@ describe("disc unlocks", () => {
     expect(isDiscUnlocked(zone, [])).toBe(false);
     expect(isDiscUnlocked(zone, ["birdie"])).toBe(true);
   });
-  it("validDiscIndex avoids a locked disc, falling back to an unlocked one", () => {
-    // index 1 (Zone) is locked with no achievements -> falls back to a usable disc
-    const idx = validDiscIndex(1, []);
-    expect(isDiscUnlocked(ADV_DISCS[idx], [])).toBe(true);
+  it("validDiscIndex keeps an index that's in the bag", () => {
+    const bag = ["aviar", "buzzz"];
+    const buzzz = ADV_DISCS.findIndex((d) => d.key === "buzzz");
+    expect(validDiscIndex(buzzz, bag)).toBe(buzzz);
   });
-  it("validDiscIndex clamps out-of-range indices into the bag", () => {
-    expect(validDiscIndex(99, [])).toBeLessThan(ADV_DISCS.length);
-    expect(validDiscIndex(-5, [])).toBeGreaterThanOrEqual(0);
+  it("validDiscIndex falls back to a bagged disc when the saved one isn't carried", () => {
+    const bag = ["buzzz"];
+    const zone = ADV_DISCS.findIndex((d) => d.key === "zone"); // not in the bag
+    expect(ADV_DISCS[validDiscIndex(zone, bag)].key).toBe("buzzz");
+    expect(ADV_DISCS[validDiscIndex(99, bag)].key).toBe("buzzz"); // out of range too
   });
   it("a purchased (owned) disc counts as unlocked even with no achievements", () => {
     const zone = ADV_DISCS.find((d) => d.key === "zone")!;
     expect(isDiscUnlocked(zone, [], [])).toBe(false);
     expect(isDiscUnlocked(zone, [], ["zone"])).toBe(true);
-    // owning it keeps the selected index valid
-    const idx = ADV_DISCS.indexOf(zone);
-    expect(validDiscIndex(idx, [], ["zone"])).toBe(idx);
   });
   it("every priced disc is a real disc that is gated by default", () => {
     for (const key of Object.keys(DISC_PRICE)) {
@@ -284,26 +286,34 @@ describe("auto-caddie disc selection", () => {
   const disc = (i: number) => ADV_DISCS[i];
   const reach = (key: string) => fullPowerRange(ADV_DISCS.find((d) => d.key === key)!, 0, STRAIGHT_SPEED_MUL);
 
-  it("a beginner only has Aviar + Buzzz: putter when close, midrange when far", () => {
-    const beg = (rem: number) => disc(autoDiscIndex(rem, [], [], 1, 0)).key;
+  it("a starter bag (Aviar + Buzzz): putter when close, midrange when far", () => {
+    const bag = ["aviar", "buzzz"];
+    const beg = (rem: number) => disc(autoDiscIndex(rem, bag, 0)).key;
     expect(beg(reach("aviar") * 0.5)).toBe("aviar"); // really close → putter
     expect(beg(reach("buzzz") * 0.9)).toBe("buzzz"); // mid range → midrange
-    expect(beg(900)).toBe("buzzz"); // long drive but no driver yet → their longest
+    expect(beg(900)).toBe("buzzz"); // long drive but no driver in the bag → their longest
   });
 
-  it("fully unlocked: clubs up close→far and always picks a STRAIGHT disc", () => {
-    const hi = (rem: number) => disc(autoDiscIndex(rem, [], [], 99, 0));
+  it("a full straight bag: clubs up close→far and always picks a STRAIGHT disc", () => {
+    const bag = ["aviar", "buzzz", "teebird", "destroyer", "zone"]; // includes an overstable disc
+    const hi = (rem: number) => disc(autoDiscIndex(rem, bag, 0));
     expect(hi(reach("aviar") * 0.5).key).toBe("aviar"); // putter
     expect(hi((reach("aviar") + reach("buzzz")) / 2).key).toBe("buzzz"); // midrange
-    const longDrive = hi(reach("river") + 20); // past the fairway tier's reach
+    const longDrive = hi(reach("teebird") + 20); // past the fairway tier's reach
     expect(longDrive.flight).toBe("straight");
-    expect(["destroyer", "wraith"]).toContain(longDrive.key); // a straight driver
-    expect(["destroyer", "wraith"]).toContain(hi(2000).key); // unreachable → longest straight
+    expect(longDrive.key).toBe("destroyer"); // the straight driver, not the overstable Zone
+    expect(disc(autoDiscIndex(2000, bag, 0)).key).toBe("destroyer"); // unreachable → longest straight
   });
 
-  it("never auto-equips an overstable disc, at any distance", () => {
+  it("never auto-equips an overstable disc when a straight one is in the bag", () => {
+    const bag = ["aviar", "buzzz", "teebird", "destroyer", "zone"];
     for (let rem = 0; rem <= 600; rem += 15)
-      expect(disc(autoDiscIndex(rem, [], [], 99, 0)).flight).toBe("straight");
+      expect(disc(autoDiscIndex(rem, bag, 0)).flight).toBe("straight");
+  });
+
+  it("falls back to an overstable disc only if the bag has no straight discs", () => {
+    const bag = ["zone", "swarm"]; // both overstable
+    expect(["zone", "swarm"]).toContain(disc(autoDiscIndex(20, bag, 0)).key);
   });
 
   it("pxToFeet scales world px to a sensible foot reading", () => {
@@ -328,10 +338,46 @@ describe("starting bag + level unlocks", () => {
     const teebird = ADV_DISCS.find((d) => d.key === "teebird")!;
     expect(isDiscUnlocked(teebird, [], ["teebird"], 1)).toBe(true);
   });
-  it("validDiscIndex falls back to the core Buzzz when the saved disc is locked", () => {
-    const teebird = ADV_DISCS.findIndex((d) => d.key === "teebird");
-    const idx = validDiscIndex(teebird, [], [], 1); // Teebird is gated at level 1
-    expect(ADV_DISCS[idx].key).toBe("buzzz");
+});
+
+describe("bag auto-fill (reconcileBag)", () => {
+  it("a new player's starter bag is just the two core discs", () => {
+    const unlocked = unlockedDiscKeys([], [], 1); // Aviar + Buzzz
+    const { bag, seen } = reconcileBag([], [], unlocked);
+    expect(bag.sort()).toEqual(["aviar", "buzzz"]);
+    expect(seen.sort()).toEqual(["aviar", "buzzz"]);
+  });
+  it("auto-adds newly-unlocked discs until the bag is full, then stops", () => {
+    const all = ADV_DISCS.map((d) => d.key); // everything unlocked at once (e.g. migration)
+    const { bag, seen } = reconcileBag([], [], all);
+    expect(bag).toHaveLength(BAG_MAX);
+    expect(bag).toContain("aviar"); // a straight putter
+    expect(bag).toContain("destroyer"); // a straight driver
+    expect(seen.sort()).toEqual([...all].sort()); // every unlock is marked processed
+  });
+  it("does not silently re-add a disc the player removed from the bag", () => {
+    const all = ADV_DISCS.map((d) => d.key);
+    // Player has seen everything and curated a 3-disc bag (removed two).
+    const curated = ["aviar", "buzzz", "destroyer"];
+    const { bag } = reconcileBag(curated, all, all);
+    expect(bag).toEqual(curated); // unchanged — no auto-refill to 5
+  });
+  it("adds a freshly-unlocked disc when there's still room", () => {
+    const seen = ["aviar", "buzzz"];
+    const bag = ["aviar", "buzzz"];
+    const nowUnlocked = ["aviar", "buzzz", "teebird"]; // teebird just unlocked
+    const res = reconcileBag(bag, seen, nowUnlocked);
+    expect(res.bag).toContain("teebird");
+    expect(res.bag).toHaveLength(3);
+  });
+  it("a freshly-unlocked disc goes to the collection (not the bag) when full", () => {
+    const seen = ["aviar", "buzzz", "teebird", "destroyer", "wraith"];
+    const bag = ["aviar", "buzzz", "teebird", "destroyer", "wraith"]; // full
+    const nowUnlocked = [...seen, "zone"]; // zone just unlocked
+    const res = reconcileBag(bag, seen, nowUnlocked);
+    expect(res.bag).toHaveLength(BAG_MAX);
+    expect(res.bag).not.toContain("zone"); // stays in the collection
+    expect(res.seen).toContain("zone"); // but is marked processed
   });
 });
 
