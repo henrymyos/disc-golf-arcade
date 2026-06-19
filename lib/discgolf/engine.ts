@@ -1046,6 +1046,31 @@ function fullPowerRange(disc: Disc, elev: number | undefined, speedMul = 1): num
   }
   return y;
 }
+// World px → feet, for the on-screen distance readout. Tuned so a full-power
+// straight driver (~300px) reads ~270ft and a par-3 hole reads ~300ft.
+const FEET_PER_PX = 0.9;
+function pxToFeet(px: number): number {
+  return Math.round(px * FEET_PER_PX);
+}
+// Straight-line distance (px) between two points — the lie-to-basket measure the
+// auto-caddie and the HUD use.
+function distBetween(a: Vec, b: Vec): number {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+// Auto-caddie: pick the disc to start the next shot with, based on how far the
+// basket still is. Always a STRAIGHT disc the player actually owns — the
+// shortest one whose full-power carry still reaches (so close shots get a
+// putter, mid shots a midrange, long drives a driver); if nothing reaches, the
+// longest straight disc available. Overstable discs are left for manual shaping.
+function autoDiscIndex(remaining: number, unlocked: string[], owned: string[] = [], level = 1, elev = 0): number {
+  const straight = ADV_DISCS
+    .map((d, i) => ({ i, d, reach: fullPowerRange(d, elev, STRAIGHT_SPEED_MUL) }))
+    .filter((x) => x.d.flight === "straight" && isDiscUnlocked(x.d, unlocked, owned, level))
+    .sort((a, b) => a.reach - b.reach);
+  if (!straight.length) return DEFAULT_DISC_INDEX; // Aviar+Buzzz are core, so unreachable
+  for (const x of straight) if (x.reach >= remaining) return x.i;
+  return straight[straight.length - 1].i; // nothing reaches → the longest straight disc
+}
 // Where the disc was last in bounds. Walk the disc's recorded flight path
 // backward and return the last point that's in bounds — so OB plays from where
 // it crossed, never a full rethrow. `trail[0]` is the launch point (always in
@@ -1310,6 +1335,9 @@ export {
   elevAt,
   vibrate,
   fullPowerRange,
+  pxToFeet,
+  distBetween,
+  autoDiscIndex,
   lastInBoundsLie,
   stepFlight,
   buildTournGhosts,

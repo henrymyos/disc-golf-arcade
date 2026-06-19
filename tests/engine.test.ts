@@ -12,6 +12,9 @@ import {
   inRect,
   distToSeg,
   fullPowerRange,
+  autoDiscIndex,
+  pxToFeet,
+  STRAIGHT_SPEED_MUL,
   ADV_DISCS,
   validDiscIndex,
   isDiscUnlocked,
@@ -274,6 +277,39 @@ describe("disc unlocks", () => {
       expect(DISC_PRICE[key]).toBeGreaterThan(0);
       expect(isDiscUnlocked(d, [], [], 1)).toBe(false); // not free at level 1
     }
+  });
+});
+
+describe("auto-caddie disc selection", () => {
+  const disc = (i: number) => ADV_DISCS[i];
+  const reach = (key: string) => fullPowerRange(ADV_DISCS.find((d) => d.key === key)!, 0, STRAIGHT_SPEED_MUL);
+
+  it("a beginner only has Aviar + Buzzz: putter when close, midrange when far", () => {
+    const beg = (rem: number) => disc(autoDiscIndex(rem, [], [], 1, 0)).key;
+    expect(beg(reach("aviar") * 0.5)).toBe("aviar"); // really close → putter
+    expect(beg(reach("buzzz") * 0.9)).toBe("buzzz"); // mid range → midrange
+    expect(beg(900)).toBe("buzzz"); // long drive but no driver yet → their longest
+  });
+
+  it("fully unlocked: clubs up close→far and always picks a STRAIGHT disc", () => {
+    const hi = (rem: number) => disc(autoDiscIndex(rem, [], [], 99, 0));
+    expect(hi(reach("aviar") * 0.5).key).toBe("aviar"); // putter
+    expect(hi((reach("aviar") + reach("buzzz")) / 2).key).toBe("buzzz"); // midrange
+    const longDrive = hi(reach("river") + 20); // past the fairway tier's reach
+    expect(longDrive.flight).toBe("straight");
+    expect(["destroyer", "wraith"]).toContain(longDrive.key); // a straight driver
+    expect(["destroyer", "wraith"]).toContain(hi(2000).key); // unreachable → longest straight
+  });
+
+  it("never auto-equips an overstable disc, at any distance", () => {
+    for (let rem = 0; rem <= 600; rem += 15)
+      expect(disc(autoDiscIndex(rem, [], [], 99, 0)).flight).toBe("straight");
+  });
+
+  it("pxToFeet scales world px to a sensible foot reading", () => {
+    expect(pxToFeet(0)).toBe(0);
+    expect(pxToFeet(330)).toBeGreaterThan(250); // a par-3-length hole reads a few hundred feet
+    expect(pxToFeet(100)).toBeLessThan(pxToFeet(200));
   });
 });
 

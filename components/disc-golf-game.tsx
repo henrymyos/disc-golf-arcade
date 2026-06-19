@@ -22,7 +22,7 @@ import {
   weeklyChallenges, roundsThisWeek, challengeDone, eventClaimKey, type EventRound,
 } from "@/lib/discgolf/events";
 import {
-  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, TOTAL_PAR, WINTHROP_HOLES, WINTHROP_PAR, leaderboardCourse, TOURN_KEY, TOURN_NAMES, tournFieldRound, tournLiveStandings, tournStandings, ACHIEVEMENTS, earnedAchievements, scoreLabel, courseStars, STRAIGHT_SPEED_MUL, releaseSpeedMul, ADV_DISCS, DISC_PRICE, isDiscUnlocked, discUnlockLevel, validDiscIndex, DEFAULT_DISC_INDEX, TOUR_COURSES, tourVenue, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, inRect, inHazard, offRibbons, dailySeed, buildRound, elevAt, vibrate, fullPowerRange, lastInBoundsLie, stepFlight,
+  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, TOTAL_PAR, WINTHROP_HOLES, WINTHROP_PAR, leaderboardCourse, TOURN_KEY, TOURN_NAMES, tournFieldRound, tournLiveStandings, tournStandings, ACHIEVEMENTS, earnedAchievements, scoreLabel, courseStars, STRAIGHT_SPEED_MUL, releaseSpeedMul, ADV_DISCS, DISC_PRICE, isDiscUnlocked, discUnlockLevel, validDiscIndex, DEFAULT_DISC_INDEX, TOUR_COURSES, tourVenue, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, inRect, inHazard, offRibbons, dailySeed, buildRound, elevAt, vibrate, fullPowerRange, pxToFeet, distBetween, autoDiscIndex, lastInBoundsLie, stepFlight,
 } from "@/lib/discgolf/engine";
 import type {
   Vec, Tree, Hole, Mode, Tournament, TournLiveRow, Achievement, FlightPath, Release, Flight, GhostState,
@@ -638,6 +638,19 @@ export function DiscGolfGame() {
     const g = stateRef.current;
     if (!g) return;
     setHud({ hole: g.holeIndex + 1, par: g.roundHoles[g.holeIndex].par, throws: g.throws, holes: g.roundHoles.length, player: g.party ? g.party.names[g.party.current] : undefined });
+  }, []);
+
+  // Auto-caddie: equip the disc the current lie calls for — a straight driver
+  // off the tee, a midrange/putter as the basket gets close. The player can
+  // still switch by hand for any shot. Skipped during the putt/target minis.
+  const equipForLie = useCallback(() => {
+    const g = stateRef.current;
+    if (!g || g.mini) return;
+    const hole = g.roundHoles[g.holeIndex];
+    const i = autoDiscIndex(distBetween(g.rest, hole.basket), unlockedRef.current, ownedRef.current, levelRef.current, hole.elev ?? 0);
+    g.discIndex = i;
+    discIndexRef.current = i;
+    setDiscIndex(i);
   }, []);
 
   const startGame = useCallback((mode?: Mode, seedOverride?: number) => {
@@ -1518,6 +1531,7 @@ export function DiscGolfGame() {
           g.camY = maxCam;
           g.camX = teeCamX;
           g.phase = "aim";
+          equipForLie(); // tee shot: clubs up to a straight driver
         }
         camRef.current = { x: g.camX, y: g.camY };
         return;
@@ -1628,6 +1642,7 @@ export function DiscGolfGame() {
           g.trailBuf = [];
           g.angle = aimAt(g.rest, hole.basket);
           g.phase = "aim";
+          equipForLie(); // re-club for the new lie
           syncHud();
         } else if (res.status === "stop") {
           // Came to rest. If it's in a hazard (sand), +1 but play where it lies.
@@ -1652,6 +1667,7 @@ export function DiscGolfGame() {
           g.trailBuf = [];
           g.angle = aimAt(g.rest, hole.basket); // auto-aim at the basket
           g.phase = "aim";
+          equipForLie(); // re-club for the new lie
         }
       } else if (g.phase === "holed") {
         if (g.holedAt && performance.now() - g.holedAt > 850) {
@@ -2347,6 +2363,7 @@ export function DiscGolfGame() {
         if (g.party) hudItem("UP", g.party.names[g.party.current].slice(0, 8), "#f5d24a");
         hudItem("HOLE", g.party ? `${g.holeIndex + 1}/${g.roundHoles.length}` : g.practice ? `P${g.practiceHole}` : `${g.holeIndex + 1}/${g.roundHoles.length}`, "#ffffff");
         hudItem("PAR", `${hole.par}`, "#ffffff");
+        hudItem("PIN", `${pxToFeet(distBetween(g.rest, hole.basket))}ft`, "#9cc4e8");
         hudItem("THR", `${g.throws}`, "#ffffff");
         hudItem("TO PAR", overStr, over < 0 ? "#36D7B7" : over > 0 ? "#e08a3b" : "#cbd5e1");
       }
@@ -2450,7 +2467,7 @@ export function DiscGolfGame() {
     }
     rafRef.current = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [syncHud, persistResume, addCoins]);
+  }, [syncHud, persistResume, addCoins, equipForLie]);
 
   useEffect(() => {
     return () => {
