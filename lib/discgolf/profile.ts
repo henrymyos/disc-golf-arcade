@@ -40,18 +40,20 @@ export function avatarByKey(key: string): Avatar | undefined {
 }
 
 // ── Level / XP ───────────────────────────────────────────────────────────────
-// XP is earned just by playing: rounds count most, achievements and a deeper
-// bag add to it. Purely a function of progress already saved, so it never needs
-// its own persisted counter.
+// XP is earned by playing — one full round is worth ~100, the dominant term,
+// with small bonuses for achievements and a deeper bag. Purely a function of
+// progress already saved, so it never needs its own persisted counter.
 export function playerXp(roundsPlayed: number, achievements: number, discsOwned: number): number {
-  return Math.max(0, roundsPlayed) * 100 + Math.max(0, achievements) * 150 + Math.max(0, discsOwned) * 60;
+  return Math.max(0, roundsPlayed) * 100 + Math.max(0, achievements) * 20 + Math.max(0, discsOwned) * 10;
 }
 
-// Cumulative XP required to *be* a given level (level 1 starts at 0). Each level
-// costs a bit more than the last, so the curve eases upward.
+// Cumulative XP required to *be* a given level (level 1 starts at 0). Tuned so
+// that, at ~100 XP per round, level 1→2 is about one round and the cost per
+// level grows steadily — by level 19→20 it's ~6 rounds (640 XP).
+//   inc(L) = 100 + 30·(L-2)  →  cumulative below.
 export function xpForLevel(level: number): number {
   const L = Math.max(1, Math.floor(level));
-  return 200 * (L - 1) + 50 * (L - 1) * (L - 2);
+  return 100 * (L - 1) + 15 * (L - 1) * (L - 2);
 }
 
 // Resolve total XP into a level plus progress toward the next one.

@@ -27,16 +27,30 @@ describe("avatars", () => {
 });
 
 describe("level / xp", () => {
-  it("xp rises with rounds, achievements and discs and never goes negative", () => {
+  it("xp rises with rounds (dominant), achievements and discs; never negative", () => {
     expect(playerXp(0, 0, 0)).toBe(0);
-    expect(playerXp(1, 0, 0)).toBe(100);
-    expect(playerXp(1, 1, 1)).toBe(310);
+    expect(playerXp(1, 0, 0)).toBe(100); // one round
+    expect(playerXp(1, 1, 1)).toBe(130); // + small bonuses
     expect(playerXp(-5, -5, -5)).toBe(0);
   });
   it("level 1 starts at 0 xp and each level needs progressively more", () => {
     expect(xpForLevel(1)).toBe(0);
     expect(xpForLevel(2)).toBeGreaterThan(xpForLevel(1));
     expect(xpForLevel(3) - xpForLevel(2)).toBeGreaterThan(xpForLevel(2) - xpForLevel(1));
+  });
+  it("paces leveling by rounds: ~1 round to level 2, and L19→20 takes 5–8 rounds", () => {
+    // A brand-new account: one full round (no achievements/discs yet) → level 2.
+    expect(levelFromXp(playerXp(1, 0, 0)).level).toBe(2);
+    // Even a strong first round (a fistful of achievements) shouldn't blow past level 2.
+    expect(levelFromXp(playerXp(1, 6, 0)).level).toBe(2);
+    // Each round is ~100 xp, so rounds-per-level = the level's xp increment / 100.
+    const roundsFor = (lvl: number) => (xpForLevel(lvl) - xpForLevel(lvl - 1)) / 100;
+    expect(roundsFor(2)).toBeCloseTo(1, 1); // ~1 round
+    expect(roundsFor(20)).toBeGreaterThanOrEqual(5);
+    expect(roundsFor(20)).toBeLessThanOrEqual(8);
+    // Monotonically longer as you climb.
+    expect(roundsFor(20)).toBeGreaterThan(roundsFor(10));
+    expect(roundsFor(10)).toBeGreaterThan(roundsFor(2));
   });
   it("levelFromXp reports the right level and progress into it", () => {
     expect(levelFromXp(0).level).toBe(1);
