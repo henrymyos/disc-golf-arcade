@@ -22,7 +22,7 @@ import {
   weeklyChallenges, roundsThisWeek, challengeDone, eventClaimKey, type EventRound,
 } from "@/lib/discgolf/events";
 import {
-  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, TOTAL_PAR, WINTHROP_HOLES, WINTHROP_PAR, leaderboardCourse, TOURN_KEY, TOURN_FIELD, TOURNAMENTS, tournDef, tournRoundHoles, tournPlace, tournFieldRound, tournLiveStandings, tournStandings, ACHIEVEMENTS, earnedAchievements, scoreLabel, courseStars, courseDifficultyOf, courseStarDifficulty, tournDifficulty, tournStarDifficulty, STRAIGHT_SPEED_MUL, releaseSpeedMul, ADV_DISCS, DISC_PRICE, isDiscUnlocked, levelUpChoices, validDiscIndex, DEFAULT_DISC_INDEX, BAG_MAX, discByKey, discIndexByKey, unlockedDiscKeys, reconcileBag, TOUR_COURSES, tourVenue, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, inRect, inHazard, offRibbons, dailySeed, buildRound, elevAt, vibrate, fullPowerRange, pxToFeet, distBetween, autoDiscIndex, lastInBoundsLie, stepFlight,
+  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, TOTAL_PAR, WINTHROP_PAR, leaderboardCourse, TOURN_KEY, TOURN_FIELD, TOURNAMENTS, tournDef, tournRoundHoles, tournPlace, tournFieldRound, tournLiveStandings, tournStandings, ACHIEVEMENTS, earnedAchievements, scoreLabel, courseStars, courseHoles, courseDifficultyOf, courseStarDifficulty, tournDifficulty, tournStarDifficulty, STRAIGHT_SPEED_MUL, releaseSpeedMul, ADV_DISCS, DISC_PRICE, isDiscUnlocked, levelUpChoices, validDiscIndex, DEFAULT_DISC_INDEX, BAG_MAX, discByKey, discIndexByKey, unlockedDiscKeys, reconcileBag, TOUR_COURSES, tourVenue, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, inRect, inHazard, offRibbons, dailySeed, buildRound, elevAt, vibrate, fullPowerRange, pxToFeet, distBetween, autoDiscIndex, lastInBoundsLie, stepFlight,
 } from "@/lib/discgolf/engine";
 import type {
   Vec, Tree, Hole, Mode, Tournament, TournDef, TournLiveRow, Achievement, FlightPath, Release, Flight, GhostState,
@@ -920,7 +920,7 @@ export function DiscGolfGame() {
 
   // Practice a single hole: same engine, but nothing counts (no bests,
   // history, achievements, or leaderboard) — pure reps.
-  const startPractice = useCallback((m: Mode, holeIdx: number) => {
+  const startPractice = useCallback((m: Mode, holeIdx: number, seedOverride?: number) => {
     modeRef.current = m;
     if (!audioRef.current) {
       audioRef.current = new AudioEngine();
@@ -930,7 +930,9 @@ export function DiscGolfGame() {
     audioRef.current.setMuted(muted);
     audioRef.current.startMusic();
     challengePlayRef.current = false;
-    const seed = (Math.random() * 1e9) | 0;
+    // Tour venues are identified by their seed (the layout); Glendoveer/Winthrop
+    // get a random seed for jittered pins.
+    const seed = seedOverride ?? ((Math.random() * 1e9) | 0);
     const roundHoles = [buildRound(seed, m)[holeIdx]];
     const discIndex = validDiscIndex(discIndexRef.current, bagRef.current);
     discIndexRef.current = discIndex;
@@ -3201,7 +3203,7 @@ export function DiscGolfGame() {
         {practiceOpen && (
           <PracticePanel
             onClose={() => setPracticeOpen(false)}
-            onPick={(m, i) => { setPracticeOpen(false); startPractice(m, i); }}
+            onPick={(m, i, seed) => { setPracticeOpen(false); startPractice(m, i, seed); }}
             onMini={(k) => { setPracticeOpen(false); startMini(k); }}
           />
         )}
@@ -3389,7 +3391,7 @@ export function DiscGolfGame() {
               </h2>
               <p className="text-gray-400 text-xs">
                 {finalPracticeHole != null
-                  ? `${finalMode === "winthrop" ? "Winthrop Lake" : "Glendoveer East"} · hole ${finalPracticeHole} · par ${finalParTotal}`
+                  ? `${finalMode === "winthrop" ? "Winthrop Lake" : finalMode === "tour" ? tourVenue(finalSeed) : "Glendoveer East"} · hole ${finalPracticeHole} · par ${finalParTotal}`
                   : finalIsDaily
                     ? `Today's course · ${finalPars.length} holes · par ${finalParTotal}`
                     : finalMode === "ranked"
@@ -3579,7 +3581,7 @@ export function DiscGolfGame() {
 
             <div className="flex flex-wrap justify-center gap-2">
               {finalPracticeHole != null ? (
-                <button type="button" onClick={() => startPractice(finalMode, finalPracticeHole - 1)} className={btn}>↻ Retry hole</button>
+                <button type="button" onClick={() => startPractice(finalMode, finalPracticeHole - 1, finalSeed)} className={btn}>↻ Retry hole</button>
               ) : finalTournament ? (
                 <button type="button" onClick={() => { audioRef.current?.stopMusic(); setScreen("title"); setTournamentOpen(true); }} className={btn}>
                   🏟 Standings
@@ -5086,10 +5088,12 @@ function StatsPanel({ onClose }: { onClose: () => void }) {
 // toward bests, history, achievements, or leaderboards.
 function PracticePanel({ onClose, onPick, onMini }: {
   onClose: () => void;
-  onPick: (m: Mode, holeIdx: number) => void;
+  onPick: (m: Mode, holeIdx: number, seed?: number) => void;
   onMini: (kind: "putt" | "target") => void;
 }) {
-  const [course, setCourse] = useState<Mode>("course");
+  // Every premade course — the two championship layouts + every pro-tour venue.
+  const allCourses = useMemo(() => [...FIXED_COURSES, ...TOUR_COURSE_INFOS], []);
+  const [course, setCourse] = useState<CourseInfo>(allCourses[0]);
   // Glendoveer per-hole bests, read once when the panel opens.
   const [holeBest] = useState<(number | null)[]>(() => {
     try {
@@ -5097,18 +5101,17 @@ function PracticePanel({ onClose, onPick, onMini }: {
       return Array.isArray(hb) ? hb : [];
     } catch { return []; }
   });
-  const holes = course === "winthrop" ? WINTHROP_HOLES : HOLES;
-  const seg = (active: boolean) =>
-    `flex-1 rounded-md px-2 py-2 text-xs font-bold transition ${active ? "bg-[#4B3DFF] text-white" : "text-gray-400 hover:text-white"}`;
+  const key = (c: CourseInfo) => (c.seed != null ? `tour-${c.seed}` : c.mode);
+  const holes = courseHoles(course.mode, course.seed);
   return (
-    <div className="absolute inset-0 z-20 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start justify-center rounded-lg">
-      <div className="w-full max-w-xs space-y-3 my-auto text-left">
-        <div className="flex items-center justify-between">
+    <div className="absolute inset-0 z-20 bg-[#0f1117]/95 backdrop-blur-sm rounded-lg flex flex-col">
+      <div className="w-full max-w-xs mx-auto flex flex-col h-full px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] text-left">
+        <div className="flex items-center justify-between shrink-0">
           <h2 className="text-white font-black text-xl">Practice</h2>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
         {/* Skill mini-games */}
-        <div className="flex gap-2">
+        <div className="flex gap-2 mt-3 shrink-0">
           <button type="button" onClick={() => onMini("putt")} className="flex-1 rounded-lg bg-[#1a1d23] border border-[#36D7B7]/50 hover:border-[#36D7B7] py-2.5 transition">
             <span className="block text-white font-bold text-sm">⛳ Putting</span>
             <span className="block text-gray-500 text-[10px]">sink it to advance</span>
@@ -5118,29 +5121,39 @@ function PracticePanel({ onClose, onPick, onMini }: {
             <span className="block text-gray-500 text-[10px]">hit the bullseye</span>
           </button>
         </div>
-        <p className="text-gray-500 text-[11px] font-semibold uppercase tracking-wide pt-1">Or grind a hole</p>
-        <div className="flex gap-1 bg-[#1a1d23] border border-white/10 rounded-lg p-1">
-          <button type="button" onClick={() => setCourse("course")} className={seg(course === "course")}>Glendoveer</button>
-          <button type="button" onClick={() => setCourse("winthrop")} className={seg(course === "winthrop")}>Winthrop</button>
-        </div>
-        <p className="text-gray-500 text-[11px]">Pick a hole — practice doesn&apos;t count toward bests or boards.</p>
-        <div className="grid grid-cols-3 gap-1.5">
-          {holes.map((h, i) => {
-            const best = course === "course" ? holeBest[i] : null;
+        <p className="text-gray-500 text-[11px] font-semibold uppercase tracking-wide pt-2.5 shrink-0">Or grind any hole</p>
+        {/* Course picker — all premade courses */}
+        <div className="flex gap-1.5 overflow-x-auto pb-1 mt-1 -mx-1 px-1 shrink-0" style={{ scrollbarWidth: "thin" }}>
+          {allCourses.map((c) => {
+            const sel = key(c) === key(course);
             return (
-              <button
-                key={i}
-                type="button"
-                onClick={() => onPick(course, i)}
-                className="rounded-lg bg-[#1a1d23] border border-white/10 hover:border-[#36D7B7]/60 px-2 py-2 text-left transition"
-              >
-                <span className="block text-white font-bold text-sm leading-none">{i + 1}</span>
-                <span className="block text-gray-500 text-[10px] mt-1">
-                  par {h.par}{best != null ? ` · best ${best}` : ""}
-                </span>
+              <button key={key(c)} type="button" onClick={() => setCourse(c)}
+                className={`shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-bold whitespace-nowrap transition ${sel ? "bg-[#4B3DFF] text-white" : "bg-[#1a1d23] border border-white/10 text-gray-300 hover:border-white/25"}`}>
+                {c.name}
               </button>
             );
           })}
+        </div>
+        <p className="text-gray-500 text-[11px] mt-1.5 shrink-0">{course.name} · pick a hole — practice doesn&apos;t count toward bests or boards.</p>
+        <div className="flex-1 overflow-y-auto mt-2 pr-0.5 -mr-0.5">
+          <div className="grid grid-cols-3 gap-1.5">
+            {holes.map((h, i) => {
+              const best = course.mode === "course" ? holeBest[i] : null;
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => onPick(course.mode, i, course.seed)}
+                  className="rounded-lg bg-[#1a1d23] border border-white/10 hover:border-[#36D7B7]/60 px-2 py-2 text-left transition"
+                >
+                  <span className="block text-white font-bold text-sm leading-none">{i + 1}</span>
+                  <span className="block text-gray-500 text-[10px] mt-1">
+                    par {h.par}{best != null ? ` · best ${best}` : ""}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>
