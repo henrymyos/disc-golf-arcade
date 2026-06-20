@@ -181,15 +181,38 @@ function targetHole(station: number): Hole {
 // (mode "tour"); the two hand-authored layouts need none.
 type CourseInfo = { mode: Mode; name: string; holes: number; par: number; blurb: string; seed?: number };
 const FIXED_COURSES: CourseInfo[] = [
-  { mode: "course", name: "Glendoveer East", holes: 18, par: TOTAL_PAR, blurb: "Northwest Championship — a center pond, hard doglegs and tree-gate greens." },
-  { mode: "winthrop", name: "Winthrop Lake", holes: 18, par: WINTHROP_PAR, blurb: "College Nationals — the lake guards the whole front, rope-hazard golf in the middle." },
+  { mode: "course", name: "Glendoveer East", holes: 18, par: TOTAL_PAR, blurb: "The Northwest's championship test. A central pond squeezes the front nine, hard doglegs bend around mature firs, and tree-gate greens punish anything but a clean approach — precision off the tee is everything here." },
+  { mode: "winthrop", name: "Winthrop Lake", holes: 18, par: WINTHROP_PAR, blurb: "Host of College Nationals. The lake hugs the entire front side and forces nervy water carries, while the middle stretch is rope-hazard golf where one stray throw costs a stroke. A run of long par-4s on the back decides it." },
 ];
+// A character-driven opening line per venue style. The concrete hole stats
+// (par mix, water/sand, length) get woven in below to finish the description.
+const TOUR_STYLE_INTRO: Record<string, string> = {
+  "Wooded": "A tree-choked layout where every fairway threads tight gaps in the pines",
+  "Water-laden": "Water is the constant here — forced carries and nervy layups around ponds at nearly every turn",
+  "Links (open & windy)": "A wide-open links with almost no trees, where the gusting wind does all the defending",
+  "Sandy": "A desert-style course raked with sand traps that swallow anything short or wide of the line",
+  "Tight & technical": "A shot-maker's puzzle of narrow, tree-lined corridors that demand a precise line off every tee",
+  "Parkland": "A classic parkland layout of rolling, generous fairways and well-guarded tree-gate greens",
+};
 // The standalone pro-tour venues — the same procedural courses the Career tour
-// visits, now playable on their own. Built from the engine's fixed roster.
-const TOUR_COURSE_INFOS: CourseInfo[] = TOUR_COURSES.map((c) => ({
-  mode: "tour", name: c.name, holes: c.holes, par: c.par, seed: c.seed,
-  blurb: `${c.emoji} ${c.character} — a pro-tour course from the Career circuit.`,
-}));
+// visits, now playable on their own. Each blurb is built from the venue's actual
+// generated 18 holes, so it describes the real layout you're about to play.
+const TOUR_COURSE_INFOS: CourseInfo[] = TOUR_COURSES.map((c) => {
+  const holes = courseHoles("tour", c.seed);
+  const n3 = holes.filter((h) => h.par === 3).length;
+  const n4 = holes.filter((h) => h.par === 4).length;
+  const n5 = holes.filter((h) => h.par === 5).length;
+  const water = holes.filter((h) => (h.water?.length ?? 0) > 0).length;
+  const sand = holes.filter((h) => (h.hazard?.length ?? 0) > 0).length;
+  const totalFt = holes.reduce((s, h) => s + pxToFeet(h.worldH), 0);
+  const intro = TOUR_STYLE_INTRO[c.character] ?? "A varied championship layout that rewards all-round play";
+  const feats: string[] = [];
+  if (water) feats.push(`water guards ${water} hole${water > 1 ? "s" : ""}`);
+  if (sand) feats.push(`${sand} play through sand`);
+  feats.push(`it plays ${totalFt.toLocaleString()} ft from the tees`);
+  const blurb = `${c.emoji} ${intro}. ${n3} par-3s, ${n4} par-4s and ${n5} par-5s for a par of ${c.par}; ${feats.join(", ")}.`;
+  return { mode: "tour" as Mode, name: c.name, holes: c.holes, par: c.par, seed: c.seed, blurb };
+});
 
 export function DiscGolfGame() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
