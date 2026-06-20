@@ -414,6 +414,20 @@ describe("hole length: which disc the drive needs", () => {
       }
     expect(shortDrives).toBeGreaterThan(total * 0.1); // a meaningful share are reachable without a driver
   });
+  it("par 4 holes read ~650-900 ft and par 5 holes ~1000-1200 ft", () => {
+    // Per-hole basket position spreads the length a little, so allow modest
+    // slop around the 650–900 / 1000–1200 targets (a couple of hand-authored
+    // designs sit right at the edges).
+    const feetOf = (h: { tee: { x: number; y: number }; basket: { x: number; y: number } }) => pxToFeet(distBetween(h.tee, h.basket));
+    const holes = [...HOLES, ...WINTHROP_HOLES, ...generateTourCourse(7), ...buildRound(99, "daily"), ...buildRound(3, "tour")];
+    let p4 = 0, p5 = 0;
+    for (const h of holes) {
+      if (h.par === 4) { p4++; expect(feetOf(h), `par 4 = ${feetOf(h)}ft`).toBeGreaterThanOrEqual(620); expect(feetOf(h), `par 4 = ${feetOf(h)}ft`).toBeLessThanOrEqual(920); }
+      if (h.par === 5) { p5++; expect(feetOf(h), `par 5 = ${feetOf(h)}ft`).toBeGreaterThanOrEqual(980); expect(feetOf(h), `par 5 = ${feetOf(h)}ft`).toBeLessThanOrEqual(1260); }
+    }
+    expect(p4).toBeGreaterThan(0);
+    expect(p5).toBeGreaterThan(0);
+  });
 });
 
 describe("bag auto-fill (reconcileBag)", () => {

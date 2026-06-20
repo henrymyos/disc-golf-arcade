@@ -173,13 +173,15 @@ const HOLE_TEMPLATES: Omit<Hole, "worldH">[] = [
   ], water: [{ x: 120, y: 280, w: 74, h: 30 }] },
 ];
 
-// A max drive carries ~DRIVE world px, so a hole's length is ~(par-2) drives:
-// par 3 ≈ reachable in one big drive, par 4 ≈ two, par 5 ≈ three. Each template
-// (authored tee y≈416, basket near the top) is stretched vertically to fit, with
-// extra room left behind the tee so the pull-back slider isn't cramped.
+// A max drive carries ~DRIVE world px (≈540 ft at FEET_PER_PX). Hole length is
+// set per par to read realistically in feet: par 3 ≈ one big drive (~510 ft),
+// par 4 ≈ 650–900 ft, par 5 ≈ 1000–1200 ft. Each template (authored tee y≈416,
+// basket near the top) is stretched vertically to fit, with extra room behind
+// the tee so the pull-back slider isn't cramped. (The 60 + TEE_BEHIND offsets
+// are baked into materializeHole's scale, so worldH carries them too.)
 const DRIVE = 330;
 const TEE_BEHIND = 120;
-const worldHForPar = (par: number) => (par - 2) * DRIVE + 60 + TEE_BEHIND;
+const worldHForPar = (par: number) => (par <= 3 ? 510 : par === 4 ? 680 : 890);
 // Stretch an authored template (tee y≈416, basket near the top) into a full hole
 // whose length scales with par. Shared by Glendoveer and the procedural daily.
 // The tee keeps its authored x — putting the tee off-center (e.g. far left)
