@@ -2874,30 +2874,6 @@ export function DiscGolfGame() {
                 );
               })()}
 
-              {/* Stat pills */}
-              {(bestScore != null || winthropBest != null || roundsPlayed > 0) && (
-                <div className="flex gap-2 mt-3">
-                  {bestScore != null && (
-                    <div className="rounded-lg bg-white/5 border border-white/10 px-3 py-1.5">
-                      <p className="text-[#36D7B7] font-bold text-sm leading-none">{bestScore}</p>
-                      <p className="text-gray-500 text-[9px] mt-0.5 uppercase tracking-wide">GE Best ({overStr(bestScore - TOTAL_PAR)})</p>
-                    </div>
-                  )}
-                  {winthropBest != null && (
-                    <div className="rounded-lg bg-white/5 border border-white/10 px-3 py-1.5">
-                      <p className="text-[#f5d24a] font-bold text-sm leading-none">{winthropBest}</p>
-                      <p className="text-gray-500 text-[9px] mt-0.5 uppercase tracking-wide">WL Best ({overStr(winthropBest - WINTHROP_PAR)})</p>
-                    </div>
-                  )}
-                  {roundsPlayed > 0 && (
-                    <div className="rounded-lg bg-white/5 border border-white/10 px-3 py-1.5">
-                      <p className="text-white font-bold text-sm leading-none">{roundsPlayed}</p>
-                      <p className="text-gray-500 text-[9px] mt-0.5 uppercase tracking-wide">Rounds</p>
-                    </div>
-                  )}
-                </div>
-              )}
-
               {/* Coins + daily reward */}
               <div className="w-full flex items-center gap-2 mt-3">
                 <div className="flex items-center gap-1 rounded-lg bg-[#f5d24a]/10 border border-[#f5d24a]/30 px-2.5 py-1.5">
@@ -2907,11 +2883,11 @@ export function DiscGolfGame() {
                 {dailyAvailable(daily, today) ? (
                   <button type="button" onClick={claimDaily}
                     className="flex-1 rounded-lg bg-[#36D7B7] hover:bg-[#2bc4a6] active:scale-[0.99] text-[#0f1117] font-bold text-sm py-2 transition animate-pulse">
-                    🎁 Claim daily reward
+                    🎁 Daily reward
                   </button>
                 ) : (
                   <div className="flex-1 rounded-lg border border-white/10 text-gray-400 text-xs font-semibold py-2 text-center">
-                    🎁 Daily claimed · 🔥 {daily?.streak ?? 0}-day streak
+                    🎁 Claimed · 🔥 {daily?.streak ?? 0}d
                   </div>
                 )}
               </div>
