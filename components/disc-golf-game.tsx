@@ -22,7 +22,7 @@ import {
   weeklyChallenges, roundsThisWeek, challengeDone, eventClaimKey, type EventRound,
 } from "@/lib/discgolf/events";
 import {
-  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, TOTAL_PAR, WINTHROP_PAR, leaderboardCourse, TOURN_KEY, TOURN_FIELD, TOURNAMENTS, tournDef, tournRoundHoles, tournPlace, tournFieldRound, tournLiveStandings, tournStandings, ACHIEVEMENTS, earnedAchievements, scoreLabel, courseStars, courseHoles, courseDifficultyOf, courseStarDifficulty, tournDifficulty, tournStarDifficulty, STRAIGHT_SPEED_MUL, releaseSpeedMul, ADV_DISCS, DISC_PRICE, isDiscUnlocked, levelUpChoices, validDiscIndex, DEFAULT_DISC_INDEX, BAG_MAX, discByKey, discIndexByKey, unlockedDiscKeys, reconcileBag, TOUR_COURSES, tourVenue, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, inRect, inHazard, offRibbons, dailySeed, buildRound, elevAt, vibrate, fullPowerRange, pxToFeet, distBetween, autoDiscIndex, lastInBoundsLie, stepFlight,
+  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, TOTAL_PAR, WINTHROP_PAR, leaderboardCourse, TOURN_KEY, TOURN_FIELD, TOURNAMENTS, tournDef, tournRoundHoles, tournPlace, tournFieldRound, tournLiveStandings, tournStandings, ACHIEVEMENTS, earnedAchievements, achievementReward, scoreLabel, courseStars, courseHoles, courseDifficultyOf, courseStarDifficulty, tournDifficulty, tournStarDifficulty, STRAIGHT_SPEED_MUL, releaseSpeedMul, ADV_DISCS, DISC_PRICE, isDiscUnlocked, levelUpChoices, validDiscIndex, DEFAULT_DISC_INDEX, BAG_MAX, discByKey, discIndexByKey, unlockedDiscKeys, reconcileBag, TOUR_COURSES, tourVenue, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, inRect, inHazard, offRibbons, dailySeed, buildRound, elevAt, vibrate, fullPowerRange, pxToFeet, distBetween, autoDiscIndex, lastInBoundsLie, stepFlight,
 } from "@/lib/discgolf/engine";
 import type {
   Vec, Tree, Hole, Mode, Tournament, TournDef, TournLiveRow, Achievement, FlightPath, Release, Flight, GhostState,
@@ -1308,6 +1308,7 @@ export function DiscGolfGame() {
         unlockedRef.current = all;
         setUnlocked(all);
         try { localStorage.setItem(ACH_KEY, JSON.stringify(all)); } catch { /* ignore */ }
+        addCoins(achievementReward(fresh)); // one-time coin bounty per new achievement
       }
       setNewAchievements(fresh.map((id) => ACHIEVEMENTS.find((a) => a.id === id)!).filter(Boolean));
     } else {
@@ -1354,6 +1355,7 @@ export function DiscGolfGame() {
             unlockedRef.current = all;
             setUnlocked(all);
             try { localStorage.setItem(ACH_KEY, JSON.stringify(all)); } catch { /* ignore */ }
+            addCoins(achievementReward(["natty"]));
             setNewAchievements((prev) => [...prev, ACHIEVEMENTS.find((a) => a.id === "natty")!]);
           }
         }
@@ -3512,13 +3514,17 @@ export function DiscGolfGame() {
             {/* Newly-unlocked achievements */}
             {newAchievements.length > 0 && (
               <div className="bg-[#f5d24a]/10 border border-[#f5d24a]/30 rounded-2xl p-3">
-                <p className="text-[#f5d24a] font-bold text-sm mb-2">🏅 Achievement{newAchievements.length > 1 ? "s" : ""} unlocked!</p>
+                <p className="text-[#f5d24a] font-bold text-sm mb-2">
+                  🏅 Achievement{newAchievements.length > 1 ? "s" : ""} unlocked!
+                  <span className="text-[#f5d24a]/80 font-mono"> +{newAchievements.reduce((s, a) => s + a.coins, 0)} 🪙</span>
+                </p>
                 <div className="flex flex-col gap-1.5">
                   {newAchievements.map((a) => (
                     <div key={a.id} className="flex items-center gap-2 text-sm">
                       <span className="text-lg">{a.emoji}</span>
                       <span className="text-white font-semibold">{a.name}</span>
-                      <span className="text-gray-400 text-xs">— {a.desc}</span>
+                      <span className="text-gray-400 text-xs flex-1 truncate">— {a.desc}</span>
+                      <span className="text-[#f5d24a] font-mono text-xs shrink-0">+{a.coins} 🪙</span>
                     </div>
                   ))}
                 </div>
@@ -5292,8 +5298,9 @@ function SettingsPanel(props: {
               return (
                 <div key={a.id} className={`flex items-center gap-2 text-sm ${got ? "" : "opacity-40"}`}>
                   <span className="text-lg">{got ? a.emoji : "🔒"}</span>
-                  <span className="text-white font-semibold">{a.name}</span>
-                  <span className="text-gray-500 text-xs truncate">— {a.desc}</span>
+                  <span className="text-white font-semibold shrink-0">{a.name}</span>
+                  <span className="text-gray-500 text-xs flex-1 truncate">— {a.desc}</span>
+                  <span className={`font-mono text-xs shrink-0 ${got ? "text-gray-600" : "text-[#f5d24a]"}`}>{got ? "✓" : `+${a.coins} 🪙`}</span>
                 </div>
               );
             })}

@@ -476,37 +476,77 @@ const HOLE_ELEV = [0, -2, 0, 0, -2, -2, 2, -1, 0, 0, -2, -1, 1, -1, 0, 0, 0, 0];
 // that week (the async global ranked ladder); built like a tour course.
 type Mode = "daily" | "course" | "winthrop" | "tour" | "ranked";
 
-// Achievements — evaluated from a finished round's per-hole scores.
-type Achievement = { id: string; name: string; emoji: string; desc: string };
+// Achievements — evaluated from a finished round's per-hole scores. Each pays a
+// one-time coin bounty (`coins`) the first time it's unlocked, scaled to how
+// hard it is to pull off.
+type Achievement = { id: string; name: string; emoji: string; desc: string; coins: number };
 const ACHIEVEMENTS: Achievement[] = [
-  { id: "ace", name: "Ace!", emoji: "🎯", desc: "Hole out in a single throw" },
-  { id: "eagle", name: "Eagle Eye", emoji: "🦅", desc: "Score an eagle or better" },
-  { id: "birdie", name: "First Birdie", emoji: "🐦", desc: "Score a birdie" },
-  { id: "bogeyfree9", name: "Bogey-Free Nine", emoji: "✨", desc: "Play a front or back nine with no bogeys" },
-  { id: "underpar", name: "Under Par", emoji: "🏆", desc: "Finish a round under par" },
-  { id: "evenpar", name: "Par the Course", emoji: "🟢", desc: "Finish a round at par or better" },
-  { id: "regular", name: "Glendoveer Regular", emoji: "📅", desc: "Finish 5 rounds" },
-  { id: "daily", name: "Daily Grinder", emoji: "🔥", desc: "Complete a Daily Challenge" },
-  { id: "natty", name: "National Champion", emoji: "🏟", desc: "Win the Winthrop Lake tournament" },
+  // Single-hole feats
+  { id: "birdie", name: "First Birdie", emoji: "🐦", desc: "Score a birdie", coins: 25 },
+  { id: "eagle", name: "Eagle Eye", emoji: "🦅", desc: "Score an eagle or better", coins: 100 },
+  { id: "albatross", name: "Albatross", emoji: "💫", desc: "Score 3-under on a single hole", coins: 400 },
+  { id: "ace", name: "Ace!", emoji: "🎯", desc: "Hole out in a single throw", coins: 300 },
+  // In-round streaks & tallies
+  { id: "hotstart", name: "Hot Start", emoji: "☀️", desc: "Open a round with three straight birdies", coins: 200 },
+  { id: "birdiestreak", name: "On Fire", emoji: "⚡", desc: "Birdie three holes in a row", coins: 150 },
+  { id: "fivebirdies", name: "Birdie Barrage", emoji: "🐤", desc: "Make 5 birdies in one round", coins: 150 },
+  { id: "bogeyfree9", name: "Bogey-Free Nine", emoji: "✨", desc: "Play a nine with no bogeys", coins: 100 },
+  { id: "bogeyfree18", name: "Clean Card", emoji: "🧊", desc: "Play a full 18 with no bogeys", coins: 250 },
+  // Round totals
+  { id: "evenpar", name: "Par the Course", emoji: "🟢", desc: "Finish a round at par or better", coins: 50 },
+  { id: "underpar", name: "Under Par", emoji: "🏆", desc: "Finish a round under par", coins: 75 },
+  { id: "lowround", name: "Going Low", emoji: "🌟", desc: "Finish a round 5-under or better", coins: 200 },
+  { id: "subten", name: "Double Digits", emoji: "💎", desc: "Finish a round 10-under or better", coins: 400 },
+  // Modes & milestones
+  { id: "daily", name: "Daily Grinder", emoji: "🔥", desc: "Complete a Daily Challenge", coins: 40 },
+  { id: "tourstop", name: "Tour Pro", emoji: "⛳", desc: "Finish a pro-tour course", coins: 60 },
+  { id: "ranked", name: "Ranked Up", emoji: "🏅", desc: "Play a ranked round", coins: 60 },
+  { id: "regular", name: "Regular", emoji: "📅", desc: "Finish 5 rounds", coins: 50 },
+  { id: "veteran", name: "Veteran", emoji: "🎖", desc: "Finish 25 rounds", coins: 150 },
+  { id: "centurion", name: "Centurion", emoji: "💯", desc: "Finish 100 rounds", coins: 600 },
+  { id: "natty", name: "National Champion", emoji: "🏟", desc: "Win the Winthrop Lake tournament", coins: 500 },
 ];
+// Total coin bounty for a set of freshly-unlocked achievement ids.
+function achievementReward(ids: string[]): number {
+  return ids.reduce((sum, id) => sum + (ACHIEVEMENTS.find((a) => a.id === id)?.coins ?? 0), 0);
+}
 // Which achievement ids this round earns (a superset is fine — newly-unlocked is
 // the diff against what's already saved).
 function earnedAchievements(scores: number[], pars: number[], mode: Mode, roundsPlayed: number): string[] {
   const out: string[] = [];
   const total = scores.reduce((s, n) => s + (n ?? 0), 0);
   const parTotal = pars.reduce((s, n) => s + n, 0);
+  // Per-hole score relative to par (a missing hole sits well over par so it
+  // never counts as a birdie/clean hole).
+  const rel = scores.map((s, i) => (s != null ? s - pars[i] : 99));
   if (scores.some((s) => s === 1)) out.push("ace");
-  if (scores.some((s, i) => s != null && s - pars[i] <= -2)) out.push("eagle");
-  if (scores.some((s, i) => s != null && s - pars[i] === -1)) out.push("birdie");
+  if (rel.some((d) => d <= -3)) out.push("albatross");
+  if (rel.some((d) => d <= -2)) out.push("eagle");
+  if (rel.some((d) => d === -1)) out.push("birdie");
+  // Birdie-or-better tallies and streaks.
+  if (rel.filter((d) => d <= -1).length >= 5) out.push("fivebirdies");
+  let run = 0;
+  for (const d of rel) {
+    run = d <= -1 ? run + 1 : 0;
+    if (run >= 3) { out.push("birdiestreak"); break; }
+  }
+  if (rel.length >= 3 && rel[0] <= -1 && rel[1] <= -1 && rel[2] <= -1) out.push("hotstart");
   const nineClean = (from: number, to: number) => {
     const slice = scores.slice(from, to);
     return slice.length === 9 && slice.every((s, i) => s != null && s - pars[from + i] <= 0);
   };
   if (nineClean(0, 9) || nineClean(9, 18)) out.push("bogeyfree9");
-  if (total < parTotal) out.push("underpar");
+  if (scores.length >= 18 && rel.slice(0, 18).every((d) => d <= 0)) out.push("bogeyfree18");
   if (total <= parTotal) out.push("evenpar");
+  if (total < parTotal) out.push("underpar");
+  if (total <= parTotal - 5) out.push("lowround");
+  if (total <= parTotal - 10) out.push("subten");
   if (mode === "daily") out.push("daily");
+  if (mode === "tour") out.push("tourstop");
+  if (mode === "ranked") out.push("ranked");
   if (roundsPlayed >= 5) out.push("regular");
+  if (roundsPlayed >= 25) out.push("veteran");
+  if (roundsPlayed >= 100) out.push("centurion");
   return out;
 }
 
@@ -1469,6 +1509,7 @@ export {
   HOLE_ELEV,
   ACHIEVEMENTS,
   earnedAchievements,
+  achievementReward,
   BOGEY_PREFIX,
   scoreLabel,
   courseStars,

@@ -9,6 +9,7 @@ import {
   tournDifficulty,
   tournStarDifficulty,
   earnedAchievements,
+  achievementReward,
   buildRound,
   HOLES,
   WINTHROP_HOLES,
@@ -110,6 +111,32 @@ describe("earnedAchievements", () => {
     expect(earnedAchievements(pars, pars, "daily", 1)).toContain("daily");
     expect(earnedAchievements(pars, pars, "course", 5)).toContain("regular");
     expect(earnedAchievements(pars, pars, "course", 4)).not.toContain("regular");
+  });
+  it("detects albatross, birdie streaks, hot starts and barrages", () => {
+    // First three holes birdied → hotstart + birdiestreak; an albatross on hole 4.
+    const scores = [2, 2, 2, 1, 4, 4, 4, 5, 5];
+    const got = earnedAchievements(scores, pars, "course", 1);
+    expect(got).toContain("hotstart");
+    expect(got).toContain("birdiestreak");
+    expect(got).toContain("albatross"); // hole 4 is a par-4 aced (−3)
+    // Five birdies-or-better across the round.
+    const five = [2, 2, 2, 3, 3, 3, 3, 4, 4];
+    expect(earnedAchievements(five, pars, "course", 1)).toContain("fivebirdies");
+  });
+  it("rewards going low and a clean 18, and tags tour/ranked modes", () => {
+    const low = pars.map((p) => p - 1); // every hole birdied → 9-under on this nine
+    expect(earnedAchievements(low, pars, "course", 1)).toContain("lowround");
+    const par18 = [...pars, ...pars];
+    expect(earnedAchievements(par18, par18, "course", 1)).toContain("bogeyfree18");
+    expect(earnedAchievements(pars, pars, "tour", 1)).toContain("tourstop");
+    expect(earnedAchievements(pars, pars, "ranked", 1)).toContain("ranked");
+  });
+  it("achievementReward sums the coin bounty for fresh ids", () => {
+    expect(achievementReward([])).toBe(0);
+    expect(achievementReward(["birdie"])).toBeGreaterThan(0);
+    expect(achievementReward(["birdie", "ace"])).toBe(
+      achievementReward(["birdie"]) + achievementReward(["ace"]),
+    );
   });
 });
 
