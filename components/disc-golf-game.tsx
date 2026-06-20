@@ -196,7 +196,9 @@ export function DiscGolfGame() {
   const stateRef = useRef<GameState | null>(null);
   const keysRef = useRef<Set<string>>(new Set());
   // Drag-to-throw (Wii-golf style): pull back to set power + aim, release to throw.
-  const dragRef = useRef<{ active: boolean; cx: number; cy: number }>({ active: false, cx: 0, cy: 0 });
+  // ax/ay: where the press started (the anchor); cx/cy: the current pointer.
+  // Pull is measured anchor→pointer so you can grab anywhere on screen.
+  const dragRef = useRef<{ active: boolean; ax: number; ay: number; cx: number; cy: number }>({ active: false, ax: 0, ay: 0, cx: 0, cy: 0 });
   const camRef = useRef({ x: 0, y: 0 }); // current camera scroll, mirrored for the pointer handlers
   const ghostRef = useRef<Vec[][][] | null>(null); // best-round flight paths for the active course
   const rangeFlashRef = useRef(0); // when a disc was last switched (brightens the reach line)
@@ -2182,9 +2184,10 @@ export function DiscGolfGame() {
         let ky: number;
         let power: number;
         if (dr.active) {
-          // dr.cx/cy are screen coords; dsx is world-x (drawn under translate).
-          let pullX = dr.cx + camX - dsx;
-          let pullY = dr.cy - dsy;
+          // Pull is the anchor→pointer vector; the knob renders off the disc so
+          // the slider stays attached even though the gesture started elsewhere.
+          let pullX = dr.cx - dr.ax;
+          let pullY = dr.cy - dr.ay;
           const dist = Math.hypot(pullX, pullY) || 0.0001;
           const cl = Math.min(dist, MAX_DRAG);
           pullX = (pullX / dist) * cl;
@@ -2634,11 +2637,14 @@ export function DiscGolfGame() {
     const r = c.getBoundingClientRect();
     return { x: (clientX - r.left) * (W / r.width), y: (clientY - r.top) * (H / r.height) };
   }, []);
-  // Pull is measured from the disc itself, so the slider/knob stays attached to
-  // it: drag the knob back, aim by its direction, release to throw the opposite way.
+  // Pull is measured from where the press started (the anchor), so you can grab
+  // anywhere on screen — handy when the disc is near an edge and there's no room
+  // to pull back from the disc itself. The slider/knob still renders attached to
+  // the disc; only the gesture origin moves.
   const applyDrag = useCallback((g: GameState, px: number, py: number) => {
-    const pullX = px - (g.disc.x - camRef.current.x); // disc's on-screen X
-    const pullY = py - (g.disc.y - camRef.current.y); // disc's on-screen Y
+    const dr = dragRef.current;
+    const pullX = px - dr.ax; // pull relative to the press point
+    const pullY = py - dr.ay;
     const dist = Math.hypot(pullX, pullY);
     g.power = Math.min(1, dist / MAX_DRAG);
     if (dist > 4) g.angle = Math.atan2(-pullY, -pullX); // throw opposite the pull
@@ -2648,7 +2654,7 @@ export function DiscGolfGame() {
     const g = stateRef.current;
     if (!g || g.phase !== "aim") return;
     const p = clientToCanvas(e.clientX, e.clientY);
-    dragRef.current = { active: true, cx: p.x, cy: p.y };
+    dragRef.current = { active: true, ax: p.x, ay: p.y, cx: p.x, cy: p.y };
     applyDrag(g, p.x, p.y);
   }
 
@@ -3648,7 +3654,7 @@ function TutorialPanel({ onClose }: { onClose: () => void }) {
   const steps: { title: string; caption: string; art: React.ReactNode }[] = [
     {
       title: "Pull back & throw",
-      caption: "Press on your disc and drag back — the farther you pull, the more power. Release to throw the opposite way. Pulled back but changed your mind? Bring the knob back inside the red ring to cancel.",
+      caption: "Press anywhere and drag back — the farther you pull, the more power. Release to throw the opposite way. Pulled back but changed your mind? Bring the knob back inside the red ring to cancel.",
       art: (
         <svg viewBox="0 0 220 130" className={illo}>
           <rect x="60" y="0" width="100" height="130" fill="#16331f" />
