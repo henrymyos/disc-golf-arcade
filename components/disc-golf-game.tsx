@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { submitArcadeScore, getArcadeLeaderboard } from "@/actions/arcade";
 import type { ArcadeScore } from "@/lib/arcade-types";
@@ -22,7 +22,7 @@ import {
   weeklyChallenges, roundsThisWeek, challengeDone, eventClaimKey, type EventRound,
 } from "@/lib/discgolf/events";
 import {
-  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, TOTAL_PAR, WINTHROP_HOLES, WINTHROP_PAR, leaderboardCourse, TOURN_KEY, TOURN_FIELD, TOURNAMENTS, tournDef, tournRoundHoles, tournPlace, tournFieldRound, tournLiveStandings, tournStandings, ACHIEVEMENTS, earnedAchievements, scoreLabel, courseStars, STRAIGHT_SPEED_MUL, releaseSpeedMul, ADV_DISCS, DISC_PRICE, isDiscUnlocked, levelUpChoices, validDiscIndex, DEFAULT_DISC_INDEX, BAG_MAX, discByKey, discIndexByKey, unlockedDiscKeys, reconcileBag, TOUR_COURSES, tourVenue, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, inRect, inHazard, offRibbons, dailySeed, buildRound, elevAt, vibrate, fullPowerRange, pxToFeet, distBetween, autoDiscIndex, lastInBoundsLie, stepFlight,
+  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, TOTAL_PAR, WINTHROP_HOLES, WINTHROP_PAR, leaderboardCourse, TOURN_KEY, TOURN_FIELD, TOURNAMENTS, tournDef, tournRoundHoles, tournPlace, tournFieldRound, tournLiveStandings, tournStandings, ACHIEVEMENTS, earnedAchievements, scoreLabel, courseStars, courseDifficultyOf, courseStarDifficulty, tournDifficulty, tournStarDifficulty, STRAIGHT_SPEED_MUL, releaseSpeedMul, ADV_DISCS, DISC_PRICE, isDiscUnlocked, levelUpChoices, validDiscIndex, DEFAULT_DISC_INDEX, BAG_MAX, discByKey, discIndexByKey, unlockedDiscKeys, reconcileBag, TOUR_COURSES, tourVenue, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, inRect, inHazard, offRibbons, dailySeed, buildRound, elevAt, vibrate, fullPowerRange, pxToFeet, distBetween, autoDiscIndex, lastInBoundsLie, stepFlight,
 } from "@/lib/discgolf/engine";
 import type {
   Vec, Tree, Hole, Mode, Tournament, TournDef, TournLiveRow, Achievement, FlightPath, Release, Flight, GhostState,
@@ -3991,6 +3991,8 @@ function TournamentPanel({ tournaments, active, bests, onStart, onAbandon, onPla
   onClose: () => void;
 }) {
   const def = active ? tournDef(active.id) : null;
+  // Roster sorted easiest → hardest (hook must run before the early return).
+  const roster = useMemo(() => tournaments.map((d) => ({ d, diff: tournDifficulty(d) })).sort((a, b) => a.diff - b.diff), [tournaments]);
 
   // ── Active tournament: standings + play/continue ──
   if (active && def) {
@@ -4002,9 +4004,12 @@ function TournamentPanel({ tournaments, active, bests, onStart, onAbandon, onPla
     return (
       <div className="absolute inset-0 z-20 bg-[#0f1117]/95 backdrop-blur-sm rounded-lg flex flex-col">
         <div className="w-full max-w-sm mx-auto flex flex-col h-full p-4 text-left">
-          <div className="flex items-center justify-between shrink-0">
-            <h2 className="text-white font-black text-lg truncate pr-2">🏟 {def.name}</h2>
-            <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none shrink-0">×</button>
+          <div className="flex items-center justify-between gap-2 shrink-0">
+            <h2 className="text-white font-black text-lg truncate">🏟 {def.name}</h2>
+            <div className="flex items-center gap-2 shrink-0">
+              <DiffStars n={tournStarDifficulty(def)} />
+              <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
+            </div>
           </div>
           <p className="text-gray-500 text-[11px] shrink-0">{def.venues} · {def.rounds.length} rounds{hasCut ? " · cut after R2" : ""}</p>
 
@@ -4070,15 +4075,18 @@ function TournamentPanel({ tournaments, active, bests, onStart, onAbandon, onPla
           <h2 className="text-white font-black text-xl">🏟 Tournaments</h2>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
-        <p className="text-gray-500 text-[11px] mt-1 shrink-0">Each is a {TOURN_FIELD}-strong field over 2–3 rounds. 3-round events cut to the top half after R2.</p>
+        <p className="text-gray-500 text-[11px] mt-1 shrink-0">Easiest first. <span className="text-[#e0923b]">★</span> = difficulty (5 = very hard). A {TOURN_FIELD}-strong field over 2–3 rounds; 3-round events cut after R2.</p>
         <div className="flex-1 overflow-y-auto mt-2.5 space-y-2.5 pr-0.5 -mr-0.5">
-          {tournaments.map((d) => {
+          {roster.map(({ d }) => {
             const best = bests[d.id];
             return (
               <div key={d.id} className="rounded-xl bg-[#1a1d23] border border-white/10 p-3">
-                <div className="flex items-baseline justify-between gap-2">
-                  <span className="text-white font-bold text-sm truncate">{d.name}</span>
-                  <span className="text-gray-500 text-[10px] shrink-0">{d.rounds.length} rounds</span>
+                <div className="flex items-start justify-between gap-2">
+                  <span className="text-white font-bold text-sm truncate pt-0.5">{d.name}</span>
+                  <div className="shrink-0 text-right">
+                    <DiffStars n={tournStarDifficulty(d)} />
+                    <span className="block text-gray-500 text-[10px] mt-0.5">{d.rounds.length} rounds</span>
+                  </div>
                 </div>
                 <p className="text-gray-500 text-[11px] mt-0.5 truncate">{d.venues}</p>
                 <div className="flex items-center justify-between mt-2.5">
@@ -4682,6 +4690,16 @@ function ShopPanel({ coins, unlocked, owned, level, onBuy, onClose }: {
 
 // Every fixed course in the app on one page — keeps the title screen short and
 // scales as new courses are added to FIXED_COURSES.
+// A 1–5 star difficulty rating (orange stars), 5 = very difficult.
+function DiffStars({ n }: { n: number }) {
+  return (
+    <span className="leading-none tracking-tight whitespace-nowrap" aria-label={`Difficulty ${n} of 5`}>
+      {[0, 1, 2, 3, 4].map((i) => (
+        <span key={i} className={`text-[11px] ${i < n ? "text-[#e0923b]" : "text-white/15"}`}>★</span>
+      ))}
+    </span>
+  );
+}
 function CoursesPanel({ courses, tourCourses, bests, tourBests, onClose, onPlay }: {
   courses: CourseInfo[];
   tourCourses: CourseInfo[];
@@ -4695,15 +4713,23 @@ function CoursesPanel({ courses, tourCourses, bests, tourBests, onClose, onPlay 
   const seg = (active: boolean) =>
     `flex-1 rounded-md px-2 py-2 text-xs font-bold transition ${active ? "bg-[#4B3DFF] text-white" : "text-gray-400 hover:text-white"}`;
   const bestFor = (c: CourseInfo) => (c.seed != null ? tourBests[c.seed] ?? null : bests[c.mode] ?? null);
-  const list = tab === "championship" ? courses : tourCourses;
-  const card = (c: CourseInfo) => {
+  // Sort each tab easiest → hardest by intrinsic difficulty.
+  const byDiff = (cs: CourseInfo[]) => cs.map((c) => ({ c, d: courseDifficultyOf(c.mode, c.seed) })).sort((a, b) => a.d - b.d);
+  const champ = useMemo(() => byDiff(courses), [courses]);
+  const tourL = useMemo(() => byDiff(tourCourses), [tourCourses]);
+  const list = tab === "championship" ? champ : tourL;
+  const card = ({ c }: { c: CourseInfo }) => {
     const best = bestFor(c);
     const stars = courseStars(best, c.par);
+    const diff = courseStarDifficulty(c.mode, c.seed);
     return (
       <div key={c.seed != null ? `tour-${c.seed}` : c.mode} className="rounded-xl bg-[#1a1d23] border border-white/10 p-3">
-        <div className="flex items-baseline justify-between gap-2">
-          <span className="text-white font-bold text-sm truncate">{c.name}</span>
-          <span className="text-gray-500 text-[10px] shrink-0">{c.holes} holes · par {c.par}</span>
+        <div className="flex items-start justify-between gap-2">
+          <span className="text-white font-bold text-sm truncate pt-0.5">{c.name}</span>
+          <div className="shrink-0 text-right">
+            <DiffStars n={diff} />
+            <span className="block text-gray-500 text-[10px] mt-0.5">{c.holes} holes · par {c.par}</span>
+          </div>
         </div>
         <p className="text-gray-500 text-[11px] mt-0.5 leading-snug">{c.blurb}</p>
         <div className="flex items-center justify-between mt-2.5">
@@ -4733,9 +4759,9 @@ function CoursesPanel({ courses, tourCourses, bests, tourBests, onClose, onPlay 
           <button type="button" onClick={() => setTab("championship")} className={seg(tab === "championship")}>Championship</button>
           <button type="button" onClick={() => setTab("tour")} className={seg(tab === "tour")}>🏆 Pro Tour</button>
         </div>
-        <p className="text-gray-500 text-[11px] mt-2 shrink-0">Earn stars by going low: <span className="text-[#f5d24a]">★</span> even par · <span className="text-[#f5d24a]">★★</span> −9 · <span className="text-[#f5d24a]">★★★</span> −18.</p>
+        <p className="text-gray-500 text-[11px] mt-2 shrink-0">Easiest first. <span className="text-[#e0923b]">★</span> = difficulty (5 = very hard). Gold <span className="text-[#f5d24a]">★</span> below are your best: even par · −9 · −18.</p>
         <div className="flex-1 overflow-y-auto mt-2 space-y-2.5 pr-0.5 -mr-0.5">
-          {list.map(card)}
+          {list.map(({ c }) => card({ c }))}
         </div>
         <button type="button" onClick={onClose} className={`${btn} w-full shrink-0 mt-3`}>Done</button>
       </div>

@@ -291,6 +291,48 @@ const WINTHROP_TEMPLATES: Omit<Hole, "worldH">[] = [
 ];
 const WINTHROP_HOLES: Hole[] = WINTHROP_TEMPLATES.map(materializeHole);
 const WINTHROP_PAR = WINTHROP_HOLES.reduce((s, h) => s + h.par, 0);
+
+// The 18 holes of a playable course, by (mode, seed). Glendoveer + Winthrop are
+// fixed; a tour venue's seed builds its layout. (Daily/ranked aren't fixed
+// courses, so they fall back to Glendoveer.)
+function courseHoles(mode: Mode, seed?: number): Hole[] {
+  if (mode === "winthrop") return WINTHROP_HOLES;
+  if (mode === "tour") return generateTourCourse(seed ?? 0);
+  return HOLES; // "course" = Glendoveer East
+}
+// Intrinsic course difficulty — how hard it plays, from the obstacles, fairway
+// tightness, wind, and elevation averaged over the holes. Higher = nastier.
+function courseDifficulty(holes: Hole[]): number {
+  if (!holes.length) return 0;
+  let s = 0;
+  for (const h of holes) {
+    s += (h.trees?.length ?? 0) * 0.32;
+    s += (h.water?.length ?? 0) * 1.0;
+    s += (h.hazard?.length ?? 0) * 0.7;
+    s += (h.obZones?.length ?? 0) * 0.9;
+    s += Math.max(0, 120 - h.fwWidth) / 12; // tighter corridor than ~120px
+    s += Math.max(0, h.elev ?? 0) * 0.4; // uphill
+    s += (h.windMag ?? 0) * 26;
+    if (h.roughIsHazard) s += 0.8;
+  }
+  return s / holes.length;
+}
+// Difficulty as a 1–5 star rating (5 = very difficult). Thresholds calibrated to
+// the spread of the play-courses (~2.5 easiest to ~4.9 hardest).
+function difficultyStars(diff: number): 1 | 2 | 3 | 4 | 5 {
+  if (diff >= 4.6) return 5;
+  if (diff >= 3.9) return 4;
+  if (diff >= 3.3) return 3;
+  if (diff >= 2.6) return 2;
+  return 1;
+}
+// Convenience: a course's raw difficulty / star difficulty from (mode, seed).
+function courseDifficultyOf(mode: Mode, seed?: number): number {
+  return courseDifficulty(courseHoles(mode, seed));
+}
+function courseStarDifficulty(mode: Mode, seed?: number): 1 | 2 | 3 | 4 | 5 {
+  return difficultyStars(courseDifficultyOf(mode, seed));
+}
 // Winthrop's personal best lives in its own key (WBEST_KEY, from @/lib/progress).
 // Leaderboards are per course; each daily seed gets its own board.
 function leaderboardCourse(mode: Mode, seed: number): string {
@@ -328,9 +370,14 @@ function tournDef(id: string): TournDef | undefined {
 }
 // A round's base hole layout (used for field scoring + ghosts, like the field).
 function tournRoundHoles(round: TournRound): Hole[] {
-  if (round.mode === "winthrop") return WINTHROP_HOLES;
-  if (round.mode === "tour") return generateTourCourse(round.seed ?? 0);
-  return HOLES; // Glendoveer
+  return courseHoles(round.mode, round.seed);
+}
+// A tournament's difficulty = the average difficulty of the courses it visits.
+function tournDifficulty(def: TournDef): number {
+  return def.rounds.reduce((s, r) => s + courseDifficulty(tournRoundHoles(r)), 0) / def.rounds.length;
+}
+function tournStarDifficulty(def: TournDef): 1 | 2 | 3 | 4 | 5 {
+  return difficultyStars(tournDifficulty(def));
 }
 function tournRoundPar(round: TournRound): number {
   return tournRoundHoles(round).reduce((s, h) => s + h.par, 0);
@@ -1425,6 +1472,13 @@ export {
   BOGEY_PREFIX,
   scoreLabel,
   courseStars,
+  courseHoles,
+  courseDifficulty,
+  courseDifficultyOf,
+  difficultyStars,
+  courseStarDifficulty,
+  tournDifficulty,
+  tournStarDifficulty,
   STRAIGHT_SPEED_MUL,
   releaseSpeedMul,
   FAIRWAY_BASE,

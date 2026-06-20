@@ -2,6 +2,12 @@ import { describe, it, expect } from "vitest";
 import {
   scoreLabel,
   courseStars,
+  courseHoles,
+  courseDifficulty,
+  difficultyStars,
+  courseStarDifficulty,
+  tournDifficulty,
+  tournStarDifficulty,
   earnedAchievements,
   buildRound,
   HOLES,
@@ -489,6 +495,46 @@ describe("pro-tour courses", () => {
   it("each tour course gets its own leaderboard board keyed by seed", () => {
     const c = TOUR_COURSES[0];
     expect(leaderboardCourse("tour", c.seed)).toBe(`tour-${c.seed}`);
+  });
+});
+
+describe("course difficulty (1–5 stars)", () => {
+  it("difficultyStars maps the score range onto 1–5 (5 = very hard)", () => {
+    expect(difficultyStars(1.0)).toBe(1);
+    expect(difficultyStars(2.6)).toBe(2);
+    expect(difficultyStars(3.3)).toBe(3);
+    expect(difficultyStars(3.9)).toBe(4);
+    expect(difficultyStars(4.6)).toBe(5);
+    expect(difficultyStars(99)).toBe(5);
+  });
+  it("rates a busier course harder than a wide-open one", () => {
+    const open = [{ par: 3, fwWidth: 140, trees: [], water: [], hazard: [] }] as unknown as Parameters<typeof courseDifficulty>[0];
+    const nasty = [{ par: 3, fwWidth: 80, trees: [{}, {}, {}, {}], water: [{}, {}], hazard: [{}], windMag: 0.03, elev: 2 }] as unknown as Parameters<typeof courseDifficulty>[0];
+    expect(courseDifficulty(nasty)).toBeGreaterThan(courseDifficulty(open));
+  });
+  it("the play-courses span a real spread of star ratings", () => {
+    const stars = new Set<number>();
+    stars.add(courseStarDifficulty("course"));
+    stars.add(courseStarDifficulty("winthrop"));
+    for (const c of TOUR_COURSES) stars.add(courseStarDifficulty("tour", c.seed));
+    expect(Math.max(...stars)).toBe(5); // at least one very-hard course
+    expect(Math.min(...stars)).toBeLessThanOrEqual(2); // and an easy one
+    expect(stars.size).toBeGreaterThanOrEqual(3); // a genuine spread
+  });
+  it("every fixed course resolves to 18 holes via courseHoles", () => {
+    expect(courseHoles("course")).toHaveLength(18);
+    expect(courseHoles("winthrop")).toHaveLength(18);
+    expect(courseHoles("tour", TOUR_COURSES[0].seed)).toHaveLength(18);
+  });
+  it("a tournament's difficulty is the average of its courses", () => {
+    const single = TOURNAMENTS.find((d) => d.id === "Winthrop Lake Classic")!;
+    expect(tournStarDifficulty(single)).toBe(courseStarDifficulty("winthrop"));
+    for (const d of TOURNAMENTS) {
+      const avg = d.rounds.reduce((s, r) => s + courseDifficulty(courseHoles(r.mode, r.seed)), 0) / d.rounds.length;
+      expect(tournDifficulty(d)).toBeCloseTo(avg, 5);
+      expect(tournStarDifficulty(d)).toBeGreaterThanOrEqual(1);
+      expect(tournStarDifficulty(d)).toBeLessThanOrEqual(5);
+    }
   });
 });
 
