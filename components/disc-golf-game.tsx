@@ -2809,7 +2809,7 @@ export function DiscGolfGame() {
 
                 <div className="w-full flex flex-col gap-2.5 mt-6">
                   <button type="button" onClick={() => chooseEntry("offline")} className={titleCard}>
-                    🎮 Play offline
+                    Play offline
                   </button>
                   {supa && (
                     <button type="button" onClick={() => chooseEntry("auth")} className={titleCard}>
@@ -2945,7 +2945,6 @@ export function DiscGolfGame() {
                 <>
                   <div className={`w-full flex flex-col gap-2 ${menuTopMargin}`}>
                     <button type="button" onClick={() => setHub("solo")} className={hubCard}>
-                      <span className="text-2xl leading-none shrink-0">🎮</span>
                       <span className="flex-1 text-left min-w-0">
                         <span className="block font-bold text-sm">Single Player</span>
                         <span className="block text-[11px] text-gray-400 truncate">Daily, Courses, Career &amp; Tournament</span>
@@ -2953,7 +2952,6 @@ export function DiscGolfGame() {
                       <span className="text-gray-500 text-lg shrink-0">›</span>
                     </button>
                     <button type="button" onClick={() => setHub("online")} className={hubCard}>
-                      <span className="text-2xl leading-none shrink-0">🏆</span>
                       <span className="flex-1 text-left min-w-0">
                         <span className="block font-bold text-sm">Online &amp; Compete</span>
                         <span className="block text-[11px] text-gray-400 truncate">Friends, Ranked, Events &amp; Leaders</span>
@@ -2964,7 +2962,6 @@ export function DiscGolfGame() {
                       <span className="text-gray-500 text-lg shrink-0">›</span>
                     </button>
                     <button type="button" onClick={() => setPracticeOpen(true)} className={hubCard}>
-                      <span className="text-2xl leading-none shrink-0">🎯</span>
                       <span className="flex-1 text-left min-w-0">
                         <span className="block font-bold text-sm">Practice</span>
                         <span className="block text-[11px] text-gray-400 truncate">Putting, targets &amp; single holes</span>
@@ -2999,17 +2996,17 @@ export function DiscGolfGame() {
                     </button>
                   ) : (
                     <button type="button" onClick={() => startGame("daily")} className={titleCard}>
-                      🔥 Daily Challenge
+                      Daily Challenge
                     </button>
                   )}
                   <button type="button" onClick={() => setCoursesOpen(true)} className={titleCard}>
-                    ⛳ Play Courses · {FIXED_COURSES.length + TOUR_COURSE_INFOS.length}
+                    Play Courses · {FIXED_COURSES.length + TOUR_COURSE_INFOS.length}
                   </button>
                   <button type="button" onClick={() => { setCareerLastResult(null); setCareerNotes([]); setCareerOpen(true); }} className={titleCard}>
-                    🌟 Career{career && !career.retired ? ` · ${STAGE_LABEL[career.stage]}, age ${career.age}` : ""}
+                    Career{career && !career.retired ? ` · ${STAGE_LABEL[career.stage]}, age ${career.age}` : ""}
                   </button>
                   <button type="button" onClick={() => setTournamentOpen(true)} className={titleCard}>
-                    🏟 Tournaments{tournament && !tournament.finished ? ` · ${tournDef(tournament.id)?.name ?? ""} R${tournament.myTotals.length + 1}` : ""}
+                    Tournaments{tournament && !tournament.finished ? ` · ${tournDef(tournament.id)?.name ?? ""} R${tournament.myTotals.length + 1}` : ""}
                   </button>
                 </div>
               )}
@@ -3019,16 +3016,16 @@ export function DiscGolfGame() {
                 <div className={`w-full flex flex-col gap-2 ${menuTopMargin}`}>
                   <button type="button" onClick={() => setHub("home")} className={`${titleCardSm} !flex-none self-start px-3`}>‹ Back</button>
                   <button type="button" onClick={() => setChallengeOpen(true)} className={titleCard}>
-                    👥 Challenge Friends
+                    Challenge Friends
                   </button>
                   <button type="button" onClick={() => setRankedOpen(true)} className={titleCard}>
-                    🏅 Ranked · {tierFromRP(ranked?.rp ?? 0).tier.emoji} {tierFromRP(ranked?.rp ?? 0).tier.name}
+                    Ranked · {tierFromRP(ranked?.rp ?? 0).tier.emoji} {tierFromRP(ranked?.rp ?? 0).tier.name}
                   </button>
                   <button type="button" onClick={() => setEventsOpen(true)} className={titleCard}>
-                    🎟 Weekly Events{claimableEvents > 0 ? ` · ${claimableEvents} reward${claimableEvents === 1 ? "" : "s"} ready!` : ""}
+                    Weekly Events{claimableEvents > 0 ? ` · ${claimableEvents} reward${claimableEvents === 1 ? "" : "s"} ready!` : ""}
                   </button>
                   <button type="button" onClick={() => setBoardsOpen(true)} className={titleCard}>
-                    🏆 Leaderboards
+                    Leaderboards
                   </button>
                 </div>
               )}
@@ -3707,7 +3704,7 @@ const titleCard =
   "w-full rounded-xl border border-[#36D7B7]/55 bg-[#1a1d23] hover:border-[#36D7B7] hover:bg-[#20262f] active:scale-[0.99] text-white font-bold py-3 transition";
 const titleCardSm =
   "flex-1 rounded-lg border border-[#36D7B7]/45 bg-[#1a1d23] hover:border-[#36D7B7] text-gray-200 hover:text-white text-xs font-semibold py-2 transition";
-// Big hub category card: emoji + title + subtitle + chevron.
+// Big hub category card: title + subtitle + chevron.
 const hubCard =
   "w-full flex items-center gap-3 rounded-xl border border-[#36D7B7]/55 bg-[#1a1d23] hover:border-[#36D7B7] hover:bg-[#20262f] active:scale-[0.99] text-white px-3.5 py-3 transition";
 
@@ -4004,7 +4001,7 @@ function LobbyPanel({ lobby, players, onStart, onLeave }: {
         </div>
         {lobby.isHost ? (
           <>
-            <button type="button" onClick={onStart} className={`${btn} w-full`}>▶ Start round</button>
+            <button type="button" onClick={onStart} className={`${btn} w-full`}>Start round</button>
             {players.length < 2 && <p className="text-gray-500 text-[11px] text-center">Waiting for friends to join — you can start anytime.</p>}
           </>
         ) : (
@@ -4058,7 +4055,7 @@ function PartyPanel({ onClose, onStart }: { onClose: () => void; onStart: (m: Mo
           onClick={() => onStart(course, Array.from({ length: count }, (_, i) => names[i].trim() || `Player ${i + 1}`))}
           className={`${btn} w-full`}
         >
-          ▶ Tee off
+          Tee off
         </button>
       </div>
     </div>
@@ -4146,7 +4143,7 @@ function TournamentPanel({ tournaments, active, bests, onStart, onAbandon, onPla
           {!active.finished ? (
             <>
               <button type="button" onClick={() => onPlayRound(active)} className={`${btn} w-full shrink-0 mt-3`}>
-                ▶ Play round {active.myTotals.length + 1} of {def.rounds.length}
+                Play round {active.myTotals.length + 1} of {def.rounds.length}
               </button>
               <button type="button" onClick={onAbandon} className="w-full text-gray-500 hover:text-gray-300 text-xs py-1.5 transition shrink-0">Abandon tournament</button>
             </>
@@ -4184,7 +4181,7 @@ function TournamentPanel({ tournaments, active, bests, onStart, onAbandon, onPla
                   <span className="text-[11px] text-gray-400">
                     {best ? <>🏅 Best <span className="text-[#f5d24a] font-bold">{ordinal(best)}</span> <span className="text-gray-500">of {TOURN_FIELD}</span></> : "Not played yet"}
                   </span>
-                  <button type="button" onClick={() => onStart(d)} className="shrink-0 rounded-lg bg-[#4B3DFF] hover:bg-[#3a2ee0] text-white text-sm font-bold px-5 py-1.5 transition">▶ Play</button>
+                  <button type="button" onClick={() => onStart(d)} className="shrink-0 rounded-lg bg-[#4B3DFF] hover:bg-[#3a2ee0] text-white text-sm font-bold px-5 py-1.5 transition">Play</button>
                 </div>
               </div>
             );
@@ -4422,7 +4419,7 @@ function CareerPanel({ career, lastResult, notes, onClose, onStart, onPlay, onSi
                   <span className={`shrink-0 text-xs font-bold ${r.win ? "text-[#f5d24a]" : "text-gray-300"}`} title={r.played ? "played" : "simmed"}>{placeLabel(r.placed)} <span className="text-gray-500 font-normal">{r.played ? "▶" : "⚡"}</span></span>
                 ) : (
                   <div className="shrink-0 flex gap-1">
-                    <button type="button" onClick={() => onPlay(ev)} className="rounded bg-[#4B3DFF] hover:bg-[#3a2ee0] text-white text-xs font-bold px-2.5 py-1">▶ Play</button>
+                    <button type="button" onClick={() => onPlay(ev)} className="rounded bg-[#4B3DFF] hover:bg-[#3a2ee0] text-white text-xs font-bold px-2.5 py-1">Play</button>
                     <button type="button" onClick={() => onSim(ev)} className="rounded bg-white/10 hover:bg-white/20 text-white text-xs font-bold px-2.5 py-1">⚡ Sim</button>
                   </div>
                 )}
@@ -4834,7 +4831,7 @@ function CoursesPanel({ courses, tourCourses, bests, tourBests, onClose, onPlay 
               {best != null ? <>Best <span className="text-[#36D7B7] font-bold">{best}</span> ({over(best - c.par)})</> : "Not played yet"}
             </span>
           </div>
-          <button type="button" onClick={() => onPlay(c.mode, c.seed)} className="shrink-0 rounded-lg bg-[#4B3DFF] hover:bg-[#3a2ee0] text-white text-sm font-bold px-5 py-1.5 transition">▶ Play</button>
+          <button type="button" onClick={() => onPlay(c.mode, c.seed)} className="shrink-0 rounded-lg bg-[#4B3DFF] hover:bg-[#3a2ee0] text-white text-sm font-bold px-5 py-1.5 transition">Play</button>
         </div>
       </div>
     );
@@ -4982,7 +4979,7 @@ function RankedPanel({ ranked, playerName, onPlay, onClose }: {
         </p>
 
         <button type="button" onClick={onPlay} className={`${btn} w-full`}>
-          ▶ Play this week&apos;s ranked round
+          Play this week&apos;s ranked round
         </button>
 
         {/* Live weekly board */}
