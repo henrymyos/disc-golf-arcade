@@ -3027,7 +3027,7 @@ export function DiscGolfGame() {
                 ))}
               </div>
               <button type="button" onClick={(e) => { e.stopPropagation(); nextHole(); }} className={btn}>
-                {hud.hole >= hud.holes ? "See results ▶" : "Next hole ▶"}
+                Tap anywhere to continue
               </button>
             </Overlay>
           );
@@ -3048,7 +3048,7 @@ export function DiscGolfGame() {
               })}
             </div>
             <button type="button" onClick={nextHole} className={btn}>
-              {hud.hole >= hud.holes ? "See results ▶" : "Next hole ▶"}
+              Tap anywhere to continue
             </button>
           </Overlay>
         )}
@@ -3100,7 +3100,7 @@ export function DiscGolfGame() {
                 );
               })()}
               <button type="button" onClick={(e) => { e.stopPropagation(); nextHole(); }} className={btn}>
-                {hud.hole >= hud.holes ? "See results ▶" : "Next hole ▶"}
+                Tap anywhere to continue
               </button>
             </Overlay>
           );
@@ -3694,11 +3694,6 @@ function Overlay({ children, onTap }: { children: React.ReactNode; onTap?: () =>
       onClick={onTap}
     >
       {children}
-      {onTap && (
-        <p className="absolute bottom-3 inset-x-0 text-center text-[11px] text-white/40 font-medium">
-          tap anywhere to continue
-        </p>
-      )}
     </div>
   );
 }
