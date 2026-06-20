@@ -3381,7 +3381,7 @@ export function DiscGolfGame() {
       )}
 
       {screen === "gameComplete" && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm p-4 flex items-start sm:items-center justify-center">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start sm:items-center justify-center">
           <div className="w-full max-w-lg space-y-4 my-auto">
             <div className="text-center">
               <h2 className="text-white font-black text-2xl">
@@ -3771,7 +3771,7 @@ function TutorialPanel({ onClose }: { onClose: () => void }) {
   const last = step === steps.length - 1;
   const nav = "rounded-lg px-4 py-2 text-xs font-bold transition";
   return (
-    <div className="absolute inset-0 z-20 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm p-4 flex items-start justify-center rounded-lg">
+    <div className="absolute inset-0 z-20 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start justify-center rounded-lg">
       <div className="w-full max-w-xs space-y-3 my-auto text-left">
         <div className="flex items-center justify-between">
           <h2 className="text-white font-black text-xl">How to Play</h2>
@@ -3817,7 +3817,7 @@ function ChallengePanel({ online, onClose, onPassPlay, onCreate, onJoin }: {
     `flex-1 rounded-md px-2 py-2 text-xs font-bold transition ${active ? "bg-[#4B3DFF] text-white" : "text-gray-400 hover:text-white"}`;
   const input = "w-full bg-[#1a1d23] border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-[#4B3DFF]";
   return (
-    <div className="absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm p-4 flex items-start justify-center rounded-lg">
+    <div className="absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start justify-center rounded-lg">
       <div className="w-full max-w-xs space-y-3 my-auto text-left">
         <div className="flex items-center justify-between">
           <h2 className="text-white font-black text-xl">👥 Challenge Friends</h2>
@@ -3888,7 +3888,7 @@ function LobbyPanel({ lobby, players, onStart, onLeave }: {
   const courseMode = host?.mode ?? lobby.mode;
   const courseLabel = courseMode === "course" ? "Glendoveer East" : courseMode === "winthrop" ? "Winthrop Lake" : "Daily course";
   return (
-    <div className="absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm p-4 flex items-start justify-center rounded-lg">
+    <div className="absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start justify-center rounded-lg">
       <div className="w-full max-w-xs space-y-4 my-auto text-left">
         <div className="flex items-center justify-between">
           <h2 className="text-white font-black text-xl">Lobby</h2>
@@ -3932,7 +3932,7 @@ function PartyPanel({ onClose, onStart }: { onClose: () => void; onStart: (m: Mo
   const seg = (active: boolean) =>
     `flex-1 rounded-md px-2 py-2 text-xs font-bold transition ${active ? "bg-[#4B3DFF] text-white" : "text-gray-400 hover:text-white"}`;
   return (
-    <div className="absolute inset-0 z-20 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm p-4 flex items-start justify-center rounded-lg">
+    <div className="absolute inset-0 z-20 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start justify-center rounded-lg">
       <div className="w-full max-w-xs space-y-3 my-auto text-left">
         <div className="flex items-center justify-between">
           <h2 className="text-white font-black text-xl">👥 Pass &amp; Play</h2>
@@ -4003,7 +4003,7 @@ function TournamentPanel({ tournaments, active, bests, onStart, onAbandon, onPla
     const hasCut = def.cut && def.rounds.length >= 3;
     return (
       <div className="absolute inset-0 z-20 bg-[#0f1117]/95 backdrop-blur-sm rounded-lg flex flex-col">
-        <div className="w-full max-w-sm mx-auto flex flex-col h-full p-4 text-left">
+        <div className="w-full max-w-sm mx-auto flex flex-col h-full px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] text-left">
           <div className="flex items-center justify-between gap-2 shrink-0">
             <h2 className="text-white font-black text-lg truncate">🏟 {def.name}</h2>
             <div className="flex items-center gap-2 shrink-0">
@@ -4070,7 +4070,7 @@ function TournamentPanel({ tournaments, active, bests, onStart, onAbandon, onPla
   // ── Tournament roster ──
   return (
     <div className="absolute inset-0 z-20 bg-[#0f1117]/95 backdrop-blur-sm rounded-lg flex flex-col">
-      <div className="w-full max-w-xs mx-auto flex flex-col h-full p-4 text-left">
+      <div className="w-full max-w-xs mx-auto flex flex-col h-full px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] text-left">
         <div className="flex items-center justify-between shrink-0">
           <h2 className="text-white font-black text-xl">🏟 Tournaments</h2>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
@@ -4138,7 +4138,7 @@ function CareerPanel({ career, lastResult, notes, onClose, onStart, onPlay, onSi
   useEffect(() => { setAlloc({ power: 0, control: 0, putt: 0, mental: 0 }); setConfirm(null); }, [career?.season, career?.retired]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  const wrap = "absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm p-4 flex items-start justify-center rounded-lg";
+  const wrap = "absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start justify-center rounded-lg";
   const card = "w-full max-w-sm space-y-3 my-auto text-left";
   const toPar = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
 
@@ -4405,7 +4405,7 @@ function ProfilePanel({ profile, coins, owned, unlocked, roundsPlayed, bestScore
   const pct = lvl.need ? Math.round((lvl.into / lvl.need) * 100) : 100;
   const over = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
   return (
-    <div className="absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm p-4 flex items-start justify-center rounded-lg">
+    <div className="absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start justify-center rounded-lg">
       <div className="w-full max-w-xs space-y-3.5 my-auto text-left">
         <div className="flex items-center justify-between">
           <h2 className="text-white font-black text-xl">👤 Profile</h2>
@@ -4582,7 +4582,7 @@ function BagPanel({ bag, unlocked, owned, level, onAdd, onRemove, onMove, onShop
   );
   return (
     <div className="absolute inset-0 z-30 bg-[#0f1117]/95 backdrop-blur-sm rounded-lg flex flex-col">
-      <div className="w-full max-w-xs mx-auto flex flex-col h-full p-4 text-left">
+      <div className="w-full max-w-xs mx-auto flex flex-col h-full px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] text-left">
         <div className="flex items-center justify-between shrink-0">
           <h2 className="text-white font-black text-xl">🎒 Your Bag · {bag.length}/{BAG_MAX}</h2>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
@@ -4649,7 +4649,7 @@ function ShopPanel({ coins, unlocked, owned, level, onBuy, onClose }: {
   // Every priced disc across both bags, cheapest first.
   const items = ADV_DISCS.filter((d) => DISC_PRICE[d.key] != null).sort((a, b) => DISC_PRICE[a.key] - DISC_PRICE[b.key]);
   return (
-    <div className="absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm p-4 flex items-start justify-center rounded-lg">
+    <div className="absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start justify-center rounded-lg">
       <div className="w-full max-w-xs space-y-2.5 my-auto text-left">
         <div className="flex items-center justify-between">
           <h2 className="text-white font-black text-xl">🛒 Disc Shop</h2>
@@ -4750,7 +4750,7 @@ function CoursesPanel({ courses, tourCourses, bests, tourBests, onClose, onPlay 
   };
   return (
     <div className="absolute inset-0 z-20 bg-[#0f1117]/95 backdrop-blur-sm rounded-lg flex flex-col">
-      <div className="w-full max-w-xs mx-auto flex flex-col h-full p-4 text-left">
+      <div className="w-full max-w-xs mx-auto flex flex-col h-full px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] text-left">
         <div className="flex items-center justify-between shrink-0">
           <h2 className="text-white font-black text-xl">⛳ Play Courses</h2>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
@@ -4787,7 +4787,7 @@ function EventsPanel({ history, owned, coins, onClaim, onClose }: {
   const challenges = weeklyChallenges(week);
   const rows = roundsThisWeek(history, week);
   return (
-    <div className="absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm p-4 flex items-start justify-center rounded-lg">
+    <div className="absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start justify-center rounded-lg">
       <div className="w-full max-w-xs space-y-3 my-auto text-left">
         <div className="flex items-center justify-between">
           <h2 className="text-white font-black text-xl">🎟 Weekly Events</h2>
@@ -4864,7 +4864,7 @@ function RankedPanel({ ranked, playerName, onPlay, onClose }: {
     return () => { active = false; };
   }, [week]);
   return (
-    <div className="absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm p-4 flex items-start justify-center rounded-lg">
+    <div className="absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start justify-center rounded-lg">
       <div className="w-full max-w-xs space-y-3 my-auto text-left">
         <div className="flex items-center justify-between">
           <h2 className="text-white font-black text-xl">🏅 Ranked</h2>
@@ -4954,7 +4954,7 @@ function LeaderboardPanel({ onClose }: { onClose: () => void }) {
   }, [pick]);
   /* eslint-enable react-hooks/set-state-in-effect */
   return (
-    <div className="absolute inset-0 z-20 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm p-4 flex items-start justify-center rounded-lg">
+    <div className="absolute inset-0 z-20 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start justify-center rounded-lg">
       <div className="w-full max-w-xs space-y-3 my-auto text-left">
         <div className="flex items-center justify-between">
           <h2 className="text-white font-black text-xl">🏆 Leaderboards</h2>
@@ -5037,7 +5037,7 @@ function StatsPanel({ onClose }: { onClose: () => void }) {
   ];
   const maxN = Math.max(1, ...distRows.map((d) => d.n));
   return (
-    <div className="absolute inset-0 z-20 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm p-4 flex items-start justify-center rounded-lg">
+    <div className="absolute inset-0 z-20 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start justify-center rounded-lg">
       <div className="w-full max-w-xs space-y-4 my-auto text-left">
         <div className="flex items-center justify-between">
           <h2 className="text-white font-black text-xl">Stats</h2>
@@ -5101,7 +5101,7 @@ function PracticePanel({ onClose, onPick, onMini }: {
   const seg = (active: boolean) =>
     `flex-1 rounded-md px-2 py-2 text-xs font-bold transition ${active ? "bg-[#4B3DFF] text-white" : "text-gray-400 hover:text-white"}`;
   return (
-    <div className="absolute inset-0 z-20 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm p-4 flex items-start justify-center rounded-lg">
+    <div className="absolute inset-0 z-20 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start justify-center rounded-lg">
       <div className="w-full max-w-xs space-y-3 my-auto text-left">
         <div className="flex items-center justify-between">
           <h2 className="text-white font-black text-xl">Practice</h2>
@@ -5163,7 +5163,7 @@ function SettingsPanel(props: {
   const seg = (active: boolean) =>
     `flex-1 rounded-md px-2 py-2 text-xs font-bold transition ${active ? "bg-[#4B3DFF] text-white" : "text-gray-400 hover:text-white"}`;
   return (
-    <div className="absolute inset-0 z-20 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm p-4 flex items-start justify-center rounded-lg">
+    <div className="absolute inset-0 z-20 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start justify-center rounded-lg">
       <div className="w-full max-w-xs space-y-4 my-auto text-left">
         <div className="flex items-center justify-between">
           <h2 className="text-white font-black text-xl">Settings</h2>
@@ -5245,7 +5245,7 @@ function AuthPanel(props: {
   const { onClose, user, email, setEmail, password, setPassword, busy, error, message, onSignIn, onSignUp, onSignOut } = props;
   const input = "w-full bg-[#0f1117] border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-[#4B3DFF]";
   return (
-    <div className="absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm p-4 flex items-start justify-center rounded-lg">
+    <div className="absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start justify-center rounded-lg">
       <div className="w-full max-w-xs space-y-4 my-auto text-left">
         <div className="flex items-center justify-between">
           <h2 className="text-white font-black text-xl">{user ? "Account" : "Log in"}</h2>
