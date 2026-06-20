@@ -205,6 +205,9 @@ export function DiscGolfGame() {
   // Juice: short-lived particles (world coords), camera shake, basket rattle.
   type Particle = { x: number; y: number; vx: number; vy: number; g: number; life: number; max: number; color: string; size: number };
   const particlesRef = useRef<Particle[]>([]);
+  // Ambient wind streaks (screen-fixed): faint lines drifting in the wind
+  // direction so you can SEE the wind blowing, not just read the arrow.
+  const windStreaksRef = useRef<{ x: number; y: number; len: number; a: number; sp: number }[]>([]);
   const shakeRef = useRef({ until: 0, mag: 0 });
   const rattleRef = useRef(0); // timestamp the basket chains were last hit
   const ghostsRef = useRef<GhostState | null>(null); // tournament rivals playing the current hole
@@ -2300,6 +2303,55 @@ export function DiscGolfGame() {
       ctx.globalAlpha = 1;
 
       ctx.restore(); // end of world-space (horizontally panned) drawing
+
+      // ── Ambient wind (screen-fixed) — faint streaks blowing across the whole
+      // viewport in the wind's direction. Density and speed scale with strength,
+      // so a stiff breeze visibly rips across the screen and a calm one barely
+      // drifts. Purely cosmetic; the arrow/mph panel still gives the exact read.
+      {
+        const wmag = hole.windMag ?? 0;
+        if (wmag > 0.0006) {
+          const wmph = Math.round((wmag / 0.018) * 15);
+          const wang = Math.atan2(hole.wind?.y ?? 0, hole.wind?.x ?? 0);
+          const dx = Math.cos(wang);
+          const dy = Math.sin(wang);
+          const streaks = windStreaksRef.current;
+          const margin = 36;
+          const target = Math.min(48, 5 + Math.round(wmph * 2.2)); // more wind → more streaks
+          const baseSpeed = 0.7 + wmph * 0.24; // px/frame at the slowest layer
+          while (streaks.length < target) {
+            streaks.push({
+              x: Math.random() * (W + margin * 2) - margin,
+              y: Math.random() * (H + margin * 2) - margin,
+              len: 5 + Math.random() * 11,
+              a: 0.05 + Math.random() * 0.13,
+              sp: 0.65 + Math.random() * 0.8, // per-streak speed → parallax depth
+            });
+          }
+          if (streaks.length > target) streaks.length = target;
+          // Tint matches the arrow: blue (calm) → yellow → orange (strong).
+          const tint = wmph >= 10 ? "224,138,59" : wmph >= 5 ? "245,210,74" : "196,222,238";
+          ctx.lineCap = "round";
+          ctx.lineWidth = 1;
+          for (const st of streaks) {
+            const v = baseSpeed * st.sp;
+            st.x += dx * v;
+            st.y += dy * v;
+            if (st.x < -margin) st.x = W + margin;
+            else if (st.x > W + margin) st.x = -margin;
+            if (st.y < -margin) st.y = H + margin;
+            else if (st.y > H + margin) st.y = -margin;
+            const l = st.len * st.sp;
+            ctx.strokeStyle = `rgba(${tint},${st.a})`;
+            ctx.beginPath();
+            ctx.moveTo(st.x, st.y);
+            ctx.lineTo(st.x - dx * l, st.y - dy * l); // tail points upwind
+            ctx.stroke();
+          }
+        } else {
+          windStreaksRef.current.length = 0;
+        }
+      }
 
       // ── Mini-map (screen-fixed) — sits on the side AWAY from the hole's
       // upper half, so a dogleg toward one corner is never hidden under it. ──
