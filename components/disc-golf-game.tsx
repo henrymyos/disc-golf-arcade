@@ -2947,14 +2947,12 @@ export function DiscGolfGame() {
                     <button type="button" onClick={() => setHub("solo")} className={hubCard}>
                       <span className="flex-1 text-left min-w-0">
                         <span className="block font-bold text-sm">Single Player</span>
-                        <span className="block text-[11px] text-gray-400 truncate">Daily, Courses, Career &amp; Tournament</span>
                       </span>
                       <span className="text-gray-500 text-lg shrink-0">›</span>
                     </button>
                     <button type="button" onClick={() => setHub("online")} className={hubCard}>
                       <span className="flex-1 text-left min-w-0">
                         <span className="block font-bold text-sm">Online &amp; Compete</span>
-                        <span className="block text-[11px] text-gray-400 truncate">Friends, Ranked, Events &amp; Leaders</span>
                       </span>
                       {claimableEvents > 0 && (
                         <span className="shrink-0 min-w-[18px] h-[18px] px-1 rounded-full bg-[#f5d24a] text-[#0f1117] text-[10px] font-black flex items-center justify-center">{claimableEvents}</span>
@@ -2964,7 +2962,6 @@ export function DiscGolfGame() {
                     <button type="button" onClick={() => setPracticeOpen(true)} className={hubCard}>
                       <span className="flex-1 text-left min-w-0">
                         <span className="block font-bold text-sm">Practice</span>
-                        <span className="block text-[11px] text-gray-400 truncate">Putting, targets &amp; single holes</span>
                       </span>
                       <span className="text-gray-500 text-lg shrink-0">›</span>
                     </button>
@@ -3000,10 +2997,10 @@ export function DiscGolfGame() {
                     </button>
                   )}
                   <button type="button" onClick={() => setCoursesOpen(true)} className={titleCard}>
-                    Play Courses · {FIXED_COURSES.length + TOUR_COURSE_INFOS.length}
+                    Challenge the Arcade
                   </button>
                   <button type="button" onClick={() => { setCareerLastResult(null); setCareerNotes([]); setCareerOpen(true); }} className={titleCard}>
-                    Career{career && !career.retired ? ` · ${STAGE_LABEL[career.stage]}, age ${career.age}` : ""}
+                    Career{career && !career.retired ? " · Continue" : ""}
                   </button>
                   <button type="button" onClick={() => setTournamentOpen(true)} className={titleCard}>
                     Tournaments{tournament && !tournament.finished ? ` · ${tournDef(tournament.id)?.name ?? ""} R${tournament.myTotals.length + 1}` : ""}
