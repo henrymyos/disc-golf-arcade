@@ -33,7 +33,12 @@ import {
   leaderboardCourse,
   tournStandings,
   tournLiveStandings,
+  tournPlace,
   TOURN_NAMES,
+  TOURN_FIELD,
+  TOURNAMENTS,
+  tournDef,
+  tournRoundHoles,
   materializeHole,
   tourPars,
   tourCharacter,
@@ -487,50 +492,72 @@ describe("pro-tour courses", () => {
   });
 });
 
+describe("tournament roster", () => {
+  it("offers 10–20 named events, each 2–3 rounds on one or two courses", () => {
+    expect(TOURNAMENTS.length).toBeGreaterThanOrEqual(10);
+    expect(TOURNAMENTS.length).toBeLessThanOrEqual(20);
+    const ids = new Set(TOURNAMENTS.map((d) => d.id));
+    expect(ids.size).toBe(TOURNAMENTS.length); // unique
+    for (const d of TOURNAMENTS) {
+      expect(d.rounds.length).toBeGreaterThanOrEqual(2);
+      expect(d.rounds.length).toBeLessThanOrEqual(3);
+      const courses = new Set(d.rounds.map((r) => `${r.mode}:${r.seed ?? ""}`));
+      expect(courses.size).toBeGreaterThanOrEqual(1);
+      expect(courses.size).toBeLessThanOrEqual(2); // one or two distinct courses
+      for (const r of d.rounds) expect(tournRoundHoles(r).length).toBe(18); // every round resolves
+      expect(tournDef(d.id)).toBe(d);
+    }
+  });
+});
+
 describe("tournament", () => {
-  const seed = 4242;
+  const def = TOURNAMENTS.find((d) => d.id === "Winthrop Lake Classic")!; // 3 rounds, cut
+  const seed = def.seed;
   // A tournament where two rounds have been played by everyone.
   const make = (myR1: number, myR2: number): Tournament => {
     const field0 = TOURN_NAMES.map((_, i) => 60 + (i % 7));
     const field1 = TOURN_NAMES.map((_, i) => 61 + (i % 5));
-    return { seed, round: 2, myTotals: [myR1, myR2], fieldTotals: [field0, field1], madeCut: true, finished: false };
+    return { id: def.id, seed, round: 2, myTotals: [myR1, myR2], fieldTotals: [field0, field1], madeCut: true, finished: false };
   };
   it("ranks the field and includes exactly one 'you' row", () => {
-    const rows = tournStandings(make(58, 57));
-    expect(rows).toHaveLength(TOURN_NAMES.length + 1);
+    const rows = tournStandings(make(58, 57), def);
+    expect(rows).toHaveLength(TOURN_FIELD);
     expect(rows.filter((r) => r.you)).toHaveLength(1);
-    // sorted ascending by total among non-cut players
     const active = rows.filter((r) => !r.cut);
     for (let i = 1; i < active.length; i++) {
       expect(active[i].total).toBeGreaterThanOrEqual(active[i - 1].total);
     }
   });
   it("cuts roughly the top half after round 2", () => {
-    const rows = tournStandings(make(80, 80)); // a poor player
+    const rows = tournStandings(make(80, 80), def); // a poor player
     const made = rows.filter((r) => !r.cut).length;
-    // 36 players -> top 18 advance (ties at the line included)
     expect(made).toBeGreaterThanOrEqual(18);
-    expect(made).toBeLessThanOrEqual(TOURN_NAMES.length + 1);
+    expect(made).toBeLessThanOrEqual(TOURN_FIELD);
   });
-  it("a strong player makes the cut; a weak one misses it", () => {
-    expect(tournStandings(make(50, 50)).find((r) => r.you)!.cut).toBe(false);
-    expect(tournStandings(make(120, 120)).find((r) => r.you)!.cut).toBe(true);
+  it("a strong player makes the cut and finishes high; a weak one misses it", () => {
+    expect(tournStandings(make(50, 50), def).find((r) => r.you)!.cut).toBe(false);
+    expect(tournStandings(make(120, 120), def).find((r) => r.you)!.cut).toBe(true);
+    expect(tournPlace(make(40, 40), def)).toBeLessThan(tournPlace(make(120, 120), def));
+  });
+  it("a 2-round event has no cut", () => {
+    const twoRound = TOURNAMENTS.find((d) => d.rounds.length === 2)!;
+    expect(tournStandings({ ...make(120, 120), id: twoRound.id }, twoRound).find((r) => r.you)!.cut).toBe(false);
   });
   it("live standings rank you among the field through N holes", () => {
-    const t = make(0, 0); // round 3 in progress would use myTotals.length; emulate round 1
-    const fresh: Tournament = { ...t, round: 0, myTotals: [], fieldTotals: [] };
-    const rows = tournLiveStandings(fresh, 10, 3); // 10 strokes thru 3 holes
+    const fresh: Tournament = { ...make(0, 0), round: 0, myTotals: [], fieldTotals: [] };
+    const rows = tournLiveStandings(fresh, def, 10, 3); // 10 strokes thru 3 holes
     expect(rows.filter((r) => r.you)).toHaveLength(1);
     expect(rows[0].rank).toBe(1);
   });
 });
 
 describe("tournament ghosts", () => {
-  const t: Tournament = { seed: 7, round: 0, myTotals: [], fieldTotals: [], madeCut: true, finished: false };
+  const def = TOURNAMENTS.find((d) => d.id === "Winthrop Lake Classic")!;
+  const t: Tournament = { id: def.id, seed: def.seed, round: 0, myTotals: [], fieldTotals: [], madeCut: true, finished: false };
   const hole = WINTHROP_HOLES[0];
 
   it("builds the configured number of rivals with tee→basket paths", () => {
-    const gs = buildTournGhosts(t, 0, hole, 1000);
+    const gs = buildTournGhosts(t, def, 0, hole, 1000);
     expect(gs.ghosts).toHaveLength(4);
     expect(gs.holeIndex).toBe(0);
     for (const gh of gs.ghosts) {
@@ -541,20 +568,20 @@ describe("tournament ghosts", () => {
   });
 
   it("picks distinct in-field rivals", () => {
-    const ids = buildTournGhosts(t, 3, hole, 0).ghosts.map((g) => g.idx);
+    const ids = buildTournGhosts(t, def, 3, hole, 0).ghosts.map((g) => g.idx);
     expect(new Set(ids).size).toBe(ids.length);
     ids.forEach((i) => expect(i).toBeGreaterThanOrEqual(0));
     ids.forEach((i) => expect(i).toBeLessThan(TOURN_NAMES.length));
   });
 
   it("is deterministic for the same inputs", () => {
-    const a = buildTournGhosts(t, 5, hole, 1).ghosts.map((g) => g.path);
-    const b = buildTournGhosts(t, 5, hole, 999).ghosts.map((g) => g.path); // startAt differs, paths shouldn't
+    const a = buildTournGhosts(t, def, 5, hole, 1).ghosts.map((g) => g.path);
+    const b = buildTournGhosts(t, def, 5, hole, 999).ghosts.map((g) => g.path); // startAt differs, paths shouldn't
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
   });
 
   it("ghostPosAt sits at the tee before start and the basket once holed", () => {
-    const gh = buildTournGhosts(t, 0, hole, 0).ghosts[0];
+    const gh = buildTournGhosts(t, def, 0, hole, 0).ghosts[0];
     const pre = ghostPosAt(gh, -50);
     expect(pre.holed).toBe(false);
     expect(pre).toMatchObject({ x: hole.tee.x, y: hole.tee.y });

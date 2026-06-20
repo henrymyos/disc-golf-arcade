@@ -297,8 +297,9 @@ function leaderboardCourse(mode: Mode, seed: number): string {
   return mode === "course" ? "glendoveer" : mode === "winthrop" ? "winthrop" : mode === "ranked" ? `ranked-${seed}` : mode === "tour" ? `tour-${seed}` : `daily-${seed}`;
 }
 
-// ── Tournament mode: 3 rounds at Winthrop Lake (College Nationals) against a
-// seeded AI field, with a cut to the top half after round 2. ──
+// ── Tournaments: a roster of named events, each 2–3 rounds on one or two of the
+// play-courses, against a seeded AI field. 3-round events cut to the top half
+// after round 2. (The roster itself, TOURNAMENTS, is built after TOUR_COURSES.)
 const TOURN_KEY = "discgolf.tournament.v1";
 const TOURN_NAMES = [
   "A. Hammes", "C. Dickerson", "L. Castro", "J. Mwangi", "T. Nakamura", "R. Pulido",
@@ -308,28 +309,49 @@ const TOURN_NAMES = [
   "M. Sorensen", "T. Vega", "R. Easterling", "D. Croft", "S. Bhatt", "L. Mercer",
   "K. Howell", "E. Trask", "B. Quinones", "J. Felder", "Y. Petrov",
 ];
+const TOURN_FIELD = TOURN_NAMES.length + 1; // 36 (the field + you)
+// A round plays one play-course: Glendoveer {mode:"course"}, Winthrop
+// {mode:"winthrop"}, or a pro-tour venue {mode:"tour", seed}.
+type TournRound = { mode: Mode; seed?: number };
+type TournDef = { id: string; name: string; venues: string; rounds: TournRound[]; cut: boolean; seed: number };
 type Tournament = {
-  seed: number;
+  id: string; // which TournDef
+  seed: number; // AI field seed (from the def)
   round: number; // next round to play (0-based); rounds played = myTotals.length
   myTotals: number[];
   fieldTotals: number[][]; // [round][playerIdx]
   madeCut: boolean;
   finished: boolean;
 };
-// Per-player skill: divided by 2.5 below, this spans about -10..+1.5 strokes
-// vs par per round — the very best in the field average around -10.
+function tournDef(id: string): TournDef | undefined {
+  return TOURNAMENTS.find((d) => d.id === id);
+}
+// A round's base hole layout (used for field scoring + ghosts, like the field).
+function tournRoundHoles(round: TournRound): Hole[] {
+  if (round.mode === "winthrop") return WINTHROP_HOLES;
+  if (round.mode === "tour") return generateTourCourse(round.seed ?? 0);
+  return HOLES; // Glendoveer
+}
+function tournRoundPar(round: TournRound): number {
+  return tournRoundHoles(round).reduce((s, h) => s + h.par, 0);
+}
+// 3-round events cut to the top half after R2; 2-round events have no cut.
+function tournHasCut(def: TournDef): boolean {
+  return def.cut && def.rounds.length >= 3;
+}
+// Per-player skill: divided by 2.5 below, ~ -10..+1.5 strokes vs par per round.
 function tournSkills(seed: number): number[] {
   const rng = mulberry32((seed ^ 0x9e3779b9) >>> 0);
   return TOURN_NAMES.map(() => rng() * 29 - 25);
 }
-// Hole-by-hole field scores so live standings exist mid-round. Skill is fixed
-// across rounds — same player, same expected scoring all weekend.
-function tournFieldHoles(seed: number, round: number): number[][] {
+// Hole-by-hole field scores for a round on `holes`, so live standings exist
+// mid-round. Skill is fixed across rounds (same player all weekend).
+function tournFieldHoles(seed: number, round: number, holes: Hole[]): number[][] {
   const skills = tournSkills(seed);
   const rng = mulberry32((seed * 31 + round * 7919) >>> 0);
   return skills.map((sk) => {
     const perHole = sk / 2.5 / 18;
-    return WINTHROP_HOLES.map((h) => {
+    return holes.map((h) => {
       let d = Math.round(perHole + (rng() * 2 - 1) * 0.85);
       if (rng() < 0.04) d -= 1; // the odd bomb
       if (rng() < 0.05) d += 1; // and the odd blow-up
@@ -337,24 +359,30 @@ function tournFieldHoles(seed: number, round: number): number[][] {
     });
   });
 }
-function tournFieldRound(seed: number, round: number): number[] {
-  return tournFieldHoles(seed, round).map((hs) => hs.reduce((a, b) => a + b, 0));
+function tournFieldRound(seed: number, round: number, holes: Hole[]): number[] {
+  return tournFieldHoles(seed, round, holes).map((hs) => hs.reduce((a, b) => a + b, 0));
 }
-// Full live leaderboard during a tournament round — everyone scored through the
-// same number of holes (cut players dropped in the final round), sorted, with
-// rank, to-par, and which row is you. `parThru` is par for the holes played so
-// far (completed rounds + this round's first `holesPlayed` holes).
+// Median two-round cut line (Infinity until two rounds exist).
+function tournCutLine(t: Tournament): number {
+  if (t.myTotals.length < 2 || t.fieldTotals.length < 2) return Infinity;
+  const sums = [t.myTotals[0] + t.myTotals[1], ...t.fieldTotals[0].map((_, i) => t.fieldTotals[0][i] + t.fieldTotals[1][i])];
+  return [...sums].sort((a, b) => a - b)[Math.floor(sums.length / 2) - 1];
+}
+// Full live leaderboard during a round — everyone scored through the same number
+// of holes (cut players dropped in the final round), sorted, with rank, to-par,
+// and which row is you. Par-thru spans completed rounds + this round's holes.
 type TournLiveRow = { rank: number; name: string; total: number; toPar: number; you: boolean };
-function tournLiveStandings(t: Tournament, myRoundSoFar: number, holesPlayed: number): TournLiveRow[] {
+function tournLiveStandings(t: Tournament, def: TournDef, myRoundSoFar: number, holesPlayed: number): TournLiveRow[] {
   const roundIdx = t.myTotals.length;
-  const fieldHoles = tournFieldHoles(t.seed, roundIdx);
+  const holes = tournRoundHoles(def.rounds[roundIdx]);
+  const fieldHoles = tournFieldHoles(t.seed, roundIdx, holes);
   let active = TOURN_NAMES.map((_, i) => i);
-  if (roundIdx === 2 && t.fieldTotals.length >= 2) {
-    const sums = [t.myTotals[0] + t.myTotals[1], ...t.fieldTotals[0].map((_, i) => t.fieldTotals[0][i] + t.fieldTotals[1][i])];
-    const line = [...sums].sort((a, b) => a - b)[Math.floor(sums.length / 2) - 1];
+  if (tournHasCut(def) && roundIdx === 2 && t.fieldTotals.length >= 2) {
+    const line = tournCutLine(t);
     active = active.filter((i) => t.fieldTotals[0][i] + t.fieldTotals[1][i] <= line);
   }
-  const parThru = roundIdx * WINTHROP_PAR + WINTHROP_HOLES.slice(0, holesPlayed).reduce((s, h) => s + h.par, 0);
+  const parBefore = def.rounds.slice(0, roundIdx).reduce((s, r) => s + tournRoundPar(r), 0);
+  const parThru = parBefore + holes.slice(0, holesPlayed).reduce((s, h) => s + h.par, 0);
   const rows = [{ name: "You", total: t.myTotals.reduce((a, b) => a + b, 0) + myRoundSoFar, you: true }];
   for (const i of active) {
     let prev = 0;
@@ -365,28 +393,27 @@ function tournLiveStandings(t: Tournament, myRoundSoFar: number, holesPlayed: nu
   return rows.map((r, idx) => ({ rank: idx + 1, name: r.name, total: r.total, toPar: r.total - parThru, you: r.you }));
 }
 type TournRow = { name: string; you: boolean; rounds: (number | null)[]; total: number; cut: boolean };
-// Standings with the post-R2 cut applied (ties at the line advance).
-function tournStandings(t: Tournament): TournRow[] {
-  const played = t.myTotals.length;
+// Final standings, with the post-R2 cut applied for 3-round events.
+function tournStandings(t: Tournament, def: TournDef): TournRow[] {
   const fieldRounds = t.fieldTotals.length;
-  let cutLine = Infinity;
-  if (played >= 2 && fieldRounds >= 2) {
-    const sums = [t.myTotals[0] + t.myTotals[1], ...t.fieldTotals[0].map((_, i) => t.fieldTotals[0][i] + t.fieldTotals[1][i])];
-    const sorted = [...sums].sort((a, b) => a - b);
-    cutLine = sorted[Math.floor(sorted.length / 2) - 1];
-  }
+  const hasCut = tournHasCut(def);
+  const cutLine = hasCut ? tournCutLine(t) : Infinity;
   const rows: TournRow[] = [];
-  const myCut = played >= 2 && t.myTotals[0] + t.myTotals[1] > cutLine;
+  const myCut = hasCut && t.myTotals.length >= 2 && t.myTotals[0] + t.myTotals[1] > cutLine;
   rows.push({ name: "You", you: true, rounds: t.myTotals.slice(), total: t.myTotals.reduce((a, b) => a + b, 0), cut: myCut });
   TOURN_NAMES.forEach((name, i) => {
     const sum2 = fieldRounds >= 2 ? t.fieldTotals[0][i] + t.fieldTotals[1][i] : 0;
-    const cut = fieldRounds >= 2 && sum2 > cutLine;
+    const cut = hasCut && fieldRounds >= 2 && sum2 > cutLine;
     const rounds: (number | null)[] = [];
     for (let r = 0; r < fieldRounds; r++) rounds.push(r === 2 && cut ? null : t.fieldTotals[r][i]);
     rows.push({ name, you: false, rounds, total: rounds.reduce<number>((a, b) => a + (b ?? 0), 0), cut });
   });
   rows.sort((a, b) => (a.cut === b.cut ? a.total - b.total : a.cut ? 1 : -1));
   return rows;
+}
+// Your 1-based finishing place (out of TOURN_FIELD).
+function tournPlace(t: Tournament, def: TournDef): number {
+  return tournStandings(t, def).findIndex((r) => r.you) + 1;
 }
 
 // Fixed per-hole elevation (course identity, not random): + uphill / − downhill,
@@ -1050,6 +1077,31 @@ function buildTourRoster(count: number): TourCourse[] {
   return out;
 }
 const TOUR_COURSES: TourCourse[] = buildTourRoster(8);
+
+// The tournament roster — named events on the play-courses: single-course
+// championships (3 rounds, cut) plus two-course series (2–3 rounds). Built once
+// from the course roster; each event's `seed` (an id hash) drives its AI field.
+function buildTournaments(): TournDef[] {
+  const glen: TournRound = { mode: "course" };
+  const wint: TournRound = { mode: "winthrop" };
+  const tour = (c: TourCourse): TournRound => ({ mode: "tour", seed: c.seed });
+  const seedOf = (s: string) => { let h = 2166136261 >>> 0; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
+  const ev = (name: string, venues: string, rounds: TournRound[], cut: boolean): TournDef => ({ id: name, name, venues, rounds, cut, seed: seedOf(name) });
+  const t = TOUR_COURSES;
+  const list: TournDef[] = [
+    ev("Glendoveer Championship", "Glendoveer East", [glen, glen, glen], true),
+    ev("Winthrop Lake Classic", "Winthrop Lake", [wint, wint, wint], true),
+    ...t.map((c) => ev(`${c.name} Open`, c.name, [tour(c), tour(c), tour(c)], true)),
+    ev("Northwest Showdown", "Glendoveer East + Winthrop Lake", [glen, wint], false),
+  ];
+  if (t[0]) list.push(ev("Champions Cup", `Glendoveer East + ${t[0].name}`, [glen, tour(t[0])], false));
+  if (t[0] && t[1]) list.push(ev("Spring Swing", `${t[0].name} + ${t[1].name}`, [tour(t[0]), tour(t[1]), tour(t[0])], true));
+  if (t[2] && t[3]) list.push(ev("Coastal Cup", `${t[2].name} + ${t[3].name}`, [tour(t[2]), tour(t[3])], false));
+  if (t[4] && t[5]) list.push(ev("Summer Series", `${t[4].name} + ${t[5].name}`, [tour(t[4]), tour(t[5]), tour(t[4])], true));
+  if (t[6] && t[7]) list.push(ev("Autumn Classic", `${t[6].name} + ${t[7].name}`, [tour(t[6]), tour(t[7])], false));
+  return list;
+}
+const TOURNAMENTS: TournDef[] = buildTournaments();
 // Build one playable round. Daily = a new 9-hole course; tour = a generated
 // 18-hole pro course; course = the 18 fixed Glendoveer holes with seeded wind +
 // a jittered pin. Same seed ⇒ same round.
@@ -1294,14 +1346,13 @@ function buildRacerGhosts(seed: number, holeIndex: number, hole: Hole, racers: G
 
 // Tournament rivals: the best-skilled players still in the event (cut applied in
 // round 3), with per-hole scores matching tournFieldHoles, as ghost discs.
-function buildTournGhosts(t: Tournament, holeIndex: number, hole: Hole, now: number): GhostState {
+function buildTournGhosts(t: Tournament, def: TournDef, holeIndex: number, hole: Hole, now: number): GhostState {
   const roundIdx = t.myTotals.length;
-  const fieldHoles = tournFieldHoles(t.seed, roundIdx);
+  const fieldHoles = tournFieldHoles(t.seed, roundIdx, tournRoundHoles(def.rounds[roundIdx]));
   const skills = tournSkills(t.seed);
   let active = TOURN_NAMES.map((_, i) => i);
-  if (roundIdx === 2 && t.fieldTotals.length >= 2) {
-    const sums = [t.myTotals[0] + t.myTotals[1], ...t.fieldTotals[0].map((_, i) => t.fieldTotals[0][i] + t.fieldTotals[1][i])];
-    const line = [...sums].sort((a, b) => a - b)[Math.floor(sums.length / 2) - 1];
+  if (tournHasCut(def) && roundIdx === 2 && t.fieldTotals.length >= 2) {
+    const line = tournCutLine(t);
     active = active.filter((i) => t.fieldTotals[0][i] + t.fieldTotals[1][i] <= line);
   }
   const rivals = [...active].sort((a, b) => skills[a] - skills[b]).slice(0, N_RIVALS);
@@ -1356,6 +1407,13 @@ export {
   leaderboardCourse,
   TOURN_KEY,
   TOURN_NAMES,
+  TOURN_FIELD,
+  TOURNAMENTS,
+  tournDef,
+  tournRoundHoles,
+  tournRoundPar,
+  tournHasCut,
+  tournPlace,
   tournSkills,
   tournFieldHoles,
   tournFieldRound,
@@ -1430,6 +1488,8 @@ export type {
   Hole,
   Mode,
   Tournament,
+  TournDef,
+  TournRound,
   TournLiveRow,
   TournRow,
   Achievement,
