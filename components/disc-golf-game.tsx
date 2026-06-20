@@ -27,7 +27,6 @@ import {
 import type {
   Vec, Tree, Hole, Mode, Tournament, TournDef, TournLiveRow, Achievement, FlightPath, Release, Flight, GhostState,
 } from "@/lib/discgolf/engine";
-import { challengeParam } from "@/lib/discgolf/challenge";
 import {
   newCareer, normalizeCareer, skillMods, seasonSchedule, simEvent, recordResult, advanceSeason, retire, seasonComplete,
   placeLabel, STAGE_LABEL, SKILL_KEYS, SKILL_LABEL, SKILL_DESC, IDENTITY_MODS,
@@ -1540,29 +1539,6 @@ export function DiscGolfGame() {
       }, "image/png");
     });
   }, [finalTotal, finalPars, finalMode, finalSeed, scorecard]);
-
-  // Share a challenge link that replays this exact round (same seed ⇒ same pins
-  // + wind). Friends open it and play to beat your score; the link unfurls with
-  // a generated OG preview (see app/page.tsx + app/og).
-  const [challengeCopied, setChallengeCopied] = useState(false);
-  const shareChallenge = useCallback(async () => {
-    const name = nameInput.trim() || "A friend";
-    const param = challengeParam(finalMode, finalSeed, finalTotal, name);
-    const url = `${location.origin}/?ch=${param}`;
-    const label = finalMode === "winthrop" ? "Winthrop Lake" : finalMode === "daily" ? "today's Daily" : finalMode === "ranked" ? "this week's Ranked" : finalMode === "tour" ? tourVenue(finalSeed) : "Glendoveer East";
-    try {
-      const nav = navigator as Navigator & { share?: (d: { title?: string; text?: string; url?: string }) => Promise<void> };
-      if (nav.share) {
-        await nav.share({ title: "Disc Golf Arcade", text: `I shot ${finalTotal} on ${label}. Beat it!`, url });
-        return;
-      }
-    } catch { /* fall through to clipboard */ }
-    try {
-      await navigator.clipboard.writeText(url);
-      setChallengeCopied(true);
-      setTimeout(() => setChallengeCopied(false), 2200);
-    } catch { /* ignore */ }
-  }, [nameInput, finalMode, finalSeed, finalTotal]);
 
   // When a hole finishes, record/show the best-ever strokes for that hole.
   // Only for Glendoveer — the daily course's holes change every day.
@@ -3650,16 +3626,9 @@ export function DiscGolfGame() {
               ) : (
                 <button type="button" onClick={() => (finalMode === "tour" ? startGame("tour", finalSeed) : startGame())} className={btn}>↻ Play again</button>
               )}
-              <button type="button" onClick={shareCard} className="mt-1 bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white font-bold px-6 py-3 rounded-lg transition">
-                📤 Share card
+              <button type="button" onClick={shareCard} aria-label="Share card" title="Share card" className="mt-1 flex items-center justify-center bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white text-lg px-3.5 py-3 rounded-lg transition">
+                📤
               </button>
-              {/* Challenge a friend to the exact same round (fixed seed). Not for
-                  practice/party/online, where there's no single comparable score. */}
-              {finalPracticeHole == null && !finalParty && !finalOnline && (
-                <button type="button" onClick={shareChallenge} className="mt-1 bg-[#1a1d23] border border-[#e0923b]/40 hover:border-[#e0923b]/70 text-white font-bold px-6 py-3 rounded-lg transition">
-                  {challengeCopied ? "✓ Link copied" : "⚔ Challenge a friend"}
-                </button>
-              )}
               <button
                 type="button"
                 onClick={() => { audioRef.current?.stopMusic(); if (finalOnline) leaveLobby(); setScreen("title"); }}
