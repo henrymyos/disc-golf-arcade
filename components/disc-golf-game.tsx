@@ -3021,7 +3021,7 @@ export function DiscGolfGame() {
             .sort((a, b) => a.total - b.total);
           const lead = rows.length ? rows[0].total : 0;
           return (
-            <Overlay>
+            <Overlay onTap={nextHole}>
               <p className="text-[#36D7B7] font-bold text-lg">Hole {onlineView.hole + 1} · {sl.emoji && `${sl.emoji} `}{sl.name}</p>
               <div className="w-full max-w-[260px] space-y-1">
                 {rows.map((r) => (
@@ -3031,14 +3031,14 @@ export function DiscGolfGame() {
                   </div>
                 ))}
               </div>
-              <button type="button" onClick={nextHole} className={btn}>
+              <button type="button" onClick={(e) => { e.stopPropagation(); nextHole(); }} className={btn}>
                 {hud.hole >= hud.holes ? "See results ▶" : "Next hole ▶"}
               </button>
             </Overlay>
           );
         })()}
         {screen === "holeComplete" && partyView && (
-          <Overlay>
+          <Overlay onTap={nextHole}>
             <p className="text-[#36D7B7] font-bold text-xl">Hole {hud.hole} complete</p>
             <div className="w-full max-w-[240px] space-y-1">
               {partyView.names.map((n, i) => {
@@ -3064,7 +3064,7 @@ export function DiscGolfGame() {
             sl.tone === "good" ? "text-[#36D7B7]" :
             sl.tone === "even" ? "text-white" : "text-[#e08a3b]";
           return (
-            <Overlay>
+            <Overlay onTap={nextHole}>
               <p className="text-[#36D7B7] font-bold text-xl">Hole {hud.hole} complete</p>
               <p className={`${tone} font-black text-3xl leading-tight`}>
                 {sl.emoji && `${sl.emoji} `}{sl.name}
@@ -3104,7 +3104,7 @@ export function DiscGolfGame() {
                   </div>
                 );
               })()}
-              <button type="button" onClick={nextHole} className={btn}>
+              <button type="button" onClick={(e) => { e.stopPropagation(); nextHole(); }} className={btn}>
                 {hud.hole >= hud.holes ? "See results ▶" : "Next hole ▶"}
               </button>
             </Overlay>
@@ -3688,10 +3688,18 @@ const titleCardSm =
 const hubCard =
   "w-full flex items-center gap-3 rounded-xl border border-[#36D7B7]/55 bg-[#1a1d23] hover:border-[#36D7B7] hover:bg-[#20262f] active:scale-[0.99] text-white px-3.5 py-3 transition";
 
-function Overlay({ children }: { children: React.ReactNode }) {
+function Overlay({ children, onTap }: { children: React.ReactNode; onTap?: () => void }) {
   return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/55 rounded-lg text-center px-4">
+    <div
+      className={`absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/55 rounded-lg text-center px-4${onTap ? " cursor-pointer" : ""}`}
+      onClick={onTap}
+    >
       {children}
+      {onTap && (
+        <p className="absolute bottom-3 inset-x-0 text-center text-[11px] text-white/40 font-medium">
+          tap anywhere to continue
+        </p>
+      )}
     </div>
   );
 }
