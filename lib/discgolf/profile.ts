@@ -21,14 +21,14 @@ export const AVATARS: Avatar[] = [
   { key: "dart", emoji: "🎯", price: 0 },
   { key: "fire", emoji: "🔥", price: 0 },
   { key: "star", emoji: "⭐", price: 0 },
-  { key: "eagle", emoji: "🦅", price: 200 },
-  { key: "rocket", emoji: "🚀", price: 350 },
-  { key: "trophy", emoji: "🏆", price: 400 },
-  { key: "crown", emoji: "👑", price: 500 },
-  { key: "alien", emoji: "👽", price: 600 },
-  { key: "robot", emoji: "🤖", price: 600 },
-  { key: "unicorn", emoji: "🦄", price: 800 },
-  { key: "goat", emoji: "🐐", price: 1000 },
+  { key: "eagle", emoji: "🦅", price: 1400 },
+  { key: "rocket", emoji: "🚀", price: 2500 },
+  { key: "trophy", emoji: "🏆", price: 2800 },
+  { key: "crown", emoji: "👑", price: 3500 },
+  { key: "alien", emoji: "👽", price: 4200 },
+  { key: "robot", emoji: "🤖", price: 4200 },
+  { key: "unicorn", emoji: "🦄", price: 5500 },
+  { key: "goat", emoji: "🐐", price: 7000 },
 ];
 
 export const DEFAULT_AVATAR = "🥏";
