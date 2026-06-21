@@ -19,10 +19,10 @@ import {
   TRAILS, DEFAULT_TRAIL, trailByKey, type Trail,
 } from "@/lib/discgolf/trails";
 import {
-  DISC_SKINS, BASKET_SKINS, AIM_STYLES, GROUND_THEMES,
-  DEFAULT_DISC_SKIN, DEFAULT_BASKET_SKIN, DEFAULT_AIM_STYLE, DEFAULT_GROUND_THEME,
+  DISC_SKINS, BASKET_SKINS, AIM_STYLES, GROUND_THEMES, CELEBRATIONS,
+  DEFAULT_DISC_SKIN, DEFAULT_BASKET_SKIN, DEFAULT_AIM_STYLE, DEFAULT_GROUND_THEME, DEFAULT_CELEBRATION,
   COSMETIC_PREFIX, cosmeticOwnKey, cosmeticUnlocked, cosmeticByKey,
-  type DiscSkin, type BasketSkin, type AimStyle, type GroundTheme,
+  type DiscSkin, type BasketSkin, type AimStyle, type GroundTheme, type Celebration,
 } from "@/lib/discgolf/cosmetics";
 import {
   weekSeed, rankedCourseKey, roundRP, applyRankedRound, tierFromRP, type RankedState,
@@ -502,11 +502,13 @@ export function DiscGolfGame() {
   const basketSkinRef = useRef<string>(DEFAULT_BASKET_SKIN);
   const aimStyleRef = useRef<string>(DEFAULT_AIM_STYLE);
   const groundThemeRef = useRef<string>(DEFAULT_GROUND_THEME);
+  const celebrationRef = useRef<string>(DEFAULT_CELEBRATION);
   useEffect(() => { trailKeyRef.current = profile.trail || DEFAULT_TRAIL; }, [profile.trail]);
   useEffect(() => { discSkinRef.current = profile.discSkin || DEFAULT_DISC_SKIN; }, [profile.discSkin]);
   useEffect(() => { basketSkinRef.current = profile.basketSkin || DEFAULT_BASKET_SKIN; }, [profile.basketSkin]);
   useEffect(() => { aimStyleRef.current = profile.aimStyle || DEFAULT_AIM_STYLE; }, [profile.aimStyle]);
   useEffect(() => { groundThemeRef.current = profile.groundTheme || DEFAULT_GROUND_THEME; }, [profile.groundTheme]);
+  useEffect(() => { celebrationRef.current = profile.celebration || DEFAULT_CELEBRATION; }, [profile.celebration]);
   const saveProfile = useCallback((next: PlayerProfile) => {
     setProfile(next);
     try { localStorage.setItem(PROFILE_KEY, JSON.stringify(next)); } catch { /* ignore */ }
@@ -649,6 +651,7 @@ export function DiscGolfGame() {
           basketSkin: typeof prof.basketSkin === "string" ? prof.basketSkin : DEFAULT_BASKET_SKIN,
           aimStyle: typeof prof.aimStyle === "string" ? prof.aimStyle : DEFAULT_AIM_STYLE,
           groundTheme: typeof prof.groundTheme === "string" ? prof.groundTheme : DEFAULT_GROUND_THEME,
+          celebration: typeof prof.celebration === "string" ? prof.celebration : DEFAULT_CELEBRATION,
         });
       }
       const rk = JSON.parse(localStorage.getItem(RANKED_KEY) || "null");
@@ -1776,7 +1779,14 @@ export function DiscGolfGame() {
           vibrate([15, 30, 15]);
           rattleRef.current = performance.now();
           const under = g.throws < hole.par;
-          spawnBurst(hole.basket.x, hole.basket.y, ["#36D7B7", "#f5d24a", "#ffffff", "#4B3DFF"], under ? 70 : 36, under ? 2.6 : 1.9, 0.05, 40);
+          // Equipped hole-out celebration: a bigger pop when you're under par.
+          const cel = cosmeticByKey(CELEBRATIONS, celebrationRef.current) ?? CELEBRATIONS[0];
+          const nBursts = cel.bursts ?? 1;
+          for (let b = 0; b < nBursts; b++) {
+            const ox = nBursts > 1 ? (Math.random() - 0.5) * 24 : 0;
+            const oy = nBursts > 1 ? (Math.random() - 0.5) * 24 : 0;
+            spawnBurst(hole.basket.x + ox, hole.basket.y + oy, cel.colors, Math.round(cel.count * (under ? 1.5 : 1)), cel.speed * (under ? 1.1 : 1), cel.grav, cel.life);
+          }
         } else if (res.status === "ob" || res.status === "oob") {
           // OUT OF BOUNDS: +1 and play from where it crossed the line.
           const inWater = hole.water.some((w) => inRect(w, f.x, f.y));
@@ -4766,9 +4776,13 @@ function basketSwatch(b: BasketSkin): string {
 function groundSwatch(g: GroundTheme): string {
   return `linear-gradient(90deg,${g.rough},${g.fairway},${g.stripe})`;
 }
+function celebrationSwatch(c: Celebration): string {
+  if (c.colors.length === 1) return c.colors[0];
+  return `linear-gradient(90deg,${c.colors.join(",")})`;
+}
 
 // Cosmetic profile fields the shop can equip.
-type CosmeticField = "trail" | "discSkin" | "basketSkin" | "aimStyle" | "groundTheme";
+type CosmeticField = "trail" | "discSkin" | "basketSkin" | "aimStyle" | "groundTheme" | "celebration";
 
 // Disc shop — buy advanced discs + cosmetics with coins.
 function ShopPanel({ coins, unlocked, owned, level, profile, onBuy, onEquip, onClose }: {
@@ -4781,7 +4795,7 @@ function ShopPanel({ coins, unlocked, owned, level, profile, onBuy, onEquip, onC
   onEquip: (field: CosmeticField, key: string) => void;
   onClose: () => void;
 }) {
-  const [tab, setTab] = useState<"discs" | "trails" | "discskin" | "basket" | "aim" | "ground">("discs");
+  const [tab, setTab] = useState<"discs" | "trails" | "discskin" | "basket" | "aim" | "ground" | "celebration">("discs");
   const seg = (active: boolean) =>
     `shrink-0 rounded-md px-2.5 py-1.5 text-xs font-bold whitespace-nowrap transition ${active ? "bg-[#4B3DFF] text-white" : "text-gray-400 hover:text-white"}`;
   // Every priced disc across both bags, cheapest first.
@@ -4821,6 +4835,7 @@ function ShopPanel({ coins, unlocked, owned, level, profile, onBuy, onEquip, onC
     { id: "basket", label: "🧺 Basket" },
     { id: "aim", label: "🎯 Aim" },
     { id: "ground", label: "🌿 Ground" },
+    { id: "celebration", label: "🎉 Win" },
   ];
   return (
     <div className="absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start justify-center rounded-lg">
@@ -4888,6 +4903,11 @@ function ShopPanel({ coins, unlocked, owned, level, profile, onBuy, onEquip, onC
         {tab === "ground" && <>
           <p className="text-gray-500 text-[11px]">Re-tint the grass and fairway. Hazard rough keeps its warning colors.</p>
           {GROUND_THEMES.map((g) => cosmeticRow(g, COSMETIC_PREFIX.ground, profile.groundTheme || DEFAULT_GROUND_THEME, "groundTheme", groundSwatch(g)))}
+        </>}
+
+        {tab === "celebration" && <>
+          <p className="text-gray-500 text-[11px]">The burst that fires when you sink the disc — bigger when you beat par.</p>
+          {CELEBRATIONS.map((c) => cosmeticRow(c, COSMETIC_PREFIX.celebration, profile.celebration || DEFAULT_CELEBRATION, "celebration", celebrationSwatch(c)))}
         </>}
 
         <button type="button" onClick={onClose} className={`${btn} w-full`}>Done</button>

@@ -10,6 +10,7 @@ export type PlayerProfile = {
   basketSkin?: string;
   aimStyle?: string;
   groundTheme?: string;
+  celebration?: string;
 };
 
 export type Avatar = { key: string; emoji: string; price: number };

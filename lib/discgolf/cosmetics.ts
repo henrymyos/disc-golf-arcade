@@ -59,10 +59,27 @@ export const GROUND_THEMES: GroundTheme[] = [
   { key: "night", name: "Night", desc: "Moonlit night round", price: 600, rough: "#1c2433", roughBand: "#18202c", fairway: "#2a3b4a", stripe: "#34465a" },
 ];
 
+// ── Hole-out celebrations (the particle burst when you sink it). Each is a set
+// of spawnBurst parameters; `bursts` > 1 fires several pops around the basket. ──
+export type Celebration = {
+  key: string; name: string; desc: string; price: number;
+  colors: string[]; count: number; speed: number; grav: number; life: number; bursts?: number;
+};
+export const CELEBRATIONS: Celebration[] = [
+  { key: "classic", name: "Classic", desc: "The standard confetti pop", price: 0, colors: ["#36D7B7", "#f5d24a", "#ffffff", "#4B3DFF"], count: 42, speed: 2.3, grav: 0.05, life: 40 },
+  { key: "bubbles", name: "Bubbles", desc: "Floaty blue bubbles", price: 350, colors: ["#bdecff", "#5fb0e8", "#ffffff"], count: 40, speed: 1.6, grav: -0.01, life: 60 },
+  { key: "confetti", name: "Party", desc: "A big rainbow confetti shower", price: 450, colors: ["#e23b3b", "#f5a623", "#f5d24a", "#36D7B7", "#5fb0e8", "#b85cd6"], count: 64, speed: 2.1, grav: 0.03, life: 66 },
+  { key: "stars", name: "Stars", desc: "A golden starburst", price: 500, colors: ["#fff7cf", "#f5d24a", "#ffe9a0"], count: 40, speed: 2.3, grav: 0.02, life: 52 },
+  { key: "inferno", name: "Inferno", desc: "Erupting flames", price: 600, colors: ["#e23b3b", "#e0923b", "#f5d24a"], count: 52, speed: 2.6, grav: -0.005, life: 46, bursts: 2 },
+  { key: "fireworks", name: "Fireworks", desc: "Multiple booming pops", price: 800, colors: ["#ff4d4d", "#f5d24a", "#36D7B7", "#5fb0e8", "#ffffff"], count: 24, speed: 2.9, grav: 0.04, life: 40, bursts: 4 },
+  { key: "rainbow", name: "Rainbow", desc: "A full-spectrum explosion", price: 1000, colors: ["#ff4d4d", "#f5a623", "#f5d24a", "#36D7B7", "#5fb0e8", "#b85cd6", "#ffffff"], count: 60, speed: 2.7, grav: 0.03, life: 56, bursts: 2 },
+];
+
 export const DEFAULT_DISC_SKIN = "white";
 export const DEFAULT_BASKET_SKIN = "steel";
 export const DEFAULT_AIM_STYLE = "white";
 export const DEFAULT_GROUND_THEME = "classic";
+export const DEFAULT_CELEBRATION = "classic";
 
 // Per-category owned-set prefixes.
 export const COSMETIC_PREFIX = {
@@ -70,6 +87,7 @@ export const COSMETIC_PREFIX = {
   basket: "basket",
   aim: "aim",
   ground: "ground",
+  celebration: "celebration",
 } as const;
 
 export function cosmeticOwnKey(prefix: string, key: string): string {
