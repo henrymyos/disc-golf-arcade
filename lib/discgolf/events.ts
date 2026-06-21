@@ -49,30 +49,31 @@ function isUnderPar(r: EventRound): boolean {
   return d != null && d < 0;
 }
 
-// ── Daily pool: light objectives, three surfaced per day. ──
+// ── Daily pool: three surfaced per day. (ids kept stable across difficulty
+// tweaks so in-progress claims aren't disrupted.) ──
 const DAILY_POOL: Challenge[] = [
-  { id: "play2", emoji: "🏌", title: "Out for a Round", desc: "Play 2 rounds today", reward: 100, goal: 2, measure: (rows) => rows.length },
-  { id: "play4", emoji: "💪", title: "Range Day", desc: "Play 4 rounds today", reward: 180, goal: 4, measure: (rows) => rows.length },
-  { id: "underpar", emoji: "🔽", title: "Go Low", desc: "Finish a round under par", reward: 150, goal: 1, measure: (rows) => rows.filter(isUnderPar).length },
-  { id: "evenpar", emoji: "🟢", title: "Steady", desc: "Finish a round at par or better", reward: 100, goal: 1, measure: (rows) => rows.filter((r) => { const d = toPar(r); return d != null && d <= 0; }).length },
-  { id: "birdies3", emoji: "🐦", title: "Birdie Hunter", desc: "Card 3 birdies today", reward: 130, goal: 3, measure: (rows) => countHoles(rows, (s, p) => s - p === -1) },
-  { id: "ace1", emoji: "🎯", title: "Hole in One", desc: "Throw an ace", reward: 300, goal: 1, measure: (rows) => countHoles(rows, (s) => s === 1) },
-  { id: "eagle1", emoji: "🦅", title: "Soaring", desc: "Score an eagle or better", reward: 200, goal: 1, measure: (rows) => countHoles(rows, (s, p) => s - p <= -2) },
-  { id: "ranked1", emoji: "🏅", title: "Enter the Ladder", desc: "Play a ranked round", reward: 120, goal: 1, measure: (rows) => rows.filter((r) => r.mode === "ranked").length },
-  { id: "daily1", emoji: "🔥", title: "Daily Devotee", desc: "Complete the Daily Challenge", reward: 120, goal: 1, measure: (rows) => rows.filter((r) => r.mode === "daily").length },
+  { id: "play2", emoji: "🏌", title: "Range Day", desc: "Play 4 rounds today", reward: 160, goal: 4, measure: (rows) => rows.length },
+  { id: "play4", emoji: "💪", title: "Marathon", desc: "Play 8 rounds today", reward: 300, goal: 8, measure: (rows) => rows.length },
+  { id: "underpar", emoji: "🔽", title: "Go Low", desc: "Finish 2 rounds under par", reward: 250, goal: 2, measure: (rows) => rows.filter(isUnderPar).length },
+  { id: "evenpar", emoji: "🟢", title: "Steady", desc: "Finish 2 rounds at par or better", reward: 180, goal: 2, measure: (rows) => rows.filter((r) => { const d = toPar(r); return d != null && d <= 0; }).length },
+  { id: "birdies3", emoji: "🐦", title: "Birdie Hunter", desc: "Card 6 birdies today", reward: 220, goal: 6, measure: (rows) => countHoles(rows, (s, p) => s - p === -1) },
+  { id: "ace1", emoji: "🎯", title: "Sharpshooter", desc: "Throw 2 aces", reward: 500, goal: 2, measure: (rows) => countHoles(rows, (s) => s === 1) },
+  { id: "eagle1", emoji: "🦅", title: "Soaring", desc: "Score 2 eagles or better", reward: 350, goal: 2, measure: (rows) => countHoles(rows, (s, p) => s - p <= -2) },
+  { id: "ranked1", emoji: "🏅", title: "On the Ladder", desc: "Play 2 ranked rounds", reward: 200, goal: 2, measure: (rows) => rows.filter((r) => r.mode === "ranked").length },
+  { id: "daily1", emoji: "🔥", title: "Daily Devotee", desc: "Play the Daily Challenge twice", reward: 200, goal: 2, measure: (rows) => rows.filter((r) => r.mode === "daily").length },
 ];
 
 // ── Weekly pool: heavier, longer-haul objectives, three surfaced per week. ──
 const WEEKLY_POOL: Challenge[] = [
-  { id: "wplay10", emoji: "🏌", title: "Frequent Flyer", desc: "Play 10 rounds this week", reward: 500, goal: 10, measure: (rows) => rows.length },
-  { id: "wplay20", emoji: "💪", title: "Iron Arm", desc: "Play 20 rounds this week", reward: 1000, goal: 20, measure: (rows) => rows.length },
-  { id: "wunderpar3", emoji: "🔽", title: "Under Pressure", desc: "Finish 3 rounds under par this week", reward: 550, goal: 3, measure: (rows) => rows.filter(isUnderPar).length },
-  { id: "wbirdies20", emoji: "🐦", title: "Birdie Machine", desc: "Card 20 birdies this week", reward: 600, goal: 20, measure: (rows) => countHoles(rows, (s, p) => s - p === -1) },
-  { id: "weagle3", emoji: "🦅", title: "Sky High", desc: "Score 3 eagles or better this week", reward: 700, goal: 3, measure: (rows) => countHoles(rows, (s, p) => s - p <= -2) },
-  { id: "wace2", emoji: "🎯", title: "Deadeye", desc: "Throw 2 aces this week", reward: 1200, goal: 2, measure: (rows) => countHoles(rows, (s) => s === 1) },
-  { id: "wlow10", emoji: "💎", title: "Double Digits", desc: "Finish a round 10-under or better", reward: 800, goal: 1, measure: (rows) => rows.filter((r) => { const d = toPar(r); return d != null && d <= -10; }).length },
-  { id: "wranked3", emoji: "🏅", title: "Ladder Climber", desc: "Play 3 ranked rounds this week", reward: 450, goal: 3, measure: (rows) => rows.filter((r) => r.mode === "ranked").length },
-  { id: "wdaily5", emoji: "🔥", title: "Daily Streak", desc: "Complete 5 Daily Challenges this week", reward: 600, goal: 5, measure: (rows) => rows.filter((r) => r.mode === "daily").length },
+  { id: "wplay10", emoji: "🏌", title: "Frequent Flyer", desc: "Play 20 rounds this week", reward: 800, goal: 20, measure: (rows) => rows.length },
+  { id: "wplay20", emoji: "💪", title: "Iron Arm", desc: "Play 40 rounds this week", reward: 1600, goal: 40, measure: (rows) => rows.length },
+  { id: "wunderpar3", emoji: "🔽", title: "Under Pressure", desc: "Finish 6 rounds under par this week", reward: 900, goal: 6, measure: (rows) => rows.filter(isUnderPar).length },
+  { id: "wbirdies20", emoji: "🐦", title: "Birdie Machine", desc: "Card 40 birdies this week", reward: 1000, goal: 40, measure: (rows) => countHoles(rows, (s, p) => s - p === -1) },
+  { id: "weagle3", emoji: "🦅", title: "Sky High", desc: "Score 6 eagles or better this week", reward: 1100, goal: 6, measure: (rows) => countHoles(rows, (s, p) => s - p <= -2) },
+  { id: "wace2", emoji: "🎯", title: "Deadeye", desc: "Throw 4 aces this week", reward: 2000, goal: 4, measure: (rows) => countHoles(rows, (s) => s === 1) },
+  { id: "wlow10", emoji: "💎", title: "Double Digits", desc: "Finish 2 rounds 10-under or better", reward: 1400, goal: 2, measure: (rows) => rows.filter((r) => { const d = toPar(r); return d != null && d <= -10; }).length },
+  { id: "wranked3", emoji: "🏅", title: "Ladder Climber", desc: "Play 6 ranked rounds this week", reward: 750, goal: 6, measure: (rows) => rows.filter((r) => r.mode === "ranked").length },
+  { id: "wdaily5", emoji: "🔥", title: "Daily Streak", desc: "Complete 10 Daily Challenges this week", reward: 1000, goal: 10, measure: (rows) => rows.filter((r) => r.mode === "daily").length },
 ];
 
 // Deterministic small PRNG (same family as the engine's mulberry32).
