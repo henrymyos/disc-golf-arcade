@@ -19,7 +19,8 @@ import {
   weekSeed, rankedCourseKey, roundRP, applyRankedRound, tierFromRP, type RankedState,
 } from "@/lib/discgolf/ranked";
 import {
-  weeklyChallenges, roundsThisWeek, challengeDone, eventClaimKey, type EventRound,
+  dailyChallenges, weeklyChallenges, roundsThisDay, roundsThisWeek, challengeDone,
+  dailyClaimKey, eventClaimKey, type Challenge, type EventRound,
 } from "@/lib/discgolf/events";
 import {
   W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, TOTAL_PAR, WINTHROP_PAR, leaderboardCourse, TOURN_KEY, TOURN_FIELD, TOURNAMENTS, tournDef, tournRoundHoles, tournPlace, tournFieldRound, tournLiveStandings, tournStandings, ACHIEVEMENTS, earnedAchievements, achievementReward, scoreLabel, courseStars, courseHoles, courseDifficultyOf, courseStarDifficulty, tournDifficulty, tournStarDifficulty, STRAIGHT_SPEED_MUL, releaseSpeedMul, ADV_DISCS, DISC_PRICE, isDiscUnlocked, levelUpChoices, validDiscIndex, DEFAULT_DISC_INDEX, BAG_MAX, discByKey, discIndexByKey, unlockedDiscKeys, reconcileBag, TOUR_COURSES, tourVenue, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, inRect, inHazard, offRibbons, dailySeed, buildRound, elevAt, vibrate, fullPowerRange, pxToFeet, distBetween, autoDiscIndex, lastInBoundsLie, stepFlight,
@@ -498,15 +499,14 @@ export function DiscGolfGame() {
   const [rankedOpen, setRankedOpen] = useState(false);
   const [rankedGain, setRankedGain] = useState<number | null>(null); // RP gained by the round just finished
 
-  // ── Recurring weekly events (rotating challenges that pay coins) ──
+  // ── Recurring daily + weekly challenges (rotating objectives that pay coins) ──
   const [challengesOpen, setChallengesOpen] = useState(false);
-  // Claiming marks the reward in `owned` (cloud-synced, union-merged) so it
-  // can't be double-claimed, and pays the coins.
-  const claimEvent = useCallback((week: number, id: string, reward: number) => {
-    const key = eventClaimKey(week, id);
-    if (ownedRef.current.includes(key)) return;
+  // Claiming marks the reward in `owned` (cloud-synced, union-merged) under its
+  // claim key so it can't be double-claimed, and pays the coins.
+  const claimChallenge = useCallback((claimKey: string, reward: number) => {
+    if (ownedRef.current.includes(claimKey)) return;
     addCoins(reward);
-    const next = [...ownedRef.current, key];
+    const next = [...ownedRef.current, claimKey];
     ownedRef.current = next; setOwned(next);
     try { localStorage.setItem(OWNED_KEY, JSON.stringify(next)); } catch { /* ignore */ }
   }, [addCoins]);
@@ -563,11 +563,15 @@ export function DiscGolfGame() {
 
   // Title-screen navigation: a small hub so the menu isn't a wall of buttons.
   const [hub, setHub] = useState<"home" | "solo" | "online">("home");
-  // How many weekly-event rewards are ready to claim (badged on the hub).
+  // How many challenge rewards (daily + weekly) are ready to claim (badged).
   const claimableEvents = (() => {
+    const hist = history as EventRound[];
     const wk = weekSeed(today * 86_400_000); // `today` is a day number → land in this week
-    const rows = roundsThisWeek(history as EventRound[], wk);
-    return weeklyChallenges(wk).filter((c) => challengeDone(c, rows) && !owned.includes(eventClaimKey(wk, c.id))).length;
+    const dayRows = roundsThisDay(hist, today);
+    const weekRows = roundsThisWeek(hist, wk);
+    const dailyN = dailyChallenges(today).filter((c) => challengeDone(c, dayRows) && !owned.includes(dailyClaimKey(today, c.id))).length;
+    const weeklyN = weeklyChallenges(wk).filter((c) => challengeDone(c, weekRows) && !owned.includes(eventClaimKey(wk, c.id))).length;
+    return dailyN + weeklyN;
   })();
 
   // A resumable Daily round takes over the Daily Challenge button (Single Player
@@ -2940,6 +2944,15 @@ export function DiscGolfGame() {
               {hub === "solo" && (
                 <div className={`w-full flex flex-col gap-2 ${menuTopMargin}`}>
                   <button type="button" onClick={() => setHub("home")} className={`${titleCardSm} !flex-none self-start px-3`}>‹ Back</button>
+                  {dailyResume ? (
+                    <button type="button" onClick={() => startResume(dailyResume)} className={titleCard}>
+                      ↻ Resume Daily · hole {dailyResume.scores.length + 1}
+                    </button>
+                  ) : (
+                    <button type="button" onClick={() => startGame("daily")} className={titleCard}>
+                      Daily Challenge
+                    </button>
+                  )}
                   <button type="button" onClick={() => setCoursesOpen(true)} className={titleCard}>
                     Challenge the Arcade
                   </button>
@@ -3211,10 +3224,8 @@ export function DiscGolfGame() {
             history={history}
             owned={owned}
             coins={coins}
-            dailyResume={dailyResume}
-            onPlayDaily={() => { setChallengesOpen(false); startGame("daily"); }}
-            onResumeDaily={() => { if (dailyResume) { setChallengesOpen(false); startResume(dailyResume); } }}
-            onClaim={claimEvent}
+            today={today}
+            onClaim={claimChallenge}
             onClose={() => setChallengesOpen(false)}
           />
         )}
@@ -4791,26 +4802,59 @@ function CoursesPanel({ courses, tourCourses, bests, tourBests, onClose, onPlay 
   );
 }
 
-// Career stats computed from the locally-stored round history. Older rounds
-// (before per-hole scores were recorded) still count toward totals/averages.
-// Browse the global (Supabase) leaderboard for any course from the title
-// screen. Daily uses today's seed; Glendoveer & Winthrop are all-time.
-// Recurring weekly events — three rotating challenges that pay coins and reset
-// each week. Progress is read from saved round history; claims are marked in the
-// owned set so they survive a refresh and can't be claimed twice.
-function ChallengesPanel({ history, owned, coins, dailyResume, onPlayDaily, onResumeDaily, onClaim, onClose }: {
+// Recurring challenges that pay coins: easy DAILY objectives (reset each day)
+// and harder WEEKLY ones (reset each week). Progress is read from saved round
+// history; claims are marked in the owned set so they survive a refresh and
+// can't be claimed twice.
+function ChallengesPanel({ history, owned, coins, today, onClaim, onClose }: {
   history: EventRound[];
   owned: string[];
   coins: number;
-  dailyResume: ResumeSnap | null;
-  onPlayDaily: () => void;
-  onResumeDaily: () => void;
-  onClaim: (week: number, id: string, reward: number) => void;
+  today: number; // current day number
+  onClaim: (claimKey: string, reward: number) => void;
   onClose: () => void;
 }) {
   const [week] = useState(() => weekSeed(Date.now()));
-  const challenges = weeklyChallenges(week);
-  const rows = roundsThisWeek(history, week);
+  const dayRows = roundsThisDay(history, today);
+  const weekRows = roundsThisWeek(history, week);
+  const row = (c: Challenge, rows: EventRound[], claimKey: string) => {
+    const have = Math.min(c.measure(rows), c.goal);
+    const done = have >= c.goal;
+    const claimed = owned.includes(claimKey);
+    const pct = Math.round((have / c.goal) * 100);
+    return (
+      <div key={c.id} className="bg-[#1a1d23] border border-white/10 rounded-xl px-3 py-2.5">
+        <div className="flex items-center gap-2.5">
+          <span className="text-2xl leading-none shrink-0">{c.emoji}</span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-white font-bold text-sm truncate">{c.title}</span>
+              <span className="text-[#f5d24a] font-bold text-[11px] shrink-0">+{c.reward} 🪙</span>
+            </div>
+            <p className="text-gray-500 text-[11px]">{c.desc}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 mt-2">
+          <div className="flex-1 h-1.5 bg-white/10 rounded overflow-hidden">
+            <div className="h-full rounded bg-[#36D7B7]" style={{ width: `${pct}%` }} />
+          </div>
+          <span className="text-gray-400 font-mono text-[10px] w-9 text-right">{have}/{c.goal}</span>
+          {claimed ? (
+            <span className="shrink-0 text-[11px] font-bold text-[#36D7B7] w-16 text-center">Claimed ✓</span>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onClaim(claimKey, c.reward)}
+              disabled={!done}
+              className="shrink-0 w-16 rounded-lg bg-[#36D7B7] hover:bg-[#2bc4a6] text-[#0f1117] text-[11px] font-bold py-1.5 disabled:opacity-30 disabled:bg-white/10 disabled:text-gray-500"
+            >
+              {done ? "Claim" : "Locked"}
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
   return (
     <div className="absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start justify-center rounded-lg">
       <div className="w-full max-w-xs space-y-3 my-auto text-left">
@@ -4822,65 +4866,14 @@ function ChallengesPanel({ history, owned, coins, dailyResume, onPlayDaily, onRe
           </div>
         </div>
 
-        {/* Daily — a fresh 9-hole course everyone plays today */}
-        <p className="text-gray-400 text-[11px] font-semibold uppercase tracking-wide">Daily</p>
-        <div className="bg-[#1a1d23] border border-[#36D7B7]/40 rounded-xl px-3 py-2.5">
-          <div className="flex items-center gap-2.5">
-            <span className="text-2xl leading-none shrink-0">🔥</span>
-            <div className="min-w-0 flex-1">
-              <span className="text-white font-bold text-sm">Daily Challenge</span>
-              <p className="text-gray-500 text-[11px]">A fresh 9-hole course every day — the same for everyone.</p>
-            </div>
-            <button
-              type="button"
-              onClick={dailyResume ? onResumeDaily : onPlayDaily}
-              className="shrink-0 rounded-lg bg-[#36D7B7] hover:bg-[#2bc4a6] text-[#0f1117] text-[11px] font-bold px-3 py-1.5"
-            >
-              {dailyResume ? `Resume · ${dailyResume.scores.length + 1}` : "Play"}
-            </button>
-          </div>
-        </div>
+        {/* Daily — light objectives, reset every day */}
+        <p className="text-gray-400 text-[11px] font-semibold uppercase tracking-wide">Daily · resets at midnight</p>
+        {dailyChallenges(today).map((c) => row(c, dayRows, dailyClaimKey(today, c.id)))}
 
-        {/* Weekly — three rotating objectives that pay coins */}
+        {/* Weekly — harder objectives, reset every week */}
         <p className="text-gray-400 text-[11px] font-semibold uppercase tracking-wide pt-1">Weekly · resets Monday</p>
-        {challenges.map((c) => {
-          const have = Math.min(c.measure(rows), c.goal);
-          const done = have >= c.goal;
-          const claimed = owned.includes(eventClaimKey(week, c.id));
-          const pct = Math.round((have / c.goal) * 100);
-          return (
-            <div key={c.id} className="bg-[#1a1d23] border border-white/10 rounded-xl px-3 py-2.5">
-              <div className="flex items-center gap-2.5">
-                <span className="text-2xl leading-none shrink-0">{c.emoji}</span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-baseline justify-between gap-2">
-                    <span className="text-white font-bold text-sm truncate">{c.title}</span>
-                    <span className="text-[#f5d24a] font-bold text-[11px] shrink-0">+{c.reward} 🪙</span>
-                  </div>
-                  <p className="text-gray-500 text-[11px]">{c.desc}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 mt-2">
-                <div className="flex-1 h-1.5 bg-white/10 rounded overflow-hidden">
-                  <div className="h-full rounded bg-[#36D7B7]" style={{ width: `${pct}%` }} />
-                </div>
-                <span className="text-gray-400 font-mono text-[10px] w-9 text-right">{have}/{c.goal}</span>
-                {claimed ? (
-                  <span className="shrink-0 text-[11px] font-bold text-[#36D7B7] w-16 text-center">Claimed ✓</span>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => onClaim(week, c.id, c.reward)}
-                    disabled={!done}
-                    className="shrink-0 w-16 rounded-lg bg-[#36D7B7] hover:bg-[#2bc4a6] text-[#0f1117] text-[11px] font-bold py-1.5 disabled:opacity-30 disabled:bg-white/10 disabled:text-gray-500"
-                  >
-                    {done ? "Claim" : "Locked"}
-                  </button>
-                )}
-              </div>
-            </div>
-          );
-        })}
+        {weeklyChallenges(week).map((c) => row(c, weekRows, eventClaimKey(week, c.id)))}
+
         <button type="button" onClick={onClose} className={`${btn} w-full`}>Done</button>
       </div>
     </div>
@@ -4975,6 +4968,8 @@ function RankedPanel({ ranked, playerName, onPlay, onClose }: {
   );
 }
 
+// Browse the global (Supabase) leaderboard for any course from the title
+// screen. Daily uses today's seed; Glendoveer & Winthrop are all-time.
 function LeaderboardPanel({ onClose }: { onClose: () => void }) {
   type Board = { key: "course" | "winthrop" | "daily"; label: string; courseKey: string; par: number };
   const [boards] = useState<Board[]>(() => {

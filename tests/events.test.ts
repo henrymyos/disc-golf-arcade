@@ -1,13 +1,17 @@
 import { describe, it, expect } from "vitest";
 import {
+  dailyChallenges,
   weeklyChallenges,
+  roundsThisDay,
   roundsThisWeek,
   challengeDone,
+  dailyClaimKey,
   eventClaimKey,
   type EventRound,
 } from "../lib/discgolf/events";
 
-const WEEK_MS = 7 * 86_400_000;
+const DAY_MS = 86_400_000;
+const WEEK_MS = 7 * DAY_MS;
 
 describe("weekly challenges", () => {
   it("surfaces exactly three distinct challenges, stable within a week", () => {
@@ -46,8 +50,41 @@ describe("progress from history", () => {
   });
 });
 
+describe("daily challenges", () => {
+  it("surfaces three distinct challenges, stable within a day and rotating across days", () => {
+    const a = dailyChallenges(500);
+    expect(a).toHaveLength(3);
+    expect(a.map((c) => c.id)).toEqual(dailyChallenges(500).map((c) => c.id)); // stable
+    expect(new Set(a.map((c) => c.id)).size).toBe(3); // distinct
+    const ids = new Set<string>();
+    for (let d = 0; d < 20; d++) dailyChallenges(d).forEach((c) => ids.add(c.id));
+    expect(ids.size).toBeGreaterThan(3);
+  });
+  it("daily and weekly draw from different pools", () => {
+    const dailyIds = new Set<string>();
+    const weeklyIds = new Set<string>();
+    for (let i = 0; i < 30; i++) {
+      dailyChallenges(i).forEach((c) => dailyIds.add(c.id));
+      weeklyChallenges(i).forEach((c) => weeklyIds.add(c.id));
+    }
+    // No id appears in both pools (weekly ids are all prefixed differently).
+    for (const id of weeklyIds) expect(dailyIds.has(id)).toBe(false);
+  });
+  it("only counts rounds inside the day window", () => {
+    const day = 1000;
+    const start = day * DAY_MS;
+    const rows: EventRound[] = [
+      { mode: "course", total: 54, date: start + 10 },
+      { mode: "course", total: 54, date: start - 10 }, // yesterday
+      { mode: "course", total: 54, date: start + DAY_MS + 5 }, // tomorrow
+    ];
+    expect(roundsThisDay(rows, day)).toHaveLength(1);
+  });
+});
+
 describe("claim keys", () => {
-  it("namespaces claims by week and id", () => {
+  it("namespaces claims by window and id", () => {
     expect(eventClaimKey(7, "ace1")).toBe("event:7:ace1");
+    expect(dailyClaimKey(9, "ace1")).toBe("daily:9:ace1");
   });
 });
