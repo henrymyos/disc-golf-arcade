@@ -16,6 +16,9 @@ import {
   AVATARS, DEFAULT_AVATAR, avatarOwnKey, avatarUnlocked, playerXp, levelFromXp, type PlayerProfile,
 } from "@/lib/discgolf/profile";
 import {
+  TRAILS, DEFAULT_TRAIL, trailOwnKey, trailUnlocked, trailByKey, type Trail,
+} from "@/lib/discgolf/trails";
+import {
   weekSeed, rankedCourseKey, roundRP, applyRankedRound, tierFromRP, type RankedState,
 } from "@/lib/discgolf/ranked";
 import {
@@ -484,9 +487,12 @@ export function DiscGolfGame() {
     });
   }, []);
 
-  // Player profile (display name + chosen avatar). Persisted + cloud-synced.
-  const [profile, setProfile] = useState<PlayerProfile>({ name: "", avatar: DEFAULT_AVATAR });
+  // Player profile (display name + chosen avatar + flight trail). Persisted + cloud-synced.
+  const [profile, setProfile] = useState<PlayerProfile>({ name: "", avatar: DEFAULT_AVATAR, trail: DEFAULT_TRAIL });
   const [profileOpen, setProfileOpen] = useState(false);
+  // Chosen trail, mirrored to a ref so the render loop can read it cheaply.
+  const trailKeyRef = useRef<string>(DEFAULT_TRAIL);
+  useEffect(() => { trailKeyRef.current = profile.trail || DEFAULT_TRAIL; }, [profile.trail]);
   const saveProfile = useCallback((next: PlayerProfile) => {
     setProfile(next);
     try { localStorage.setItem(PROFILE_KEY, JSON.stringify(next)); } catch { /* ignore */ }
@@ -621,7 +627,7 @@ export function DiscGolfGame() {
       ownedRef.current = Array.isArray(ow) ? ow : []; setOwned(ownedRef.current);
       const prof = JSON.parse(localStorage.getItem(PROFILE_KEY) || "null");
       if (prof && typeof prof === "object") {
-        setProfile({ name: typeof prof.name === "string" ? prof.name : "", avatar: typeof prof.avatar === "string" ? prof.avatar : DEFAULT_AVATAR });
+        setProfile({ name: typeof prof.name === "string" ? prof.name : "", avatar: typeof prof.avatar === "string" ? prof.avatar : DEFAULT_AVATAR, trail: typeof prof.trail === "string" ? prof.trail : DEFAULT_TRAIL });
       }
       const rk = JSON.parse(localStorage.getItem(RANKED_KEY) || "null");
       if (rk && typeof rk === "object" && typeof rk.rp === "number") {
@@ -2283,6 +2289,11 @@ export function DiscGolfGame() {
         ctx.lineWidth = 1;
       }
 
+      // Cosmetic flight trail, drawn under the disc so the disc rides its head.
+      if (g.trailBuf.length >= 2) {
+        drawTrail(ctx, g.trailBuf, cam, trailByKey(trailKeyRef.current), performance.now());
+      }
+
       // Shadow on the ground + disc lifted by its height.
       const disc = ADV_DISCS[g.discIndex];
       const dscreenY = g.disc.y - cam;
@@ -3175,7 +3186,7 @@ export function DiscGolfGame() {
         )}
 
         {shopOpen && (
-          <ShopPanel coins={coins} unlocked={unlocked} owned={owned} level={playerLevel} onBuy={buyItem} onClose={() => setShopOpen(false)} />
+          <ShopPanel coins={coins} unlocked={unlocked} owned={owned} level={playerLevel} onBuy={buyItem} trail={profile.trail || DEFAULT_TRAIL} onSelectTrail={(key) => saveProfile({ ...profile, trail: key })} onClose={() => setShopOpen(false)} />
         )}
 
         {bagOpen && (
@@ -4690,50 +4701,99 @@ function BagPanel({ bag, unlocked, owned, level, onAdd, onRemove, onMove, onShop
 }
 
 // Disc shop — buy advanced discs (and skip achievement grinds) with coins.
-function ShopPanel({ coins, unlocked, owned, level, onBuy, onClose }: {
+// CSS background that previews a trail's palette (a left→right swatch).
+function trailSwatch(t: Trail): string {
+  if (t.kind === "none") return "repeating-linear-gradient(45deg,#2a2f3a,#2a2f3a 3px,#1a1d23 3px,#1a1d23 6px)";
+  if (t.kind === "rainbow") return "linear-gradient(90deg,#ff4d4d,#f5a623,#f5d24a,#36D7B7,#5fb0e8,#b85cd6)";
+  if (t.colors.length === 1) return t.colors[0];
+  return `linear-gradient(90deg,${t.colors.join(",")})`;
+}
+function ShopPanel({ coins, unlocked, owned, level, onBuy, trail, onSelectTrail, onClose }: {
   coins: number;
   unlocked: string[];
   owned: string[];
   level: number;
   onBuy: (key: string, price: number) => void;
+  trail: string;
+  onSelectTrail: (key: string) => void;
   onClose: () => void;
 }) {
+  const [tab, setTab] = useState<"discs" | "trails">("discs");
+  const seg = (active: boolean) =>
+    `flex-1 rounded-md px-2 py-2 text-xs font-bold transition ${active ? "bg-[#4B3DFF] text-white" : "text-gray-400 hover:text-white"}`;
   // Every priced disc across both bags, cheapest first.
   const items = ADV_DISCS.filter((d) => DISC_PRICE[d.key] != null).sort((a, b) => DISC_PRICE[a.key] - DISC_PRICE[b.key]);
   return (
     <div className="absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start justify-center rounded-lg">
       <div className="w-full max-w-xs space-y-2.5 my-auto text-left">
         <div className="flex items-center justify-between">
-          <h2 className="text-white font-black text-xl">🛒 Disc Shop</h2>
+          <h2 className="text-white font-black text-xl">🛒 Shop</h2>
           <div className="flex items-center gap-2">
             <span className="text-[#f5d24a] font-bold font-mono text-sm">{fmtCoins(coins)} 🪙</span>
             <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
           </div>
         </div>
-        <p className="text-gray-500 text-[11px]">Every disc is buyable at any level — distance drivers are just pricey. Or draft one free each level-up. Discs work in every mode.</p>
-        {items.map((d) => {
-          const bought = owned.includes(d.key);
-          const have = isDiscUnlocked(d, unlocked, owned, level); // owned or earned
-          const price = DISC_PRICE[d.key];
-          const afford = coins >= price;
-          return (
-            <div key={d.key} className="flex items-center gap-2.5 bg-[#1a1d23] border border-white/5 rounded-lg px-3 py-2">
-              <span className="w-3 h-3 rounded-full shrink-0" style={{ background: d.color }} />
-              <div className="min-w-0 flex-1">
-                <p className="text-white text-sm font-bold truncate">{d.name} <span className="text-gray-500 font-normal text-[10px]">{d.brand}</span></p>
-                <p className="text-[10px] font-mono text-gray-500">{d.blurb.split("· ")[1] ?? d.blurb}</p>
+        <div className="flex gap-1 bg-[#1a1d23] rounded-lg p-1">
+          <button type="button" onClick={() => setTab("discs")} className={seg(tab === "discs")}>🥏 Discs</button>
+          <button type="button" onClick={() => setTab("trails")} className={seg(tab === "trails")}>✨ Trails</button>
+        </div>
+
+        {tab === "discs" && <>
+          <p className="text-gray-500 text-[11px]">Every disc is buyable at any level — distance drivers are just pricey. Or draft one free each level-up. Discs work in every mode.</p>
+          {items.map((d) => {
+            const bought = owned.includes(d.key);
+            const have = isDiscUnlocked(d, unlocked, owned, level); // owned or earned
+            const price = DISC_PRICE[d.key];
+            const afford = coins >= price;
+            return (
+              <div key={d.key} className="flex items-center gap-2.5 bg-[#1a1d23] border border-white/5 rounded-lg px-3 py-2">
+                <span className="w-3 h-3 rounded-full shrink-0" style={{ background: d.color }} />
+                <div className="min-w-0 flex-1">
+                  <p className="text-white text-sm font-bold truncate">{d.name} <span className="text-gray-500 font-normal text-[10px]">{d.brand}</span></p>
+                  <p className="text-[10px] font-mono text-gray-500">{d.blurb.split("· ")[1] ?? d.blurb}</p>
+                </div>
+                {have ? (
+                  <span className="shrink-0 text-[11px] font-bold text-[#36D7B7]">{bought ? "Owned ✓" : "Earned ✓"}</span>
+                ) : (
+                  <button type="button" onClick={() => onBuy(d.key, price)} disabled={!afford}
+                    className="shrink-0 rounded-lg bg-[#f5d24a] hover:brightness-110 text-[#0f1117] text-xs font-bold px-2.5 py-1.5 disabled:opacity-40 disabled:bg-white/10 disabled:text-gray-500">
+                    {price} 🪙
+                  </button>
+                )}
               </div>
-              {have ? (
-                <span className="shrink-0 text-[11px] font-bold text-[#36D7B7]">{bought ? "Owned ✓" : "Earned ✓"}</span>
-              ) : (
-                <button type="button" onClick={() => onBuy(d.key, price)} disabled={!afford}
-                  className="shrink-0 rounded-lg bg-[#f5d24a] hover:brightness-110 text-[#0f1117] text-xs font-bold px-2.5 py-1.5 disabled:opacity-40 disabled:bg-white/10 disabled:text-gray-500">
-                  {price} 🪙
-                </button>
-              )}
-            </div>
-          );
-        })}
+            );
+          })}
+        </>}
+
+        {tab === "trails" && <>
+          <p className="text-gray-500 text-[11px]">A cosmetic streak your disc leaves on every throw. Buy with coins, then tap Equip — equipped in every mode.</p>
+          {TRAILS.map((t) => {
+            const have = trailUnlocked(t, owned);
+            const equipped = trail === t.key;
+            const afford = coins >= t.price;
+            return (
+              <div key={t.key} className="flex items-center gap-2.5 bg-[#1a1d23] border border-white/5 rounded-lg px-3 py-2">
+                <span className="w-8 h-2.5 rounded-full shrink-0 border border-white/10" style={{ background: trailSwatch(t) }} />
+                <div className="min-w-0 flex-1">
+                  <p className="text-white text-sm font-bold truncate">{t.name}</p>
+                  <p className="text-[10px] text-gray-500">{t.desc}</p>
+                </div>
+                {have ? (
+                  <button type="button" onClick={() => onSelectTrail(t.key)} disabled={equipped}
+                    className={`shrink-0 rounded-lg text-xs font-bold px-2.5 py-1.5 ${equipped ? "text-[#36D7B7]" : "bg-[#36D7B7] hover:bg-[#2bc4a6] text-[#0f1117]"}`}>
+                    {equipped ? "Equipped ✓" : "Equip"}
+                  </button>
+                ) : (
+                  <button type="button" onClick={() => onBuy(trailOwnKey(t.key), t.price)} disabled={!afford}
+                    className="shrink-0 rounded-lg bg-[#f5d24a] hover:brightness-110 text-[#0f1117] text-xs font-bold px-2.5 py-1.5 disabled:opacity-40 disabled:bg-white/10 disabled:text-gray-500">
+                    {t.price} 🪙
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </>}
+
         <button type="button" onClick={onClose} className={`${btn} w-full`}>Done</button>
       </div>
     </div>
@@ -5355,6 +5415,71 @@ function AuthPanel(props: {
       </div>
     </div>
   );
+}
+
+// ── Flight trail rendering ────────────────────────────────────────────────
+function hexRGB(hex: string): [number, number, number] {
+  const h = hex.replace("#", "");
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+}
+// A color sampled from a palette at t∈[0,1] (tail→head), linearly interpolated.
+function paletteAt(cols: string[], t: number): [number, number, number] {
+  if (cols.length === 0) return [255, 255, 255];
+  if (cols.length === 1) return hexRGB(cols[0]);
+  const seg = t * (cols.length - 1);
+  const i = Math.min(cols.length - 2, Math.floor(seg));
+  const f = seg - i;
+  const a = hexRGB(cols[i]);
+  const b = hexRGB(cols[i + 1]);
+  return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
+}
+// Draw the cosmetic flight trail along the disc's path (world coords; `cam` is
+// the vertical camera offset). Fades and tapers toward the tail; `kind` styles
+// it. Only the most-recent points are drawn (older ones scroll off-screen).
+function drawTrail(ctx: CanvasRenderingContext2D, pts: Vec[], cam: number, trail: Trail | undefined, now: number) {
+  if (!trail || trail.kind === "none" || pts.length < 2) return;
+  const start = Math.max(1, pts.length - 200);
+  const n = pts.length;
+  const span = Math.max(1, n - 1 - (start - 1));
+  ctx.save();
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  const glow = trail.kind === "neon" || trail.kind === "fire" || trail.kind === "ice" || trail.kind === "sparkle";
+  if (glow) ctx.shadowBlur = trail.kind === "neon" ? 8 : 5;
+  const widen = trail.kind === "shadow" ? 1.9 : 1;
+  for (let i = start; i < n; i++) {
+    const t = (i - start) / span; // 0 tail → 1 head
+    const alpha = 0.1 + 0.78 * t;
+    const w = (0.5 + 2.3 * t) * widen;
+    if (trail.kind === "rainbow") {
+      const hue = (t * 280 + now * 0.05) % 360;
+      ctx.strokeStyle = `hsla(${hue}, 90%, 62%, ${alpha})`;
+    } else {
+      const rgb = paletteAt(trail.colors, t);
+      const mul = trail.kind === "fire" ? 0.8 + 0.2 * Math.sin(now * 0.025 + i * 0.6) : 1;
+      ctx.strokeStyle = `rgba(${rgb[0] | 0},${rgb[1] | 0},${rgb[2] | 0},${alpha * mul})`;
+    }
+    if (glow) ctx.shadowColor = ctx.strokeStyle as string;
+    ctx.lineWidth = w;
+    ctx.beginPath();
+    ctx.moveTo(pts[i - 1].x, pts[i - 1].y - cam);
+    ctx.lineTo(pts[i].x, pts[i].y - cam);
+    ctx.stroke();
+  }
+  // Sparkle: bright twinkling motes scattered along the path.
+  if (trail.kind === "sparkle") {
+    for (let i = start + 1; i < n; i += 3) {
+      const t = (i - start) / span;
+      const tw = 0.35 + 0.65 * Math.abs(Math.sin(now * 0.01 + i * 1.7));
+      const rgb = paletteAt(trail.colors, t);
+      ctx.fillStyle = `rgba(${rgb[0] | 0},${rgb[1] | 0},${rgb[2] | 0},${tw * (0.25 + 0.75 * t)})`;
+      ctx.shadowColor = ctx.fillStyle as string;
+      ctx.beginPath();
+      ctx.arc(pts[i].x, pts[i].y - cam, 0.6 + 1.2 * tw * t, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
 }
 
 function drawTree(ctx: CanvasRenderingContext2D, tr: Tree) {

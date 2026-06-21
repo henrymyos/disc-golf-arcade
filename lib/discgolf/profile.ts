@@ -2,7 +2,7 @@
 // lifetime play. Avatars are cosmetics — a handful are free, the rest are bought
 // with coins and stored in the shared `owned` set under an "avatar:" prefix.
 
-export type PlayerProfile = { name: string; avatar: string };
+export type PlayerProfile = { name: string; avatar: string; trail?: string };
 
 export type Avatar = { key: string; emoji: string; price: number };
 
