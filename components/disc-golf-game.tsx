@@ -16,8 +16,14 @@ import {
   AVATARS, DEFAULT_AVATAR, avatarOwnKey, avatarUnlocked, playerXp, levelFromXp, type PlayerProfile,
 } from "@/lib/discgolf/profile";
 import {
-  TRAILS, DEFAULT_TRAIL, trailOwnKey, trailUnlocked, trailByKey, type Trail,
+  TRAILS, DEFAULT_TRAIL, trailByKey, type Trail,
 } from "@/lib/discgolf/trails";
+import {
+  DISC_SKINS, BASKET_SKINS, AIM_STYLES, GROUND_THEMES,
+  DEFAULT_DISC_SKIN, DEFAULT_BASKET_SKIN, DEFAULT_AIM_STYLE, DEFAULT_GROUND_THEME,
+  COSMETIC_PREFIX, cosmeticOwnKey, cosmeticUnlocked, cosmeticByKey,
+  type DiscSkin, type BasketSkin, type AimStyle, type GroundTheme,
+} from "@/lib/discgolf/cosmetics";
 import {
   weekSeed, rankedCourseKey, roundRP, applyRankedRound, tierFromRP, type RankedState,
 } from "@/lib/discgolf/ranked";
@@ -487,12 +493,20 @@ export function DiscGolfGame() {
     });
   }, []);
 
-  // Player profile (display name + chosen avatar + flight trail). Persisted + cloud-synced.
+  // Player profile (name + avatar + cosmetics). Persisted + cloud-synced.
   const [profile, setProfile] = useState<PlayerProfile>({ name: "", avatar: DEFAULT_AVATAR, trail: DEFAULT_TRAIL });
   const [profileOpen, setProfileOpen] = useState(false);
-  // Chosen trail, mirrored to a ref so the render loop can read it cheaply.
+  // Chosen cosmetics, mirrored to refs so the render loop can read them cheaply.
   const trailKeyRef = useRef<string>(DEFAULT_TRAIL);
+  const discSkinRef = useRef<string>(DEFAULT_DISC_SKIN);
+  const basketSkinRef = useRef<string>(DEFAULT_BASKET_SKIN);
+  const aimStyleRef = useRef<string>(DEFAULT_AIM_STYLE);
+  const groundThemeRef = useRef<string>(DEFAULT_GROUND_THEME);
   useEffect(() => { trailKeyRef.current = profile.trail || DEFAULT_TRAIL; }, [profile.trail]);
+  useEffect(() => { discSkinRef.current = profile.discSkin || DEFAULT_DISC_SKIN; }, [profile.discSkin]);
+  useEffect(() => { basketSkinRef.current = profile.basketSkin || DEFAULT_BASKET_SKIN; }, [profile.basketSkin]);
+  useEffect(() => { aimStyleRef.current = profile.aimStyle || DEFAULT_AIM_STYLE; }, [profile.aimStyle]);
+  useEffect(() => { groundThemeRef.current = profile.groundTheme || DEFAULT_GROUND_THEME; }, [profile.groundTheme]);
   const saveProfile = useCallback((next: PlayerProfile) => {
     setProfile(next);
     try { localStorage.setItem(PROFILE_KEY, JSON.stringify(next)); } catch { /* ignore */ }
@@ -627,7 +641,15 @@ export function DiscGolfGame() {
       ownedRef.current = Array.isArray(ow) ? ow : []; setOwned(ownedRef.current);
       const prof = JSON.parse(localStorage.getItem(PROFILE_KEY) || "null");
       if (prof && typeof prof === "object") {
-        setProfile({ name: typeof prof.name === "string" ? prof.name : "", avatar: typeof prof.avatar === "string" ? prof.avatar : DEFAULT_AVATAR, trail: typeof prof.trail === "string" ? prof.trail : DEFAULT_TRAIL });
+        setProfile({
+          name: typeof prof.name === "string" ? prof.name : "",
+          avatar: typeof prof.avatar === "string" ? prof.avatar : DEFAULT_AVATAR,
+          trail: typeof prof.trail === "string" ? prof.trail : DEFAULT_TRAIL,
+          discSkin: typeof prof.discSkin === "string" ? prof.discSkin : DEFAULT_DISC_SKIN,
+          basketSkin: typeof prof.basketSkin === "string" ? prof.basketSkin : DEFAULT_BASKET_SKIN,
+          aimStyle: typeof prof.aimStyle === "string" ? prof.aimStyle : DEFAULT_AIM_STYLE,
+          groundTheme: typeof prof.groundTheme === "string" ? prof.groundTheme : DEFAULT_GROUND_THEME,
+        });
       }
       const rk = JSON.parse(localStorage.getItem(RANKED_KEY) || "null");
       if (rk && typeof rk === "object" && typeof rk.rp === "number") {
@@ -1884,13 +1906,17 @@ export function DiscGolfGame() {
       const cam = g.camY; // world→screen: screenY = worldY - cam
       const camX = g.camX; // world→screen: screenX = worldX - camX
 
+      // Active ground/course theme (re-tints normal grass; hazard rough keeps
+      // its warning colors).
+      const ground = cosmeticByKey(GROUND_THEMES, groundThemeRef.current) ?? GROUND_THEMES[0];
+
       // Everything outside the fairway is rough — out of bounds normally, or
       // olive-tinted hazard ground on rope-lined holes (+1, play where it lies).
-      ctx.fillStyle = hole.roughIsHazard ? "#535426" : "#2f5a26";
+      ctx.fillStyle = hole.roughIsHazard ? "#535426" : ground.rough;
       ctx.fillRect(0, 0, W, H);
       // Darker rough mowing bands for a little texture.
       const startY = Math.floor(cam / 16) * 16;
-      ctx.fillStyle = hole.roughIsHazard ? "#4b4c22" : "#2b5323";
+      ctx.fillStyle = hole.roughIsHazard ? "#4b4c22" : ground.roughBand;
       for (let y = startY; y < cam + H; y += 32) ctx.fillRect(0, y - cam, W, 16);
 
       // All world-space drawing below is shifted by the horizontal camera (and
@@ -1916,11 +1942,11 @@ export function DiscGolfGame() {
         ctx.strokeStyle = hole.roughIsHazard ? "#e0c25a" : "#eef1e6";
         ctx.lineWidth = hole.fwWidth;
         ctx.stroke();
-        ctx.strokeStyle = "#4d9a39"; // fairway
+        ctx.strokeStyle = ground.fairway; // fairway
         ctx.lineWidth = hole.fwWidth - 3;
         ctx.stroke();
         // Mowing stripes inside the fairway.
-        ctx.strokeStyle = "#56a541";
+        ctx.strokeStyle = ground.stripe;
         ctx.lineWidth = hole.fwWidth - 3;
         ctx.setLineDash([10, 10]);
         ctx.stroke();
@@ -2099,7 +2125,7 @@ export function DiscGolfGame() {
           ctx.strokeStyle = "rgba(255,255,255,0.35)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(tx, ty, r, 0, Math.PI * 2); ctx.stroke();
         }
       }
-      drawBasket(ctx, hole.basket.x + rattle, hole.basket.y - cam, g.skill.catchR);
+      drawBasket(ctx, hole.basket.x + rattle, hole.basket.y - cam, g.skill.catchR, cosmeticByKey(BASKET_SKINS, basketSkinRef.current));
       for (const tr of hole.trees) drawTree(ctx, { x: tr.x, y: tr.y - cam, r: tr.r });
 
       // Tournament rivals playing the hole alongside you (simulated field).
@@ -2258,8 +2284,11 @@ export function DiscGolfGame() {
           }
           // Only reveal the first half of the flight, fading from solid to gone.
           const shown = Math.max(2, Math.floor(pts.length * 0.5));
+          const aimStyle = cosmeticByKey(AIM_STYLES, aimStyleRef.current) ?? AIM_STYLES[0];
           ctx.lineWidth = 2;
-          ctx.strokeStyle = "#ffffff";
+          ctx.strokeStyle = aimStyle.color;
+          if (aimStyle.dash) ctx.setLineDash(aimStyle.dash);
+          if (aimStyle.glow) { ctx.shadowBlur = 6; ctx.shadowColor = aimStyle.color; }
           for (let i = 0; i < shown - 1; i++) {
             const t = i / (shown - 1);
             ctx.globalAlpha = Math.max(0.04, 0.95 * (1 - Math.pow(t, 1.4)));
@@ -2269,6 +2298,8 @@ export function DiscGolfGame() {
             ctx.stroke();
           }
           ctx.globalAlpha = 1;
+          ctx.setLineDash([]);
+          ctx.shadowBlur = 0;
         }
 
         // Slider track + knob (the pull-back handle), colored by power.
@@ -2303,11 +2334,28 @@ export function DiscGolfGame() {
       ctx.ellipse(g.disc.x, dscreenY, shadowR, shadowR * 0.6, 0, 0, Math.PI * 2);
       ctx.fill();
       const discY = dscreenY - g.h;
-      ctx.fillStyle = "#ffffff";
+      const skin = cosmeticByKey(DISC_SKINS, discSkinRef.current) ?? DISC_SKINS[0];
+      ctx.save();
+      if (skin.kind === "glow") { ctx.shadowBlur = 7; ctx.shadowColor = skin.body; }
+      if (skin.kind === "chrome") {
+        const grad = ctx.createRadialGradient(g.disc.x - 1.5, discY - 1.5, 0.4, g.disc.x, discY, DISC_R);
+        grad.addColorStop(0, "#ffffff");
+        grad.addColorStop(0.55, skin.body);
+        grad.addColorStop(1, "#878d97");
+        ctx.fillStyle = grad;
+      } else {
+        ctx.fillStyle = skin.body;
+      }
       ctx.beginPath();
       ctx.arc(g.disc.x, discY, DISC_R, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = disc.color;
+      ctx.restore();
+      if (skin.kind === "galaxy") {
+        ctx.fillStyle = "rgba(255,255,255,0.92)"; // star specks
+        ctx.fillRect(Math.round(g.disc.x) + 1, Math.round(discY) - 1, 1, 1);
+        ctx.fillRect(Math.round(g.disc.x) - 2, Math.round(discY) + 1, 1, 1);
+      }
+      ctx.fillStyle = disc.color; // tier pip so you can tell which disc is in hand
       ctx.fillRect(Math.round(g.disc.x) - 1, Math.round(discY) - 1, 2, 2);
 
       // Particles (leaves, splashes, sand, confetti) fade out as they die.
@@ -3186,7 +3234,7 @@ export function DiscGolfGame() {
         )}
 
         {shopOpen && (
-          <ShopPanel coins={coins} unlocked={unlocked} owned={owned} level={playerLevel} onBuy={buyItem} trail={profile.trail || DEFAULT_TRAIL} onSelectTrail={(key) => saveProfile({ ...profile, trail: key })} onClose={() => setShopOpen(false)} />
+          <ShopPanel coins={coins} unlocked={unlocked} owned={owned} level={playerLevel} profile={profile} onBuy={buyItem} onEquip={(field, key) => saveProfile({ ...profile, [field]: key })} onClose={() => setShopOpen(false)} />
         )}
 
         {bagOpen && (
@@ -4700,29 +4748,80 @@ function BagPanel({ bag, unlocked, owned, level, onAdd, onRemove, onMove, onShop
   );
 }
 
-// Disc shop — buy advanced discs (and skip achievement grinds) with coins.
-// CSS background that previews a trail's palette (a left→right swatch).
+// ── Shop swatch previews (CSS backgrounds for each cosmetic category). ──
 function trailSwatch(t: Trail): string {
   if (t.kind === "none") return "repeating-linear-gradient(45deg,#2a2f3a,#2a2f3a 3px,#1a1d23 3px,#1a1d23 6px)";
   if (t.kind === "rainbow") return "linear-gradient(90deg,#ff4d4d,#f5a623,#f5d24a,#36D7B7,#5fb0e8,#b85cd6)";
   if (t.colors.length === 1) return t.colors[0];
   return `linear-gradient(90deg,${t.colors.join(",")})`;
 }
-function ShopPanel({ coins, unlocked, owned, level, onBuy, trail, onSelectTrail, onClose }: {
+function discSkinSwatch(s: DiscSkin): string {
+  if (s.kind === "chrome") return "linear-gradient(90deg,#ffffff,#d7dde6,#878d97)";
+  if (s.kind === "galaxy") return "linear-gradient(90deg,#b07cf0,#6a4bd6,#2a1d5a)";
+  return s.body;
+}
+function basketSwatch(b: BasketSkin): string {
+  return `linear-gradient(90deg,${b.band},${b.pole},${b.base})`;
+}
+function groundSwatch(g: GroundTheme): string {
+  return `linear-gradient(90deg,${g.rough},${g.fairway},${g.stripe})`;
+}
+
+// Cosmetic profile fields the shop can equip.
+type CosmeticField = "trail" | "discSkin" | "basketSkin" | "aimStyle" | "groundTheme";
+
+// Disc shop — buy advanced discs + cosmetics with coins.
+function ShopPanel({ coins, unlocked, owned, level, profile, onBuy, onEquip, onClose }: {
   coins: number;
   unlocked: string[];
   owned: string[];
   level: number;
+  profile: PlayerProfile;
   onBuy: (key: string, price: number) => void;
-  trail: string;
-  onSelectTrail: (key: string) => void;
+  onEquip: (field: CosmeticField, key: string) => void;
   onClose: () => void;
 }) {
-  const [tab, setTab] = useState<"discs" | "trails">("discs");
+  const [tab, setTab] = useState<"discs" | "trails" | "discskin" | "basket" | "aim" | "ground">("discs");
   const seg = (active: boolean) =>
-    `flex-1 rounded-md px-2 py-2 text-xs font-bold transition ${active ? "bg-[#4B3DFF] text-white" : "text-gray-400 hover:text-white"}`;
+    `shrink-0 rounded-md px-2.5 py-1.5 text-xs font-bold whitespace-nowrap transition ${active ? "bg-[#4B3DFF] text-white" : "text-gray-400 hover:text-white"}`;
   // Every priced disc across both bags, cheapest first.
   const items = ADV_DISCS.filter((d) => DISC_PRICE[d.key] != null).sort((a, b) => DISC_PRICE[a.key] - DISC_PRICE[b.key]);
+  // One buy/equip row, shared by every cosmetic category.
+  const cosmeticRow = <T extends { key: string; name: string; desc: string; price: number }>(
+    item: T, prefix: string, selected: string, field: CosmeticField, swatch: string,
+  ) => {
+    const have = cosmeticUnlocked(prefix, item, owned);
+    const equipped = selected === item.key;
+    const afford = coins >= item.price;
+    return (
+      <div key={item.key} className="flex items-center gap-2.5 bg-[#1a1d23] border border-white/5 rounded-lg px-3 py-2">
+        <span className="w-8 h-3 rounded-full shrink-0 border border-white/10" style={{ background: swatch }} />
+        <div className="min-w-0 flex-1">
+          <p className="text-white text-sm font-bold truncate">{item.name}</p>
+          <p className="text-[10px] text-gray-500">{item.desc}</p>
+        </div>
+        {have ? (
+          <button type="button" onClick={() => onEquip(field, item.key)} disabled={equipped}
+            className={`shrink-0 rounded-lg text-xs font-bold px-2.5 py-1.5 ${equipped ? "text-[#36D7B7]" : "bg-[#36D7B7] hover:bg-[#2bc4a6] text-[#0f1117]"}`}>
+            {equipped ? "Equipped ✓" : "Equip"}
+          </button>
+        ) : (
+          <button type="button" onClick={() => onBuy(cosmeticOwnKey(prefix, item.key), item.price)} disabled={!afford}
+            className="shrink-0 rounded-lg bg-[#f5d24a] hover:brightness-110 text-[#0f1117] text-xs font-bold px-2.5 py-1.5 disabled:opacity-40 disabled:bg-white/10 disabled:text-gray-500">
+            {item.price} 🪙
+          </button>
+        )}
+      </div>
+    );
+  };
+  const TABS: { id: typeof tab; label: string }[] = [
+    { id: "discs", label: "🥏 Discs" },
+    { id: "trails", label: "✨ Trails" },
+    { id: "discskin", label: "🎨 Disc" },
+    { id: "basket", label: "🧺 Basket" },
+    { id: "aim", label: "🎯 Aim" },
+    { id: "ground", label: "🌿 Ground" },
+  ];
   return (
     <div className="absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start justify-center rounded-lg">
       <div className="w-full max-w-xs space-y-2.5 my-auto text-left">
@@ -4733,9 +4832,10 @@ function ShopPanel({ coins, unlocked, owned, level, onBuy, trail, onSelectTrail,
             <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
           </div>
         </div>
-        <div className="flex gap-1 bg-[#1a1d23] rounded-lg p-1">
-          <button type="button" onClick={() => setTab("discs")} className={seg(tab === "discs")}>🥏 Discs</button>
-          <button type="button" onClick={() => setTab("trails")} className={seg(tab === "trails")}>✨ Trails</button>
+        <div className="flex gap-1 bg-[#1a1d23] rounded-lg p-1 overflow-x-auto" style={{ scrollbarWidth: "thin" }}>
+          {TABS.map((t) => (
+            <button key={t.id} type="button" onClick={() => setTab(t.id)} className={seg(tab === t.id)}>{t.label}</button>
+          ))}
         </div>
 
         {tab === "discs" && <>
@@ -4766,32 +4866,28 @@ function ShopPanel({ coins, unlocked, owned, level, onBuy, trail, onSelectTrail,
         </>}
 
         {tab === "trails" && <>
-          <p className="text-gray-500 text-[11px]">A cosmetic streak your disc leaves on every throw. Buy with coins, then tap Equip — equipped in every mode.</p>
-          {TRAILS.map((t) => {
-            const have = trailUnlocked(t, owned);
-            const equipped = trail === t.key;
-            const afford = coins >= t.price;
-            return (
-              <div key={t.key} className="flex items-center gap-2.5 bg-[#1a1d23] border border-white/5 rounded-lg px-3 py-2">
-                <span className="w-8 h-2.5 rounded-full shrink-0 border border-white/10" style={{ background: trailSwatch(t) }} />
-                <div className="min-w-0 flex-1">
-                  <p className="text-white text-sm font-bold truncate">{t.name}</p>
-                  <p className="text-[10px] text-gray-500">{t.desc}</p>
-                </div>
-                {have ? (
-                  <button type="button" onClick={() => onSelectTrail(t.key)} disabled={equipped}
-                    className={`shrink-0 rounded-lg text-xs font-bold px-2.5 py-1.5 ${equipped ? "text-[#36D7B7]" : "bg-[#36D7B7] hover:bg-[#2bc4a6] text-[#0f1117]"}`}>
-                    {equipped ? "Equipped ✓" : "Equip"}
-                  </button>
-                ) : (
-                  <button type="button" onClick={() => onBuy(trailOwnKey(t.key), t.price)} disabled={!afford}
-                    className="shrink-0 rounded-lg bg-[#f5d24a] hover:brightness-110 text-[#0f1117] text-xs font-bold px-2.5 py-1.5 disabled:opacity-40 disabled:bg-white/10 disabled:text-gray-500">
-                    {t.price} 🪙
-                  </button>
-                )}
-              </div>
-            );
-          })}
+          <p className="text-gray-500 text-[11px]">A streak your disc leaves on every throw. Buy, then Equip — works in every mode.</p>
+          {TRAILS.map((t) => cosmeticRow(t, "trail", profile.trail || DEFAULT_TRAIL, "trail", trailSwatch(t)))}
+        </>}
+
+        {tab === "discskin" && <>
+          <p className="text-gray-500 text-[11px]">Recolor the flying disc. Its tier color stays as a center pip so you can tell which disc is in hand.</p>
+          {DISC_SKINS.map((s) => cosmeticRow(s, COSMETIC_PREFIX.discSkin, profile.discSkin || DEFAULT_DISC_SKIN, "discSkin", discSkinSwatch(s)))}
+        </>}
+
+        {tab === "basket" && <>
+          <p className="text-gray-500 text-[11px]">Restyle the basket you&apos;re aiming at — shown on every hole.</p>
+          {BASKET_SKINS.map((b) => cosmeticRow(b, COSMETIC_PREFIX.basket, profile.basketSkin || DEFAULT_BASKET_SKIN, "basketSkin", basketSwatch(b)))}
+        </>}
+
+        {tab === "aim" && <>
+          <p className="text-gray-500 text-[11px]">Restyle the predicted-flight aim line you see while pulling back.</p>
+          {AIM_STYLES.map((a) => cosmeticRow(a, COSMETIC_PREFIX.aim, profile.aimStyle || DEFAULT_AIM_STYLE, "aimStyle", a.color))}
+        </>}
+
+        {tab === "ground" && <>
+          <p className="text-gray-500 text-[11px]">Re-tint the grass and fairway. Hazard rough keeps its warning colors.</p>
+          {GROUND_THEMES.map((g) => cosmeticRow(g, COSMETIC_PREFIX.ground, profile.groundTheme || DEFAULT_GROUND_THEME, "groundTheme", groundSwatch(g)))}
         </>}
 
         <button type="button" onClick={onClose} className={`${btn} w-full`}>Done</button>
@@ -5501,17 +5597,18 @@ function drawTree(ctx: CanvasRenderingContext2D, tr: Tree) {
   ctx.fill();
 }
 
-function drawBasket(ctx: CanvasRenderingContext2D, x: number, y: number, catchR = CATCH_R) {
+function drawBasket(ctx: CanvasRenderingContext2D, x: number, y: number, catchR = CATCH_R, skin?: BasketSkin) {
+  const s = skin ?? BASKET_SKINS[0];
   ctx.strokeStyle = "rgba(255,255,255,0.15)";
   ctx.beginPath();
   ctx.arc(x, y, catchR, 0, Math.PI * 2);
   ctx.stroke();
-  ctx.fillStyle = "#9aa0a8";
+  ctx.fillStyle = s.pole;
   ctx.fillRect(Math.round(x) - 1, Math.round(y) - 2, 2, 12);
-  ctx.fillStyle = "#7a808a";
+  ctx.fillStyle = s.base;
   ctx.fillRect(Math.round(x) - 4, Math.round(y) + 10, 8, 2);
-  ctx.fillStyle = "#c2c8d0";
+  ctx.fillStyle = s.band;
   ctx.fillRect(Math.round(x) - 5, Math.round(y) - 8, 10, 3);
-  ctx.fillStyle = "#aeb4bd";
+  ctx.fillStyle = s.chains;
   for (let i = -3; i <= 3; i += 3) ctx.fillRect(Math.round(x) + i, Math.round(y) - 5, 1, 5);
 }
