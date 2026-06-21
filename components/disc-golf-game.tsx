@@ -2931,11 +2931,6 @@ export function DiscGolfGame() {
                   </div>
                   <div className="w-full flex gap-2 mt-2">
                     <button type="button" onClick={() => setSettingsOpen(true)} className={titleCardSm}>⚙ Settings</button>
-                    {supa && (
-                      <button type="button" onClick={() => { setAuthErr(null); setAuthMsg(null); setAuthOpen(true); }} className={`${titleCardSm} truncate px-2`}>
-                        {user ? `👤 ${user.email}` : "👤 Log in"}
-                      </button>
-                    )}
                   </div>
                 </>
               )}
@@ -3206,6 +3201,10 @@ export function DiscGolfGame() {
             onBuyAvatar={buyAvatar}
             onBag={() => { setProfileOpen(false); setBagOpen(true); }}
             onShop={() => { setProfileOpen(false); setShopOpen(true); }}
+            hasAuth={!!supa}
+            user={user}
+            onAccount={() => { setProfileOpen(false); setAuthErr(null); setAuthMsg(null); setAuthOpen(true); }}
+            onSignOut={signOut}
             onClose={() => setProfileOpen(false)}
           />
         )}
@@ -4418,7 +4417,7 @@ function CareerPanel({ career, lastResult, notes, onClose, onStart, onPlay, onSi
 }
 
 // Player profile — pick an avatar, set a name, see your level and badges.
-function ProfilePanel({ profile, coins, owned, unlocked, roundsPlayed, bestScore, winthropBest, bagCount, onSave, onBuyAvatar, onBag, onShop, onClose }: {
+function ProfilePanel({ profile, coins, owned, unlocked, roundsPlayed, bestScore, winthropBest, bagCount, onSave, onBuyAvatar, onBag, onShop, hasAuth, user, onAccount, onSignOut, onClose }: {
   profile: PlayerProfile;
   coins: number;
   owned: string[];
@@ -4431,6 +4430,10 @@ function ProfilePanel({ profile, coins, owned, unlocked, roundsPlayed, bestScore
   onBuyAvatar: (key: string, price: number) => void;
   onBag: () => void;
   onShop: () => void;
+  hasAuth: boolean;
+  user: { email: string } | null;
+  onAccount: () => void;
+  onSignOut: () => void;
   onClose: () => void;
 }) {
   const discsOwned = owned.filter((k) => !k.includes(":")).length; // exclude avatar:/event: cosmetics
@@ -4541,6 +4544,22 @@ function ProfilePanel({ profile, coins, owned, unlocked, roundsPlayed, bestScore
             })}
           </div>
         </div>
+
+        {/* Account — log in to sync, or sign out */}
+        {hasAuth && (
+          <div>
+            <p className="text-gray-400 text-xs font-semibold mb-1.5">Account</p>
+            {user ? (
+              <div className="flex items-center gap-2">
+                <span className="flex-1 truncate text-gray-300 text-xs">👤 {user.email}</span>
+                <button type="button" onClick={onSignOut} className="shrink-0 rounded-lg border border-white/15 hover:border-white/35 text-gray-200 hover:text-white text-xs font-semibold px-3 py-1.5 transition">Log out</button>
+              </div>
+            ) : (
+              <button type="button" onClick={onAccount} className="w-full rounded-lg border border-[#36D7B7]/45 bg-[#1a1d23] hover:border-[#36D7B7] text-white text-xs font-bold py-2 transition">👤 Log in / Sign up</button>
+            )}
+            <p className="text-gray-600 text-[10px] mt-1.5">Log in to sync your bag, coins and best scores across devices.</p>
+          </div>
+        )}
 
         <button type="button" onClick={onClose} className={`${btn} w-full`}>Done</button>
       </div>
