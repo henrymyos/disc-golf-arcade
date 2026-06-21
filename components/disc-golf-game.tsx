@@ -2921,7 +2921,9 @@ export function DiscGolfGame() {
                   {/* Utilities */}
                   <div className="w-full flex gap-2 mt-4">
                     <button type="button" onClick={() => setStatsOpen(true)} className={titleCardSm}>📊 Stats</button>
-                    <button type="button" onClick={() => setTutorialOpen(true)} className={titleCardSm}>📖 How to Play</button>
+                    <button type="button" onClick={() => setChallengesOpen(true)} className={titleCardSm}>
+                      🎯 Challenges{claimableEvents > 0 ? ` (${claimableEvents})` : ""}
+                    </button>
                   </div>
                   <div className="w-full flex gap-2 mt-2">
                     <button type="button" onClick={() => setSettingsOpen(true)} className={titleCardSm}>⚙ Settings</button>
@@ -2931,18 +2933,6 @@ export function DiscGolfGame() {
                       </button>
                     )}
                   </div>
-
-                  {/* Challenges — daily course + rotating weekly objectives */}
-                  <button
-                    type="button"
-                    onClick={() => setChallengesOpen(true)}
-                    className="w-full mt-4 flex items-center justify-center gap-2 rounded-xl border border-[#f5d24a]/45 bg-[#f5d24a]/10 hover:bg-[#f5d24a]/20 active:scale-[0.99] text-white font-bold py-3 transition"
-                  >
-                    🎯 Challenges
-                    {claimableEvents > 0 && (
-                      <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-[#f5d24a] text-[#0f1117] text-[10px] font-black flex items-center justify-center">{claimableEvents}</span>
-                    )}
-                  </button>
                 </>
               )}
 
@@ -3234,6 +3224,7 @@ export function DiscGolfGame() {
             onClose={() => setPracticeOpen(false)}
             onPick={(m, i, seed) => { setPracticeOpen(false); startPractice(m, i, seed); }}
             onMini={(k) => { setPracticeOpen(false); startMini(k); }}
+            onHowTo={() => { setPracticeOpen(false); setTutorialOpen(true); }}
           />
         )}
 
@@ -5139,10 +5130,11 @@ function StatsPanel({ onClose }: { onClose: () => void }) {
 
 // Pick any hole on either course and grind it — practice rounds don't count
 // toward bests, history, achievements, or leaderboards.
-function PracticePanel({ onClose, onPick, onMini }: {
+function PracticePanel({ onClose, onPick, onMini, onHowTo }: {
   onClose: () => void;
   onPick: (m: Mode, holeIdx: number, seed?: number) => void;
   onMini: (kind: "putt" | "target") => void;
+  onHowTo: () => void;
 }) {
   // Every premade course — the two championship layouts + every pro-tour venue.
   const allCourses = useMemo(() => [...FIXED_COURSES, ...TOUR_COURSE_INFOS], []);
@@ -5161,7 +5153,10 @@ function PracticePanel({ onClose, onPick, onMini }: {
       <div className="w-full max-w-xs mx-auto flex flex-col h-full px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] text-left">
         <div className="flex items-center justify-between shrink-0">
           <h2 className="text-white font-black text-xl">Practice</h2>
-          <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={onHowTo} className="rounded-lg border border-white/15 hover:border-white/35 text-gray-200 hover:text-white text-xs font-semibold px-2.5 py-1.5 transition">📖 How to Play</button>
+            <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
+          </div>
         </div>
         {/* Skill mini-games */}
         <div className="flex gap-2 mt-3 shrink-0">
