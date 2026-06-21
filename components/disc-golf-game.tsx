@@ -499,7 +499,7 @@ export function DiscGolfGame() {
   const [rankedGain, setRankedGain] = useState<number | null>(null); // RP gained by the round just finished
 
   // ── Recurring weekly events (rotating challenges that pay coins) ──
-  const [eventsOpen, setEventsOpen] = useState(false);
+  const [challengesOpen, setChallengesOpen] = useState(false);
   // Claiming marks the reward in `owned` (cloud-synced, union-merged) so it
   // can't be double-claimed, and pays the coins.
   const claimEvent = useCallback((week: number, id: string, reward: number) => {
@@ -2908,9 +2908,6 @@ export function DiscGolfGame() {
                       <span className="flex-1 text-left min-w-0">
                         <span className="block font-bold text-sm">Online &amp; Compete</span>
                       </span>
-                      {claimableEvents > 0 && (
-                        <span className="shrink-0 min-w-[18px] h-[18px] px-1 rounded-full bg-[#f5d24a] text-[#0f1117] text-[10px] font-black flex items-center justify-center">{claimableEvents}</span>
-                      )}
                       <span className="text-gray-500 text-lg shrink-0">›</span>
                     </button>
                     <button type="button" onClick={() => setPracticeOpen(true)} className={hubCard}>
@@ -2934,6 +2931,18 @@ export function DiscGolfGame() {
                       </button>
                     )}
                   </div>
+
+                  {/* Challenges — daily course + rotating weekly objectives */}
+                  <button
+                    type="button"
+                    onClick={() => setChallengesOpen(true)}
+                    className="w-full mt-4 flex items-center justify-center gap-2 rounded-xl border border-[#f5d24a]/45 bg-[#f5d24a]/10 hover:bg-[#f5d24a]/20 active:scale-[0.99] text-white font-bold py-3 transition"
+                  >
+                    🎯 Challenges
+                    {claimableEvents > 0 && (
+                      <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-[#f5d24a] text-[#0f1117] text-[10px] font-black flex items-center justify-center">{claimableEvents}</span>
+                    )}
+                  </button>
                 </>
               )}
 
@@ -2941,15 +2950,6 @@ export function DiscGolfGame() {
               {hub === "solo" && (
                 <div className={`w-full flex flex-col gap-2 ${menuTopMargin}`}>
                   <button type="button" onClick={() => setHub("home")} className={`${titleCardSm} !flex-none self-start px-3`}>‹ Back</button>
-                  {dailyResume ? (
-                    <button type="button" onClick={() => startResume(dailyResume)} className={titleCard}>
-                      ↻ Resume Daily · hole {dailyResume.scores.length + 1}
-                    </button>
-                  ) : (
-                    <button type="button" onClick={() => startGame("daily")} className={titleCard}>
-                      Daily Challenge
-                    </button>
-                  )}
                   <button type="button" onClick={() => setCoursesOpen(true)} className={titleCard}>
                     Challenge the Arcade
                   </button>
@@ -2971,9 +2971,6 @@ export function DiscGolfGame() {
                   </button>
                   <button type="button" onClick={() => setRankedOpen(true)} className={titleCard}>
                     Ranked · {tierFromRP(ranked?.rp ?? 0).tier.emoji} {tierFromRP(ranked?.rp ?? 0).tier.name}
-                  </button>
-                  <button type="button" onClick={() => setEventsOpen(true)} className={titleCard}>
-                    Weekly Events{claimableEvents > 0 ? ` · ${claimableEvents} reward${claimableEvents === 1 ? "" : "s"} ready!` : ""}
                   </button>
                   <button type="button" onClick={() => setBoardsOpen(true)} className={titleCard}>
                     Leaderboards
@@ -3219,13 +3216,16 @@ export function DiscGolfGame() {
           />
         )}
 
-        {eventsOpen && (
-          <EventsPanel
+        {challengesOpen && (
+          <ChallengesPanel
             history={history}
             owned={owned}
             coins={coins}
+            dailyResume={dailyResume}
+            onPlayDaily={() => { setChallengesOpen(false); startGame("daily"); }}
+            onResumeDaily={() => { if (dailyResume) { setChallengesOpen(false); startResume(dailyResume); } }}
             onClaim={claimEvent}
-            onClose={() => setEventsOpen(false)}
+            onClose={() => setChallengesOpen(false)}
           />
         )}
 
@@ -3781,7 +3781,7 @@ function TutorialPanel({ onClose }: { onClose: () => void }) {
     },
     {
       title: "Modes & menu",
-      caption: "From the menu: Single Player (Daily Challenge, Courses, Career, Tournament), Online & Compete (challenge friends, the ranked ladder, weekly events, leaderboards), and Practice (putting, targets, single holes). Log in to sync your bag, coins and best scores across devices.",
+      caption: "From the menu: Single Player (Courses, Career, Tournament), Online & Compete (challenge friends, the ranked ladder, leaderboards), Practice (putting, targets, single holes), and Challenges (the daily course plus rotating weekly objectives). Log in to sync your bag, coins and best scores across devices.",
       art: (
         <svg viewBox="0 0 220 130" className={illo}>
           {([
@@ -4807,10 +4807,13 @@ function CoursesPanel({ courses, tourCourses, bests, tourBests, onClose, onPlay 
 // Recurring weekly events — three rotating challenges that pay coins and reset
 // each week. Progress is read from saved round history; claims are marked in the
 // owned set so they survive a refresh and can't be claimed twice.
-function EventsPanel({ history, owned, coins, onClaim, onClose }: {
+function ChallengesPanel({ history, owned, coins, dailyResume, onPlayDaily, onResumeDaily, onClaim, onClose }: {
   history: EventRound[];
   owned: string[];
   coins: number;
+  dailyResume: ResumeSnap | null;
+  onPlayDaily: () => void;
+  onResumeDaily: () => void;
   onClaim: (week: number, id: string, reward: number) => void;
   onClose: () => void;
 }) {
@@ -4821,13 +4824,34 @@ function EventsPanel({ history, owned, coins, onClaim, onClose }: {
     <div className="absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start justify-center rounded-lg">
       <div className="w-full max-w-xs space-y-3 my-auto text-left">
         <div className="flex items-center justify-between">
-          <h2 className="text-white font-black text-xl">🎟 Weekly Events</h2>
+          <h2 className="text-white font-black text-xl">🎯 Challenges</h2>
           <div className="flex items-center gap-2">
             <span className="text-[#f5d24a] font-bold font-mono text-sm">{fmtCoins(coins)} 🪙</span>
             <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
           </div>
         </div>
-        <p className="text-gray-500 text-[11px]">Three fresh challenges every week. Finish them in any mode to earn coins — they reset Monday.</p>
+
+        {/* Daily — a fresh 9-hole course everyone plays today */}
+        <p className="text-gray-400 text-[11px] font-semibold uppercase tracking-wide">Daily</p>
+        <div className="bg-[#1a1d23] border border-[#36D7B7]/40 rounded-xl px-3 py-2.5">
+          <div className="flex items-center gap-2.5">
+            <span className="text-2xl leading-none shrink-0">🔥</span>
+            <div className="min-w-0 flex-1">
+              <span className="text-white font-bold text-sm">Daily Challenge</span>
+              <p className="text-gray-500 text-[11px]">A fresh 9-hole course every day — the same for everyone.</p>
+            </div>
+            <button
+              type="button"
+              onClick={dailyResume ? onResumeDaily : onPlayDaily}
+              className="shrink-0 rounded-lg bg-[#36D7B7] hover:bg-[#2bc4a6] text-[#0f1117] text-[11px] font-bold px-3 py-1.5"
+            >
+              {dailyResume ? `Resume · ${dailyResume.scores.length + 1}` : "Play"}
+            </button>
+          </div>
+        </div>
+
+        {/* Weekly — three rotating objectives that pay coins */}
+        <p className="text-gray-400 text-[11px] font-semibold uppercase tracking-wide pt-1">Weekly · resets Monday</p>
         {challenges.map((c) => {
           const have = Math.min(c.measure(rows), c.goal);
           const done = have >= c.goal;
