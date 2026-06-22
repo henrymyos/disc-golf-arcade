@@ -5549,19 +5549,32 @@ function paletteAt(cols: string[], t: number): [number, number, number] {
 // it. Only the most-recent points are drawn (older ones scroll off-screen).
 function drawTrail(ctx: CanvasRenderingContext2D, pts: Vec[], cam: number, trail: Trail | undefined, now: number) {
   if (!trail || trail.kind === "none" || pts.length < 2) return;
-  const start = Math.max(1, pts.length - 200);
+  // Keep this cheap: a short tail and no per-segment shadowBlur (which tanks the
+  // frame rate on mobile, slowing the whole fixed-step sim). Glow kinds get a
+  // SINGLE blurred underlay stroke instead of one per segment.
+  const start = Math.max(1, pts.length - 56);
   const n = pts.length;
   const span = Math.max(1, n - 1 - (start - 1));
+  const widen = trail.kind === "shadow" ? 1.8 : 1;
   ctx.save();
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
-  const glow = trail.kind === "neon" || trail.kind === "fire" || trail.kind === "ice" || trail.kind === "sparkle";
-  if (glow) ctx.shadowBlur = trail.kind === "neon" ? 8 : 5;
-  const widen = trail.kind === "shadow" ? 1.9 : 1;
+  // One blurred halo pass for glow trails (cheap: a single stroke, not N).
+  if (trail.kind === "neon" || trail.kind === "fire" || trail.kind === "ice") {
+    ctx.shadowBlur = 6;
+    ctx.shadowColor = trail.colors[trail.colors.length - 1] || "#ffffff";
+    ctx.strokeStyle = "rgba(255,255,255,0.16)";
+    ctx.lineWidth = 2.4 * widen;
+    ctx.beginPath();
+    ctx.moveTo(pts[start - 1].x, pts[start - 1].y - cam);
+    for (let i = start; i < n; i++) ctx.lineTo(pts[i].x, pts[i].y - cam);
+    ctx.stroke();
+    ctx.shadowBlur = 0; // colored segments below draw without the costly shadow
+  }
   for (let i = start; i < n; i++) {
     const t = (i - start) / span; // 0 tail → 1 head
     const alpha = 0.1 + 0.78 * t;
-    const w = (0.5 + 2.3 * t) * widen;
+    ctx.lineWidth = (0.5 + 2.3 * t) * widen;
     if (trail.kind === "rainbow") {
       const hue = (t * 280 + now * 0.05) % 360;
       ctx.strokeStyle = `hsla(${hue}, 90%, 62%, ${alpha})`;
@@ -5570,23 +5583,20 @@ function drawTrail(ctx: CanvasRenderingContext2D, pts: Vec[], cam: number, trail
       const mul = trail.kind === "fire" ? 0.8 + 0.2 * Math.sin(now * 0.025 + i * 0.6) : 1;
       ctx.strokeStyle = `rgba(${rgb[0] | 0},${rgb[1] | 0},${rgb[2] | 0},${alpha * mul})`;
     }
-    if (glow) ctx.shadowColor = ctx.strokeStyle as string;
-    ctx.lineWidth = w;
     ctx.beginPath();
     ctx.moveTo(pts[i - 1].x, pts[i - 1].y - cam);
     ctx.lineTo(pts[i].x, pts[i].y - cam);
     ctx.stroke();
   }
-  // Sparkle: bright twinkling motes scattered along the path.
+  // Sparkle: a few cheap twinkling motes (no shadow).
   if (trail.kind === "sparkle") {
-    for (let i = start + 1; i < n; i += 3) {
+    for (let i = start + 2; i < n; i += 4) {
       const t = (i - start) / span;
       const tw = 0.35 + 0.65 * Math.abs(Math.sin(now * 0.01 + i * 1.7));
       const rgb = paletteAt(trail.colors, t);
       ctx.fillStyle = `rgba(${rgb[0] | 0},${rgb[1] | 0},${rgb[2] | 0},${tw * (0.25 + 0.75 * t)})`;
-      ctx.shadowColor = ctx.fillStyle as string;
       ctx.beginPath();
-      ctx.arc(pts[i].x, pts[i].y - cam, 0.6 + 1.2 * tw * t, 0, Math.PI * 2);
+      ctx.arc(pts[i].x, pts[i].y - cam, 0.6 + 1.0 * tw * t, 0, Math.PI * 2);
       ctx.fill();
     }
   }
