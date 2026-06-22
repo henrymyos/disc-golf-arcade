@@ -2991,14 +2991,15 @@ export function DiscGolfGame() {
                     </button>
                   </div>
 
-                  {/* Utilities */}
+                  {/* Utilities — Bag, Shop, Challenges, Settings */}
                   <div className="w-full flex gap-2 mt-4">
-                    <button type="button" onClick={() => setStatsOpen(true)} className={titleCardSm}>📊 Stats</button>
+                    <button type="button" onClick={() => setBagOpen(true)} className={titleCardSm}>🎒 Bag</button>
+                    <button type="button" onClick={() => setShopOpen(true)} className={titleCardSm}>🛒 Shop</button>
+                  </div>
+                  <div className="w-full flex gap-2 mt-2">
                     <button type="button" onClick={() => setChallengesOpen(true)} className={titleCardSm}>
                       🎯 Challenges{claimableEvents > 0 ? ` (${claimableEvents})` : ""}
                     </button>
-                  </div>
-                  <div className="w-full flex gap-2 mt-2">
                     <button type="button" onClick={() => setSettingsOpen(true)} className={titleCardSm}>⚙ Settings</button>
                   </div>
                 </>
@@ -3270,6 +3271,7 @@ export function DiscGolfGame() {
             onBuyAvatar={buyAvatar}
             onBag={() => { setProfileOpen(false); setBagOpen(true); }}
             onShop={() => { setProfileOpen(false); setShopOpen(true); }}
+            onStats={() => { setProfileOpen(false); setStatsOpen(true); }}
             hasAuth={!!supa}
             user={user}
             onAccount={() => { setProfileOpen(false); setAuthErr(null); setAuthMsg(null); setAuthOpen(true); }}
@@ -4486,7 +4488,7 @@ function CareerPanel({ career, lastResult, notes, onClose, onStart, onPlay, onSi
 }
 
 // Player profile — pick an avatar, set a name, see your level and badges.
-function ProfilePanel({ profile, coins, owned, unlocked, roundsPlayed, bestScore, winthropBest, bagCount, onSave, onBuyAvatar, onBag, onShop, hasAuth, user, onAccount, onSignOut, onClose }: {
+function ProfilePanel({ profile, coins, owned, unlocked, roundsPlayed, bestScore, winthropBest, bagCount, onSave, onBuyAvatar, onBag, onShop, onStats, hasAuth, user, onAccount, onSignOut, onClose }: {
   profile: PlayerProfile;
   coins: number;
   owned: string[];
@@ -4499,6 +4501,7 @@ function ProfilePanel({ profile, coins, owned, unlocked, roundsPlayed, bestScore
   onBuyAvatar: (key: string, price: number) => void;
   onBag: () => void;
   onShop: () => void;
+  onStats: () => void;
   hasAuth: boolean;
   user: { email: string } | null;
   onAccount: () => void;
@@ -4553,10 +4556,11 @@ function ProfilePanel({ profile, coins, owned, unlocked, roundsPlayed, bestScore
           ))}
         </div>
 
-        {/* Discs: edit the bag or buy more */}
+        {/* Discs: edit the bag or buy more; detailed stats */}
         <div className="flex gap-2">
           <button type="button" onClick={onBag} className="flex-1 rounded-lg border border-[#36D7B7]/45 bg-[#1a1d23] hover:border-[#36D7B7] text-white text-xs font-bold py-2">🎒 Bag · {bagCount}/{BAG_MAX}</button>
           <button type="button" onClick={onShop} className="flex-1 rounded-lg border border-[#f5d24a]/45 bg-[#1a1d23] hover:border-[#f5d24a] text-white text-xs font-bold py-2">🛒 Shop</button>
+          <button type="button" onClick={onStats} className="flex-1 rounded-lg border border-white/15 bg-[#1a1d23] hover:border-white/35 text-white text-xs font-bold py-2">📊 Stats</button>
         </div>
 
         {/* Avatar picker */}
