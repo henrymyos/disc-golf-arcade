@@ -2972,35 +2972,26 @@ export function DiscGolfGame() {
                 <>
                   <div className={`w-full flex flex-col gap-2 ${menuTopMargin}`}>
                     <button type="button" onClick={() => setHub("solo")} className={hubCard}>
-                      <span className="flex-1 text-left min-w-0">
-                        <span className="block font-bold text-sm">Single Player</span>
-                      </span>
-                      <span className="text-gray-500 text-lg shrink-0">›</span>
+                      <span className="flex-1 text-center font-bold text-sm">Single Player</span>
                     </button>
                     <button type="button" onClick={() => setHub("online")} className={hubCard}>
-                      <span className="flex-1 text-left min-w-0">
-                        <span className="block font-bold text-sm">Online &amp; Compete</span>
-                      </span>
-                      <span className="text-gray-500 text-lg shrink-0">›</span>
+                      <span className="flex-1 text-center font-bold text-sm">Online</span>
                     </button>
                     <button type="button" onClick={() => setPracticeOpen(true)} className={hubCard}>
-                      <span className="flex-1 text-left min-w-0">
-                        <span className="block font-bold text-sm">Practice</span>
-                      </span>
-                      <span className="text-gray-500 text-lg shrink-0">›</span>
+                      <span className="flex-1 text-center font-bold text-sm">Practice</span>
                     </button>
                   </div>
 
                   {/* Utilities — Bag, Shop, Challenges, Settings */}
                   <div className="w-full flex gap-2 mt-4">
-                    <button type="button" onClick={() => setBagOpen(true)} className={titleCardSm}>🎒 Bag</button>
-                    <button type="button" onClick={() => setShopOpen(true)} className={titleCardSm}>🛒 Shop</button>
+                    <button type="button" onClick={() => setBagOpen(true)} className={titleCardSm}>Bag</button>
+                    <button type="button" onClick={() => setShopOpen(true)} className={titleCardSm}>Shop</button>
                   </div>
                   <div className="w-full flex gap-2 mt-2">
                     <button type="button" onClick={() => setChallengesOpen(true)} className={titleCardSm}>
-                      🎯 Challenges{claimableEvents > 0 ? ` (${claimableEvents})` : ""}
+                      Challenges{claimableEvents > 0 ? ` (${claimableEvents})` : ""}
                     </button>
-                    <button type="button" onClick={() => setSettingsOpen(true)} className={titleCardSm}>⚙ Settings</button>
+                    <button type="button" onClick={() => setSettingsOpen(true)} className={titleCardSm}>Settings</button>
                   </div>
                 </>
               )}
@@ -3853,12 +3844,12 @@ function TutorialPanel({ onClose }: { onClose: () => void }) {
     },
     {
       title: "Modes & menu",
-      caption: "From the menu: Single Player (Courses, Career, Tournament), Online & Compete (challenge friends, the ranked ladder, leaderboards), Practice (putting, targets, single holes), and Challenges (the daily course plus rotating weekly objectives). Log in to sync your bag, coins and best scores across devices.",
+      caption: "From the menu: Single Player (Courses, Career, Tournament), Online (challenge friends, the ranked ladder, leaderboards), Practice (putting, targets, single holes), and Challenges (the daily course plus rotating weekly objectives). Log in to sync your bag, coins and best scores across devices.",
       art: (
         <svg viewBox="0 0 220 130" className={illo}>
           {([
             { label: "Single Player", color: "#36D7B7", y: 12 },
-            { label: "Online & Compete", color: "#f5d24a", y: 50 },
+            { label: "Online", color: "#f5d24a", y: 50 },
             { label: "Practice", color: "#e08a3b", y: 88 },
           ] as const).map((c) => (
             <g key={c.label}>
