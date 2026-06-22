@@ -32,7 +32,7 @@ import {
   dailyClaimKey, eventClaimKey, type Challenge, type EventRound,
 } from "@/lib/discgolf/events";
 import {
-  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, TOTAL_PAR, WINTHROP_PAR, leaderboardCourse, TOURN_KEY, TOURN_FIELD, TOURNAMENTS, tournDef, tournRoundHoles, tournPlace, tournFieldRound, tournLiveStandings, tournStandings, ACHIEVEMENTS, earnedAchievements, achievementReward, scoreLabel, courseStars, courseHoles, courseDifficultyOf, courseStarDifficulty, tournDifficulty, tournStarDifficulty, STRAIGHT_SPEED_MUL, releaseSpeedMul, ADV_DISCS, DISC_PRICE, isDiscUnlocked, levelUpChoices, validDiscIndex, DEFAULT_DISC_INDEX, BAG_MAX, discByKey, discIndexByKey, unlockedDiscKeys, reconcileBag, TOUR_COURSES, tourVenue, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, inRect, inHazard, offRibbons, dailySeed, buildRound, elevAt, vibrate, fullPowerRange, pxToFeet, distBetween, autoDiscIndex, lastInBoundsLie, stepFlight,
+  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, TOTAL_PAR, WINTHROP_PAR, leaderboardCourse, TOURN_KEY, TOURN_FIELD, TOURNAMENTS, tournDef, tournRoundHoles, tournPlace, tournFieldRound, tournLiveStandings, tournStandings, ACHIEVEMENTS, earnedAchievements, achievementReward, scoreLabel, courseStars, courseHoles, courseDifficultyOf, courseStarDifficulty, tournDifficulty, tournStarDifficulty, STRAIGHT_SPEED_MUL, releaseSpeedMul, ADV_DISCS, DISC_PRICE, isDiscUnlocked, levelUpChoices, validDiscIndex, DEFAULT_DISC_INDEX, BAG_MAX, discByKey, discIndexByKey, unlockedDiscKeys, reconcileBag, TOUR_COURSES, tourVenue, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, inRect, inHazard, offRibbons, dailySeed, buildRound, elevAt, vibrate, pxToFeet, distBetween, autoDiscIndex, lastInBoundsLie, stepFlight,
 } from "@/lib/discgolf/engine";
 import type {
   Vec, Tree, Hole, Mode, Tournament, TournDef, TournLiveRow, Achievement, FlightPath, Release, Flight, GhostState,
@@ -233,7 +233,6 @@ export function DiscGolfGame() {
   const dragRef = useRef<{ active: boolean; ax: number; ay: number; cx: number; cy: number }>({ active: false, ax: 0, ay: 0, cx: 0, cy: 0 });
   const camRef = useRef({ x: 0, y: 0 }); // current camera scroll, mirrored for the pointer handlers
   const ghostRef = useRef<Vec[][][] | null>(null); // best-round flight paths for the active course
-  const rangeFlashRef = useRef(0); // when a disc was last switched (brightens the reach line)
   // Juice: short-lived particles (world coords), camera shake, basket rattle.
   type Particle = { x: number; y: number; vx: number; vy: number; g: number; life: number; max: number; color: string; size: number };
   const particlesRef = useRef<Particle[]>([]);
@@ -1203,7 +1202,6 @@ export function DiscGolfGame() {
     if (!ADV_DISCS[i] || !bagRef.current.includes(ADV_DISCS[i].key)) return;
     setDiscIndex(i);
     if (stateRef.current) stateRef.current.discIndex = i;
-    rangeFlashRef.current = performance.now(); // emphasize the reach line briefly
   }, []);
 
   const throwDisc = useCallback(() => {
@@ -2188,47 +2186,6 @@ export function DiscGolfGame() {
         const path: FlightPath = aimDisc.flight ?? "straight";
         const dsx = g.disc.x;
         const dsy = g.disc.y - cam; // disc screen position
-
-        // Full-power reach for the selected disc: a short tick showing how far it
-        // carries. Only shown briefly when switching discs (fading out), and not
-        // while lining up a shot. Points up the line toward the basket — or
-        // straight up the screen when the basket is off-screen.
-        {
-          const since = performance.now() - rangeFlashRef.current;
-          const SHOW_MS = 2000;
-          if (!dr.active && since < SHOW_MS) {
-            const range = fullPowerRange(aimDisc, elevAt(hole, g.disc.y), (path === "straight" ? STRAIGHT_SPEED_MUL : 1) * releaseSpeedMul(releaseRef.current) * g.skill.speedMul);
-            const bsy = hole.basket.y - cam;
-            const bsx = hole.basket.x - camX;
-            const basketVisible = bsy >= 0 && bsy <= H && bsx >= 0 && bsx <= W;
-            const ang = basketVisible ? g.angle : -Math.PI / 2; // straight up if off-screen
-            const rx = g.disc.x + Math.cos(ang) * range;
-            const ry = g.disc.y + Math.sin(ang) * range - cam;
-            const half = 2 * CATCH_R; // full length = 2 basket diameters
-            const px = -Math.sin(ang); // unit perpendicular to the throw line
-            const py = Math.cos(ang);
-            if (ry > 14 && ry < H - 2 && rx - camX > 2 && rx - camX < W - 2) {
-              const a = Math.max(0, 0.9 * (1 - since / SHOW_MS)); // fade out
-              ctx.save();
-              ctx.globalAlpha = a;
-              ctx.strokeStyle = aimDisc.color;
-              ctx.lineWidth = 1.5;
-              ctx.lineCap = "round";
-              ctx.beginPath();
-              ctx.moveTo(rx - px * half, ry - py * half);
-              ctx.lineTo(rx + px * half, ry + py * half);
-              ctx.stroke();
-              ctx.lineCap = "butt";
-              ctx.fillStyle = aimDisc.color;
-              ctx.font = "7px monospace";
-              ctx.textAlign = "center";
-              ctx.textBaseline = "bottom";
-              ctx.fillText(`${aimDisc.name} max`, rx, ry - half - 2);
-              ctx.textBaseline = "middle";
-              ctx.restore();
-            }
-          }
-        }
 
         let kx: number;
         let ky: number;
