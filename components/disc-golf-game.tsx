@@ -2714,8 +2714,18 @@ export function DiscGolfGame() {
       }
     }
 
-    function frame() {
-      update();
+    // Fixed-timestep sim so motion stays at the right wall-clock speed even when
+    // the frame rate dips — the disc/camera advance by elapsed real time rather
+    // than once-per-frame (which slowed to a crawl on slower devices). Render
+    // once per frame after catching the sim up.
+    const STEP_MS = 1000 / 60; // simulate at 60 Hz
+    let prev = performance.now();
+    let acc = 0;
+    function frame(now: number) {
+      acc += Math.min(STEP_MS * 4, now - prev); // never try to catch up more than 4 steps
+      prev = now;
+      let steps = 0;
+      while (acc >= STEP_MS && steps < 4) { update(); acc -= STEP_MS; steps++; }
       draw();
       rafRef.current = requestAnimationFrame(frame);
     }
