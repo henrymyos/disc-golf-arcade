@@ -777,9 +777,12 @@ export function DiscGolfGame() {
     if (!supa) return;
     await supa.auth.signOut();
     setUser(null);
-    // Drop them back at the front door so they can re-choose offline vs login.
+    // Drop them back at the front door so they can re-choose offline vs login —
+    // close any panel that Log out can be reached from so nothing covers it.
     try { localStorage.removeItem(ENTRY_KEY); } catch { /* ignore */ }
     setAuthOpen(false);
+    setProfileOpen(false);
+    setSettingsOpen(false);
     setScreen("landing");
   }, [supa]);
 
