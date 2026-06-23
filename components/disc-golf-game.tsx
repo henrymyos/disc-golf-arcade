@@ -3300,16 +3300,16 @@ export function DiscGolfGame() {
           <div className="absolute inset-0 z-40 flex items-center justify-center bg-[#0f1117]/80 backdrop-blur-sm rounded-lg px-6">
             <div className="w-full max-w-[240px] flex flex-col gap-2.5">
               <h2 className="text-white font-black text-2xl text-center mb-1">Paused</h2>
-              <button type="button" onClick={() => setPauseMenu(null)} className={`${btn} w-full !mt-0`}>▶ Continue</button>
+              <button type="button" onClick={() => setPauseMenu(null)} className={`${btn} w-full !mt-0`}>Continue</button>
               {pauseMenu.canRestart && (
                 <button type="button" onClick={restartRound}
                   className="w-full bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white font-bold py-3 rounded-lg transition">
-                  ↻ Restart round
+                  Restart round
                 </button>
               )}
               <button type="button" onClick={exitToHome}
                 className="w-full bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white font-bold py-3 rounded-lg transition">
-                🏠 Exit to home
+                Exit to home
               </button>
             </div>
           </div>
