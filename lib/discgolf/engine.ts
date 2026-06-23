@@ -1068,8 +1068,31 @@ function genDailyHole(rng: () => number, opts: GenOpts = {}): Hole {
   const hazardChance = opts.hazardChance ?? (pro ? 0.42 : 0.32);
   const water: Water[] = [];
   for (let i = 0; i < (opts.waterMax ?? 1); i++) if (rng() < waterChance) water.push(sideBox(pointOnPath(pts, r(0.4, 0.72)), 46, 74, 26, 44));
+  // Sand traps stay in play: a bunker kept FULLY inside the fairway corridor
+  // (never floating out in OB) and clear of any water (sand in a pond isn't
+  // real). Axis-aligned overlap test with a small margin so they never touch.
+  const overlaps = (a: Water, b: Water, m = 4) =>
+    a.x - m < b.x + b.w && a.x + a.w + m > b.x && a.y - m < b.y + b.h && a.y + a.h + m > b.y;
+  const sandBox = (p: Vec): Water => {
+    const side = rng() < 0.5 ? 1 : -1;
+    const half = fwWidth / 2;
+    const w = Math.round(Math.max(14, Math.min(r(22, 34), half - 8)));
+    const h = Math.round(r(16, 24));
+    const near = p.x + side * r(2, Math.max(2, (half - w - 4) * 0.7)); // far edge stays within `half`
+    const left = side > 0 ? near : near - w;
+    const x = Math.round(Math.max(8, Math.min(300 - w, left)));
+    return { x, y: Math.round(p.y - h / 2), w, h };
+  };
   const hazard: Water[] = [];
-  for (let i = 0; i < (opts.hazardMax ?? 1); i++) if (rng() < hazardChance) hazard.push(sideBox(pointOnPath(pts, r(0.3, 0.78)), 24, 36, 18, 26));
+  for (let i = 0; i < (opts.hazardMax ?? 1); i++) {
+    if (rng() >= hazardChance) continue;
+    for (let tries = 0; tries < 6; tries++) {
+      const cand = sandBox(pointOnPath(pts, r(0.3, 0.78)));
+      if (water.some((wb) => overlaps(cand, wb)) || hazard.some((hb) => overlaps(cand, hb))) continue;
+      hazard.push(cand);
+      break;
+    }
+  }
 
   // Length variety: like a real course, not every hole is a max-driver shot.
   // Many par-3s play short enough to reach with a midrange or fairway off the
