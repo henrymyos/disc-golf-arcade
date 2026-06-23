@@ -3697,165 +3697,158 @@ function Overlay({ children, onTap }: { children: React.ReactNode; onTap?: () =>
   );
 }
 
-// Paginated how-to-play walkthrough: throw, disc choice, flight shape, stance.
-// Each step pairs a small looping SVG animation with a short caption.
+// How to Play: an auto-playing demo where an imaginary player takes on a hole
+// start to finish — pulling back to aim, throwing, switching discs and sinking
+// the putt. A small looping canvas animation; the caption tracks each step.
 function TutorialPanel({ onClose }: { onClose: () => void }) {
-  const [step, setStep] = useState(0);
-  const illo = "w-full rounded-lg border border-white/10 bg-[#10141a]";
-  // Knob pull-back loop shared by the line + knob in step 1.
-  const pull = { dur: "2.6s", keyTimes: "0;0.45;0.6;1", repeatCount: "indefinite" } as const;
-  const steps: { title: string; caption: string; art: React.ReactNode }[] = [
-    {
-      title: "Pull back & throw",
-      caption: "Press anywhere and drag back — the farther you pull, the more power. Release to throw the opposite way. Pulled back but changed your mind? Bring the knob back inside the red ring to cancel.",
-      art: (
-        <svg viewBox="0 0 220 130" className={illo}>
-          <rect x="60" y="0" width="100" height="130" fill="#16331f" />
-          <line x1="110" y1="14" x2="110" y2="30" stroke="#cfd8dc" strokeWidth="2" />
-          <rect x="102" y="16" width="16" height="9" fill="none" stroke="#cfd8dc" strokeWidth="2" />
-          <path d="M110 92 C 104 70, 116 48, 110 30" fill="none" stroke="#36D7B7" strokeWidth="2" strokeDasharray="4 4">
-            <animate attributeName="stroke-dashoffset" from="32" to="0" dur="1.2s" repeatCount="indefinite" />
-          </path>
-          <text x="122" y="62" fill="#36D7B7" fontSize="9">throw</text>
-          <circle cx="110" cy="92" r="6" fill="#36D7B7" />
-          <line x1="110" y1="92" stroke="rgba(255,255,255,0.7)" strokeWidth="2">
-            <animate attributeName="x2" values="110;134;134;110" {...pull} />
-            <animate attributeName="y2" values="92;118;118;92" {...pull} />
-          </line>
-          <circle r="5" fill="#fff">
-            <animate attributeName="cx" values="110;134;134;110" {...pull} />
-            <animate attributeName="cy" values="92;118;118;92" {...pull} />
-          </circle>
-          <text x="144" y="122" fill="#9aa4b2" fontSize="9">pull back</text>
-        </svg>
-      ),
-    },
-    {
-      title: "Pick your disc",
-      caption: "Tap a disc in the rack below the screen — any time, even mid-hole. Putters are short and controlled, midranges accurate, fairways and distance drivers fly farthest. When you switch, a tick flashes on the fairway showing that disc's max reach.",
-      art: (
-        <svg viewBox="0 0 220 130" className={illo}>
-          {([
-            { name: "Putter", color: "#36D7B7", len: 48, y: 24 },
-            { name: "Midrange", color: "#f5d24a", len: 74, y: 52 },
-            { name: "Fairway", color: "#5fb0e8", len: 100, y: 80 },
-            { name: "Driver", color: "#e23b3b", len: 124, y: 108 },
-          ] as const).map((d) => (
-            <g key={d.name}>
-              <circle cx="20" cy={d.y} r="7" fill={d.color} />
-              <text x="32" y={d.y + 3} fill="#e7ebf0" fontSize="9" fontWeight="bold">{d.name}</text>
-              <rect x="86" y={d.y - 3} height="6" rx="3" fill={d.color} opacity="0.85">
-                <animate attributeName="width" values={`0;${d.len};${d.len}`} keyTimes="0;0.55;1" dur="2.8s" repeatCount="indefinite" />
-              </rect>
-              <line x1={86 + d.len} y1={d.y - 6} x2={86 + d.len} y2={d.y + 6} stroke={d.color} strokeWidth="2" />
-            </g>
-          ))}
-        </svg>
-      ),
-    },
-    {
-      title: "Every disc flies its own shape",
-      caption: "There's no flight toggle — each real disc has its line baked in. Overstable discs (Zone, Firebird) bend steadily one way — dependable in wind. Straight discs (Aviar, Destroyer) hold their line and carry farther. Choose the shape by choosing the disc.",
-      art: (
-        <svg viewBox="0 0 220 130" className={illo}>
-          <path d="M70 112 C 70 85, 56 55, 42 32" fill="none" stroke="#e08a3b" strokeWidth="2.5" strokeDasharray="5 4">
-            <animate attributeName="stroke-dashoffset" from="36" to="0" dur="1.3s" repeatCount="indefinite" />
-          </path>
-          <circle cx="70" cy="112" r="5" fill="#e08a3b" />
-          <text x="50" y="124" fill="#e08a3b" fontSize="9">Overstable</text>
-          <path d="M150 112 C 158 85, 146 50, 145 20" fill="none" stroke="#36D7B7" strokeWidth="2.5" strokeDasharray="5 4">
-            <animate attributeName="stroke-dashoffset" from="36" to="0" dur="1.3s" repeatCount="indefinite" />
-          </path>
-          <circle cx="150" cy="112" r="5" fill="#36D7B7" />
-          <text x="132" y="124" fill="#36D7B7" fontSize="9">Straight</text>
-          <text x="158" y="30" fill="#9aa4b2" fontSize="8">farther</text>
-        </svg>
-      ),
-    },
-    {
-      title: "Stance & angle",
-      caption: "Backhand fades left at the end of the flight; forehand fades right — pick per throw next to the rack. Set the release Angle (Hyzer / Flat / Anny) to tilt the disc out of your hand and shape shots around trees and doglegs. Left-handed? Flip it in Settings and everything mirrors.",
-      art: (
-        <svg viewBox="0 0 220 130" className={illo}>
-          <path d="M110 110 C 104 75, 86 45, 68 28" fill="none" stroke="#36D7B7" strokeWidth="2.5" strokeDasharray="5 4">
-            <animate attributeName="stroke-dashoffset" from="36" to="0" dur="1.3s" repeatCount="indefinite" />
-          </path>
-          <path d="M110 110 C 116 75, 134 45, 152 28" fill="none" stroke="#f5d24a" strokeWidth="2.5" strokeDasharray="5 4">
-            <animate attributeName="stroke-dashoffset" from="36" to="0" dur="1.3s" repeatCount="indefinite" />
-          </path>
-          <circle cx="110" cy="110" r="6" fill="#fff" />
-          <text x="42" y="20" fill="#36D7B7" fontSize="9">BH fades left</text>
-          <text x="128" y="20" fill="#f5d24a" fontSize="9">FH fades right</text>
-        </svg>
-      ),
-    },
-    {
-      title: "Unlock discs & earn coins",
-      caption: "You start with just a putter and a midrange. Earn coins from rounds, the daily reward, practice and weekly events — then unlock new discs for free by leveling up, or buy them straight away in the Shop. Whatever's in your bag works in every mode.",
-      art: (
-        <svg viewBox="0 0 220 130" className={illo}>
-          <circle cx="32" cy="30" r="13" fill="#f5d24a" stroke="#c9a52e" strokeWidth="2" />
-          <text x="32" y="35" textAnchor="middle" fill="#7a5c00" fontSize="13" fontWeight="bold">$</text>
-          <text x="52" y="34" fill="#9aa4b2" fontSize="9">earn coins</text>
-          <text x="20" y="66" fill="#36D7B7" fontSize="9" fontWeight="bold">LEVEL UP</text>
-          <rect x="20" y="72" width="180" height="10" rx="5" fill="#1e2630" />
-          <rect x="20" y="72" height="10" rx="5" fill="#36D7B7">
-            <animate attributeName="width" values="0;180;180" keyTimes="0;0.7;1" dur="2.8s" repeatCount="indefinite" />
-          </rect>
-          <circle cx="30" cy="108" r="9" fill="#444">
-            <animate attributeName="fill" values="#444;#444;#36D7B7" keyTimes="0;0.65;0.8" dur="2.8s" repeatCount="indefinite" />
-          </circle>
-          <text x="46" y="112" fill="#9aa4b2" fontSize="9">new disc unlocked</text>
-        </svg>
-      ),
-    },
-    {
-      title: "Modes & menu",
-      caption: "From the menu: Single Player (Courses, Career, Tournament), Online (challenge friends, the ranked ladder, leaderboards), Practice (putting, targets, single holes), and Challenges (the daily course plus rotating weekly objectives). Log in to sync your bag, coins and best scores across devices.",
-      art: (
-        <svg viewBox="0 0 220 130" className={illo}>
-          {([
-            { label: "Single Player", color: "#36D7B7", y: 12 },
-            { label: "Online", color: "#f5d24a", y: 50 },
-            { label: "Practice", color: "#e08a3b", y: 88 },
-          ] as const).map((c) => (
-            <g key={c.label}>
-              <rect x="22" y={c.y} width="176" height="30" rx="7" fill="#1a1d23" stroke={c.color} strokeWidth="1.5" />
-              <circle cx="40" cy={c.y + 15} r="6" fill={c.color} />
-              <text x="56" y={c.y + 19} fill="#e7ebf0" fontSize="11" fontWeight="bold">{c.label}</text>
-            </g>
-          ))}
-        </svg>
-      ),
-    },
-  ];
-  const last = step === steps.length - 1;
-  const nav = "rounded-lg px-4 py-2 text-xs font-bold transition";
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [caption, setCaption] = useState("An imaginary player takes on a hole…");
+  const capRef = useRef("");
+  useEffect(() => {
+    const cv = canvasRef.current;
+    if (!cv) return;
+    const ctx = cv.getContext("2d");
+    if (!ctx) return;
+    const DW = 240, DH = 320;
+    type Pt = { x: number; y: number };
+    const basket: Pt = { x: 120, y: 44 };
+    const tee: Pt = { x: 120, y: 274 };
+    const tree = { x: 158, y: 165, r: 12 };
+    const pond = { x: 72, y: 120, rx: 24, ry: 15 };
+    const DISCS = [
+      { name: "Driver", color: "#e23b3b" },
+      { name: "Mid", color: "#f5d24a" },
+      { name: "Putter", color: "#36D7B7" },
+    ];
+    const SHOTS: { from: Pt; ctrl: Pt; to: Pt; di: number }[] = [
+      { from: tee, ctrl: { x: 92, y: 206 }, to: { x: 132, y: 150 }, di: 0 },
+      { from: { x: 132, y: 150 }, ctrl: { x: 150, y: 114 }, to: { x: 122, y: 82 }, di: 1 },
+      { from: { x: 122, y: 82 }, ctrl: { x: 118, y: 62 }, to: basket, di: 2 },
+    ];
+    const throwIdx = [2, 5, 8]; // BEATS index of each shot's throw
+    type Beat = { dur: number; cap: string; kind: "intro" | "aim" | "throw" | "switch" | "celebrate"; shot: number };
+    const BEATS: Beat[] = [
+      { dur: 1100, cap: "An imaginary player lines up the tee shot", kind: "intro", shot: 0 },
+      { dur: 1500, cap: "Press and drag BACK from the disc to aim and build power", kind: "aim", shot: 0 },
+      { dur: 1100, cap: "Release to throw the other way — pull farther for more power", kind: "throw", shot: 0 },
+      { dur: 1100, cap: "Closer now — switch to a midrange for control", kind: "switch", shot: 1 },
+      { dur: 1300, cap: "Line up the approach and throw again", kind: "aim", shot: 1 },
+      { dur: 1000, cap: "Lay it up near the basket", kind: "throw", shot: 1 },
+      { dur: 1100, cap: "On the green — switch to the putter", kind: "switch", shot: 2 },
+      { dur: 1200, cap: "A gentle pull for the putt…", kind: "aim", shot: 2 },
+      { dur: 900, cap: "Sink it!", kind: "throw", shot: 2 },
+      { dur: 1700, cap: "Hole complete! 🎉", kind: "celebrate", shot: 2 },
+    ];
+    const total = BEATS.reduce((s, b) => s + b.dur, 0);
+    const qbez = (a: Pt, c: Pt, b: Pt, t: number): Pt => ({
+      x: (1 - t) * (1 - t) * a.x + 2 * (1 - t) * t * c.x + t * t * b.x,
+      y: (1 - t) * (1 - t) * a.y + 2 * (1 - t) * t * c.y + t * t * b.y,
+    });
+    const easeInOut = (p: number) => p * p * (3 - 2 * p);
+    const easeOut = (p: number) => 1 - (1 - p) * (1 - p);
+    const norm = (v: Pt): Pt => { const l = Math.hypot(v.x, v.y) || 1; return { x: v.x / l, y: v.y / l }; };
+    const drawBag = (activeDi: number) => {
+      const h = 18, w = 64, gap = 6, x0 = (DW - (w * 3 + gap * 2)) / 2, y0 = DH - 25;
+      ctx.font = "8px ui-monospace, monospace"; ctx.textBaseline = "middle";
+      for (let i = 0; i < 3; i++) {
+        const x = x0 + i * (w + gap);
+        ctx.fillStyle = "#1a1d23"; ctx.fillRect(x, y0, w, h);
+        ctx.strokeStyle = i === activeDi ? DISCS[i].color : "rgba(255,255,255,0.15)";
+        ctx.lineWidth = i === activeDi ? 2 : 1; ctx.strokeRect(x, y0, w, h);
+        ctx.fillStyle = DISCS[i].color; ctx.beginPath(); ctx.arc(x + 12, y0 + h / 2, 4, 0, Math.PI * 2); ctx.fill();
+        ctx.textAlign = "center"; ctx.fillStyle = i === activeDi ? "#fff" : "#9aa4b2";
+        ctx.fillText(DISCS[i].name, x + w / 2 + 6, y0 + h / 2 + 0.5);
+      }
+      ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+    };
+
+    let raf = 0;
+    const startT = performance.now();
+    const render = (now: number) => {
+      const tt = (now - startT) % total;
+      let acc = 0, bi = 0, p = 0;
+      for (let i = 0; i < BEATS.length; i++) {
+        if (tt < acc + BEATS[i].dur) { bi = i; p = (tt - acc) / BEATS[i].dur; break; }
+        acc += BEATS[i].dur;
+      }
+      const beat = BEATS[bi];
+      if (capRef.current !== beat.cap) { capRef.current = beat.cap; setCaption(beat.cap); }
+
+      // Grass + a curved fairway ribbon.
+      ctx.fillStyle = "#2f5a26"; ctx.fillRect(0, 0, DW, DH);
+      ctx.lineCap = "round"; ctx.lineJoin = "round";
+      ctx.strokeStyle = "#4d9a39"; ctx.lineWidth = 52;
+      ctx.beginPath(); ctx.moveTo(tee.x, tee.y); ctx.quadraticCurveTo(96, 198, 124, 138); ctx.quadraticCurveTo(140, 92, basket.x, basket.y); ctx.stroke();
+      ctx.strokeStyle = "#56a541"; ctx.lineWidth = 4; ctx.setLineDash([10, 10]); ctx.stroke(); ctx.setLineDash([]);
+      // Pond + tree hazards.
+      ctx.fillStyle = "#3a6ea5"; ctx.beginPath(); ctx.ellipse(pond.x, pond.y, pond.rx, pond.ry, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#5b8fc4"; ctx.beginPath(); ctx.ellipse(pond.x, pond.y - 1.5, pond.rx - 3, pond.ry - 3, 0, 0, Math.PI * 2); ctx.fill();
+      drawTree(ctx, { x: tree.x, y: tree.y, r: tree.r });
+      // Faint paths of shots already thrown.
+      for (let s = 0; s < SHOTS.length; s++) {
+        if (bi <= throwIdx[s]) continue;
+        ctx.strokeStyle = "rgba(255,255,255,0.3)"; ctx.lineWidth = 1.25; ctx.setLineDash([3, 3]);
+        ctx.beginPath(); ctx.moveTo(SHOTS[s].from.x, SHOTS[s].from.y);
+        ctx.quadraticCurveTo(SHOTS[s].ctrl.x, SHOTS[s].ctrl.y, SHOTS[s].to.x, SHOTS[s].to.y); ctx.stroke(); ctx.setLineDash([]);
+      }
+      drawBasket(ctx, basket.x, basket.y);
+
+      // Disc position + which disc is in hand for this beat.
+      let pos: Pt = tee, activeDi = 0;
+      if (beat.kind === "aim") { pos = SHOTS[beat.shot].from; activeDi = SHOTS[beat.shot].di; }
+      else if (beat.kind === "throw") { pos = qbez(SHOTS[beat.shot].from, SHOTS[beat.shot].ctrl, SHOTS[beat.shot].to, easeInOut(p)); activeDi = SHOTS[beat.shot].di; }
+      else if (beat.kind === "switch") { pos = SHOTS[beat.shot].from; activeDi = p < 0.5 ? SHOTS[beat.shot - 1].di : SHOTS[beat.shot].di; }
+      else if (beat.kind === "celebrate") { pos = basket; activeDi = 2; }
+      else { pos = tee; activeDi = 0; }
+
+      // Live trail while the disc is in the air.
+      if (beat.kind === "throw") {
+        const tp = easeInOut(p);
+        ctx.strokeStyle = DISCS[activeDi].color; ctx.lineWidth = 2; ctx.globalAlpha = 0.5; ctx.beginPath();
+        for (let k = 0; k <= 16; k++) { const pp = qbez(SHOTS[beat.shot].from, SHOTS[beat.shot].ctrl, SHOTS[beat.shot].to, tp * k / 16); if (k === 0) ctx.moveTo(pp.x, pp.y); else ctx.lineTo(pp.x, pp.y); }
+        ctx.stroke(); ctx.globalAlpha = 1;
+      }
+
+      // Aim: predicted dots, pull-back slider, power knob + a fingertip ring.
+      if (beat.kind === "aim") {
+        const dir = norm({ x: SHOTS[beat.shot].to.x - pos.x, y: SHOTS[beat.shot].to.y - pos.y });
+        const pw = easeOut(Math.min(1, p * 1.25));
+        const kx = pos.x - dir.x * 30 * pw, ky = pos.y - dir.y * 30 * pw;
+        ctx.fillStyle = "rgba(255,255,255,0.5)";
+        for (let k = 1; k <= 5; k++) { const pp = qbez(SHOTS[beat.shot].from, SHOTS[beat.shot].ctrl, SHOTS[beat.shot].to, k / 14); ctx.beginPath(); ctx.arc(pp.x, pp.y, 1.3, 0, Math.PI * 2); ctx.fill(); }
+        ctx.strokeStyle = "rgba(255,255,255,0.6)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(pos.x, pos.y); ctx.lineTo(kx, ky); ctx.stroke();
+        ctx.fillStyle = pw < 0.5 ? "#36D7B7" : pw < 0.85 ? "#f5d24a" : "#e23b3b"; ctx.beginPath(); ctx.arc(kx, ky, 4, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = "rgba(255,255,255,0.85)"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(kx, ky, 8, 0, Math.PI * 2); ctx.stroke();
+      }
+
+      // The disc itself (shadow, white body, tier-color pip).
+      ctx.fillStyle = "rgba(0,0,0,0.25)"; ctx.beginPath(); ctx.ellipse(pos.x, pos.y + 1, 4, 2.4, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(pos.x, pos.y, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = DISCS[activeDi].color; ctx.fillRect(Math.round(pos.x) - 1, Math.round(pos.y) - 1, 2, 2);
+
+      // Celebration confetti on the made putt.
+      if (beat.kind === "celebrate") {
+        const cols = ["#36D7B7", "#f5d24a", "#ffffff", "#4B3DFF", "#e23b3b"];
+        for (let k = 0; k < 18; k++) { const ang = (k / 18) * Math.PI * 2; const sp = 20 + (k % 4) * 8; const cx = basket.x + Math.cos(ang) * sp * p; const cy = basket.y + Math.sin(ang) * sp * p + p * p * 16; ctx.globalAlpha = Math.max(0, 1 - p); ctx.fillStyle = cols[k % 5]; ctx.fillRect(cx - 1.5, cy - 1.5, 3, 3); }
+        ctx.globalAlpha = 1;
+      }
+
+      drawBag(activeDi);
+      raf = requestAnimationFrame(render);
+    };
+    raf = requestAnimationFrame(render);
+    return () => cancelAnimationFrame(raf);
+  }, []);
   return (
-    <div className="absolute inset-0 z-20 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start justify-center rounded-lg">
-      <div className="w-full max-w-xs space-y-3 my-auto text-left">
+    <div className="absolute inset-0 z-40 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start justify-center rounded-lg">
+      <div className="w-full max-w-xs space-y-3 my-auto text-center">
         <div className="flex items-center justify-between">
           <h2 className="text-white font-black text-xl">How to Play</h2>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
-        <p className="text-[#36D7B7] text-sm font-bold">{step + 1}. {steps[step].title}</p>
-        {steps[step].art}
-        <p className="text-gray-300 text-xs leading-relaxed min-h-[72px]">{steps[step].caption}</p>
-        <div className="flex items-center justify-between pt-1">
-          <button type="button" onClick={() => setStep(step - 1)} disabled={step === 0}
-            className={`${nav} border border-white/10 text-gray-300 hover:text-white disabled:opacity-30 disabled:hover:text-gray-300`}>
-            ◀ Back
-          </button>
-          <div className="flex gap-1.5">
-            {steps.map((_, i) => (
-              <span key={i} className={`w-1.5 h-1.5 rounded-full ${i === step ? "bg-[#36D7B7]" : "bg-white/15"}`} />
-            ))}
-          </div>
-          <button type="button" onClick={() => (last ? onClose() : setStep(step + 1))}
-            className={`${nav} ${last ? "bg-[#36D7B7] hover:bg-[#2bc4a6] text-[#0f1117]" : "bg-[#4B3DFF] hover:bg-[#3a2ee0] text-white"}`}>
-            {last ? "Got it ✓" : "Next ▶"}
-          </button>
-        </div>
+        <canvas ref={canvasRef} width={240} height={320} className="w-full rounded-xl border border-white/10 bg-[#2f5a26]" style={{ imageRendering: "pixelated" }} />
+        <p className="text-gray-200 text-sm font-medium min-h-[40px] leading-snug flex items-center justify-center">{caption}</p>
+        <button type="button" onClick={onClose} className={`${btn} w-full`}>Got it ✓</button>
       </div>
     </div>
   );
