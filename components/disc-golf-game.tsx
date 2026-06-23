@@ -3319,15 +3319,12 @@ export function DiscGolfGame() {
       {(screen === "playing" || screen === "holeComplete") && (
         <div className="shrink-0 w-full border-t border-white/10 bg-[#13161b]">
           <div className="mx-auto w-full max-w-[480px] px-3 pt-2 pb-[max(calc(env(safe-area-inset-bottom)+0.4rem),1.25rem)] flex flex-col gap-2">
-            {/* Disc selector — only the discs in your bag */}
+            {/* Disc selector — only the discs in your bag (no bag-editing or
+                shopping mid-round; both live on the home screen between rounds). */}
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-gray-500">Bag · {bag.length}/{BAG_MAX}</span>
-              <span className="flex items-center gap-2 ml-2 min-w-0">
-                <span className="text-[10px] text-gray-400 font-medium truncate">
-                  {`${ADV_DISCS[discIndex]?.brand ?? ""} ${ADV_DISCS[discIndex]?.name ?? ""}`}
-                </span>
-                <button type="button" onClick={() => setBagOpen(true)} className="shrink-0 text-[10px] font-bold text-[#36D7B7] hover:brightness-110">🎒 Bag</button>
-                <button type="button" onClick={() => setShopOpen(true)} className="shrink-0 text-[10px] font-bold text-[#f5d24a] hover:brightness-110">🛒 Shop</button>
+              <span className="text-[10px] text-gray-400 font-medium truncate ml-2 min-w-0">
+                {`${ADV_DISCS[discIndex]?.brand ?? ""} ${ADV_DISCS[discIndex]?.name ?? ""}`}
               </span>
             </div>
             <div className="flex gap-2 overflow-x-auto pb-0.5 -mx-1 px-1" style={{ scrollbarWidth: "thin" }}>
