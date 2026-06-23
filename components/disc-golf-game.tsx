@@ -3279,6 +3279,7 @@ export function DiscGolfGame() {
             musicVolume={musicVolume} setMusicVolume={setMusicVolume}
             leftHanded={leftHanded} setLeftHanded={setLeftHanded}
             showGhost={showGhost} setShowGhost={setShowGhost}
+            muted={muted} onToggleSound={toggleMute}
             unlocked={unlocked}
           />
         )}
@@ -3397,14 +3398,6 @@ export function DiscGolfGame() {
                   </button>
                 ))}
               </div>
-              <button
-                type="button"
-                onClick={toggleMute}
-                aria-label={muted ? "Unmute" : "Mute"}
-                className="shrink-0 w-10 h-[34px] flex items-center justify-center bg-[#0f1117] border border-white/10 hover:border-white/25 text-white rounded-lg active:bg-white/10 transition"
-              >
-                {muted ? "🔇" : "🔊"}
-              </button>
               <button
                 type="button"
                 onClick={() => { const g = stateRef.current; setPauseMenu({ canRestart: !!g && !g.online && !g.mini && !tournamentPlayRef.current && !careerPlayRef.current }); }}
@@ -5356,9 +5349,11 @@ function SettingsPanel(props: {
   setLeftHanded: (b: boolean) => void;
   showGhost: boolean;
   setShowGhost: (b: boolean) => void;
+  muted: boolean;
+  onToggleSound: () => void;
   unlocked: string[];
 }) {
-  const { onClose, throwStyle, setThrowStyle, musicVolume, setMusicVolume, leftHanded, setLeftHanded, showGhost, setShowGhost, unlocked } = props;
+  const { onClose, throwStyle, setThrowStyle, musicVolume, setMusicVolume, leftHanded, setLeftHanded, showGhost, setShowGhost, muted, onToggleSound, unlocked } = props;
   const seg = (active: boolean) =>
     `flex-1 rounded-md px-2 py-2 text-xs font-bold transition ${active ? "bg-[#4B3DFF] text-white" : "text-gray-400 hover:text-white"}`;
   return (
@@ -5399,6 +5394,17 @@ function SettingsPanel(props: {
           </span>
           <span className={`shrink-0 text-xs font-bold px-2 py-0.5 rounded ${showGhost ? "bg-[#36D7B7] text-[#0f1117]" : "bg-white/10 text-gray-400"}`}>
             {showGhost ? "ON" : "OFF"}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={onToggleSound}
+          className="w-full flex items-center justify-between bg-[#1a1d23] border border-white/10 rounded-lg px-3 py-2.5"
+        >
+          <span className="text-white text-sm font-semibold">Sound</span>
+          <span className={`text-xs font-bold px-2 py-0.5 rounded ${!muted ? "bg-[#36D7B7] text-[#0f1117]" : "bg-white/10 text-gray-400"}`}>
+            {!muted ? "ON" : "OFF"}
           </span>
         </button>
 
