@@ -2904,8 +2904,8 @@ export function DiscGolfGame() {
 
               {/* Coins + daily reward */}
               <div className="w-full flex items-center gap-2 mt-3">
-                <div className="flex items-center gap-1 rounded-lg bg-[#f5d24a]/10 border border-[#f5d24a]/30 px-2.5 py-1.5">
-                  <span>🪙</span>
+                <div className="flex items-center gap-1.5 rounded-lg bg-[#f5d24a]/10 border border-[#f5d24a]/30 px-2.5 py-1.5">
+                  <Coin />
                   <span className="text-[#f5d24a] font-bold text-sm font-mono">{fmtCoins(coins)}</span>
                 </div>
                 {dailyAvailable(daily, today) ? (
@@ -3171,7 +3171,7 @@ export function DiscGolfGame() {
           <div className="absolute inset-0 z-40 flex items-center justify-center bg-[#0f1117]/85 backdrop-blur-sm rounded-lg px-6" onClick={() => setDailyClaim(null)}>
             <div className="text-center">
               <p className="text-6xl mb-2">🎁</p>
-              <p className="text-[#f5d24a] font-black text-4xl">+{dailyClaim.coins} 🪙</p>
+              <p className="text-[#f5d24a] font-black text-4xl">+{dailyClaim.coins} <Coin className="!w-7 !h-7 align-[-2px]" /></p>
               <p className="text-gray-300 text-sm mt-2">Daily reward · 🔥 {dailyClaim.streak}-day streak</p>
               <button type="button" onClick={() => setDailyClaim(null)} className={`${btn} mt-4`}>Nice!</button>
             </div>
@@ -3426,7 +3426,7 @@ export function DiscGolfGame() {
             ) : (
               <p className="text-gray-300">You scored <span className="text-[#f5d24a] font-bold">{miniResult.points}</span> points over 10 throws.</p>
             )}
-            <p className="text-[#f5d24a] font-bold text-lg">+{miniResult.coins} 🪙</p>
+            <p className="text-[#f5d24a] font-bold text-lg">+{miniResult.coins} <Coin className="!w-4 !h-4" /></p>
             <div className="flex flex-col gap-2 pt-1">
               <button type="button" onClick={() => startMini(miniResult.kind)} className={`${btn} w-full`}>↻ Play again</button>
               <button type="button" onClick={() => { audioRef.current?.stopMusic(); setMiniResult(null); }} className="w-full bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white font-bold py-3 rounded-lg transition">🏠 Done</button>
@@ -3465,7 +3465,7 @@ export function DiscGolfGame() {
                   <p className="text-gray-400 text-xs mt-0.5">Your best: {finalBest} ({overStr(finalBest - finalParTotal)})</p>
                 )}
                 {coinReward > 0 && (
-                  <p className="text-[#f5d24a] text-sm font-bold mt-1">+{coinReward} 🪙{rankedGain != null ? <span className="text-[#36D7B7] ml-2">+{rankedGain} RP 🏅</span> : null}</p>
+                  <p className="text-[#f5d24a] text-sm font-bold mt-1">+{coinReward} <Coin />{rankedGain != null ? <span className="text-[#36D7B7] ml-2">+{rankedGain} RP 🏅</span> : null}</p>
                 )}
               </>)}
               {finalChallenge && (
@@ -3516,7 +3516,7 @@ export function DiscGolfGame() {
               <div className="bg-[#f5d24a]/10 border border-[#f5d24a]/30 rounded-2xl p-3">
                 <p className="text-[#f5d24a] font-bold text-sm mb-2">
                   🏅 Achievement{newAchievements.length > 1 ? "s" : ""} unlocked!
-                  <span className="text-[#f5d24a]/80 font-mono"> +{newAchievements.reduce((s, a) => s + a.coins, 0)} 🪙</span>
+                  <span className="text-[#f5d24a]/80 font-mono"> +{newAchievements.reduce((s, a) => s + a.coins, 0)} <Coin /></span>
                 </p>
                 <div className="flex flex-col gap-1.5">
                   {newAchievements.map((a) => (
@@ -3524,7 +3524,7 @@ export function DiscGolfGame() {
                       <span className="text-lg">{a.emoji}</span>
                       <span className="text-white font-semibold">{a.name}</span>
                       <span className="text-gray-400 text-xs flex-1 truncate">— {a.desc}</span>
-                      <span className="text-[#f5d24a] font-mono text-xs shrink-0">+{a.coins} 🪙</span>
+                      <span className="text-[#f5d24a] font-mono text-xs shrink-0 inline-flex items-center gap-1">+{a.coins} <Coin /></span>
                     </div>
                   ))}
                 </div>
@@ -3670,6 +3670,18 @@ const titleCardSm =
 // Big hub category card: title + subtitle + chevron.
 const hubCard =
   "w-full flex items-center gap-3 rounded-xl border border-[#36D7B7]/55 bg-[#1a1d23] hover:border-[#36D7B7] hover:bg-[#20262f] active:scale-[0.99] text-white px-3.5 py-3 transition";
+
+// A small gold coin chip — used wherever a coin balance/amount is shown so the
+// currency reads as clearly gold (rather than the dull 🪙 emoji).
+function Coin({ className = "" }: { className?: string }) {
+  return (
+    <span
+      aria-hidden
+      className={`inline-block w-3 h-3 rounded-full align-[-1px] shrink-0 ${className}`}
+      style={{ background: "radial-gradient(circle at 35% 30%, #fff3ad, #f6c63a 58%, #c08812)", boxShadow: "inset 0 0 0 0.5px rgba(110,72,0,0.55)" }}
+    />
+  );
+}
 
 function Overlay({ children, onTap }: { children: React.ReactNode; onTap?: () => void }) {
   return (
@@ -4503,7 +4515,7 @@ function ProfilePanel({ profile, coins, owned, unlocked, roundsPlayed, bestScore
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <p className="text-gray-400 text-xs font-semibold">Avatar</p>
-            <span className="text-[#f5d24a] font-bold font-mono text-[11px]">{fmtCoins(coins)} 🪙</span>
+            <span className="text-[#f5d24a] font-bold font-mono text-[11px]">{fmtCoins(coins)} <Coin /></span>
           </div>
           <div className="grid grid-cols-6 gap-1.5">
             {AVATARS.map((a) => {
@@ -4684,7 +4696,7 @@ function BagPanel({ bag, unlocked, owned, level, onAdd, onRemove, onMove, onShop
                     <span className="w-3 h-3 rounded-full shrink-0 bg-[#444]" />
                     <div className="min-w-0 flex-1">
                       <p className="text-gray-300 text-sm font-bold truncate">🔒 {d.name} <span className="text-gray-600 font-normal text-[10px]">{d.brand}</span></p>
-                      <p className="text-[10px] font-mono text-gray-600">{price != null ? `In the Shop · ${price} 🪙` : "Draft at level-up"}</p>
+                      <p className="text-[10px] font-mono text-gray-600">{price != null ? <span className="inline-flex items-center gap-1">In the Shop · {price} <Coin className="!w-2.5 !h-2.5" /></span> : "Draft at level-up"}</p>
                     </div>
                   </div>
                 );
@@ -4783,7 +4795,7 @@ function ShopPanel({ coins, unlocked, owned, level, profile, onBuy, onEquip, onC
         <div className="flex items-center justify-between">
           <h2 className="text-white font-black text-xl">🛒 Shop</h2>
           <div className="flex items-center gap-2">
-            <span className="text-[#f5d24a] font-bold font-mono text-sm">{fmtCoins(coins)} 🪙</span>
+            <span className="text-[#f5d24a] font-bold font-mono text-sm">{fmtCoins(coins)} <Coin /></span>
             <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
           </div>
         </div>
@@ -4964,7 +4976,7 @@ function ChallengesPanel({ history, owned, coins, today, onClaim, onClose }: {
           <div className="min-w-0 flex-1">
             <div className="flex items-baseline justify-between gap-2">
               <span className="text-white font-bold text-sm truncate">{c.title}</span>
-              <span className="text-[#f5d24a] font-bold text-[11px] shrink-0">+{c.reward} 🪙</span>
+              <span className="text-[#f5d24a] font-bold text-[11px] shrink-0 inline-flex items-center gap-1">+{c.reward} <Coin className="!w-2.5 !h-2.5" /></span>
             </div>
             <p className="text-gray-500 text-[11px]">{c.desc}</p>
           </div>
@@ -4996,7 +5008,7 @@ function ChallengesPanel({ history, owned, coins, today, onClaim, onClose }: {
         <div className="flex items-center justify-between">
           <h2 className="text-white font-black text-xl">🎯 Challenges</h2>
           <div className="flex items-center gap-2">
-            <span className="text-[#f5d24a] font-bold font-mono text-sm">{fmtCoins(coins)} 🪙</span>
+            <span className="text-[#f5d24a] font-bold font-mono text-sm">{fmtCoins(coins)} <Coin /></span>
             <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
           </div>
         </div>
@@ -5426,7 +5438,7 @@ function SettingsPanel(props: {
                   <span className="text-lg">{got ? a.emoji : "🔒"}</span>
                   <span className="text-white font-semibold shrink-0">{a.name}</span>
                   <span className="text-gray-500 text-xs flex-1 truncate">— {a.desc}</span>
-                  <span className={`font-mono text-xs shrink-0 ${got ? "text-gray-600" : "text-[#f5d24a]"}`}>{got ? "✓" : `+${a.coins} 🪙`}</span>
+                  <span className={`font-mono text-xs shrink-0 inline-flex items-center gap-1 ${got ? "text-gray-600" : "text-[#f5d24a]"}`}>{got ? "✓" : <>+{a.coins} <Coin className="!w-2.5 !h-2.5" /></>}</span>
                 </div>
               );
             })}
