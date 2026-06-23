@@ -14,6 +14,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  // Resolves relative Open Graph / Twitter image URLs (e.g. /og?…) to absolute
+  // links on the live domain so shared/challenge links unfurl correctly.
+  metadataBase: new URL("https://discgolfarcade.com"),
   title: "Disc Golf Arcade",
   description: "A retro pixel-art disc golf game — 18 holes, a daily challenge, real discs, and a leaderboard.",
   appleWebApp: { capable: true, title: "Disc Golf Arcade", statusBarStyle: "black-translucent" },

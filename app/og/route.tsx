@@ -53,7 +53,7 @@ export function GET(req: Request) {
               18 holes · a daily challenge · real discs · leaderboards
             </div>
           </div>
-          <div style={{ display: "flex", fontSize: "26px", color: MUTED }}>disc-golf-arcade.vercel.app</div>
+          <div style={{ display: "flex", fontSize: "26px", color: MUTED }}>discgolfarcade.com</div>
         </Frame>
       ),
       { width: 1200, height: 630 },
