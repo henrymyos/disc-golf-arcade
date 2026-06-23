@@ -346,7 +346,6 @@ export function DiscGolfGame() {
   const [winthropBest, setWinthropBest] = useState<number | null>(null);
   const [isNewBest, setIsNewBest] = useState(false);
   const [leaderboard, setLeaderboard] = useState<ArcadeScore[]>([]);
-  const [nameInput, setNameInput] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveErr, setSaveErr] = useState<string | null>(null);
@@ -1473,13 +1472,15 @@ export function DiscGolfGame() {
     setScreen("title");
   }, [leaveLobby]);
 
+  // Submit the finished round to the per-course leaderboard under the player's
+  // profile name (auto-triggered when the results screen shows).
   const saveScore = useCallback(async () => {
     if (saving || saved) return;
     setSaving(true);
     setSaveErr(null);
     try {
       const course = leaderboardCourse(finalMode, finalSeed);
-      const res = await submitArcadeScore(nameInput, finalTotal, course);
+      const res = await submitArcadeScore(profile.name.trim() || "Player", finalTotal, course);
       if (!res.ok) {
         setSaveErr(res.error ?? "Save failed");
         return;
@@ -1492,7 +1493,16 @@ export function DiscGolfGame() {
     } finally {
       setSaving(false);
     }
-  }, [saving, saved, nameInput, finalTotal, finalMode, finalSeed]);
+  }, [saving, saved, profile.name, finalTotal, finalMode, finalSeed]);
+
+  // Auto-save the round to the leaderboard when the results screen appears
+  // (skips practice / pass-&-play / online matches).
+  useEffect(() => {
+    if (screen !== "gameComplete") return;
+    if (finalPracticeHole != null || finalParty || finalOnline) return;
+    if (saved || saving) return;
+    void saveScore();
+  }, [screen, finalPracticeHole, finalParty, finalOnline, saved, saving, saveScore]);
 
   // Share a challenge link that replays this exact round (mode + seed).
   // Render the finished round to an image and share it (or download as fallback).
@@ -3595,28 +3605,16 @@ export function DiscGolfGame() {
                 practice rounds skip all of it. */}
             {finalPracticeHole == null && !finalParty && !finalOnline && (<>
             {saved ? (
-              <p className="text-center text-[#36D7B7] text-sm font-semibold">Saved to the leaderboard ✓</p>
+              <p className="text-center text-[#36D7B7] text-sm font-semibold">Saved to the leaderboard as {profile.name.trim() || "Player"} ✓</p>
+            ) : saveErr ? (
+              <button type="button" onClick={saveScore} disabled={saving}
+                className="w-full bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white text-sm font-semibold py-2 rounded-lg transition disabled:opacity-50">
+                {saving ? "Saving…" : "Retry save"}
+              </button>
             ) : (
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={nameInput}
-                      onChange={(e) => setNameInput(e.target.value)}
-                      placeholder="Your name"
-                      maxLength={16}
-                      className="flex-1 bg-[#1a1d23] border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-[#4B3DFF]"
-                    />
-                    <button
-                      type="button"
-                      onClick={saveScore}
-                      disabled={saving}
-                      className="bg-[#36D7B7] hover:bg-[#2bc4a6] text-black font-bold text-sm px-4 py-2 rounded-lg transition disabled:opacity-50"
-                    >
-                      {saving ? "Saving…" : "Save score"}
-                    </button>
-                  </div>
-                )}
-            {saveErr && <p className="text-red-400 text-xs text-center">{saveErr}</p>}
+              <p className="text-center text-gray-400 text-sm">{saving ? "Saving to the leaderboard…" : "Saving…"}</p>
+            )}
+            {saveErr && !saved && <p className="text-red-400 text-xs text-center">{saveErr}</p>}
 
             <div className="bg-[#1a1d23] border border-white/5 rounded-2xl overflow-hidden">
               <p className="text-white font-bold text-sm px-4 py-2.5 border-b border-white/5">
