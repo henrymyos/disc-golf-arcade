@@ -2876,8 +2876,6 @@ export function DiscGolfGame() {
                   Disc Golf <span className="text-[#36D7B7]">Arcade</span>
                 </h1>
               </div>
-              <p className="text-gray-300 text-xs mt-2.5 font-medium">Pixel disc golf — wind, hills &amp; water.</p>
-              <p className="text-gray-500 text-[11px] mt-1">Drag back from the disc to aim &amp; throw.</p>
 
               {/* Player profile chip — avatar, name, level + xp-to-next bar */}
               {(() => {
