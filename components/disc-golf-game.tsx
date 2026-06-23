@@ -3347,7 +3347,6 @@ export function DiscGolfGame() {
                     <span className={`text-xs font-bold truncate ${i === discIndex ? "text-white" : "text-gray-300"}`}>{d.name}</span>
                   </span>
                   <span className="block text-[9px] text-gray-500 mt-0.5">{d.brand}</span>
-                  <span className="block text-[9px] font-mono text-gray-400 leading-tight">{d.blurb.split("· ")[1]}</span>
                 </button>
                 );
               })}
