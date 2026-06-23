@@ -82,6 +82,16 @@ export function readLocalProgress(): Progress {
   return { best, winthropBest, holeBest, achievements, history, settings, career, coins, daily, owned, profile, ranked, bag, bagSeen, levelRewarded };
 }
 
+// Wipe this device's saved progress (device SETTINGS are kept). Used on sign-out
+// so the next "Play offline" / sign-up is a fresh account; the signed-out
+// account's data lives in the cloud, which logging back in restores.
+export function clearLocalProgress() {
+  if (typeof localStorage === "undefined") return;
+  for (const k of [BEST_KEY, WBEST_KEY, HOLEBEST_KEY, ACH_KEY, HIST_KEY, CAREER_KEY, COINS_KEY, DAILY_KEY, OWNED_KEY, PROFILE_KEY, RANKED_KEY, BAG_KEY, BAGSEEN_KEY, LEVELREWARD_KEY]) {
+    try { localStorage.removeItem(k); } catch { /* ignore */ }
+  }
+}
+
 export function applyProgress(p: Progress) {
   if (typeof localStorage === "undefined") return;
   try {

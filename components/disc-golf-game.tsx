@@ -7,7 +7,7 @@ import type { ArcadeScore } from "@/lib/arcade-types";
 import { getSupabase } from "@/lib/supabase/browser";
 import {
   BEST_KEY, WBEST_KEY, HOLEBEST_KEY, SETTINGS_KEY, ACH_KEY, HIST_KEY, CAREER_KEY, COINS_KEY, DAILY_KEY, OWNED_KEY, PROFILE_KEY, RANKED_KEY, BAG_KEY, BAGSEEN_KEY, LEVELREWARD_KEY,
-  readLocalProgress, applyProgress, mergeProgress, type Progress,
+  readLocalProgress, applyProgress, mergeProgress, clearLocalProgress, type Progress,
 } from "@/lib/progress";
 import {
   dayNumber, claimDailyReward, dailyAvailable, coinsForRound, fmtCoins, type DailyReward,
@@ -777,13 +777,16 @@ export function DiscGolfGame() {
     if (!supa) return;
     await supa.auth.signOut();
     setUser(null);
-    // Drop them back at the front door so they can re-choose offline vs login —
-    // close any panel that Log out can be reached from so nothing covers it.
-    try { localStorage.removeItem(ENTRY_KEY); } catch { /* ignore */ }
-    setAuthOpen(false);
-    setProfileOpen(false);
-    setSettingsOpen(false);
-    setScreen("landing");
+    // Leaving the account wipes THIS DEVICE'S copy so the next "Play offline" or
+    // sign-up starts a fresh account (the cloud keeps the signed-out account's
+    // data — logging back in restores it). Device settings are kept. Reload so
+    // every in-memory value resets cleanly and we land on the front door.
+    try {
+      localStorage.removeItem(ENTRY_KEY);
+      [RESUME_KEY, TOURN_KEY, TOURBEST_KEY, TOURNBEST_KEY].forEach((k) => localStorage.removeItem(k));
+    } catch { /* ignore */ }
+    clearLocalProgress();
+    if (typeof location !== "undefined") location.reload();
   }, [supa]);
 
   // Front-door choice: remember it and enter the game (opening the login panel
