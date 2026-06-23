@@ -3026,8 +3026,9 @@ export function DiscGolfGame() {
           const lead = rows.length ? rows[0].total : 0;
           return (
             <Overlay onTap={nextHole}>
-              <p className="text-[#36D7B7] font-bold text-lg">Hole {onlineView.hole + 1} · {sl.emoji && `${sl.emoji} `}{sl.name}</p>
-              <div className="w-full max-w-[260px] space-y-1">
+              <p className="text-gray-400 text-[11px] font-semibold uppercase tracking-[0.15em]">Hole {onlineView.hole + 1}</p>
+              <p className="text-[#36D7B7] font-black text-2xl leading-none">{sl.emoji && `${sl.emoji} `}{sl.name}</p>
+              <div className="w-full max-w-[260px] space-y-1 pt-1">
                 {rows.map((r) => (
                   <div key={r.id} className="flex items-center justify-between bg-white/5 rounded-lg px-3 py-1.5 text-sm">
                     <span className="text-white font-semibold truncate">{r.total === lead ? "👑 " : ""}{r.id === onlineView.myId ? `${r.name} (you)` : r.name}</span>
@@ -3035,16 +3036,14 @@ export function DiscGolfGame() {
                   </div>
                 ))}
               </div>
-              <button type="button" onClick={(e) => { e.stopPropagation(); nextHole(); }} className={btn}>
-                Tap anywhere to continue
-              </button>
+              <p className="text-white/35 text-xs pt-1">tap anywhere to continue</p>
             </Overlay>
           );
         })()}
         {screen === "holeComplete" && partyView && (
           <Overlay onTap={nextHole}>
-            <p className="text-[#36D7B7] font-bold text-xl">Hole {hud.hole} complete</p>
-            <div className="w-full max-w-[240px] space-y-1">
+            <p className="text-gray-400 text-[11px] font-semibold uppercase tracking-[0.15em]">Hole {hud.hole} complete</p>
+            <div className="w-full max-w-[240px] space-y-1 pt-1">
               {partyView.names.map((n, i) => {
                 const sc = partyView.holeScores[i];
                 const lead = Math.min(...partyView.totals);
@@ -3056,9 +3055,7 @@ export function DiscGolfGame() {
                 );
               })}
             </div>
-            <button type="button" onClick={nextHole} className={btn}>
-              Tap anywhere to continue
-            </button>
+            <p className="text-white/35 text-xs pt-1">tap anywhere to continue</p>
           </Overlay>
         )}
         {screen === "holeComplete" && !partyView && !onlineView && (() => {
@@ -3069,8 +3066,8 @@ export function DiscGolfGame() {
             sl.tone === "even" ? "text-white" : "text-[#e08a3b]";
           return (
             <Overlay onTap={nextHole}>
-              <p className="text-[#36D7B7] font-bold text-xl">Hole {hud.hole} complete</p>
-              <p className={`${tone} font-black text-3xl leading-tight`}>
+              <p className="text-gray-400 text-[11px] font-semibold uppercase tracking-[0.15em]">Hole {hud.hole}</p>
+              <p className={`${tone} font-black text-4xl leading-none`}>
                 {sl.emoji && `${sl.emoji} `}{sl.name}
               </p>
               <p className="text-gray-300 text-sm">{hud.throws} throws · par {hud.par}</p>
@@ -3078,7 +3075,7 @@ export function DiscGolfGame() {
                 <p className="text-xs font-semibold">
                   {holeBestNote.isNew
                     ? <span className="text-[#f5d24a]">★ New best for this hole!</span>
-                    : <span className="text-gray-400">Your best here: {holeBestNote.best}</span>}
+                    : <span className="text-gray-500">Your best here: {holeBestNote.best}</span>}
                 </p>
               )}
               {tournLiveView && (() => {
@@ -3108,9 +3105,7 @@ export function DiscGolfGame() {
                   </div>
                 );
               })()}
-              <button type="button" onClick={(e) => { e.stopPropagation(); nextHole(); }} className={btn}>
-                Tap anywhere to continue
-              </button>
+              <p className="text-white/35 text-xs pt-1">tap anywhere to continue</p>
             </Overlay>
           );
         })()}
@@ -3453,22 +3448,22 @@ export function DiscGolfGame() {
 
       {screen === "gameComplete" && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start sm:items-center justify-center">
-          <div className="w-full max-w-lg space-y-4 my-auto">
+          <div className="w-full max-w-lg space-y-3 my-auto">
             <div className="text-center">
-              <h2 className="text-white font-black text-2xl">
-                {finalParty || finalOnline ? "Match complete!" : finalPracticeHole != null ? "Practice complete!" : finalIsDaily ? "Daily Challenge complete!" : "Round complete!"}
-              </h2>
-              <p className="text-gray-400 text-xs">
+              <p className="text-gray-400 text-[11px] font-semibold uppercase tracking-wide">
                 {finalPracticeHole != null
                   ? `${finalMode === "winthrop" ? "Winthrop Lake" : finalMode === "tour" ? tourVenue(finalSeed) : "Glendoveer East"} · hole ${finalPracticeHole} · par ${finalParTotal}`
                   : finalIsDaily
                     ? `Today's course · ${finalPars.length} holes · par ${finalParTotal}`
                     : finalMode === "ranked"
-                      ? `🏅 Ranked · this week's course · ${finalPars.length} holes · par ${finalParTotal}`
+                      ? `Ranked · this week · ${finalPars.length} holes · par ${finalParTotal}`
                       : finalMode === "tour"
-                        ? `🏆 ${tourVenue(finalSeed)} · ${finalPars.length} holes · par ${finalParTotal}`
+                        ? `${tourVenue(finalSeed)} · ${finalPars.length} holes · par ${finalParTotal}`
                         : `${finalMode === "winthrop" ? "Winthrop Lake" : "Glendoveer East"} · 18 holes · par ${finalParTotal}`}
               </p>
+              <h2 className="text-white font-black text-2xl mt-0.5">
+                {finalParty || finalOnline ? "Match complete!" : finalPracticeHole != null ? "Practice complete!" : finalIsDaily ? "Daily Challenge complete!" : "Round complete!"}
+              </h2>
               {/* Personal headline only for solo rounds — in Pass & Play / online
                   the standings tables below are the real result (finalTotal is
                   just one player's card). */}
@@ -3624,17 +3619,20 @@ export function DiscGolfGame() {
                 <p className="text-gray-400 text-sm text-center py-6">No scores yet — be the first!</p>
               ) : (
                 <ol>
-                  {leaderboard.map((row, i) => (
-                    <li
-                      key={`${row.name}-${row.created_at}`}
-                      className={`flex items-center gap-3 px-4 py-2 text-sm ${i !== 0 ? "border-t border-white/5" : ""}`}
-                    >
-                      <span className="text-gray-400 font-mono w-6 text-right">{i + 1}</span>
-                      <span className="text-white flex-1 truncate">{row.name}</span>
-                      <span className="text-gray-400 font-mono">{overStr(row.strokes - finalParTotal)}</span>
-                      <span className="text-white font-mono font-bold w-8 text-right">{row.strokes}</span>
-                    </li>
-                  ))}
+                  {leaderboard.slice(0, 10).map((row, i) => {
+                    const mine = row.name === (profile.name.trim() || "Player");
+                    return (
+                      <li
+                        key={`${row.name}-${row.created_at}`}
+                        className={`flex items-center gap-3 px-4 py-2 text-sm ${i !== 0 ? "border-t border-white/5" : ""} ${mine ? "bg-[#36D7B7]/10" : ""}`}
+                      >
+                        <span className="text-gray-400 font-mono w-6 text-right">{i + 1}</span>
+                        <span className={`flex-1 truncate ${mine ? "text-[#36D7B7] font-bold" : "text-white"}`}>{row.name}</span>
+                        <span className="text-gray-400 font-mono">{overStr(row.strokes - finalParTotal)}</span>
+                        <span className="text-white font-mono font-bold w-8 text-right">{row.strokes}</span>
+                      </li>
+                    );
+                  })}
                 </ol>
               )}
             </div>
