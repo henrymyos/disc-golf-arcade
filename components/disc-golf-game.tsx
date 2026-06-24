@@ -2862,6 +2862,18 @@ export function DiscGolfGame() {
         )}
 
         {screen === "title" && (
+          <>
+          {hub === "home" && (
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(true)}
+              aria-label="Settings"
+              className="absolute z-10 right-3 w-9 h-9 flex items-center justify-center rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 active:bg-white/15 text-gray-300 hover:text-white text-lg transition"
+              style={{ top: "max(env(safe-area-inset-top), 0.5rem)" }}
+            >
+              ⚙
+            </button>
+          )}
           <div className="absolute inset-0 overflow-y-auto rounded-lg bg-gradient-to-b from-[#1c2233] via-[#141926] to-[#0f1117]">
             <div
               className="min-h-full flex items-center justify-center px-5"
@@ -2963,7 +2975,7 @@ export function DiscGolfGame() {
                     </button>
                   </div>
 
-                  {/* Utilities — Bag, Shop, Challenges, Settings */}
+                  {/* Utilities — Bag, Shop, Challenges, Leaderboards (Settings = top-right gear) */}
                   <div className="w-full flex gap-2 mt-4">
                     <button type="button" onClick={() => setBagOpen(true)} className={titleCardSm}>Bag</button>
                     <button type="button" onClick={() => setShopOpen(true)} className={titleCardSm}>Shop</button>
@@ -2972,7 +2984,7 @@ export function DiscGolfGame() {
                     <button type="button" onClick={() => setChallengesOpen(true)} className={titleCardSm}>
                       Challenges{claimableEvents > 0 ? ` (${claimableEvents})` : ""}
                     </button>
-                    <button type="button" onClick={() => setSettingsOpen(true)} className={titleCardSm}>Settings</button>
+                    <button type="button" onClick={() => setBoardsOpen(true)} className={titleCardSm}>Leaderboards</button>
                   </div>
                 </>
               )}
@@ -3012,14 +3024,12 @@ export function DiscGolfGame() {
                   <button type="button" onClick={() => setRankedOpen(true)} className={titleCard}>
                     Ranked · {tierFromRP(ranked?.rp ?? 0).tier.emoji} {tierFromRP(ranked?.rp ?? 0).tier.name}
                   </button>
-                  <button type="button" onClick={() => setBoardsOpen(true)} className={titleCard}>
-                    Leaderboards
-                  </button>
                 </div>
               )}
             </div>
             </div>
           </div>
+          </>
         )}
 
         {screen === "holeComplete" && onlineView && (() => {
