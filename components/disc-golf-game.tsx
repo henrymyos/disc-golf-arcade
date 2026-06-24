@@ -4778,8 +4778,8 @@ function ShopPanel({ coins, unlocked, owned, level, profile, onBuy, onEquip, onC
           </button>
         ) : (
           <button type="button" onClick={() => onBuy(cosmeticOwnKey(prefix, item.key), item.price)} disabled={!afford}
-            className="shrink-0 rounded-lg bg-[#f5d24a] hover:brightness-110 text-[#0f1117] text-xs font-bold px-2.5 py-1.5 disabled:opacity-40 disabled:bg-white/10 disabled:text-gray-500">
-            {item.price} 🪙
+            className="shrink-0 inline-flex items-center justify-center gap-1 rounded-lg bg-[#f5d24a] hover:brightness-110 text-[#0f1117] text-xs font-bold px-2.5 py-1.5 disabled:opacity-40 disabled:bg-white/10 disabled:text-gray-500">
+            {item.price} <Coin />
           </button>
         )}
       </div>
@@ -4828,8 +4828,8 @@ function ShopPanel({ coins, unlocked, owned, level, profile, onBuy, onEquip, onC
                   <span className="shrink-0 text-[11px] font-bold text-[#36D7B7]">{bought ? "Owned ✓" : "Earned ✓"}</span>
                 ) : (
                   <button type="button" onClick={() => onBuy(d.key, price)} disabled={!afford}
-                    className="shrink-0 rounded-lg bg-[#f5d24a] hover:brightness-110 text-[#0f1117] text-xs font-bold px-2.5 py-1.5 disabled:opacity-40 disabled:bg-white/10 disabled:text-gray-500">
-                    {price} 🪙
+                    className="shrink-0 inline-flex items-center justify-center gap-1 rounded-lg bg-[#f5d24a] hover:brightness-110 text-[#0f1117] text-xs font-bold px-2.5 py-1.5 disabled:opacity-40 disabled:bg-white/10 disabled:text-gray-500">
+                    {price} <Coin />
                   </button>
                 )}
               </div>
