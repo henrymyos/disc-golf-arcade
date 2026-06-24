@@ -709,6 +709,7 @@ export function DiscGolfGame() {
   const [authBusy, setAuthBusy] = useState(false);
   const [authErr, setAuthErr] = useState<string | null>(null);
   const [authMsg, setAuthMsg] = useState<string | null>(null);
+  const [recovering, setRecovering] = useState(false); // arrived via a password-reset link → set a new password
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Push the current local progress up to the signed-in user's metadata.
@@ -743,7 +744,12 @@ export function DiscGolfGame() {
       await pushCloud(merged);
     };
     const { data: sub } = supa.auth.onAuthStateChange((event, session) => {
-      if (event === "INITIAL_SESSION" || event === "SIGNED_IN") void onSession(session?.user ?? null);
+      if (event === "PASSWORD_RECOVERY") {
+        // Arrived from a reset-password email link: sign them in, then prompt for
+        // a new password.
+        void onSession(session?.user ?? null);
+        setRecovering(true); setAuthErr(null); setAuthMsg(null); setScreen("title"); setAuthOpen(true);
+      } else if (event === "INITIAL_SESSION" || event === "SIGNED_IN") void onSession(session?.user ?? null);
       else if (event === "SIGNED_OUT") setUser(null);
       // ignore TOKEN_REFRESHED / USER_UPDATED to avoid update loops
     });
@@ -772,6 +778,29 @@ export function DiscGolfGame() {
     else { setAuthOpen(false); setAuthPassword(""); }
     setAuthBusy(false);
   }, [supa, authEmail, authPassword]);
+
+  // Send a password-reset link to the entered email.
+  const resetPassword = useCallback(async () => {
+    if (!supa) return;
+    const email = authEmail.trim();
+    if (!email) { setAuthErr("Enter your email above first, then tap Forgot password."); return; }
+    setAuthBusy(true); setAuthErr(null); setAuthMsg(null);
+    const { error } = await supa.auth.resetPasswordForEmail(email, { redirectTo: typeof location !== "undefined" ? location.origin : undefined });
+    if (error) setAuthErr(error.message);
+    else setAuthMsg("Password reset link sent — check your email.");
+    setAuthBusy(false);
+  }, [supa, authEmail]);
+
+  // Set a new password (after following the reset link → PASSWORD_RECOVERY).
+  const updatePassword = useCallback(async () => {
+    if (!supa) return;
+    if (authPassword.length < 6) { setAuthErr("Password must be at least 6 characters."); return; }
+    setAuthBusy(true); setAuthErr(null); setAuthMsg(null);
+    const { error } = await supa.auth.updateUser({ password: authPassword });
+    if (error) setAuthErr(error.message);
+    else { setRecovering(false); setAuthPassword(""); setAuthOpen(false); }
+    setAuthBusy(false);
+  }, [supa, authPassword]);
 
   const signOut = useCallback(async () => {
     if (!supa) return;
@@ -3300,13 +3329,15 @@ export function DiscGolfGame() {
 
         {authOpen && (
           <AuthPanel
-            onClose={() => setAuthOpen(false)}
+            onClose={() => { setRecovering(false); setAuthOpen(false); }}
             user={user}
+            recovering={recovering}
             email={authEmail} setEmail={setAuthEmail}
             password={authPassword} setPassword={setAuthPassword}
             busy={authBusy} error={authErr} message={authMsg}
             clearFeedback={() => { setAuthErr(null); setAuthMsg(null); }}
             onSignIn={signIn} onSignUp={signUp} onSignOut={signOut}
+            onResetPassword={resetPassword} onUpdatePassword={updatePassword}
           />
         )}
 
@@ -5478,13 +5509,15 @@ function DiscMark({ size = 48 }: { size?: number }) {
 function AuthPanel(props: {
   onClose: () => void;
   user: { email: string } | null;
+  recovering: boolean;
   email: string; setEmail: (v: string) => void;
   password: string; setPassword: (v: string) => void;
   busy: boolean; error: string | null; message: string | null;
   clearFeedback: () => void;
   onSignIn: () => void; onSignUp: () => void; onSignOut: () => void;
+  onResetPassword: () => void; onUpdatePassword: () => void;
 }) {
-  const { onClose, user, email, setEmail, password, setPassword, busy, error, message, clearFeedback, onSignIn, onSignUp, onSignOut } = props;
+  const { onClose, user, recovering, email, setEmail, password, setPassword, busy, error, message, clearFeedback, onSignIn, onSignUp, onSignOut, onResetPassword, onUpdatePassword } = props;
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [showPw, setShowPw] = useState(false);
   const switchTo = (m: "login" | "signup") => { if (m !== mode) { setMode(m); clearFeedback(); } };
@@ -5498,7 +5531,26 @@ function AuthPanel(props: {
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none -mt-1">×</button>
         </div>
 
-        {user ? (
+        {recovering ? (
+          <div className="space-y-4">
+            <div className="flex flex-col items-center text-center gap-1.5">
+              <DiscMark />
+              <h2 className="text-white font-black text-xl">Set a new password</h2>
+              <p className="text-gray-500 text-xs px-2">Choose a new password for your account.</p>
+            </div>
+            <form onSubmit={(e) => { e.preventDefault(); if (!busy && password) onUpdatePassword(); }} className="space-y-3">
+              <div className="relative">
+                <input type={showPw ? "text" : "password"} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="New password (min 6 characters)" className={`${input} pr-14`} />
+                <button type="button" onClick={() => setShowPw((v) => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 text-[11px] font-bold px-1">{showPw ? "HIDE" : "SHOW"}</button>
+              </div>
+              {error && <p className="text-red-400 text-xs">{error}</p>}
+              {message && <p className="text-[#36D7B7] text-xs">{message}</p>}
+              <button type="submit" disabled={busy || !password} className="w-full bg-[#4B3DFF] hover:bg-[#3a2ee0] active:scale-[0.99] text-white font-bold py-2.5 rounded-lg transition disabled:opacity-50">
+                {busy ? "…" : "Update password"}
+              </button>
+            </form>
+          </div>
+        ) : user ? (
           <div className="space-y-4 text-center">
             <div className="flex flex-col items-center gap-2">
               <DiscMark />
@@ -5550,6 +5602,12 @@ function AuthPanel(props: {
                 {busy ? "…" : mode === "login" ? "Log in" : "Create account"}
               </button>
             </form>
+
+            {mode === "login" && (
+              <button type="button" onClick={onResetPassword} disabled={busy} className="w-full text-center text-gray-500 hover:text-gray-300 text-[11px] transition disabled:opacity-50">
+                Forgot password?
+              </button>
+            )}
 
             <p className="text-center text-gray-500 text-xs">
               {mode === "login" ? (
