@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   newCareer,
   skillMods,
+  momentumAfter,
   careerRating,
   seasonSchedule,
   genField,
@@ -57,16 +58,37 @@ describe("newCareer", () => {
 });
 
 describe("skillMods", () => {
-  it("scales distance, catch radius and wind with the relevant skills", () => {
+  it("maps each skill to its in-round effect — 99 plays like normal golf, lower is harder", () => {
     const low = skillMods({ power: 0, control: 0, putt: 0, mental: 0 });
-    const high = skillMods({ power: 100, control: 100, putt: 100, mental: 100 });
-    expect(high.speedMul).toBeGreaterThan(low.speedMul); // more power = farther
-    expect(high.catchR).toBeGreaterThan(low.catchR); // better putting = bigger catch
-    expect(high.windMul).toBeLessThan(low.windMul); // more control = less wind push
-    expect(low.catchR).toBeLessThan(CATCH_R); // a beginner has a smaller catch radius
+    const high = skillMods({ power: 99, control: 99, putt: 99, mental: 99 });
+    // Power → distance: 99 = full range, lower = shorter.
+    expect(high.speedMul).toBeCloseTo(1, 1);
+    expect(low.speedMul).toBeLessThan(1);
+    // Putt → basket catch radius: 99 = normal circle, lower = smaller.
+    expect(high.catchR).toBeCloseTo(CATCH_R, 1);
+    expect(low.catchR).toBeLessThan(CATCH_R);
+    // Control → aim cone: 99 = dead-on your line, lower = wider spread.
+    expect(high.aimSpread).toBeCloseTo(0, 2);
+    expect(low.aimSpread).toBeGreaterThan(high.aimSpread);
+    // Mental → momentum: 99 = no penalty after a bogey, lower = a real hit.
+    expect(high.bogeyPenalty).toBeCloseTo(0, 2);
+    expect(low.bogeyPenalty).toBeGreaterThan(0);
   });
-  it("identity mods are neutral", () => {
-    expect(IDENTITY_MODS).toEqual({ speedMul: 1, catchR: CATCH_R, windMul: 1 });
+  it("identity mods are neutral (normal play == maxed skills)", () => {
+    expect(IDENTITY_MODS.speedMul).toBe(1);
+    expect(IDENTITY_MODS.catchR).toBe(CATCH_R);
+    expect(IDENTITY_MODS.aimSpread).toBe(0);
+    expect(IDENTITY_MODS.birdieBoost).toBe(0);
+    expect(IDENTITY_MODS.bogeyPenalty).toBe(0);
+  });
+  it("momentumAfter boosts on a birdie, penalizes on a bogey (mental-scaled), resets on par", () => {
+    const rookie = skillMods({ power: 50, control: 50, putt: 50, mental: 0 });
+    const pro = skillMods({ power: 50, control: 50, putt: 50, mental: 99 });
+    expect(momentumAfter(rookie, 2, 3)).toBeGreaterThan(1); // birdie → boost
+    expect(momentumAfter(rookie, 4, 3)).toBeLessThan(1); // bogey → penalty
+    expect(momentumAfter(pro, 4, 3)).toBeCloseTo(1, 2); // elite mental → no bogey hit
+    expect(momentumAfter(pro, 2, 3)).toBeGreaterThan(momentumAfter(rookie, 2, 3)); // sweeter birdie boost
+    expect(momentumAfter(rookie, 3, 3)).toBe(1); // par → reset
   });
 });
 

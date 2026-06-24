@@ -13,22 +13,42 @@ export const SKILL_LABEL: Record<keyof CareerSkills, string> = {
 // What each skill does when you PLAY a round — shown in the hub so the benefit
 // of training is obvious.
 export const SKILL_DESC: Record<keyof CareerSkills, string> = {
-  power: "Throw distance",
-  control: "Hold your line in wind",
-  putt: "Make more putts (wider catch)",
-  mental: "Clutch + a bit of everything",
+  power: "Throw distance — 99 = full range",
+  control: "Aim accuracy — low spreads your shots into a cone",
+  putt: "Basket catch size — 99 = normal",
+  mental: "Momentum: birdies boost you, bogeys bite (99 = unshakeable)",
 };
 
-// How skills bend the real game when you PLAY an event.
-export type SkillMods = { speedMul: number; catchR: number; windMul: number };
-export const IDENTITY_MODS: SkillMods = { speedMul: 1, catchR: CATCH_R, windMul: 1 };
+// How skills bend the real game when you PLAY an event. At 99 every skill plays
+// exactly like normal (outside-career) golf; below 99 it gets harder:
+//   power      → throw distance        (99 = full, lower = every shot is shorter)
+//   putt       → basket catch radius   (99 = normal circle, lower = smaller)
+//   control    → aim spread, a release cone (99 = dead-on your line, lower = wider)
+//   mental     → momentum after a hole (birdie boosts everything next hole, bogey
+//                hurts; high mental kills the bogey penalty and sweetens birdies)
+export type SkillMods = { speedMul: number; catchR: number; windMul: number; aimSpread: number; birdieBoost: number; bogeyPenalty: number };
+export const IDENTITY_MODS: SkillMods = { speedMul: 1, catchR: CATCH_R, windMul: 1, aimSpread: 0, birdieBoost: 0, bogeyPenalty: 0 };
 export function skillMods(s: CareerSkills): SkillMods {
-  const mental = clamp(s.mental) / 100; // composure gives a small all-round lift
+  const power = Math.min(1, clamp(s.power) / 99);
+  const putt = Math.min(1, clamp(s.putt) / 99);
+  const control = Math.min(1, clamp(s.control) / 99);
+  const mental = Math.min(1, clamp(s.mental) / 99);
   return {
-    speedMul: 0.8 + (clamp(s.power) / 100) * 0.42 + mental * 0.04, // a kid carries ~30% short; a maxed pro bombs it
-    catchR: CATCH_R * (0.7 + (clamp(s.putt) / 100) * 0.58 + mental * 0.08), // small catch radius → harder to hole out
-    windMul: 1.3 - (clamp(s.control) / 100) * 0.85, // low control → the wind shoves you around
+    speedMul: 0.62 + 0.38 * power,             // 0.62 (beginner) … 1.0 (full range at 99)
+    catchR: CATCH_R * (0.5 + 0.5 * putt),      // half … full basket catch radius
+    windMul: 1,                                 // wind hits you normally now (control no longer fights it)
+    aimSpread: 0.2 * (1 - control),            // 0 rad (dead-on) … ~11° release cone
+    birdieBoost: 0.1 * (0.4 + 0.6 * mental),   // confidence after a birdie — sweeter with composure
+    bogeyPenalty: 0.16 * (1 - mental),         // 0 at 99 (tilt-proof) … 0.16 (rattled) after a bogey
   };
+}
+// The momentum multiplier for the NEXT hole, given the hole you just shot. Birdie
+// or better → boost; bogey or worse → penalty (zeroed out by elite mental); par → reset.
+export function momentumAfter(mods: SkillMods, strokes: number, par: number): number {
+  const delta = strokes - par;
+  if (delta <= -1) return 1 + mods.birdieBoost;
+  if (delta >= 1) return 1 - mods.bogeyPenalty;
+  return 1;
 }
 
 // One overall number (0..100) used for simulated results + world ranking.

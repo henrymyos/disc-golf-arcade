@@ -38,7 +38,7 @@ import type {
   Vec, Tree, Hole, Mode, Tournament, TournDef, TournLiveRow, Achievement, FlightPath, Release, Flight, GhostState,
 } from "@/lib/discgolf/engine";
 import {
-  newCareer, normalizeCareer, skillMods, seasonSchedule, simEvent, recordResult, advanceSeason, retire, seasonComplete,
+  newCareer, normalizeCareer, skillMods, momentumAfter, seasonSchedule, simEvent, recordResult, advanceSeason, retire, seasonComplete,
   placeLabel, STAGE_LABEL, SKILL_KEYS, SKILL_LABEL, SKILL_DESC, IDENTITY_MODS,
   availableSponsors, signSponsor, trainingPointCost, buyTrainingPoint, topRivals, fmtCash, SPONSOR_CAP,
   careerRating, careerDiscShop, buyCareerDisc, toggleCareerBag, nextCareerDisc, CAREER_BAG_MAX,
@@ -115,6 +115,7 @@ type GameState = {
   career?: { eventId: string; eventName: string; venue?: string; character?: string; emoji?: string }; // round is a played Career event
   mini?: { kind: "putt" | "target"; station: number; makes: number; best: number; points: number; attempts: number; total: number; lastPts?: number }; // practice mini-game
   skill: SkillMods; // Career skill effects on flight (identity for normal play)
+  momentum?: number; // Career "mental" momentum for the current hole (1 = neutral); set from the last hole's result
   seed: number; // round seed (drives wind + pins)
   roundHoles: Hole[]; // this round's holes (wind/pins baked in)
   disc: { x: number; y: number; vx: number; vy: number };
@@ -1296,9 +1297,14 @@ export function DiscGolfGame() {
     // fairway. Straight throws carry farther; the hole's slope acts on the
     // disc in-flight (see SLOPE_PULL in stepFlight), not on the launch.
     const pathMul = (g.path === "straight" ? STRAIGHT_SPEED_MUL : 1) * releaseSpeedMul(g.release);
-    const speed = disc.power * (1.2 + g.power * 3.35) * pathMul * g.skill.speedMul;
-    g.disc.vx = Math.cos(g.angle) * speed;
-    g.disc.vy = Math.sin(g.angle) * speed;
+    // Career skills bend the shot: momentum (mental) scales distance + catch,
+    // and low control adds a random release-angle error within the aim cone.
+    const mo = g.momentum ?? 1;
+    const speed = disc.power * (1.2 + g.power * 3.35) * pathMul * g.skill.speedMul * mo;
+    const spread = (g.skill.aimSpread ?? 0) / mo; // a birdie steadies your aim; a bogey widens it
+    const angle = g.angle + (Math.random() * 2 - 1) * spread;
+    g.disc.vx = Math.cos(angle) * speed;
+    g.disc.vy = Math.sin(angle) * speed;
     g.rest = { x: g.disc.x, y: g.disc.y };
     g.trailBuf = [{ x: g.disc.x, y: g.disc.y }]; // start recording the flight path
     // Backhand fades left, forehand fades right — mirrored for a lefty.
@@ -1564,6 +1570,7 @@ export function DiscGolfGame() {
       holeIndex: 0,
       scores: [],
       roundPaths: [],
+      momentum: 1, // fresh round → neutral momentum
       discIndex: validDiscIndex(discIndexRef.current, activeBagRef.current),
       party: g.party ? { names: g.party.names, current: 0, scores: g.party.names.map(() => Array(g.roundHoles.length).fill(null)) } : undefined,
       ...freshHole(g.roundHoles[0]),
@@ -1841,7 +1848,7 @@ export function DiscGolfGame() {
         const d = g.disc;
         const disc = ADV_DISCS[g.discIndex];
         const f: Flight = { x: d.x, y: d.y, vx: d.vx, vy: d.vy, h: g.h, vh: g.vh, fadeTurn: g.fadeTurn };
-        const res = stepFlight(f, disc, g.fadeSign, g.path, hole, g.release, { catchR: g.skill.catchR, windMul: g.skill.windMul });
+        const res = stepFlight(f, disc, g.fadeSign, g.path, hole, g.release, { catchR: g.skill.catchR * (g.momentum ?? 1), windMul: g.skill.windMul });
         d.x = f.x;
         d.y = f.y;
         d.vx = f.vx;
@@ -1970,6 +1977,9 @@ export function DiscGolfGame() {
       } else if (g.phase === "holed") {
         if (g.holedAt && performance.now() - g.holedAt > 850) {
           g.scores[g.holeIndex] = g.throws;
+          // Mental/momentum: a birdie steadies + boosts you next hole, a bogey
+          // rattles you (high mental cancels the hit). Neutral outside Career.
+          g.momentum = momentumAfter(g.skill, g.throws, g.roundHoles[g.holeIndex].par);
           persistResume(g); // snapshot a resumable solo round after each hole
           // Online: record my hole, broadcast my full card (self-healing against
           // dropped messages), and show the live leaderboard.
@@ -2260,7 +2270,7 @@ export function DiscGolfGame() {
           ctx.strokeStyle = "rgba(255,255,255,0.35)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(tx, ty, r, 0, Math.PI * 2); ctx.stroke();
         }
       }
-      drawBasket(ctx, hole.basket.x + rattle, hole.basket.y - cam, g.skill.catchR, cosmeticByKey(BASKET_SKINS, basketSkinRef.current));
+      drawBasket(ctx, hole.basket.x + rattle, hole.basket.y - cam, g.skill.catchR * (g.momentum ?? 1), cosmeticByKey(BASKET_SKINS, basketSkinRef.current));
       for (const tr of hole.trees) drawTree(ctx, { x: tr.x, y: tr.y - cam, r: tr.r });
 
       // Tournament rivals playing the hole alongside you (simulated field).
@@ -2364,18 +2374,33 @@ export function DiscGolfGame() {
 
         if (dr.active && power > 0.04 && !inCancel) {
           const pathMul = (path === "straight" ? STRAIGHT_SPEED_MUL : 1) * releaseSpeedMul(releaseRef.current);
-          const speed = aimDisc.power * (1.2 + power * 3.35) * pathMul * g.skill.speedMul;
-          const f: Flight = {
-            x: g.disc.x, y: g.disc.y,
-            vx: Math.cos(g.angle) * speed, vy: Math.sin(g.angle) * speed,
-            h: 0, vh: power * aimDisc.arc, fadeTurn: 0,
+          const mo = g.momentum ?? 1;
+          const speed = aimDisc.power * (1.2 + power * 3.35) * pathMul * g.skill.speedMul * mo;
+          const spread = (g.skill.aimSpread ?? 0) / mo;
+          const eCatchR = g.skill.catchR * mo;
+          // Trace a full flight from a given launch angle.
+          const trace = (ang: number) => {
+            const f: Flight = { x: g.disc.x, y: g.disc.y, vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed, h: 0, vh: power * aimDisc.arc, fadeTurn: 0 };
+            const out: { x: number; y: number }[] = [{ x: f.x, y: f.y }];
+            for (let i = 0; i < 360; i++) { const r = stepFlight(f, aimDisc, sign, path, hole, releaseRef.current, { catchR: eCatchR, windMul: g.skill.windMul }); out.push({ x: f.x, y: f.y }); if (r.status !== "fly") break; }
+            return out;
           };
-          const pts: { x: number; y: number }[] = [{ x: f.x, y: f.y }];
-          for (let i = 0; i < 360; i++) {
-            const r = stepFlight(f, aimDisc, sign, path, hole, releaseRef.current, { catchR: g.skill.catchR, windMul: g.skill.windMul });
-            pts.push({ x: f.x, y: f.y });
-            if (r.status !== "fly") break;
+          // Control cone: low control fans the aim into a range your disc might
+          // actually go. Draw faint amber edges (collapses to nothing at 99 control).
+          if (spread > 0.002) {
+            ctx.strokeStyle = "rgba(226,160,59,0.55)";
+            ctx.lineWidth = 1.25;
+            for (const edge of [g.angle - spread, g.angle + spread]) {
+              const ep = trace(edge);
+              const eShown = Math.max(2, Math.floor(ep.length * 0.5));
+              for (let i = 0; i < eShown - 1; i++) {
+                ctx.globalAlpha = Math.max(0.05, 0.5 * (1 - i / (eShown - 1)));
+                ctx.beginPath(); ctx.moveTo(ep[i].x, ep[i].y - cam); ctx.lineTo(ep[i + 1].x, ep[i + 1].y - cam); ctx.stroke();
+              }
+            }
+            ctx.globalAlpha = 1;
           }
+          const pts = trace(g.angle);
           // Only reveal the first half of the flight, fading from solid to gone.
           const shown = Math.max(2, Math.floor(pts.length * 0.5));
           const aimStyle = cosmeticByKey(AIM_STYLES, aimStyleRef.current) ?? AIM_STYLES[0];
@@ -2704,6 +2729,11 @@ export function DiscGolfGame() {
         hudItem("PIN", `${pxToFeet(distBetween(g.rest, hole.basket))}ft`, "#9cc4e8");
         hudItem("THR", `${g.throws}`, "#ffffff");
         hudItem("TO PAR", overStr, over < 0 ? "#36D7B7" : over > 0 ? "#e08a3b" : "#cbd5e1");
+        // Career "mental" momentum carried from the last hole (boost ▲ / rattled ▼).
+        if (g.career && (g.momentum ?? 1) !== 1) {
+          const pct = Math.round(((g.momentum ?? 1) - 1) * 100);
+          hudItem("FORM", `${pct >= 0 ? "▲+" : "▼"}${Math.abs(pct)}%`, pct >= 0 ? "#36D7B7" : "#e08a3b");
+        }
       }
       if (g.mode === "daily") {
         ctx.font = "bold 7px ui-monospace, monospace";
@@ -4378,10 +4408,10 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
   // Current in-play effect of each skill, so the benefit of training is concrete.
   const mods = skillMods(career.skills);
   const effectFor = (k: keyof CareerSkills): string => {
-    if (k === "power") { const p = Math.round((mods.speedMul - 1) * 100); return `${p >= 0 ? "+" : ""}${p}% dist`; }
-    if (k === "control") return `wind ×${mods.windMul.toFixed(2)}`;
-    if (k === "putt") return `catch ${mods.catchR.toFixed(1)}`;
-    return "overall";
+    if (k === "power") return `${Math.round(mods.speedMul * 100)}% dist`; // 100% at 99
+    if (k === "control") return `cone ±${((mods.aimSpread * 180) / Math.PI).toFixed(0)}°`; // 0° at 99
+    if (k === "putt") return `basket ${Math.round((mods.catchR / CATCH_R) * 100)}%`; // 100% at 99
+    return mods.bogeyPenalty < 0.005 ? "tilt-proof" : `bogey −${Math.round(mods.bogeyPenalty * 100)}%`;
   };
 
   // Retired legacy screen.
