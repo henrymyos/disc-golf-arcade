@@ -216,7 +216,7 @@ const CAREER_DISC_SHOP: CareerDiscEntry[] = [
 
 // Base training points handed out each season; the rest is earned by how you
 // finish, so a dominant season develops your player far faster than a quiet one.
-const SEASON_BASE_TRAIN = 3;
+const SEASON_BASE_TRAIN = 6;
 
 // One generation of named rivals, born deterministically from the seed. A spread
 // of ceilings: a couple are future stars, most are solid, a few are journeymen.
@@ -363,20 +363,22 @@ export function seasonSchedule(c: Career): CareerEvent[] {
   switch (c.stage) {
     case "youth":
       return [
-        ev("jr1", "Junior Open", "daily", "minor", 12, 22 + ramp),
-        ev("jrc", "Junior Championship", "daily", "championship", 16, 28 + ramp),
+        ev("jr1", "Junior Open", "daily", "minor", 12, 14 + ramp),
+        ev("jrc", "Junior Championship", "daily", "championship", 16, 20 + ramp),
       ];
     case "highschool":
+      // Calibrated for a raw freshman (all skills start at 20) — beatable early,
+      // toughening each season so you have to keep developing to keep winning.
       return [
-        ev("hs1", pick(["Eagle Invitational", "Hometown Classic", "Riverside Open"]), "daily", "minor", 20, 36 + ramp),
-        ev("hs2", "Regional Qualifier", pick(["course", "daily"]) as Mode, "major", 24, 40 + ramp),
-        ev("hss", "State Championship", "course", "championship", 28, 46 + ramp),
+        ev("hs1", pick(["Eagle Invitational", "Hometown Classic", "Riverside Open"]), "daily", "minor", 20, 24 + ramp),
+        ev("hs2", "Regional Qualifier", pick(["course", "daily"]) as Mode, "major", 24, 28 + ramp),
+        ev("hss", "State Championship", "course", "championship", 28, 34 + ramp),
       ];
     case "college":
       return [
-        ev("co1", pick(["Conference Opener", "Autumn Collegiate", "Sunbelt Showdown"]), "tour", "minor", 28, 50 + ramp),
-        ev("co2", "Conference Championship", "winthrop", "major", 32, 55 + ramp),
-        ev("con", "College Nationals", "winthrop", "championship", 36, 60 + ramp),
+        ev("co1", pick(["Conference Opener", "Autumn Collegiate", "Sunbelt Showdown"]), "tour", "minor", 28, 40 + ramp),
+        ev("co2", "Conference Championship", "winthrop", "major", 32, 46 + ramp),
+        ev("con", "College Nationals", "winthrop", "championship", 36, 52 + ramp),
       ];
     case "pro": {
       // The pro tour rolls through a rotating slate of generated venues, with the
@@ -558,8 +560,9 @@ export function recordResult(c: Career, ev: CareerEvent, score: number, played: 
   // from results, not a flat per-season handout. Win the big ones to grow quickly.
   const trainBonus =
     placed === 1 ? (ev.importance === "championship" ? 6 : ev.importance === "major" ? 5 : 4)
-      : placed <= 3 ? 2
-      : placed <= Math.ceil(fieldN * 0.1) ? 1
+      : placed <= 3 ? 3
+      : placed <= Math.ceil(fieldN * 0.25) ? 2
+      : placed <= Math.ceil(fieldN * 0.5) ? 1 // even a top-half finish teaches you something
       : 0;
   // World-ranking points — top-heavy and importance-weighted, so a season of
   // winning everything vaults you up the rankings while a quiet season barely moves you.
@@ -627,7 +630,7 @@ const DECLINE: CareerSkills = { power: 1.35, control: 0.95, putt: 0.7, mental: -
 // Skills only move when you TRAIN them — there's no free yearly growth. Younger
 // players develop more per point; gains shrink as you approach your potential.
 // Past 30, untrained skills decline (training a skill offsets its decline).
-const GROW_RATE = 2.6;
+const GROW_RATE = 1.8;
 // A skill ONLY moves when you spend training points on it (no free growth).
 // `isPlayer` caps every player skill at 99 — your hard ceiling; rivals instead
 // cap at their own potential, so their ceilings vary and you can still surpass

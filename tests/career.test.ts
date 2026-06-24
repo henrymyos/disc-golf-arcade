@@ -182,7 +182,7 @@ describe("advanceSeason", () => {
     expect(career.age).toBe(15); // starts at 14 (high school)
     expect(career.season).toBe(1);
     expect(career.skills.power).toBeGreaterThan(before); // youth + training grows it
-    expect(career.trainPts).toBe(3); // refilled to the season base (rest is earned from results)
+    expect(career.trainPts).toBe(6); // refilled to the season base (rest is earned from results)
     expect(career.done).toHaveLength(0);
   });
   it("skills only move when you train them", () => {
@@ -380,7 +380,7 @@ describe("economy + sponsors", () => {
     c = signSponsor(c, coach.id);
     const next = advanceSeason(c, {}).career;
     expect(next.cash).toBe(c.cash + coach.stipend);
-    expect(next.trainPts).toBe(3 + 1); // base + one coach
+    expect(next.trainPts).toBe(6 + 1); // base + one coach
   });
   it("buying a training point costs escalating cash and adds a point", () => {
     const c: Career = { ...newCareer("Pro", 14), stage: "pro", age: 25, cash: 1_000_000 };
