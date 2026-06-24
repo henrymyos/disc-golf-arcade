@@ -183,7 +183,7 @@ const SPONSOR_POOL: Sponsor[] = [
 // separate from your account: you start bare-bones (a putter + a midrange) and
 // buy the rest from the Pro Shop with career cash as you climb the stages. None
 // of it touches the discs you've unlocked on your main account. ──
-export const CAREER_CORE_DISCS = ["aviar", "buzzz"]; // every career begins here
+export const CAREER_CORE_DISCS = ["aviar", "buzzz", "teebird"]; // every career begins here (putter, mid, fairway)
 export const CAREER_BAG_MAX = 5;
 
 // ── Career cosmetics: a post-max cash sink. Career runs its OWN cosmetic

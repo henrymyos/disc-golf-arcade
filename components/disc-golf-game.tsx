@@ -988,7 +988,7 @@ export function DiscGolfGame() {
     // The field reacts to this course's wind/slope/hazards (card + live board).
     careerFieldRef.current = careerFieldForRound(c, ev, roundHoles);
     // Career carries its OWN bag (its separate disc collection), not your account bag.
-    const careerBag = c.bag.length ? c.bag : ["aviar", "buzzz"];
+    const careerBag = c.bag.length ? c.bag : ["aviar", "buzzz", "teebird"];
     activeBagRef.current = careerBag;
     setActiveBag(careerBag);
     applyCareerLook(c.look ?? DEFAULT_CAREER_LOOK); // wear the career's bought cosmetics
@@ -4519,14 +4519,12 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
         </div>
         {SKILL_KEYS.map((k) => {
           const val = career.skills[k];
-          const pot = career.potential[k];
           const add = alloc[k];
           return (
             <div key={k} className="flex items-center gap-2">
               <span className="w-12 text-[11px] text-gray-300">{SKILL_LABEL[k]}</span>
               <div className="flex-1 h-2.5 bg-white/5 rounded relative overflow-hidden">
                 <div className="absolute inset-y-0 left-0 bg-[#36D7B7] rounded" style={{ width: `${Math.min(100, val)}%` }} />
-                {pot < 100 && <div className="absolute inset-y-0 w-0.5 bg-white/40" style={{ left: `${Math.min(100, pot)}%` }} />}
               </div>
               <span className="w-9 text-right text-[11px] font-mono text-white">{val}{add ? <span className="text-[#36D7B7]">+{add}</span> : null}</span>
               <div className="flex gap-0.5 shrink-0">
@@ -4546,7 +4544,7 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
           ))}
         </div>
         <div className="flex items-center justify-between gap-2 pt-1">
-          <p className="text-gray-500 text-[10px] flex-1 leading-snug">Skills <span className="text-gray-300">only rise when you spend points on them</span> at season&apos;s end (no free growth), and each <span className="text-gray-300">caps at 99</span>. Most points come from <span className="text-gray-300">finishing events well</span>. The tick is your natural talent — gains slow past it.</p>
+          <p className="text-gray-500 text-[10px] flex-1 leading-snug">Skills <span className="text-gray-300">only rise when you spend points on them</span> at season&apos;s end (no free growth), and each <span className="text-gray-300">caps at 99</span>. Most points come from <span className="text-gray-300">finishing events well</span>.</p>
           <button type="button" onClick={onBuyTrain} disabled={career.cash < trainCost}
             className="shrink-0 rounded bg-[#36D7B7]/15 border border-[#36D7B7]/40 text-[#36D7B7] text-[11px] font-bold px-2 py-1 disabled:opacity-30 disabled:border-white/10 disabled:text-gray-500">
             +1 pt · {fmtCash(trainCost)}
