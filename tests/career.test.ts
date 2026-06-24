@@ -24,6 +24,7 @@ import {
   rivalRating,
   SPONSOR_CAP,
   IDENTITY_MODS,
+  SKILL_KEYS,
   CAREER_CORE_DISCS,
   CAREER_BAG_MAX,
   careerDiscShop,
@@ -467,14 +468,18 @@ describe("career disc progression (separate from the account)", () => {
   });
 });
 
-describe("uncapped player growth", () => {
-  it("keeps improving past potential — no hard ceiling", () => {
-    let c: Career = { ...newCareer("Maxed", 9), age: 16, skills: { power: 95, control: 95, putt: 95, mental: 95 }, potential: { power: 96, control: 96, putt: 96, mental: 96 } };
-    const before = c.skills.power;
-    // train power hard for several seasons while still young
-    for (let i = 0; i < 4; i++) c = advanceSeason({ ...c, age: 16, trainPts: 8 }, { power: 8 }).career;
-    expect(c.skills.power).toBeGreaterThan(before); // blew past the old 96 ceiling
-    expect(c.skills.power).toBeGreaterThan(100);
+describe("skill cap (99) + points-only growth", () => {
+  it("training pushes a skill up to 99 but never past it", () => {
+    let c: Career = { ...newCareer("Maxed", 9), age: 16, skills: { power: 90, control: 90, putt: 90, mental: 90 }, potential: { power: 95, control: 95, putt: 95, mental: 95 } };
+    for (let i = 0; i < 8; i++) c = advanceSeason({ ...c, age: 16, trainPts: 12 }, { power: 12 }).career;
+    expect(c.skills.power).toBe(99); // climbs to the cap...
+    SKILL_KEYS.forEach((k) => expect(c.skills[k]).toBeLessThanOrEqual(99)); // ...and never beyond it
+  });
+  it("a skill only rises if you spend points on it", () => {
+    const c = newCareer("Trainer", 12);
+    const next = advanceSeason(c, { putt: 3 }).career;
+    expect(next.skills.putt).toBeGreaterThan(c.skills.putt); // trained → up
+    expect(next.skills.power).toBe(c.skills.power); // untrained → unchanged (young, no decline)
   });
 });
 

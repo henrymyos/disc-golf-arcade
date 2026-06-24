@@ -4357,7 +4357,7 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
           <h2 className="text-white font-black text-xl">🌟 Career</h2>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
-        <p className="text-gray-300 text-sm">Start as a 14-year-old freshman with two discs and a dream — a clean slate, kept <span className="text-white">completely separate from your main account</span>. Train four skills (<span className="text-white">no cap</span>), unlock discs in the <span className="text-[#e0923b]">Pro Shop</span>, and finish events well to develop faster. Climb from high school to college (Nationals at Winthrop Lake) to the pro tour and chase <span className="text-[#f5d24a]">World #1</span>. Play the big rounds yourself; sim the rest — any coins you earn still go to your account.</p>
+        <p className="text-gray-300 text-sm">Start as a 14-year-old freshman with two discs and a dream — a clean slate, kept <span className="text-white">completely separate from your main account</span>. Train four skills (<span className="text-white">up to 99</span>), unlock discs in the <span className="text-[#e0923b]">Pro Shop</span>, and finish events well to develop faster. Climb from high school to college (Nationals at Winthrop Lake) to the pro tour and chase <span className="text-[#f5d24a]">World #1</span>. Play the big rounds yourself; sim the rest — any coins you earn still go to your account.</p>
         <input type="text" value={name} maxLength={16} onChange={(e) => setName(e.target.value)} placeholder="Your name" className="w-full bg-[#1a1d23] border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-[#e0923b]" />
         <button type="button" onClick={() => onStart(name)} className={`${btn} w-full`}>Begin career</button>
       </div></div>
@@ -4480,7 +4480,7 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
           ))}
         </div>
         <div className="flex items-center justify-between gap-2 pt-1">
-          <p className="text-gray-500 text-[10px] flex-1 leading-snug">Skills <span className="text-gray-300">only rise when you train them</span>, with <span className="text-gray-300">no cap</span> — most training points come from <span className="text-gray-300">finishing events well</span>. The tick is your natural talent; train right past it.</p>
+          <p className="text-gray-500 text-[10px] flex-1 leading-snug">Skills <span className="text-gray-300">only rise when you spend points on them</span> at season&apos;s end (no free growth), and each <span className="text-gray-300">caps at 99</span>. Most points come from <span className="text-gray-300">finishing events well</span>. The tick is your natural talent — gains slow past it.</p>
           <button type="button" onClick={onBuyTrain} disabled={career.cash < trainCost}
             className="shrink-0 rounded bg-[#36D7B7]/15 border border-[#36D7B7]/40 text-[#36D7B7] text-[11px] font-bold px-2 py-1 disabled:opacity-30 disabled:border-white/10 disabled:text-gray-500">
             +1 pt · {fmtCash(trainCost)}

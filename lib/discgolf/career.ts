@@ -595,22 +595,19 @@ const DECLINE: CareerSkills = { power: 1.35, control: 0.95, putt: 0.7, mental: -
 // players develop more per point; gains shrink as you approach your potential.
 // Past 30, untrained skills decline (training a skill offsets its decline).
 const GROW_RATE = 4.2;
-// `uncapped` removes the hard ceiling (the PLAYER has no cap — you can keep
-// improving for as long as you keep training). `pot` still shapes the curve:
-// gains shrink as you approach and pass it (diminishing returns) so reaching the
-// very top takes seasons of work, but they never stop. Rivals stay capped at
-// their potential so you can eventually surpass them.
-function growSkill(skill: number, pot: number, age: number, invested: number, declineRate: number, uncapped = false): number {
+// A skill ONLY moves when you spend training points on it (no free growth).
+// `isPlayer` caps every player skill at 99 — your hard ceiling; rivals instead
+// cap at their own potential, so their ceilings vary and you can still surpass
+// them. `pot` shapes the curve: gains taper as you approach it (and again past
+// ~80), so the closer you get to 99 the more each point costs.
+function growSkill(skill: number, pot: number, age: number, invested: number, declineRate: number, isPlayer = false): number {
   const youth = age < 16 ? 1.5 : age < 20 ? 1.2 : age < 26 ? 0.9 : age <= 30 ? 0.65 : 0.45;
   const room = Math.max(0, pot - skill);
-  // Diminishing returns ramp up steeply past ~80, so elite skill keeps climbing
-  // (no cap) but each point costs ever more — a normal great career sits ~60–95,
-  // and only an obsessive, win-everything career inches toward triple digits.
-  const highDamp = 1 / (1 + Math.max(0, skill - 80) * 0.085);
+  const highDamp = 1 / (1 + Math.max(0, skill - 80) * 0.085); // the last points cost the most
   const gain = invested > 0 ? invested * youth * GROW_RATE * (0.45 + Math.min(room, 45) * 0.012) * highDamp : 0;
   let next = skill + gain;
   if (age > 30) next -= Math.max(0, (age - 30) * 0.55 * declineRate - invested * 0.55);
-  return clamp(next, 8, uncapped ? 999 : pot + 2);
+  return clamp(next, 8, isPlayer ? 99 : pot + 2);
 }
 
 // Rivals improve on their own each season (a little focused work, no allocation).
