@@ -3883,13 +3883,13 @@ function ChallengePanel({ online, onClose, onPassPlay, onCreate, onJoin }: {
         {step === "menu" && (
           <>
             <button type="button" onClick={onPassPlay}
-              className="w-full text-left rounded-xl bg-[#1a1d23] border border-white/10 hover:border-white/30 px-4 py-3 transition">
-              <span className="block text-white font-bold text-sm">🤝 Pass &amp; Play</span>
+              className="w-full text-left rounded-xl border border-[#36D7B7]/55 bg-[#1a1d23] hover:border-[#36D7B7] hover:bg-[#20262f] active:scale-[0.99] px-4 py-3 transition">
+              <span className="block text-white font-bold text-sm">Pass &amp; Play</span>
               <span className="block text-gray-500 text-[11px] mt-0.5">2–4 players take turns on one device.</span>
             </button>
             <button type="button" onClick={() => online && setStep("create")} disabled={!online}
-              className={`w-full text-left rounded-xl border px-4 py-3 transition ${online ? "bg-[#1a1d23] border-white/10 hover:border-white/30" : "bg-white/[0.02] border-white/5 opacity-50"}`}>
-              <span className="block text-white font-bold text-sm">🌐 Friendly Challenge</span>
+              className={`w-full text-left rounded-xl border px-4 py-3 transition ${online ? "border-[#36D7B7]/55 bg-[#1a1d23] hover:border-[#36D7B7] hover:bg-[#20262f] active:scale-[0.99]" : "border-white/5 bg-white/[0.02] opacity-50"}`}>
+              <span className="block text-white font-bold text-sm">Friendly Challenge</span>
               <span className="block text-gray-500 text-[11px] mt-0.5">
                 {online ? "Play the same round online — everyone on their own phone." : "Online play needs Supabase configured."}
               </span>
