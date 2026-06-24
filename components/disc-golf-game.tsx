@@ -267,7 +267,7 @@ export function DiscGolfGame() {
   const [statsOpen, setStatsOpen] = useState(false);
   const [boardsOpen, setBoardsOpen] = useState(false);
   const [coursesOpen, setCoursesOpen] = useState(false);
-  const [pauseMenu, setPauseMenu] = useState<{ canRestart: boolean } | null>(null); // in-round menu (restart / home / continue)
+  const [pauseMenu, setPauseMenu] = useState<{ canRestart: boolean; isCareer: boolean } | null>(null); // in-round menu (restart / sim / home / continue)
   const [tournamentOpen, setTournamentOpen] = useState(false);
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const tournamentRef = useRef<Tournament | null>(null);
@@ -288,6 +288,7 @@ export function DiscGolfGame() {
   const careerEventRef = useRef<CareerEvent | null>(null); // the event being played
   const careerFieldRef = useRef<FieldPlayer[] | null>(null); // the field's per-hole scores (card + live board)
   const [careerLastResult, setCareerLastResult] = useState<EventResult | null>(null);
+  const [careerCoins, setCareerCoins] = useState(0); // account coins paid by the last PLAYED career round (0 when simmed)
   const saveCareer = useCallback((c: Career | null) => {
     setCareer(c);
     careerRef.current = c;
@@ -976,6 +977,7 @@ export function DiscGolfGame() {
     const { career: nc, result } = recordResult(c, ev, score, false);
     saveCareer(nc);
     setCareerLastResult(result);
+    setCareerCoins(0); // simmed rounds pay no account coins
   }, [saveCareer]);
 
   const advanceCareerSeason = useCallback((alloc: Partial<CareerSkills>) => {
@@ -1304,6 +1306,16 @@ export function DiscGolfGame() {
         const { career: nc, result } = recordResult(c, ev, total, true, careerFieldRef.current ?? undefined);
         saveCareer(nc);
         setCareerLastResult(result);
+        // Career progress stays sandboxed inside the Career object — no bests,
+        // history, achievements, disc unlocks, or XP leak to your real account.
+        // The one thing that does cross over: playing a career round still pays
+        // account coins (scaled by how far under par you went), so the mode
+        // still feeds your wallet just like a normal round.
+        const reward = coinsForRound(total - g.roundHoles.reduce((s, h) => s + h.par, 0), g.roundHoles.length);
+        setCareerCoins(reward);
+        addCoins(reward);
+      } else {
+        setCareerCoins(0);
       }
       careerEventRef.current = null;
       careerFieldRef.current = null;
@@ -1472,6 +1484,29 @@ export function DiscGolfGame() {
     // not coins, and are handled in their own branch above.
     if (!practice) { setCoinReward(coinsForRound(total - pars.reduce((s, n) => s + n, 0), pars.length)); addCoins(coinsForRound(total - pars.reduce((s, n) => s + n, 0), pars.length)); }
   }, [saveProgress, saveTournament, clearResume, saveCareer, addCoins]);
+
+  // Bail out of a played Career round already in progress and let it sim from
+  // your skills instead — the same instant result as the hub "⚡ Sim", but
+  // reachable mid-round from the pause menu. A simmed round pays no coins.
+  const simCurrentCareerRound = useCallback(() => {
+    const c = careerRef.current;
+    const ev = careerEventRef.current;
+    careerPlayRef.current = false;
+    careerEventRef.current = null;
+    careerFieldRef.current = null;
+    if (c && ev && !c.done.includes(ev.id)) {
+      const { score } = simEvent(c, ev);
+      const { career: nc, result } = recordResult(c, ev, score, false);
+      saveCareer(nc);
+      setCareerLastResult(result);
+      setCareerCoins(0);
+    }
+    audioRef.current?.stopMusic();
+    clearResume();
+    setPauseMenu(null);
+    setCareerOpen(true);
+    setScreen("title");
+  }, [saveCareer, clearResume]);
 
   const nextHole = useCallback(() => {
     const g = stateRef.current;
@@ -3242,6 +3277,7 @@ export function DiscGolfGame() {
           <CareerPanel
             career={career}
             lastResult={careerLastResult}
+            lastCoins={careerCoins}
             notes={careerNotes}
             onClose={() => { setCareerOpen(false); setCareerNotes([]); }}
             onStart={startNewCareer}
@@ -3364,6 +3400,12 @@ export function DiscGolfGame() {
             <div className="w-full max-w-[240px] flex flex-col gap-2.5">
               <h2 className="text-white font-black text-2xl text-center mb-1">Paused</h2>
               <button type="button" onClick={() => setPauseMenu(null)} className={`${btn} w-full !mt-0`}>Continue</button>
+              {pauseMenu.isCareer && (
+                <button type="button" onClick={simCurrentCareerRound}
+                  className="w-full bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white font-bold py-3 rounded-lg transition">
+                  ⚡ Sim rest of round
+                </button>
+              )}
               {pauseMenu.canRestart && (
                 <button type="button" onClick={restartRound}
                   className="w-full bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white font-bold py-3 rounded-lg transition">
@@ -3462,7 +3504,7 @@ export function DiscGolfGame() {
               </div>
               <button
                 type="button"
-                onClick={() => { const g = stateRef.current; setPauseMenu({ canRestart: !!g && !g.online && !g.mini && !tournamentPlayRef.current && !careerPlayRef.current }); }}
+                onClick={() => { const g = stateRef.current; setPauseMenu({ canRestart: !!g && !g.online && !g.mini && !tournamentPlayRef.current && !careerPlayRef.current, isCareer: careerPlayRef.current }); }}
                 aria-label="Menu"
                 className="shrink-0 w-10 h-[34px] flex items-center justify-center bg-[#0f1117] border border-white/10 hover:border-white/25 text-white rounded-lg active:bg-white/10 transition"
               >
@@ -4231,9 +4273,10 @@ function CareerStat({ label, v }: { label: string; v: number | string }) {
     </div>
   );
 }
-function CareerPanel({ career, lastResult, notes, onClose, onStart, onPlay, onSim, onAdvance, onRetire, onAbandon, onSign, onBuyTrain, dismissNotes }: {
+function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, onPlay, onSim, onAdvance, onRetire, onAbandon, onSign, onBuyTrain, dismissNotes }: {
   career: Career | null;
   lastResult: EventResult | null;
+  lastCoins: number;
   notes: string[];
   onClose: () => void;
   onStart: (name: string) => void;
@@ -4352,7 +4395,7 @@ function CareerPanel({ career, lastResult, notes, onClose, onStart, onPlay, onSi
 
       {lastResult && (
         <div className={`rounded-lg px-3 py-2 text-sm border ${lastResult.win ? "border-[#f5d24a]/50 bg-[#f5d24a]/10 text-[#f5d24a]" : "border-white/10 bg-white/5 text-gray-200"}`}>
-          <div>{lastResult.name}: <span className="font-bold">{placeLabel(lastResult.placed)}</span> of {lastResult.field} · {toPar(lastResult.toPar)} ({lastResult.score}){lastResult.prize > 0 && <span className="text-[#36D7B7]"> · +{fmtCash(lastResult.prize)}</span>}</div>
+          <div>{lastResult.name}: <span className="font-bold">{placeLabel(lastResult.placed)}</span> of {lastResult.field} · {toPar(lastResult.toPar)} ({lastResult.score}){lastResult.prize > 0 && <span className="text-[#36D7B7]"> · +{fmtCash(lastResult.prize)}</span>}{lastCoins > 0 && <span className="text-[#f5d24a]"> · +{lastCoins} <Coin className="!w-3 !h-3 align-[-1px]" /></span>}</div>
           <div className="text-[10px] text-gray-400 mt-0.5">
             Beat {lastResult.beatRivals}/{lastResult.rivalCount} rivals{lastResult.winnerName ? ` · ${lastResult.winnerName} took the title` : ""}
             {lastResult.trainBonus > 0 && <span className="text-[#36D7B7]"> · +{lastResult.trainBonus} training pt{lastResult.trainBonus > 1 ? "s" : ""}</span>}
