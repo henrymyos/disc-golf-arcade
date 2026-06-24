@@ -603,7 +603,11 @@ const GROW_RATE = 4.2;
 function growSkill(skill: number, pot: number, age: number, invested: number, declineRate: number, uncapped = false): number {
   const youth = age < 16 ? 1.5 : age < 20 ? 1.2 : age < 26 ? 0.9 : age <= 30 ? 0.65 : 0.45;
   const room = Math.max(0, pot - skill);
-  const gain = invested > 0 ? invested * youth * GROW_RATE * (0.45 + Math.min(room, 45) * 0.012) : 0;
+  // Diminishing returns ramp up steeply past ~80, so elite skill keeps climbing
+  // (no cap) but each point costs ever more — a normal great career sits ~60–95,
+  // and only an obsessive, win-everything career inches toward triple digits.
+  const highDamp = 1 / (1 + Math.max(0, skill - 80) * 0.085);
+  const gain = invested > 0 ? invested * youth * GROW_RATE * (0.45 + Math.min(room, 45) * 0.012) * highDamp : 0;
   let next = skill + gain;
   if (age > 30) next -= Math.max(0, (age - 30) * 0.55 * declineRate - invested * 0.55);
   return clamp(next, 8, uncapped ? 999 : pot + 2);
