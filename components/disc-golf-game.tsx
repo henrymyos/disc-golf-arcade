@@ -693,7 +693,7 @@ export function DiscGolfGame() {
   useEffect(() => { loadLocal(); }, [loadLocal]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  // ── Optional login + cloud progress (Supabase auth user_metadata) ──
+  // ── Optional login + cloud progress (Supabase, the arcade_progress table) ──
   const supa = getSupabase();
   // Skip the landing front door for returning visitors, or when auth isn't
   // configured (then there's no "log in" choice to offer).

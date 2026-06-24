@@ -1,6 +1,6 @@
 // Player progress: the bits worth keeping across sessions/devices. Stored in
-// localStorage (offline) and, when signed in, mirrored to Supabase auth
-// user_metadata (no table/RLS needed). These helpers gather/scatter/merge it.
+// localStorage (offline) and, when signed in, mirrored to the Supabase
+// `arcade_progress` table (RLS: own row). These helpers gather/scatter/merge it.
 
 import type { Career } from "./discgolf/career";
 import type { DailyReward } from "./discgolf/wallet";
