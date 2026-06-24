@@ -746,13 +746,37 @@ export function nextCareerDisc(c: Career): { key: string; cost: number; stage: C
   const owned = new Set(c.discs);
   return CAREER_DISC_SHOP.find((d) => !owned.has(d.key) && STAGE_RANK[c.stage] < STAGE_RANK[d.stage]) ?? null;
 }
+// Disc "class" so a freshly-bought disc can slot into the bag sensibly.
+const CAREER_DISC_CLASS: Record<string, string> = {
+  aviar: "putter", zone: "putter", harp: "putter",
+  buzzz: "mid", swarm: "mid", roc: "mid",
+  teebird: "fairway", firebird: "fairway", river: "fairway", pd: "fairway",
+  destroyer: "driver", wraith: "driver", nukeos: "driver", zeus: "driver",
+};
+// Drop a newly-bought disc straight into the bag so it's usable right away: if
+// there's room, add it; if the bag is full, swap out a disc from an
+// over-represented class (so buying your first driver actually bags it instead
+// of sitting unused behind five starters). A perfectly-spread bag is left alone.
+function autoBagDisc(bag: string[], key: string): string[] {
+  if (bag.includes(key)) return bag;
+  if (bag.length < CAREER_BAG_MAX) return [...bag, key];
+  const cls = (k: string) => CAREER_DISC_CLASS[k] ?? "mid";
+  const counts: Record<string, number> = {};
+  bag.forEach((k) => { counts[cls(k)] = (counts[cls(k)] ?? 0) + 1; });
+  const newCls = cls(key);
+  const dropClass =
+    Object.keys(counts).find((cl) => counts[cl] > 1 && cl !== newCls) ??
+    Object.keys(counts).find((cl) => counts[cl] > 1);
+  if (!dropClass) return bag; // already a balanced spread — respect the player's bag
+  let dropIdx = -1; // drop the last bagged disc of the over-represented class
+  bag.forEach((k, i) => { if (cls(k) === dropClass) dropIdx = i; });
+  return bag.filter((_, i) => i !== dropIdx).concat(key);
+}
 export function buyCareerDisc(c: Career, key: string): Career {
   if (c.discs.includes(key)) return c;
   const entry = CAREER_DISC_SHOP.find((d) => d.key === key);
   if (!entry || STAGE_RANK[c.stage] < STAGE_RANK[entry.stage] || c.cash < entry.cost) return c;
-  const discs = [...c.discs, key];
-  const bag = c.bag.length < CAREER_BAG_MAX && !c.bag.includes(key) ? [...c.bag, key] : c.bag;
-  return { ...c, cash: c.cash - entry.cost, discs, bag };
+  return { ...c, cash: c.cash - entry.cost, discs: [...c.discs, key], bag: autoBagDisc(c.bag, key) };
 }
 // Add/remove an owned disc from the career bag (keeps 1..CAREER_BAG_MAX in it).
 export function toggleCareerBag(c: Career, key: string): Career {

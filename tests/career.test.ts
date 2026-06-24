@@ -446,6 +446,17 @@ describe("career disc progression (separate from the account)", () => {
     const hs: Career = { ...newCareer("HS", 5), cash: 999999 };
     expect(buyCareerDisc(hs, "destroyer").discs).not.toContain("destroyer"); // pro-only, ignored in HS
   });
+  it("buying a disc when the bag is full swaps it in (a driver doesn't sit unused behind starters)", () => {
+    // A full bag of starters (2 putters, 2 mids, 1 fairway), then buy a driver.
+    let c: Career = { ...newCareer("Bagger", 31), cash: 100000, stage: "pro",
+      discs: ["aviar", "zone", "buzzz", "swarm", "teebird", "destroyer"], bag: ["aviar", "zone", "buzzz", "swarm", "teebird"] };
+    // mark destroyer as not-yet-owned for the buy path
+    c = { ...c, discs: ["aviar", "zone", "buzzz", "swarm", "teebird"] };
+    c = buyCareerDisc(c, "destroyer");
+    expect(c.discs).toContain("destroyer");
+    expect(c.bag).toContain("destroyer"); // auto-bagged
+    expect(c.bag.length).toBe(CAREER_BAG_MAX); // still capped
+  });
   it("nextCareerDisc teases a disc from a later stage", () => {
     const hs = newCareer("HS", 6);
     const next = nextCareerDisc(hs);
