@@ -1,0 +1,48 @@
+name: ✨ Feature / Change
+description: A new feature, or a change to how something works
+title: "[Feature]: "
+labels: ["feature"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe what you want. Claude will read this, plan it, and implement it.
+  - type: textarea
+    id: what
+    attributes:
+      label: What do you want?
+      description: The change, in your words.
+      placeholder: Add a "skins" game mode where each hole is worth a point.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why / what's the goal?
+      description: What should it feel like when it's done? How do we know it's right?
+      placeholder: Makes multiplayer rounds more competitive. Done when a skins round tracks per-hole winners and shows a running tally.
+    validations:
+      required: false
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - gameplay (disc flight, physics, scoring)
+        - ui (screens, layout, styling)
+        - auth (login, signup, password reset)
+        - data (Supabase, progress, leaderboards)
+        - pwa (offline, install)
+        - not sure
+    validations:
+      required: false
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - P1 — high
+        - P2 — normal
+        - P3 — nice to have
+    validations:
+      required: false

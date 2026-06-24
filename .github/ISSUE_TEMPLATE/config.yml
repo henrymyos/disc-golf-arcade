@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 💬 Quick note (no template)
+    url: https://github.com/henrymyos/disc-golf-arcade/issues/new
+    about: Just want to jot something down fast? Open a blank issue.

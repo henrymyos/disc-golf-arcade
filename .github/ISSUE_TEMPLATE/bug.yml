@@ -1,0 +1,60 @@
+name: 🐛 Bug
+description: Something is broken or behaving wrong
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing! The more detail here, the faster Claude can pick this up and fix it without coming back to ask.
+  - type: textarea
+    id: what
+    attributes:
+      label: What's wrong?
+      description: What did you see? What did you expect instead?
+      placeholder: |
+        When I throw a disc into the water hazard, the score doesn't update.
+        Expected: it should add a penalty stroke.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Start a round on hole 3
+        2. Throw into the water
+        3. Watch the scorecard
+    validations:
+      required: false
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - gameplay (disc flight, physics, scoring)
+        - ui (screens, layout, styling)
+        - auth (login, signup, password reset)
+        - data (Supabase, progress, leaderboards)
+        - pwa (offline, install)
+        - not sure
+    validations:
+      required: false
+  - type: dropdown
+    id: severity
+    attributes:
+      label: How bad is it?
+      options:
+        - P0 — broken/unplayable, fix now
+        - P1 — high, hurts the experience
+        - P2 — normal
+        - P3 — minor
+    validations:
+      required: false
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else?
+      description: Device, screenshot, console error, or a guess at the cause.
+    validations:
+      required: false
