@@ -2405,19 +2405,29 @@ export function DiscGolfGame() {
             return out;
           };
           // Control cone: low control fans the aim into a range your disc might
-          // actually go. Draw faint amber edges (collapses to nothing at 99 control).
+          // actually go. Draw a filled amber wedge + bold edges so the possible
+          // landing area is clear (collapses to nothing at 99 control).
           if (spread > 0.002) {
-            ctx.strokeStyle = "rgba(226,160,59,0.55)";
-            ctx.lineWidth = 1.25;
-            for (const edge of [g.angle - spread, g.angle + spread]) {
-              const ep = trace(edge);
-              const eShown = Math.max(2, Math.floor(ep.length * 0.5));
-              for (let i = 0; i < eShown - 1; i++) {
-                ctx.globalAlpha = Math.max(0.05, 0.5 * (1 - i / (eShown - 1)));
-                ctx.beginPath(); ctx.moveTo(ep[i].x, ep[i].y - cam); ctx.lineTo(ep[i + 1].x, ep[i + 1].y - cam); ctx.stroke();
-              }
+            const left = trace(g.angle - spread);
+            const right = trace(g.angle + spread);
+            const n = Math.max(2, Math.floor(Math.min(left.length, right.length) * 0.6));
+            // Filled wedge — the area the disc could end up in.
+            ctx.beginPath();
+            ctx.moveTo(left[0].x, left[0].y - cam);
+            for (let i = 1; i < n; i++) ctx.lineTo(left[i].x, left[i].y - cam);
+            for (let i = n - 1; i >= 0; i--) ctx.lineTo(right[i].x, right[i].y - cam);
+            ctx.closePath();
+            ctx.fillStyle = "rgba(240,170,70,0.18)";
+            ctx.fill();
+            // Bold solid edges bounding the spread.
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = "rgba(245,180,80,0.9)";
+            for (const ep of [left, right]) {
+              ctx.beginPath();
+              ctx.moveTo(ep[0].x, ep[0].y - cam);
+              for (let i = 1; i < n; i++) ctx.lineTo(ep[i].x, ep[i].y - cam);
+              ctx.stroke();
             }
-            ctx.globalAlpha = 1;
           }
           const pts = trace(g.angle);
           // Only reveal the first half of the flight, fading from solid to gone.
