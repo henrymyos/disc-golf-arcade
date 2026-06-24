@@ -598,7 +598,7 @@ export function DiscGolfGame() {
   // page); any other interrupted solo round shows as a banner above the menu.
   const dailyResume = resumeRound && resumeRound.mode === "daily" ? resumeRound : null;
   const resumeBanner = resumeRound && resumeRound.mode !== "daily" ? resumeRound : null;
-  const menuTopMargin = challenge || resumeBanner ? "mt-2" : "mt-5";
+  const menuTopMargin = challenge || resumeBanner ? "mt-3" : "mt-7";
 
   // Per-venue best scores for the standalone pro-tour courses (keyed by seed).
   const [tourBests, setTourBests] = useState<Record<number, number>>({});
@@ -2876,13 +2876,13 @@ export function DiscGolfGame() {
           )}
           <div className="absolute inset-0 overflow-y-auto rounded-lg bg-gradient-to-b from-[#1c2233] via-[#141926] to-[#0f1117]">
             <div
-              className="min-h-full flex items-center justify-center px-5"
-              style={{ paddingTop: "max(env(safe-area-inset-top), 0.75rem)", paddingBottom: "max(env(safe-area-inset-bottom), 0.75rem)" }}
+              className="min-h-full flex items-start justify-center px-5"
+              style={{ paddingTop: "max(env(safe-area-inset-top), 1.5rem)", paddingBottom: "max(env(safe-area-inset-bottom), 0.75rem)" }}
             >
-            <div className="w-full max-w-[290px] flex flex-col items-center text-center py-2">
+            <div className="w-full max-w-[300px] flex flex-col items-center text-center pt-1 pb-4">
               {/* Logo */}
-              <div className="flex flex-col items-center gap-2">
-                <svg width="44" height="44" viewBox="0 0 32 32" aria-hidden className="drop-shadow">
+              <div className="flex flex-col items-center gap-2.5">
+                <svg width="56" height="56" viewBox="0 0 32 32" aria-hidden className="drop-shadow">
                   <g stroke="#2a7d70" strokeWidth="2" strokeLinecap="round">
                     <line x1="2" y1="12.5" x2="8" y2="12.5" /><line x1="1" y1="18" x2="7" y2="18" />
                   </g>
@@ -2890,7 +2890,7 @@ export function DiscGolfGame() {
                   <ellipse cx="18.5" cy="14.8" rx="11" ry="5" fill="#36D7B7" />
                   <ellipse cx="18.5" cy="14" rx="6.5" ry="2.4" fill="#5fe6d2" />
                 </svg>
-                <h1 className="text-white font-black text-[26px] leading-none tracking-tight">
+                <h1 className="text-white font-black text-[30px] leading-none tracking-tight">
                   Disc Golf <span className="text-[#36D7B7]">Arcade</span>
                 </h1>
               </div>
@@ -2963,15 +2963,15 @@ export function DiscGolfGame() {
               {/* Hub: three category cards keep the menu uncluttered */}
               {hub === "home" && (
                 <>
-                  <div className={`w-full flex flex-col gap-2 ${menuTopMargin}`}>
+                  <div className={`w-full flex flex-col gap-3 ${menuTopMargin}`}>
                     <button type="button" onClick={() => setHub("solo")} className={hubCard}>
-                      <span className="flex-1 text-center font-bold text-sm">Single Player</span>
+                      <span className="font-black text-lg">Single Player</span>
                     </button>
                     <button type="button" onClick={() => setHub("online")} className={hubCard}>
-                      <span className="flex-1 text-center font-bold text-sm">Online</span>
+                      <span className="font-black text-lg">Online</span>
                     </button>
                     <button type="button" onClick={() => setPracticeOpen(true)} className={hubCard}>
-                      <span className="flex-1 text-center font-bold text-sm">Practice</span>
+                      <span className="font-black text-lg">Practice</span>
                     </button>
                   </div>
 
@@ -3682,9 +3682,10 @@ const titleCard =
   "w-full rounded-xl border border-[#36D7B7]/55 bg-[#1a1d23] hover:border-[#36D7B7] hover:bg-[#20262f] active:scale-[0.99] text-white font-bold py-3 transition";
 const titleCardSm =
   "flex-1 rounded-lg border border-[#36D7B7]/45 bg-[#1a1d23] hover:border-[#36D7B7] text-gray-200 hover:text-white text-xs font-semibold py-2 transition";
-// Big hub category card: title + subtitle + chevron.
+// Big primary hub card — the three main actions, made large so they're clearly
+// the buttons to press.
 const hubCard =
-  "w-full flex items-center gap-3 rounded-xl border border-[#36D7B7]/55 bg-[#1a1d23] hover:border-[#36D7B7] hover:bg-[#20262f] active:scale-[0.99] text-white px-3.5 py-3 transition";
+  "w-full flex items-center justify-center rounded-xl border border-[#36D7B7]/55 bg-[#1a1d23] hover:border-[#36D7B7] hover:bg-[#20262f] active:scale-[0.99] text-white py-6 transition";
 
 // A small gold coin chip — used wherever a coin balance/amount is shown so the
 // currency reads as clearly gold (rather than the dull 🪙 emoji).
