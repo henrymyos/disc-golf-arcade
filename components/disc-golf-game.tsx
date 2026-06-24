@@ -4731,7 +4731,7 @@ function ProfilePanel({ profile, coins, owned, unlocked, roundsPlayed, bestScore
                 >
                   <span className={have ? "" : "grayscale opacity-70"}>{a.emoji}</span>
                   {!have && (
-                    <span className="absolute -bottom-0.5 inset-x-0 text-center text-[7px] font-mono text-[#f5d24a] leading-none">{a.price}</span>
+                    <span className="absolute -bottom-0.5 inset-x-0 flex items-center justify-center gap-0.5 text-[7px] font-mono text-[#f5d24a] leading-none">{a.price}<Coin className="!w-1.5 !h-1.5" /></span>
                   )}
                 </button>
               );
