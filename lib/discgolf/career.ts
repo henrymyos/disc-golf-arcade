@@ -35,10 +35,10 @@ export function skillMods(s: CareerSkills): SkillMods {
   const mental = Math.min(1, clamp(s.mental) / 99);
   return {
     speedMul: 0.62 + 0.38 * power,             // 0.62 (beginner) … 1.0 (full range at 99)
-    catchR: CATCH_R * (0.5 + 0.5 * putt),      // half … full basket catch radius
+    catchR: CATCH_R * (0.7 + 0.4 * putt),      // 0.7× (small basket) … 1.1× normal at 99
     windMul: 1,                                 // wind hits you normally now (control no longer fights it)
-    aimSpread: 0.2 * (1 - control),            // 0 rad (dead-on) … ~11° release cone
-    birdieBoost: 0.1 * (0.4 + 0.6 * mental),   // confidence after a birdie — sweeter with composure
+    aimSpread: 0.32 * (1 - control),           // 0 rad (dead-on) … ~±18° cone — wild at low control
+    birdieBoost: 0.1 * mental,                 // none at low mental → +10% at 99
     bogeyPenalty: 0.16 * (1 - mental),         // 0 at 99 (tilt-proof) … 0.16 (rattled) after a bogey
   };
 }
@@ -272,9 +272,8 @@ export function newCareer(name: string, seed: number): Career {
   const rng = mulberry32((seed ^ 0x5bd1e995) >>> 0);
   const talent = rng(); // 0..1 overall ceiling shift
   const pot = (base: number) => Math.round(clamp(base + talent * 26 + rng() * 16, 40, 99));
-  const start = (lo: number, hi: number) => Math.round(lo + rng() * (hi - lo));
-  // A high-school freshman: more developed than a 10-year-old, plenty of upside.
-  const skills: CareerSkills = { power: start(22, 32), control: start(24, 34), putt: start(24, 34), mental: start(28, 38) };
+  // A raw high-school freshman: every skill starts at 20, all upside ahead.
+  const skills: CareerSkills = { power: 20, control: 20, putt: 20, mental: 20 };
   const potential: CareerSkills = {
     power: Math.max(skills.power + 15, pot(58)),
     control: Math.max(skills.control + 15, pot(58)),
@@ -588,17 +587,18 @@ export function recordResult(c: Career, ev: CareerEvent, score: number, played: 
 }
 
 // Pro prize money: a purse by event tier, paid to roughly the top quarter.
+// Trimmed from the old purses so a pro career doesn't pile up idle cash late.
 function prizeFor(ev: CareerEvent, placed: number): number {
-  const purse = ev.importance === "championship" ? 100000 : ev.importance === "major" ? 50000 : 15000;
+  const purse = ev.importance === "championship" ? 55000 : ev.importance === "major" ? 28000 : 9000;
   if (placed > Math.max(5, Math.floor(ev.fieldSize * 0.25))) return 0;
   return Math.round((purse * Math.pow(0.6, placed - 1)) / 100) * 100;
 }
-// Amateur "scholarship" cash for a top finish (so you can stock the Pro Shop
-// before turning pro). Small, top-heavy, importance-scaled; only the top ~fifth pays.
+// Amateur "scholarship" cash for a top finish — boosted so the Pro Shop is
+// reachable through school. Top-heavy, importance-scaled; ~top quarter pays.
 function amateurCash(ev: CareerEvent, placed: number, fieldN: number): number {
-  if (placed > Math.max(3, Math.ceil(fieldN * 0.2))) return 0;
-  const top = ev.importance === "championship" ? 1500 : ev.importance === "major" ? 800 : 400;
-  return Math.round((top * Math.pow(0.7, placed - 1)) / 50) * 50;
+  if (placed > Math.max(4, Math.ceil(fieldN * 0.25))) return 0;
+  const top = ev.importance === "championship" ? 4000 : ev.importance === "major" ? 2000 : 1000;
+  return Math.round((top * Math.pow(0.72, placed - 1)) / 50) * 50;
 }
 // World-ranking points from a finish: a per-event peak (by importance) shared
 // out steeply by placement, so wins are worth far more than mid-pack finishes.
@@ -614,7 +614,7 @@ const DECLINE: CareerSkills = { power: 1.35, control: 0.95, putt: 0.7, mental: -
 // Skills only move when you TRAIN them — there's no free yearly growth. Younger
 // players develop more per point; gains shrink as you approach your potential.
 // Past 30, untrained skills decline (training a skill offsets its decline).
-const GROW_RATE = 4.2;
+const GROW_RATE = 2.6;
 // A skill ONLY moves when you spend training points on it (no free growth).
 // `isPlayer` caps every player skill at 99 — your hard ceiling; rivals instead
 // cap at their own potential, so their ceilings vary and you can still surpass

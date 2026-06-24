@@ -64,15 +64,18 @@ describe("skillMods", () => {
     // Power → distance: 99 = full range, lower = shorter.
     expect(high.speedMul).toBeCloseTo(1, 1);
     expect(low.speedMul).toBeLessThan(1);
-    // Putt → basket catch radius: 99 = normal circle, lower = smaller.
-    expect(high.catchR).toBeCloseTo(CATCH_R, 1);
+    // Putt → basket catch radius: 99 = 1.1× the normal circle, low = ~0.7× (smaller).
+    expect(high.catchR).toBeGreaterThan(CATCH_R);
     expect(low.catchR).toBeLessThan(CATCH_R);
     // Control → aim cone: 99 = dead-on your line, lower = wider spread.
     expect(high.aimSpread).toBeCloseTo(0, 2);
     expect(low.aimSpread).toBeGreaterThan(high.aimSpread);
-    // Mental → momentum: 99 = no penalty after a bogey, lower = a real hit.
+    // Mental → momentum: 99 = no penalty after a bogey + a real birdie boost;
+    // low = no birdie boost and a full bogey hit.
     expect(high.bogeyPenalty).toBeCloseTo(0, 2);
     expect(low.bogeyPenalty).toBeGreaterThan(0);
+    expect(high.birdieBoost).toBeGreaterThan(0);
+    expect(low.birdieBoost).toBeCloseTo(0, 2);
   });
   it("identity mods are neutral (normal play == maxed skills)", () => {
     expect(IDENTITY_MODS.speedMul).toBe(1);
@@ -81,14 +84,14 @@ describe("skillMods", () => {
     expect(IDENTITY_MODS.birdieBoost).toBe(0);
     expect(IDENTITY_MODS.bogeyPenalty).toBe(0);
   });
-  it("momentumAfter boosts on a birdie, penalizes on a bogey (mental-scaled), resets on par", () => {
+  it("momentumAfter: low mental gets no birdie boost (but still a bogey hit); high mental is boosted + tilt-proof", () => {
     const rookie = skillMods({ power: 50, control: 50, putt: 50, mental: 0 });
     const pro = skillMods({ power: 50, control: 50, putt: 50, mental: 99 });
-    expect(momentumAfter(rookie, 2, 3)).toBeGreaterThan(1); // birdie → boost
-    expect(momentumAfter(rookie, 4, 3)).toBeLessThan(1); // bogey → penalty
-    expect(momentumAfter(pro, 4, 3)).toBeCloseTo(1, 2); // elite mental → no bogey hit
-    expect(momentumAfter(pro, 2, 3)).toBeGreaterThan(momentumAfter(rookie, 2, 3)); // sweeter birdie boost
-    expect(momentumAfter(rookie, 3, 3)).toBe(1); // par → reset
+    expect(momentumAfter(rookie, 2, 3)).toBe(1); // low mental → no birdie bonus
+    expect(momentumAfter(rookie, 4, 3)).toBeLessThan(1); // …but a bogey still bites
+    expect(momentumAfter(pro, 2, 3)).toBeGreaterThan(1); // high mental → birdie boost
+    expect(momentumAfter(pro, 4, 3)).toBeCloseTo(1, 2); // …and no bogey hit
+    expect(momentumAfter(pro, 3, 3)).toBe(1); // par → reset
   });
 });
 
