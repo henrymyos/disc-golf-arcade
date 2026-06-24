@@ -4370,6 +4370,8 @@ function CareerStat({ label, v }: { label: string; v: number | string }) {
 // CASH (a post-max money sink). Color is pre-resolved per item for the swatch.
 type CareerStyleItem = { key: string; name: string; price: number; color: string };
 const CAREER_COSMETIC_CASH = 12; // coin sticker price → career cash price
+// Disc class from its power tier (for the details modal).
+const discTypeLabel = (power: number): string => (power < 0.9 ? "Putter" : power < 1.1 ? "Midrange" : power < 1.3 ? "Fairway driver" : "Distance driver");
 const CAREER_STYLE_CATS: { slot: keyof CareerLook; prefix: string; label: string; items: CareerStyleItem[] }[] = [
   { slot: "discSkin", prefix: COSMETIC_PREFIX.discSkin, label: "Disc", items: DISC_SKINS.map((i) => ({ key: i.key, name: i.name, price: i.price, color: i.body })) },
   { slot: "basketSkin", prefix: COSMETIC_PREFIX.basket, label: "Basket", items: BASKET_SKINS.map((i) => ({ key: i.key, name: i.name, price: i.price, color: i.band })) },
@@ -4402,6 +4404,7 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
   const [alloc, setAlloc] = useState<CareerSkills>({ power: 0, control: 0, putt: 0, mental: 0 });
   const [confirm, setConfirm] = useState<"retire" | "abandon" | null>(null);
   const [showStyle, setShowStyle] = useState(false);
+  const [discInfo, setDiscInfo] = useState<string | null>(null); // disc key for the details modal
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => { setAlloc({ power: 0, control: 0, putt: 0, mental: 0 }); setConfirm(null); }, [career?.season, career?.retired]);
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -4566,7 +4569,7 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
       <div className="bg-[#1a1d23] border border-white/5 rounded-xl p-3 space-y-2">
         <div className="flex items-center justify-between">
           <p className="text-gray-400 text-xs font-bold uppercase tracking-wide">Bag · {career.bag.length}/{CAREER_BAG_MAX}</p>
-          <p className="text-[10px] text-gray-500">tap a disc to bag/unbag</p>
+          <p className="text-[10px] text-gray-500">tap a disc for details</p>
         </div>
         <div className="flex flex-wrap gap-1.5">
           {career.discs.map((key) => {
@@ -4574,7 +4577,7 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
             if (!d) return null;
             const inBag = career.bag.includes(key);
             return (
-              <button key={key} type="button" onClick={() => onToggleBag(key)}
+              <button key={key} type="button" onClick={() => setDiscInfo(key)}
                 className={`rounded-lg border px-2 py-1 text-[11px] font-semibold transition ${inBag ? "border-[#36D7B7]/70 bg-[#36D7B7]/10 text-white" : "border-white/10 bg-white/[0.02] text-gray-500"}`}>
                 <span className="w-2 h-2 rounded-full inline-block mr-1 align-[-1px]" style={{ background: d.color }} />{d.name}
               </button>
@@ -4589,11 +4592,12 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
               if (!d) return null;
               return (
                 <div key={key} className="flex items-center justify-between gap-2 text-[11px]">
-                  <span className="flex items-center gap-1.5 min-w-0">
+                  <button type="button" onClick={() => setDiscInfo(key)} className="flex items-center gap-1.5 min-w-0 text-left hover:opacity-80">
                     <span className="w-2 h-2 rounded-full shrink-0" style={{ background: d.color }} />
                     <span className="text-white font-semibold truncate">{d.name}</span>
                     <span className="text-gray-500 truncate hidden xs:inline">{d.brand}</span>
-                  </span>
+                    <span className="text-gray-600 shrink-0">ⓘ</span>
+                  </button>
                   <button type="button" onClick={() => onBuyDisc(key)} disabled={career.cash < cost}
                     className="shrink-0 rounded bg-[#e0923b] hover:brightness-110 text-[#0f1117] font-bold px-2 py-0.5 disabled:bg-white/10 disabled:text-gray-500">
                     {fmtCash(cost)}
@@ -4737,6 +4741,43 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
           <button type="button" onClick={() => setConfirm("abandon")} className="text-gray-600 hover:text-gray-400 text-xs">Abandon</button>
         )}
       </div>
+
+      {/* Disc details modal — flight numbers + type, with the contextual action */}
+      {discInfo && (() => {
+        const d = discByKey(discInfo);
+        if (!d) return null;
+        const owned = career.discs.includes(d.key);
+        const inBag = career.bag.includes(d.key);
+        const cost = shop.find((s) => s.key === d.key)?.cost ?? null;
+        const nums = (d.blurb.split("· ")[1] ?? d.blurb).trim();
+        return (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 backdrop-blur-sm p-5" onClick={() => setDiscInfo(null)}>
+            <div className="w-full max-w-[270px] rounded-2xl bg-gradient-to-b from-[#1c2233] to-[#12151c] border border-white/15 p-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center gap-2.5">
+                <span className="w-6 h-6 rounded-full shrink-0 border border-black/40" style={{ background: d.color }} />
+                <div className="min-w-0">
+                  <p className="text-white font-black text-lg leading-none truncate">{d.name}</p>
+                  <p className="text-gray-500 text-[11px]">{d.brand}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2 mt-3">
+                <div className="bg-white/5 rounded-lg py-1.5 text-center"><p className="text-gray-500 text-[9px] uppercase tracking-wide">Type</p><p className="text-white text-xs font-bold">{discTypeLabel(d.power)}</p></div>
+                <div className="bg-white/5 rounded-lg py-1.5 text-center"><p className="text-gray-500 text-[9px] uppercase tracking-wide">Flight</p><p className="text-white text-xs font-bold">{d.flight === "overstable" ? "Overstable" : "Straight"}</p></div>
+              </div>
+              <div className="mt-2 bg-white/5 rounded-lg p-2 text-center">
+                <p className="text-gray-500 text-[9px] uppercase tracking-wide mb-0.5">Speed · Glide · Turn · Fade</p>
+                <p className="text-[#36D7B7] font-mono font-black text-base tracking-wide">{nums}</p>
+              </div>
+              {owned ? (
+                <button type="button" onClick={() => { onToggleBag(d.key); setDiscInfo(null); }} className={`${btn} w-full !mt-3`}>{inBag ? "Remove from bag" : "Add to bag"}</button>
+              ) : cost != null ? (
+                <button type="button" disabled={career.cash < cost} onClick={() => { onBuyDisc(d.key); setDiscInfo(null); }} className="w-full mt-3 rounded-lg bg-[#e0923b] hover:brightness-110 text-[#0f1117] font-bold py-2.5 disabled:bg-white/10 disabled:text-gray-500">Buy · {fmtCash(cost)}</button>
+              ) : null}
+              <button type="button" onClick={() => setDiscInfo(null)} className="w-full text-gray-500 hover:text-gray-300 text-xs py-1.5 mt-1 transition">Close</button>
+            </div>
+          </div>
+        );
+      })()}
     </div></div>
   );
 }
