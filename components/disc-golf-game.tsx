@@ -712,13 +712,19 @@ export function DiscGolfGame() {
   const [recovering, setRecovering] = useState(false); // arrived via a password-reset link → set a new password
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Push the current local progress up to the signed-in user's metadata.
+  // Push the current local progress to the signed-in user's row in the
+  // arcade_progress table. (Previously stored in auth user_metadata, but that
+  // bloated the session JWT — which the cookie-based sister apps store in a
+  // cookie — past Vercel's request-header limit. Keep it out of metadata.)
   const pushCloud = useCallback(async (p?: Progress) => {
     if (!supa) return;
     try {
       const { data } = await supa.auth.getUser();
       if (!data.user) return;
-      await supa.auth.updateUser({ data: { arcade_progress: p ?? readLocalProgress() } });
+      await supa.from("arcade_progress").upsert(
+        { user_id: data.user.id, data: p ?? readLocalProgress(), updated_at: new Date().toISOString() },
+        { onConflict: "user_id" },
+      );
     } catch { /* ignore */ }
   }, [supa]);
 
@@ -734,11 +740,20 @@ export function DiscGolfGame() {
   useEffect(() => {
     if (!supa) return;
     let active = true;
-    const onSession = async (sessUser: { email?: string; user_metadata?: { arcade_progress?: Progress } } | null) => {
+    const onSession = async (sessUser: { id: string; email?: string } | null) => {
       if (!active) return;
       if (!sessUser) { setUser(null); return; }
       setUser({ email: sessUser.email ?? "player" });
-      const cloud = sessUser.user_metadata?.arcade_progress;
+      // Cloud progress now lives in the arcade_progress table (see pushCloud).
+      let cloud: Progress | undefined;
+      try {
+        const { data } = await supa
+          .from("arcade_progress")
+          .select("data")
+          .eq("user_id", sessUser.id)
+          .maybeSingle();
+        cloud = (data?.data as Progress | undefined) ?? undefined;
+      } catch { /* ignore */ }
       const merged = cloud ? mergeProgress(readLocalProgress(), cloud) : readLocalProgress();
       if (cloud) { applyProgress(merged); loadLocal(); }
       await pushCloud(merged);
