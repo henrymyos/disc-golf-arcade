@@ -42,6 +42,7 @@ import {
   placeLabel, STAGE_LABEL, SKILL_KEYS, SKILL_LABEL, SKILL_DESC, IDENTITY_MODS,
   availableSponsors, signSponsor, trainingPointCost, buyTrainingPoint, topRivals, fmtCash, SPONSOR_CAP,
   careerRating, careerDiscShop, buyCareerDisc, toggleCareerBag, nextCareerDisc, CAREER_BAG_MAX,
+  buyCareerCosmetic, equipCareerLook, DEFAULT_CAREER_LOOK, type CareerLook,
   careerFieldForRound, careerCardRacers, careerLiveStandings,
   type Career, type CareerEvent, type EventResult, type CareerSkills, type SkillMods, type FieldPlayer,
 } from "@/lib/discgolf/career";
@@ -517,6 +518,21 @@ export function DiscGolfGame() {
   useEffect(() => { aimStyleRef.current = profile.aimStyle || DEFAULT_AIM_STYLE; }, [profile.aimStyle]);
   useEffect(() => { groundThemeRef.current = profile.groundTheme || DEFAULT_GROUND_THEME; }, [profile.groundTheme]);
   useEffect(() => { celebrationRef.current = profile.celebration || DEFAULT_CELEBRATION; }, [profile.celebration]);
+  const profileRef = useRef(profile);
+  useEffect(() => { profileRef.current = profile; }, [profile]);
+  // Career rounds wear the career's OWN bought cosmetics; normal play wears your
+  // account profile's. These swap the render refs at round start / end.
+  const applyCareerLook = useCallback((look: CareerLook) => {
+    discSkinRef.current = look.discSkin; basketSkinRef.current = look.basketSkin;
+    aimStyleRef.current = look.aimStyle; groundThemeRef.current = look.groundTheme;
+    celebrationRef.current = look.celebration; trailKeyRef.current = look.trail;
+  }, []);
+  const applyAccountLook = useCallback(() => {
+    const p = profileRef.current;
+    discSkinRef.current = p.discSkin || DEFAULT_DISC_SKIN; basketSkinRef.current = p.basketSkin || DEFAULT_BASKET_SKIN;
+    aimStyleRef.current = p.aimStyle || DEFAULT_AIM_STYLE; groundThemeRef.current = p.groundTheme || DEFAULT_GROUND_THEME;
+    celebrationRef.current = p.celebration || DEFAULT_CELEBRATION; trailKeyRef.current = p.trail || DEFAULT_TRAIL;
+  }, []);
   const saveProfile = useCallback((next: PlayerProfile) => {
     setProfile(next);
     try { localStorage.setItem(PROFILE_KEY, JSON.stringify(next)); } catch { /* ignore */ }
@@ -975,6 +991,7 @@ export function DiscGolfGame() {
     const careerBag = c.bag.length ? c.bag : ["aviar", "buzzz"];
     activeBagRef.current = careerBag;
     setActiveBag(careerBag);
+    applyCareerLook(c.look ?? DEFAULT_CAREER_LOOK); // wear the career's bought cosmetics
     const discIndex = validDiscIndex(discIndexRef.current, careerBag);
     discIndexRef.current = discIndex;
     setDiscIndex(discIndex);
@@ -995,7 +1012,7 @@ export function DiscGolfGame() {
     setCareerOpen(false);
     setScreen("playing");
     syncHud();
-  }, [muted, musicVolume, syncHud]);
+  }, [muted, musicVolume, syncHud, applyCareerLook]);
 
   // Simulate an event instantly from your skills, record it, and stay in the hub.
   const simCareerEvent = useCallback((ev: CareerEvent) => {
@@ -1332,6 +1349,7 @@ export function DiscGolfGame() {
     if (g?.career && careerPlayRef.current) {
       careerPlayRef.current = false;
       setActiveBag(bagRef.current); // career round over — the rack goes back to your account bag
+      applyAccountLook(); // and the cosmetics go back to your account look
       const total = scores.reduce((s, n) => s + n, 0);
       const c = careerRef.current;
       const ev = careerEventRef.current;
@@ -1517,7 +1535,7 @@ export function DiscGolfGame() {
     // Coins for a counting round (more for going low). Career events pay cash,
     // not coins, and are handled in their own branch above.
     if (!practice) { setCoinReward(coinsForRound(total - pars.reduce((s, n) => s + n, 0), pars.length)); addCoins(coinsForRound(total - pars.reduce((s, n) => s + n, 0), pars.length)); }
-  }, [saveProgress, saveTournament, clearResume, saveCareer, addCoins]);
+  }, [saveProgress, saveTournament, clearResume, saveCareer, addCoins, applyAccountLook]);
 
   // Bail out of a played Career round already in progress and let it sim from
   // your skills instead — the same instant result as the hub "⚡ Sim", but
@@ -1529,6 +1547,7 @@ export function DiscGolfGame() {
     careerEventRef.current = null;
     careerFieldRef.current = null;
     setActiveBag(bagRef.current); // back to your account bag in the rack
+    applyAccountLook(); // and account cosmetics
     if (c && ev && !c.done.includes(ev.id)) {
       const { score } = simEvent(c, ev);
       const { career: nc, result } = recordResult(c, ev, score, false);
@@ -1541,7 +1560,7 @@ export function DiscGolfGame() {
     setPauseMenu(null);
     setCareerOpen(true);
     setScreen("title");
-  }, [saveCareer, clearResume]);
+  }, [saveCareer, clearResume, applyAccountLook]);
 
   const nextHole = useCallback(() => {
     const g = stateRef.current;
@@ -1589,12 +1608,12 @@ export function DiscGolfGame() {
     tournamentPlayRef.current = false;
     const wasCareer = careerPlayRef.current;
     careerPlayRef.current = false;
-    if (wasCareer) setActiveBag(bagRef.current); // restore the account bag in the rack
+    if (wasCareer) { setActiveBag(bagRef.current); applyAccountLook(); } // restore the account bag + cosmetics
     setPauseMenu(null);
     setResumeRound(readResume()); // surface "Resume" if we left a solo round mid-way
     if (wasCareer) setCareerOpen(true); // bail back to the career hub
     setScreen("title");
-  }, [leaveLobby]);
+  }, [leaveLobby, applyAccountLook]);
 
   // Submit the finished round to the per-course leaderboard under the player's
   // profile name (auto-triggered when the results screen shows).
@@ -3350,6 +3369,8 @@ export function DiscGolfGame() {
             onBuyTrain={() => { const c = careerRef.current; if (c) saveCareer(buyTrainingPoint(c)); }}
             onBuyDisc={(key) => { const c = careerRef.current; if (c) saveCareer(buyCareerDisc(c, key)); }}
             onToggleBag={(key) => { const c = careerRef.current; if (c) saveCareer(toggleCareerBag(c, key)); }}
+            onBuyCosmetic={(ownKey, cost) => { const c = careerRef.current; if (c) saveCareer(buyCareerCosmetic(c, ownKey, cost)); }}
+            onEquipLook={(slot, key) => { const c = careerRef.current; if (c) saveCareer(equipCareerLook(c, slot, key)); }}
             dismissNotes={() => setCareerNotes([])}
           />
         )}
@@ -4335,7 +4356,19 @@ function CareerStat({ label, v }: { label: string; v: number | string }) {
     </div>
   );
 }
-function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, onPlay, onSim, onAdvance, onRetire, onAbandon, onSign, onBuyTrain, onBuyDisc, onToggleBag, dismissNotes }: {
+// Career cosmetics catalog — same items as the account shop, priced in career
+// CASH (a post-max money sink). Color is pre-resolved per item for the swatch.
+type CareerStyleItem = { key: string; name: string; price: number; color: string };
+const CAREER_COSMETIC_CASH = 12; // coin sticker price → career cash price
+const CAREER_STYLE_CATS: { slot: keyof CareerLook; prefix: string; label: string; items: CareerStyleItem[] }[] = [
+  { slot: "discSkin", prefix: COSMETIC_PREFIX.discSkin, label: "Disc", items: DISC_SKINS.map((i) => ({ key: i.key, name: i.name, price: i.price, color: i.body })) },
+  { slot: "basketSkin", prefix: COSMETIC_PREFIX.basket, label: "Basket", items: BASKET_SKINS.map((i) => ({ key: i.key, name: i.name, price: i.price, color: i.band })) },
+  { slot: "aimStyle", prefix: COSMETIC_PREFIX.aim, label: "Aim line", items: AIM_STYLES.map((i) => ({ key: i.key, name: i.name, price: i.price, color: i.color })) },
+  { slot: "groundTheme", prefix: COSMETIC_PREFIX.ground, label: "Course", items: GROUND_THEMES.map((i) => ({ key: i.key, name: i.name, price: i.price, color: i.fairway })) },
+  { slot: "celebration", prefix: COSMETIC_PREFIX.celebration, label: "Win pop", items: CELEBRATIONS.map((i) => ({ key: i.key, name: i.name, price: i.price, color: i.colors[0] ?? "#888" })) },
+  { slot: "trail", prefix: "trail", label: "Trail", items: TRAILS.filter((i) => i.key !== "none").map((i) => ({ key: i.key, name: i.name, price: i.price, color: i.colors[0] ?? "#888" })) },
+];
+function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, onPlay, onSim, onAdvance, onRetire, onAbandon, onSign, onBuyTrain, onBuyDisc, onToggleBag, onBuyCosmetic, onEquipLook, dismissNotes }: {
   career: Career | null;
   lastResult: EventResult | null;
   lastCoins: number;
@@ -4351,11 +4384,14 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
   onBuyTrain: () => void;
   onBuyDisc: (key: string) => void;
   onToggleBag: (key: string) => void;
+  onBuyCosmetic: (ownKey: string, cost: number) => void;
+  onEquipLook: (slot: keyof CareerLook, key: string) => void;
   dismissNotes: () => void;
 }) {
   const [name, setName] = useState("");
   const [alloc, setAlloc] = useState<CareerSkills>({ power: 0, control: 0, putt: 0, mental: 0 });
   const [confirm, setConfirm] = useState<"retire" | "abandon" | null>(null);
+  const [showStyle, setShowStyle] = useState(false);
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => { setAlloc({ power: 0, control: 0, putt: 0, mental: 0 }); setConfirm(null); }, [career?.season, career?.retired]);
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -4562,6 +4598,42 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
           <p className="text-gray-500 text-[10px] pt-1.5 border-t border-white/5">Reach <span className="text-gray-300">{STAGE_LABEL[nextDisc.stage]}</span> to unlock more discs in the Pro Shop.</p>
         ) : (
           <p className="text-gray-500 text-[10px] pt-1.5 border-t border-white/5">You own every disc in the bag. 🎒</p>
+        )}
+      </div>
+
+      {/* Career cosmetics — a post-max cash sink, worn during Career rounds only */}
+      <div className="bg-[#1a1d23] border border-white/5 rounded-xl p-3 space-y-2">
+        <button type="button" onClick={() => setShowStyle((s) => !s)} className="w-full flex items-center justify-between">
+          <p className="text-gray-400 text-xs font-bold uppercase tracking-wide">🎨 Style · career cash</p>
+          <span className="text-gray-500 text-[11px]">{showStyle ? "Hide ▲" : "Shop ▼"}</span>
+        </button>
+        {showStyle && (
+          <div className="space-y-2">
+            {CAREER_STYLE_CATS.map((cat) => (
+              <div key={cat.slot} className="space-y-1">
+                <p className="text-gray-500 text-[10px] font-semibold uppercase tracking-wide">{cat.label}</p>
+                <div className="flex gap-1.5 overflow-x-auto pb-0.5 -mx-1 px-1" style={{ scrollbarWidth: "thin" }}>
+                  {cat.items.map((it) => {
+                    const ownKey = cosmeticOwnKey(cat.prefix, it.key);
+                    const owned = it.price === 0 || career.cosmetics.includes(ownKey);
+                    const equipped = (career.look[cat.slot] || DEFAULT_CAREER_LOOK[cat.slot]) === it.key;
+                    const cost = it.price * CAREER_COSMETIC_CASH;
+                    return (
+                      <button key={it.key} type="button"
+                        onClick={() => (owned ? onEquipLook(cat.slot, it.key) : career.cash >= cost ? onBuyCosmetic(ownKey, cost) : undefined)}
+                        disabled={!owned && career.cash < cost}
+                        className={`shrink-0 rounded-lg border px-2 py-1 flex items-center gap-1 transition ${equipped ? "border-[#36D7B7]/70 bg-[#36D7B7]/10" : owned ? "border-white/15 bg-white/[0.02] hover:border-white/30" : "border-white/10 bg-white/[0.02] disabled:opacity-40"}`}>
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0 border border-black/30" style={{ background: it.color }} />
+                        <span className="text-[10px] text-white font-semibold whitespace-nowrap">{it.name}</span>
+                        {equipped ? <span className="text-[9px] text-[#36D7B7]">✓</span> : !owned && <span className="text-[9px] text-[#e0923b] font-mono whitespace-nowrap">{fmtCash(cost)}</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+            <p className="text-gray-600 text-[10px]">Worn during Career rounds — a flex for your prize money, separate from your account cosmetics.</p>
+          </div>
         )}
       </div>
 

@@ -32,6 +32,9 @@ import {
   buyCareerDisc,
   toggleCareerBag,
   nextCareerDisc,
+  buyCareerCosmetic,
+  equipCareerLook,
+  DEFAULT_CAREER_LOOK,
   type Career,
   type CareerSkills,
 } from "../lib/discgolf/career";
@@ -516,6 +519,28 @@ describe("skill cap (99) + points-only growth", () => {
     const next = advanceSeason(c, { putt: 3 }).career;
     expect(next.skills.putt).toBeGreaterThan(c.skills.putt); // trained → up
     expect(next.skills.power).toBe(c.skills.power); // untrained → unchanged (young, no decline)
+  });
+});
+
+describe("career cosmetics (post-max cash sink)", () => {
+  it("starts with none owned and the default look", () => {
+    const c = newCareer("Look", 41);
+    expect(c.cosmetics).toEqual([]);
+    expect(c.look).toEqual(DEFAULT_CAREER_LOOK);
+  });
+  it("buys a cosmetic for cash and refuses when broke or already owned", () => {
+    const c: Career = { ...newCareer("Look", 42), cash: 50000 };
+    const bought = buyCareerCosmetic(c, "discskin:gold", 16800);
+    expect(bought.cosmetics).toContain("discskin:gold");
+    expect(bought.cash).toBe(50000 - 16800);
+    expect(buyCareerCosmetic(bought, "discskin:gold", 16800).cosmetics).toHaveLength(1); // no double-buy
+    const broke: Career = { ...newCareer("Broke", 43), cash: 100 };
+    expect(buyCareerCosmetic(broke, "discskin:gold", 16800).cosmetics).toEqual([]); // can't afford
+  });
+  it("equips a look slot, leaving the others", () => {
+    const eq = equipCareerLook(newCareer("Look", 44), "trail", "fire");
+    expect(eq.look.trail).toBe("fire");
+    expect(eq.look.discSkin).toBe(DEFAULT_CAREER_LOOK.discSkin);
   });
 });
 

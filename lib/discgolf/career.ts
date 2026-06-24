@@ -154,6 +154,8 @@ export type Career = {
   bag: string[];          // the ≤5 discs carried into career rounds
   rankPoints: number;     // rolling world-ranking points (decays each season)
   trainBought: number;    // training points bought with cash this season (escalating cost)
+  cosmetics: string[];    // cosmetic own-keys bought with career cash (post-max sink)
+  look: CareerLook;       // the cosmetics worn during Career rounds
 };
 
 const clamp = (n: number, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, n));
@@ -183,6 +185,14 @@ const SPONSOR_POOL: Sponsor[] = [
 // of it touches the discs you've unlocked on your main account. ──
 export const CAREER_CORE_DISCS = ["aviar", "buzzz"]; // every career begins here
 export const CAREER_BAG_MAX = 5;
+
+// ── Career cosmetics: a post-max cash sink. Career runs its OWN cosmetic
+// loadout (disc skin / basket / aim line / course theme / celebration / trail),
+// bought with career cash and worn during Career rounds — entirely separate from
+// the coins-bought cosmetics on your main account. Keys match the shared
+// cosmetics catalog so the UI can render them; storage + spend live here. ──
+export type CareerLook = { discSkin: string; basketSkin: string; aimStyle: string; groundTheme: string; celebration: string; trail: string };
+export const DEFAULT_CAREER_LOOK: CareerLook = { discSkin: "white", basketSkin: "steel", aimStyle: "white", groundTheme: "classic", celebration: "classic", trail: "classic" };
 type CareerDiscEntry = { key: string; cost: number; stage: CareerStage };
 // Stage-gated shop, cheapest first within a stage. Cash comes from amateur
 // scholarship money + pro purses, so the whole bag is reachable over a career.
@@ -288,6 +298,7 @@ export function newCareer(name: string, seed: number): Career {
     cash: 0, sponsors: [], rivals: generateRivals(seed),
     pdgaRating: pdgaFromInternal(careerRating(skills)), roundRatings: [],
     discs: [...CAREER_CORE_DISCS], bag: [...CAREER_CORE_DISCS], rankPoints: 0, trainBought: 0,
+    cosmetics: [], look: { ...DEFAULT_CAREER_LOOK },
   };
 }
 
@@ -309,6 +320,8 @@ export function normalizeCareer(c: Career): Career {
     bag: c.bag?.length ? c.bag.slice(0, CAREER_BAG_MAX) : discs.slice(0, CAREER_BAG_MAX),
     rankPoints: c.rankPoints ?? 0,
     trainBought: c.trainBought ?? 0,
+    cosmetics: c.cosmetics ?? [],
+    look: { ...DEFAULT_CAREER_LOOK, ...(c.look ?? {}) },
   };
 }
 
@@ -807,6 +820,16 @@ export function toggleCareerBag(c: Career, key: string): Career {
   }
   if (c.bag.length >= CAREER_BAG_MAX) return c;
   return { ...c, bag: [...c.bag, key] };
+}
+
+// Buy a career cosmetic (own-key like "skin:gold") with career cash.
+export function buyCareerCosmetic(c: Career, ownKey: string, cost: number): Career {
+  if (c.cosmetics.includes(ownKey) || c.cash < cost) return c;
+  return { ...c, cash: c.cash - cost, cosmetics: [...c.cosmetics, ownKey] };
+}
+// Wear an owned cosmetic in a look slot (disc skin, basket, aim line, …).
+export function equipCareerLook(c: Career, slot: keyof CareerLook, key: string): Career {
+  return { ...c, look: { ...c.look, [slot]: key } };
 }
 
 // Rivals sorted strongest-first (for the hub's rivals board).
