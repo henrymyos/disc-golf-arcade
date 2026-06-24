@@ -531,8 +531,10 @@ export function DiscGolfGame() {
     try { localStorage.setItem(OWNED_KEY, JSON.stringify(next)); } catch { /* ignore */ }
   }, [addCoins]);
 
-  // Player level — drives the level-up draft.
-  const playerLevel = levelFromXp(playerXp(roundsPlayed, unlocked.length, owned.length)).level;
+  // Player level — drives the level-up draft. XP counts DISCS owned, not cosmetics
+  // (avatar:/trail:/event: … keys), so every level readout matches the profile.
+  const discsOwned = owned.filter((k) => !k.includes(":")).length;
+  const playerLevel = levelFromXp(playerXp(roundsPlayed, unlocked.length, discsOwned)).level;
 
   // Level-up disc draft. On the first load under this system, grandfather every
   // disc the player already had (so nothing's lost) and mark all past levels
@@ -550,7 +552,7 @@ export function DiscGolfGame() {
         ownedRef.current = grand; setOwned(grand);
         try { localStorage.setItem(OWNED_KEY, JSON.stringify(grand)); } catch { /* ignore */ }
       }
-      const lvl = levelFromXp(playerXp(roundsPlayed, unlocked.length, grand.length)).level;
+      const lvl = levelFromXp(playerXp(roundsPlayed, unlocked.length, grand.filter((k) => !k.includes(":")).length)).level;
       setLevelRewarded(lvl);
       try { localStorage.setItem(LEVELREWARD_KEY, String(lvl)); } catch { /* ignore */ }
       return;
@@ -2941,12 +2943,12 @@ export function DiscGolfGame() {
 
               {/* Player profile chip — avatar, name, level + xp-to-next bar */}
               {(() => {
-                const lvl = levelFromXp(playerXp(roundsPlayed, unlocked.length, owned.length));
+                const lvl = levelFromXp(playerXp(roundsPlayed, unlocked.length, discsOwned));
                 return (
                   <button
                     type="button"
                     onClick={() => setProfileOpen(true)}
-                    className="w-full mt-3 flex items-center gap-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 px-3 py-2 transition text-left"
+                    className="w-full mt-7 flex items-center gap-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 px-3 py-2 transition text-left"
                   >
                     <span className="text-2xl leading-none shrink-0">{profile.avatar || DEFAULT_AVATAR}</span>
                     <div className="min-w-0 flex-1">
