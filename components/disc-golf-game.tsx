@@ -746,6 +746,21 @@ export function DiscGolfGame() {
     saveTimer.current = setTimeout(() => { void pushCloud(); }, 1200);
   }, [supa, user, pushCloud]);
 
+  // Flush any pending save the moment the app is backgrounded or closed, so the
+  // last change (a finished career round, a new best, a purchase) is never lost
+  // to the 1.2s debounce when you swipe the PWA away or switch tabs.
+  useEffect(() => {
+    if (!supa || !user) return;
+    const flush = () => {
+      if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
+      void pushCloud();
+    };
+    const onVis = () => { if (document.visibilityState === "hidden") flush(); };
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("pagehide", flush);
+    return () => { document.removeEventListener("visibilitychange", onVis); window.removeEventListener("pagehide", flush); };
+  }, [supa, user, pushCloud]);
+
   // On sign-in (and at startup if already signed in), merge cloud progress with
   // local so nothing is lost, then write the union back.
   useEffect(() => {
