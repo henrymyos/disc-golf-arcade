@@ -446,10 +446,14 @@ export function placeInField(field: number[], yourScore: number): { placed: numb
   return { placed: better + 1, field: field.length + 1 };
 }
 
-// Simulate an event from your skills (when you choose not to play it).
+// Simming an event assumes you play it COMPETENTLY — a focused round a notch
+// above your raw skill rating (a good player out-throws their stats with smart
+// aim). This keeps simming roughly on par with playing it yourself, so a sim-only
+// career still progresses and can climb to ~90+ overall instead of stalling.
+const SIM_PLAY_BONUS = 8;
 export function simEvent(c: Career, ev: CareerEvent): { score: number; field: number[] } {
   const rng = mulberry32((c.seed ^ hashId(ev.id) ^ 0x1234567) >>> 0);
-  const score = scoreFromRating(careerRating(c.skills), ev, rng);
+  const score = scoreFromRating(careerRating(c.skills) + SIM_PLAY_BONUS, ev, rng);
   return { score, field: genField(c, ev) };
 }
 
