@@ -24,6 +24,12 @@ import {
   rivalRating,
   SPONSOR_CAP,
   IDENTITY_MODS,
+  CAREER_CORE_DISCS,
+  CAREER_BAG_MAX,
+  careerDiscShop,
+  buyCareerDisc,
+  toggleCareerBag,
+  nextCareerDisc,
   type Career,
   type CareerSkills,
 } from "../lib/discgolf/career";
@@ -147,7 +153,7 @@ describe("advanceSeason", () => {
     expect(career.age).toBe(15); // starts at 14 (high school)
     expect(career.season).toBe(1);
     expect(career.skills.power).toBeGreaterThan(before); // youth + training grows it
-    expect(career.trainPts).toBe(6); // refilled
+    expect(career.trainPts).toBe(3); // refilled to the season base (rest is earned from results)
     expect(career.done).toHaveLength(0);
   });
   it("skills only move when you train them", () => {
@@ -345,7 +351,7 @@ describe("economy + sponsors", () => {
     c = signSponsor(c, coach.id);
     const next = advanceSeason(c, {}).career;
     expect(next.cash).toBe(c.cash + coach.stipend);
-    expect(next.trainPts).toBe(6 + 1); // base + one coach
+    expect(next.trainPts).toBe(3 + 1); // base + one coach
   });
   it("buying a training point costs escalating cash and adds a point", () => {
     const c: Career = { ...newCareer("Pro", 14), stage: "pro", age: 25, cash: 1_000_000 };
@@ -399,6 +405,93 @@ describe("normalizeCareer (migration)", () => {
     expect(fixed.rivals).toHaveLength(6);
     expect(fixed.pdgaRating).toBeGreaterThan(700); // PDGA backfilled from skills
     expect(fixed.roundRatings).toEqual([]);
+  });
+  it("backfills the career disc collection, bag and ranking fields on a pre-disc save", () => {
+    const old = newCareer("Old", 21);
+    const stripped = { ...old, discs: undefined, bag: undefined, rankPoints: undefined, trainBought: undefined } as unknown as Career;
+    const fixed = normalizeCareer(stripped);
+    expect(fixed.discs).toEqual(CAREER_CORE_DISCS);
+    expect(fixed.bag.length).toBeGreaterThan(0);
+    expect(fixed.rankPoints).toBe(0);
+    expect(fixed.trainBought).toBe(0);
+  });
+});
+
+describe("career disc progression (separate from the account)", () => {
+  it("a new career starts bare-bones with the core discs in the bag", () => {
+    const c = newCareer("Rook", 1);
+    expect(c.discs).toEqual(CAREER_CORE_DISCS);
+    expect(c.bag).toEqual(CAREER_CORE_DISCS);
+  });
+  it("the shop is stage-gated and grows as you climb", () => {
+    const hs = newCareer("HS", 2);
+    const hsShop = careerDiscShop(hs).map((d) => d.key);
+    expect(hsShop.length).toBeGreaterThan(0);
+    expect(hsShop).not.toContain("destroyer"); // a pro driver isn't offered in high school
+    const pro: Career = { ...hs, stage: "pro" };
+    expect(careerDiscShop(pro).map((d) => d.key)).toContain("destroyer");
+  });
+  it("buying a disc spends cash, adds it to the collection, and drops it in the bag", () => {
+    const c: Career = { ...newCareer("Buy", 3), cash: 1000 };
+    const offer = careerDiscShop(c)[0];
+    const after = buyCareerDisc(c, offer.key);
+    expect(after.discs).toContain(offer.key);
+    expect(after.bag).toContain(offer.key);
+    expect(after.cash).toBe(1000 - offer.cost);
+  });
+  it("can't buy without enough cash, or buy a disc above your stage", () => {
+    const broke: Career = { ...newCareer("Broke", 4), cash: 0 };
+    expect(buyCareerDisc(broke, careerDiscShop(broke)[0].key).discs).toEqual(CAREER_CORE_DISCS);
+    const hs: Career = { ...newCareer("HS", 5), cash: 999999 };
+    expect(buyCareerDisc(hs, "destroyer").discs).not.toContain("destroyer"); // pro-only, ignored in HS
+  });
+  it("nextCareerDisc teases a disc from a later stage", () => {
+    const hs = newCareer("HS", 6);
+    const next = nextCareerDisc(hs);
+    expect(next).toBeTruthy();
+    expect(["college", "pro"]).toContain(next!.stage);
+  });
+  it("bag curation keeps 1..MAX owned discs", () => {
+    let c: Career = { ...newCareer("Bag", 7), cash: 100000, stage: "pro" };
+    // own a full set
+    for (const o of careerDiscShop(c)) c = buyCareerDisc(c, o.key);
+    // can't exceed the cap
+    const full = c.bag.length;
+    expect(full).toBeLessThanOrEqual(CAREER_BAG_MAX);
+    // removing down to one is fine; removing the last is refused
+    let only = { ...c, bag: [c.discs[0]] };
+    expect(toggleCareerBag(only, c.discs[0]).bag).toEqual([c.discs[0]]); // never empty
+    // a disc you don't own can't be bagged
+    only = { ...newCareer("X", 8) };
+    expect(toggleCareerBag(only, "zeus").bag).toEqual(only.bag);
+  });
+});
+
+describe("uncapped player growth", () => {
+  it("keeps improving past potential — no hard ceiling", () => {
+    let c: Career = { ...newCareer("Maxed", 9), age: 16, skills: { power: 95, control: 95, putt: 95, mental: 95 }, potential: { power: 96, control: 96, putt: 96, mental: 96 } };
+    const before = c.skills.power;
+    // train power hard for several seasons while still young
+    for (let i = 0; i < 4; i++) c = advanceSeason({ ...c, age: 16, trainPts: 8 }, { power: 8 }).career;
+    expect(c.skills.power).toBeGreaterThan(before); // blew past the old 96 ceiling
+    expect(c.skills.power).toBeGreaterThan(100);
+  });
+});
+
+describe("world ranking rewards winning", () => {
+  it("a season of dominant results banks ranking points and ranks better than a quiet season", () => {
+    const base: Career = { ...newCareer("Pro", 88), stage: "pro", age: 26, skills: { power: 80, control: 80, putt: 80, mental: 80 } };
+    const sched = seasonSchedule(base);
+    // win everything
+    let winner = base;
+    for (const ev of sched) winner = recordResult(winner, ev, 1, false).career;
+    // bomb everything
+    let quiet = base;
+    for (const ev of sched) quiet = recordResult(quiet, ev, 999, false).career;
+    expect(winner.rankPoints).toBeGreaterThan(quiet.rankPoints);
+    const winnerRank = advanceSeason(winner, {}).career.worldRank!;
+    const quietRank = advanceSeason(quiet, {}).career.worldRank!;
+    expect(winnerRank).toBeLessThan(quietRank); // dominating climbs the rankings
   });
 });
 

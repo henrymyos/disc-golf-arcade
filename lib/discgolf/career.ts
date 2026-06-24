@@ -130,10 +130,13 @@ export type Career = {
   rivals: Rival[];
   pdgaRating: number;     // official rating (≈700–1050), tracks recent rounds
   roundRatings: number[]; // recent rated rounds (oldest → newest)
+  discs: string[];        // disc keys unlocked in THIS career (separate from your account)
+  bag: string[];          // the ≤5 discs carried into career rounds
+  rankPoints: number;     // rolling world-ranking points (decays each season)
+  trainBought: number;    // training points bought with cash this season (escalating cost)
 };
 
 const clamp = (n: number, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, n));
-const TRAIN_PER_SEASON = 6;
 const RESULT_CAP = 120;
 const N_RIVALS = 6;
 const RIVAL_NAMES = [
@@ -153,6 +156,37 @@ const SPONSOR_POOL: Sponsor[] = [
   { id: "summitdiscs", name: "Summit Discs", tier: 3, signing: 30000, stipend: 22000, coach: true, reqRating: 72, reqStage: "pro" },
   { id: "global", name: "Global Sportswear", tier: 4, signing: 90000, stipend: 60000, coach: true, reqRating: 80, reqStage: "pro" },
 ];
+
+// ── Career disc collection. Career mode runs its OWN disc progression, totally
+// separate from your account: you start bare-bones (a putter + a midrange) and
+// buy the rest from the Pro Shop with career cash as you climb the stages. None
+// of it touches the discs you've unlocked on your main account. ──
+export const CAREER_CORE_DISCS = ["aviar", "buzzz"]; // every career begins here
+export const CAREER_BAG_MAX = 5;
+type CareerDiscEntry = { key: string; cost: number; stage: CareerStage };
+// Stage-gated shop, cheapest first within a stage. Cash comes from amateur
+// scholarship money + pro purses, so the whole bag is reachable over a career.
+const CAREER_DISC_SHOP: CareerDiscEntry[] = [
+  // High school — cheap utility molds to round out the bag.
+  { key: "zone", cost: 250, stage: "highschool" },
+  { key: "teebird", cost: 400, stage: "highschool" },
+  { key: "swarm", cost: 450, stage: "highschool" },
+  { key: "roc", cost: 600, stage: "highschool" },
+  // College — fairway control + your first real drivers.
+  { key: "harp", cost: 1200, stage: "college" },
+  { key: "river", cost: 1800, stage: "college" },
+  { key: "firebird", cost: 2400, stage: "college" },
+  { key: "pd", cost: 3200, stage: "college" },
+  // Pro — the distance bombers.
+  { key: "wraith", cost: 9000, stage: "pro" },
+  { key: "destroyer", cost: 12000, stage: "pro" },
+  { key: "nukeos", cost: 15000, stage: "pro" },
+  { key: "zeus", cost: 18000, stage: "pro" },
+];
+
+// Base training points handed out each season; the rest is earned by how you
+// finish, so a dominant season develops your player far faster than a quiet one.
+const SEASON_BASE_TRAIN = 3;
 
 // One generation of named rivals, born deterministically from the seed. A spread
 // of ceilings: a couple are future stars, most are solid, a few are journeymen.
@@ -229,11 +263,12 @@ export function newCareer(name: string, seed: number): Career {
   };
   return {
     v: 1, name: name.trim().slice(0, 16) || "Rookie", seed: seed >>> 0,
-    age: 14, season: 0, stage: "highschool", skills, potential, trainPts: TRAIN_PER_SEASON,
+    age: 14, season: 0, stage: "highschool", skills, potential, trainPts: SEASON_BASE_TRAIN,
     done: [], results: [], titles: [], seasonPoints: 0, careerPoints: 0, majors: 0,
     worldRank: null, bestWorldRank: null, seasonsAtNo1: 0, achievements: [], retired: false,
     cash: 0, sponsors: [], rivals: generateRivals(seed),
     pdgaRating: pdgaFromInternal(careerRating(skills)), roundRatings: [],
+    discs: [...CAREER_CORE_DISCS], bag: [...CAREER_CORE_DISCS], rankPoints: 0, trainBought: 0,
   };
 }
 
@@ -246,10 +281,15 @@ export function normalizeCareer(c: Career): Career {
     for (let s = 0; s < c.season; s++) rivals = rivals.map((r) => growRival(r, 11 + s));
   }
   rivals = rivals.map((r) => ({ ...r, pdgaRating: r.pdgaRating ?? pdgaFromInternal(rivalRating(r)), roundRatings: r.roundRatings ?? [] }));
+  const discs = c.discs?.length ? c.discs : [...CAREER_CORE_DISCS];
   return {
     ...c, cash: c.cash ?? 0, sponsors: c.sponsors ?? [], rivals,
     pdgaRating: c.pdgaRating ?? pdgaFromInternal(careerRating(c.skills)),
     roundRatings: c.roundRatings ?? [],
+    discs,
+    bag: c.bag?.length ? c.bag.slice(0, CAREER_BAG_MAX) : discs.slice(0, CAREER_BAG_MAX),
+    rankPoints: c.rankPoints ?? 0,
+    trainBought: c.trainBought ?? 0,
   };
 }
 
@@ -479,12 +519,19 @@ export function recordResult(c: Career, ev: CareerEvent, score: number, played: 
   });
 
   const prize = c.stage === "pro" ? prizeFor(ev, placed) : 0;
-  // Strong finishes earn extra training points — play well, develop faster.
+  // Amateur events pay no tour purse, but a strong finish earns a little
+  // scholarship/sponsor cash so the career Pro Shop is reachable before turning pro.
+  const amateurPay = c.stage === "pro" ? 0 : amateurCash(ev, placed, fieldN);
+  // How you finish drives how fast you develop: most of your training points come
+  // from results, not a flat per-season handout. Win the big ones to grow quickly.
   const trainBonus =
-    placed === 1 ? (ev.importance === "championship" ? 4 : ev.importance === "major" ? 3 : 2)
-      : placed <= 3 ? 1
+    placed === 1 ? (ev.importance === "championship" ? 6 : ev.importance === "major" ? 5 : 4)
+      : placed <= 3 ? 2
       : placed <= Math.ceil(fieldN * 0.1) ? 1
       : 0;
+  // World-ranking points — top-heavy and importance-weighted, so a season of
+  // winning everything vaults you up the rankings while a quiet season barely moves you.
+  const earnedRankPts = rankPointsFor(ev, placed, fieldN);
   const result: EventResult = {
     eventId: ev.id, name: ev.name, season: c.season, age: c.age, stage: c.stage,
     score, toPar: score - ev.par, placed, field: fieldN, played, win, beatRivals, rivalCount: c.rivals.length, winnerName, prize, trainBonus,
@@ -508,7 +555,8 @@ export function recordResult(c: Career, ev: CareerEvent, score: number, played: 
     done: [...c.done, ev.id],
     results: [...c.results, result].slice(-RESULT_CAP),
     titles, rivals,
-    cash: c.cash + prize,
+    cash: c.cash + prize + amateurPay,
+    rankPoints: c.rankPoints + earnedRankPts,
     trainPts: c.trainPts + trainBonus,
     seasonPoints: c.seasonPoints + points,
     careerPoints: c.careerPoints + points,
@@ -525,6 +573,20 @@ function prizeFor(ev: CareerEvent, placed: number): number {
   if (placed > Math.max(5, Math.floor(ev.fieldSize * 0.25))) return 0;
   return Math.round((purse * Math.pow(0.6, placed - 1)) / 100) * 100;
 }
+// Amateur "scholarship" cash for a top finish (so you can stock the Pro Shop
+// before turning pro). Small, top-heavy, importance-scaled; only the top ~fifth pays.
+function amateurCash(ev: CareerEvent, placed: number, fieldN: number): number {
+  if (placed > Math.max(3, Math.ceil(fieldN * 0.2))) return 0;
+  const top = ev.importance === "championship" ? 1500 : ev.importance === "major" ? 800 : 400;
+  return Math.round((top * Math.pow(0.7, placed - 1)) / 50) * 50;
+}
+// World-ranking points from a finish: a per-event peak (by importance) shared
+// out steeply by placement, so wins are worth far more than mid-pack finishes.
+function rankPointsFor(ev: CareerEvent, placed: number, fieldN: number): number {
+  const peak = ev.importance === "championship" ? 600 : ev.importance === "major" ? 350 : 150;
+  const frac = Math.max(0, (fieldN - placed) / Math.max(1, fieldN - 1)); // 1 at a win → 0 at last
+  return Math.round(peak * Math.pow(frac, 2.2));
+}
 
 // Per-skill decline speed once you age past your prime (power fades fastest).
 const DECLINE: CareerSkills = { power: 1.35, control: 0.95, putt: 0.7, mental: -0.2 };
@@ -533,13 +595,18 @@ const DECLINE: CareerSkills = { power: 1.35, control: 0.95, putt: 0.7, mental: -
 // players develop more per point; gains shrink as you approach your potential.
 // Past 30, untrained skills decline (training a skill offsets its decline).
 const GROW_RATE = 4.2;
-function growSkill(skill: number, pot: number, age: number, invested: number, declineRate: number): number {
+// `uncapped` removes the hard ceiling (the PLAYER has no cap — you can keep
+// improving for as long as you keep training). `pot` still shapes the curve:
+// gains shrink as you approach and pass it (diminishing returns) so reaching the
+// very top takes seasons of work, but they never stop. Rivals stay capped at
+// their potential so you can eventually surpass them.
+function growSkill(skill: number, pot: number, age: number, invested: number, declineRate: number, uncapped = false): number {
   const youth = age < 16 ? 1.5 : age < 20 ? 1.2 : age < 26 ? 0.9 : age <= 30 ? 0.65 : 0.45;
   const room = Math.max(0, pot - skill);
   const gain = invested > 0 ? invested * youth * GROW_RATE * (0.45 + Math.min(room, 45) * 0.012) : 0;
   let next = skill + gain;
   if (age > 30) next -= Math.max(0, (age - 30) * 0.55 * declineRate - invested * 0.55);
-  return clamp(next, 8, pot + 2);
+  return clamp(next, 8, uncapped ? 999 : pot + 2);
 }
 
 // Rivals improve on their own each season (a little focused work, no allocation).
@@ -549,15 +616,23 @@ function growRival(r: Rival, age: number): Rival {
   return { ...r, skills: { power: g("power"), control: g("control"), putt: g("putt"), mental: g("mental") } };
 }
 
-// World rank among a synthetic pro pool (pro stage only).
+// World rank among a synthetic pro pool. A player's standing blends raw skill
+// (slow to build — it takes seasons of training to reach the top) with recent
+// ranking points (fast, if you're winning everything). So you can rocket up by
+// dominating the tour, but holding #1 still demands genuine, sustained class.
+const worldStanding = (rating: number, rankPoints: number) => rating + Math.min(rankPoints, 3000) * 0.06;
 function computeWorldRank(c: Career): number {
   const rng = mulberry32((c.seed ^ 0xa5a5 ^ (c.season * 7919)) >>> 0);
-  const POOL = 80;
-  const me = careerRating(c.skills) + Math.min(40, c.seasonPoints) * 0.22;
+  const POOL = 100;
+  const me = worldStanding(careerRating(c.skills), c.rankPoints);
   let better = 0;
   for (let i = 0; i < POOL; i++) {
-    const r = clamp(70 + (rng() * 2 - 1) * 16, 30, 99) + rng() * 10;
-    if (r > me) better++;
+    // Most of the pool are strong tour pros; a handful are world-beaters. Their
+    // points scale with their skill, so the very top of the pool both rates high
+    // AND banks points — you must do the same to pass them.
+    const skill = clamp(70 + (rng() * 2 - 1) * 18, 35, 100);
+    const pts = Math.max(0, (skill - 66) * 28 + (rng() * 2 - 1) * 250);
+    if (worldStanding(skill, pts) > me) better++;
   }
   return better + 1;
 }
@@ -568,10 +643,10 @@ export function advanceSeason(c: Career, alloc: Partial<CareerSkills>): { career
   const notes: string[] = [];
   const age = c.age + 1;
   const skills: CareerSkills = {
-    power: growSkill(c.skills.power, c.potential.power, age, alloc.power ?? 0, DECLINE.power),
-    control: growSkill(c.skills.control, c.potential.control, age, alloc.control ?? 0, DECLINE.control),
-    putt: growSkill(c.skills.putt, c.potential.putt, age, alloc.putt ?? 0, DECLINE.putt),
-    mental: growSkill(c.skills.mental, c.potential.mental, age, alloc.mental ?? 0, DECLINE.mental),
+    power: growSkill(c.skills.power, c.potential.power, age, alloc.power ?? 0, DECLINE.power, true),
+    control: growSkill(c.skills.control, c.potential.control, age, alloc.control ?? 0, DECLINE.control, true),
+    putt: growSkill(c.skills.putt, c.potential.putt, age, alloc.putt ?? 0, DECLINE.putt, true),
+    mental: growSkill(c.skills.mental, c.potential.mental, age, alloc.mental ?? 0, DECLINE.mental, true),
   };
   SKILL_KEYS.forEach((k) => { skills[k] = Math.round(skills[k]); });
 
@@ -592,7 +667,8 @@ export function advanceSeason(c: Career, alloc: Partial<CareerSkills>): { career
   let career: Career = {
     ...c, age, season: c.season + 1, stage, skills, rivals,
     cash: c.cash + stipend,
-    trainPts: TRAIN_PER_SEASON + coachPts, done: [], seasonPoints: 0,
+    trainPts: SEASON_BASE_TRAIN + coachPts, done: [], seasonPoints: 0, trainBought: 0,
+    rankPoints: Math.round(c.rankPoints * 0.6), // last season's results fade — staying #1 needs sustained dominance
   };
 
   if (stage === "pro") {
@@ -644,18 +720,48 @@ export function signSponsor(c: Career, id: string): Career {
 }
 
 // ── Economy: spend cash on extra training points (escalating cost per season) ──
-function boughtThisSeason(c: Career): number {
-  const coachPts = c.sponsors.filter((s) => s.coach).length;
-  return Math.max(0, c.trainPts - (TRAIN_PER_SEASON + coachPts));
-}
 export function trainingPointCost(c: Career): number {
   const stageMult = c.stage === "pro" ? 2500 : c.stage === "college" ? 800 : c.stage === "highschool" ? 300 : 120;
-  return stageMult * (boughtThisSeason(c) + 1);
+  return stageMult * (c.trainBought + 1); // escalates per point bought this season
 }
 export function buyTrainingPoint(c: Career): Career {
   const cost = trainingPointCost(c);
   if (c.cash < cost) return c;
-  return { ...c, cash: c.cash - cost, trainPts: c.trainPts + 1 };
+  return { ...c, cash: c.cash - cost, trainPts: c.trainPts + 1, trainBought: c.trainBought + 1 };
+}
+
+// ── Career disc collection: a Pro Shop (cash) + bag curation, all separate from
+// your account's discs. ──
+const STAGE_RANK: Record<CareerStage, number> = { youth: 0, highschool: 1, college: 2, pro: 3, retired: 3 };
+// Discs you can buy right now: in the shop, unlocked by your stage, not yet owned.
+export function careerDiscShop(c: Career): { key: string; cost: number }[] {
+  const owned = new Set(c.discs);
+  return CAREER_DISC_SHOP
+    .filter((d) => !owned.has(d.key) && STAGE_RANK[c.stage] >= STAGE_RANK[d.stage])
+    .map((d) => ({ key: d.key, cost: d.cost }));
+}
+// The next disc that unlocks at a later stage (teaser for the shop), or null.
+export function nextCareerDisc(c: Career): { key: string; cost: number; stage: CareerStage } | null {
+  const owned = new Set(c.discs);
+  return CAREER_DISC_SHOP.find((d) => !owned.has(d.key) && STAGE_RANK[c.stage] < STAGE_RANK[d.stage]) ?? null;
+}
+export function buyCareerDisc(c: Career, key: string): Career {
+  if (c.discs.includes(key)) return c;
+  const entry = CAREER_DISC_SHOP.find((d) => d.key === key);
+  if (!entry || STAGE_RANK[c.stage] < STAGE_RANK[entry.stage] || c.cash < entry.cost) return c;
+  const discs = [...c.discs, key];
+  const bag = c.bag.length < CAREER_BAG_MAX && !c.bag.includes(key) ? [...c.bag, key] : c.bag;
+  return { ...c, cash: c.cash - entry.cost, discs, bag };
+}
+// Add/remove an owned disc from the career bag (keeps 1..CAREER_BAG_MAX in it).
+export function toggleCareerBag(c: Career, key: string): Career {
+  if (!c.discs.includes(key)) return c;
+  if (c.bag.includes(key)) {
+    if (c.bag.length <= 1) return c; // never empty the bag
+    return { ...c, bag: c.bag.filter((k) => k !== key) };
+  }
+  if (c.bag.length >= CAREER_BAG_MAX) return c;
+  return { ...c, bag: [...c.bag, key] };
 }
 
 // Rivals sorted strongest-first (for the hub's rivals board).

@@ -41,6 +41,7 @@ import {
   newCareer, normalizeCareer, skillMods, seasonSchedule, simEvent, recordResult, advanceSeason, retire, seasonComplete,
   placeLabel, STAGE_LABEL, SKILL_KEYS, SKILL_LABEL, SKILL_DESC, IDENTITY_MODS,
   availableSponsors, signSponsor, trainingPointCost, buyTrainingPoint, topRivals, fmtCash, SPONSOR_CAP,
+  careerRating, careerDiscShop, buyCareerDisc, toggleCareerBag, nextCareerDisc, CAREER_BAG_MAX,
   careerFieldForRound, careerCardRacers, careerLiveStandings,
   type Career, type CareerEvent, type EventResult, type CareerSkills, type SkillMods, type FieldPlayer,
 } from "@/lib/discgolf/career";
@@ -433,6 +434,13 @@ export function DiscGolfGame() {
   const [bag, setBag] = useState<string[]>([]);
   const bagRef = useRef<string[]>([]);
   useEffect(() => { bagRef.current = bag; }, [bag]);
+  // The bag actually carried into the round in progress: normally your account
+  // bag, but during a Career round it's the career's OWN (separate) bag. The
+  // disc rack + in-round disc logic read this; account bag editing is untouched.
+  const [activeBag, setActiveBag] = useState<string[]>([]);
+  const activeBagRef = useRef<string[]>([]);
+  useEffect(() => { activeBagRef.current = activeBag; }, [activeBag]);
+  useEffect(() => { if (!careerPlayRef.current) setActiveBag(bag); }, [bag]); // mirror account bag when not mid-career-round
   const [bagSeen, setBagSeen] = useState<string[]>([]);
   const [bagOpen, setBagOpen] = useState(false);
   const [bagLoaded, setBagLoaded] = useState(false); // gates auto-fill until storage is read
@@ -872,7 +880,7 @@ export function DiscGolfGame() {
     const g = stateRef.current;
     if (!g || g.mini) return;
     const hole = g.roundHoles[g.holeIndex];
-    const i = autoDiscIndex(distBetween(g.rest, hole.basket), bagRef.current, hole.elev ?? 0);
+    const i = autoDiscIndex(distBetween(g.rest, hole.basket), activeBagRef.current, hole.elev ?? 0);
     g.discIndex = i;
     discIndexRef.current = i;
     setDiscIndex(i);
@@ -947,7 +955,11 @@ export function DiscGolfGame() {
     const roundHoles = buildRound(seed, ev.mode);
     // The field reacts to this course's wind/slope/hazards (card + live board).
     careerFieldRef.current = careerFieldForRound(c, ev, roundHoles);
-    const discIndex = validDiscIndex(discIndexRef.current, bagRef.current);
+    // Career carries its OWN bag (its separate disc collection), not your account bag.
+    const careerBag = c.bag.length ? c.bag : ["aviar", "buzzz"];
+    activeBagRef.current = careerBag;
+    setActiveBag(careerBag);
+    const discIndex = validDiscIndex(discIndexRef.current, careerBag);
     discIndexRef.current = discIndex;
     setDiscIndex(discIndex);
     stateRef.current = {
@@ -1252,7 +1264,7 @@ export function DiscGolfGame() {
 
   const selectDisc = useCallback((i: number) => {
     // Only discs carried in the bag are selectable during a round.
-    if (!ADV_DISCS[i] || !bagRef.current.includes(ADV_DISCS[i].key)) return;
+    if (!ADV_DISCS[i] || !activeBagRef.current.includes(ADV_DISCS[i].key)) return;
     setDiscIndex(i);
     if (stateRef.current) stateRef.current.discIndex = i;
   }, []);
@@ -1298,6 +1310,7 @@ export function DiscGolfGame() {
     // to the hub instead of the normal results / leaderboard flow.
     if (g?.career && careerPlayRef.current) {
       careerPlayRef.current = false;
+      setActiveBag(bagRef.current); // career round over — the rack goes back to your account bag
       const total = scores.reduce((s, n) => s + n, 0);
       const c = careerRef.current;
       const ev = careerEventRef.current;
@@ -1494,6 +1507,7 @@ export function DiscGolfGame() {
     careerPlayRef.current = false;
     careerEventRef.current = null;
     careerFieldRef.current = null;
+    setActiveBag(bagRef.current); // back to your account bag in the rack
     if (c && ev && !c.done.includes(ev.id)) {
       const { score } = simEvent(c, ev);
       const { career: nc, result } = recordResult(c, ev, score, false);
@@ -1535,7 +1549,7 @@ export function DiscGolfGame() {
       holeIndex: 0,
       scores: [],
       roundPaths: [],
-      discIndex: validDiscIndex(discIndexRef.current, bagRef.current),
+      discIndex: validDiscIndex(discIndexRef.current, activeBagRef.current),
       party: g.party ? { names: g.party.names, current: 0, scores: g.party.names.map(() => Array(g.roundHoles.length).fill(null)) } : undefined,
       ...freshHole(g.roundHoles[0]),
     };
@@ -1553,6 +1567,7 @@ export function DiscGolfGame() {
     tournamentPlayRef.current = false;
     const wasCareer = careerPlayRef.current;
     careerPlayRef.current = false;
+    if (wasCareer) setActiveBag(bagRef.current); // restore the account bag in the rack
     setPauseMenu(null);
     setResumeRound(readResume()); // surface "Resume" if we left a solo round mid-way
     if (wasCareer) setCareerOpen(true); // bail back to the career hub
@@ -1706,7 +1721,7 @@ export function DiscGolfGame() {
       keysRef.current.add(e.key);
       if (e.key >= "1" && e.key <= "9") {
         const n = Number(e.key) - 1; // number keys pick bag slots
-        if (n < bagRef.current.length) selectDisc(discIndexByKey(bagRef.current[n]));
+        if (n < activeBagRef.current.length) selectDisc(discIndexByKey(activeBagRef.current[n]));
       }
       if (e.key === "b" || e.key === "B") setThrowStyle("BH");
       if (e.key === "f" || e.key === "F") setThrowStyle("FH");
@@ -3288,6 +3303,8 @@ export function DiscGolfGame() {
             onAbandon={() => { saveCareer(null); setCareerLastResult(null); setCareerNotes([]); }}
             onSign={(id) => { const c = careerRef.current; if (c) saveCareer(signSponsor(c, id)); }}
             onBuyTrain={() => { const c = careerRef.current; if (c) saveCareer(buyTrainingPoint(c)); }}
+            onBuyDisc={(key) => { const c = careerRef.current; if (c) saveCareer(buyCareerDisc(c, key)); }}
+            onToggleBag={(key) => { const c = careerRef.current; if (c) saveCareer(toggleCareerBag(c, key)); }}
             dismissNotes={() => setCareerNotes([])}
           />
         )}
@@ -3428,13 +3445,13 @@ export function DiscGolfGame() {
             {/* Disc selector — only the discs in your bag (no bag-editing or
                 shopping mid-round; both live on the home screen between rounds). */}
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-gray-500">Bag · {bag.length}/{BAG_MAX}</span>
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-gray-500">Bag · {activeBag.length}/{BAG_MAX}</span>
               <span className="text-[10px] text-gray-400 font-medium truncate ml-2 min-w-0">
                 {`${ADV_DISCS[discIndex]?.brand ?? ""} ${ADV_DISCS[discIndex]?.name ?? ""}`}
               </span>
             </div>
             <div className="flex gap-2 overflow-x-auto pb-0.5 -mx-1 px-1" style={{ scrollbarWidth: "thin" }}>
-              {bag.map((key) => {
+              {activeBag.map((key) => {
                 const d = discByKey(key);
                 if (!d) return null;
                 const i = discIndexByKey(key);
@@ -4273,7 +4290,7 @@ function CareerStat({ label, v }: { label: string; v: number | string }) {
     </div>
   );
 }
-function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, onPlay, onSim, onAdvance, onRetire, onAbandon, onSign, onBuyTrain, dismissNotes }: {
+function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, onPlay, onSim, onAdvance, onRetire, onAbandon, onSign, onBuyTrain, onBuyDisc, onToggleBag, dismissNotes }: {
   career: Career | null;
   lastResult: EventResult | null;
   lastCoins: number;
@@ -4287,6 +4304,8 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
   onAbandon: () => void;
   onSign: (id: string) => void;
   onBuyTrain: () => void;
+  onBuyDisc: (key: string) => void;
+  onToggleBag: (key: string) => void;
   dismissNotes: () => void;
 }) {
   const [name, setName] = useState("");
@@ -4323,7 +4342,7 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
           <h2 className="text-white font-black text-xl">🌟 Career</h2>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
-        <p className="text-gray-300 text-sm">Start as a 14-year-old high-school freshman with a bag and a dream. Build your <span className="text-white">power, control, putting</span> and <span className="text-white">mental</span> game over the years — high school, college (Nationals at Winthrop Lake), then the pro tour. Your <span className="text-[#f5d24a]">PDGA rating</span> climbs as you post better tournament rounds. Play the big rounds yourself; sim the rest.</p>
+        <p className="text-gray-300 text-sm">Start as a 14-year-old freshman with two discs and a dream — a clean slate, kept <span className="text-white">completely separate from your main account</span>. Train four skills (<span className="text-white">no cap</span>), unlock discs in the <span className="text-[#e0923b]">Pro Shop</span>, and finish events well to develop faster. Climb from high school to college (Nationals at Winthrop Lake) to the pro tour and chase <span className="text-[#f5d24a]">World #1</span>. Play the big rounds yourself; sim the rest — any coins you earn still go to your account.</p>
         <input type="text" value={name} maxLength={16} onChange={(e) => setName(e.target.value)} placeholder="Your name" className="w-full bg-[#1a1d23] border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-[#e0923b]" />
         <button type="button" onClick={() => onStart(name)} className={`${btn} w-full`}>Begin career</button>
       </div></div>
@@ -4338,6 +4357,9 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
   const sponsorOffers = availableSponsors(career);
   const trainCost = trainingPointCost(career);
   const rivals = topRivals(career);
+  const overall = Math.round(careerRating(career.skills)); // the single headline number — rises as you train
+  const shop = careerDiscShop(career); // discs buyable now (career cash, stage-gated)
+  const nextDisc = nextCareerDisc(career); // a teaser disc unlocking at a later stage
   // Current in-play effect of each skill, so the benefit of training is concrete.
   const mods = skillMods(career.skills);
   const effectFor = (k: keyof CareerSkills): string => {
@@ -4381,14 +4403,19 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
       <div className="flex items-center justify-between">
         <div className="min-w-0">
           <h2 className="text-white font-black text-lg leading-tight truncate">{career.name}</h2>
-          <p className="text-gray-400 text-[11px]">{STAGE_LABEL[career.stage]} · Age {career.age} · Season {career.season + 1}{career.stage === "pro" && career.worldRank ? ` · World #${career.worldRank}` : ""}</p>
+          <p className="text-gray-400 text-[11px]">{STAGE_LABEL[career.stage]} · Age {career.age} · Season {career.season + 1}</p>
+          <p className="text-[11px] mt-0.5">
+            {career.stage === "pro" && career.worldRank
+              ? <span className="text-[#f5d24a] font-bold">World #{career.worldRank}</span>
+              : <span className="text-gray-500">PDGA {career.pdgaRating}</span>}
+            <span className="text-[#36D7B7] font-bold font-mono ml-2">{fmtCash(career.cash)}</span>
+          </p>
         </div>
         <div className="shrink-0 flex items-center gap-2">
           <span className="text-right leading-tight">
-            <span className="block text-[#f5d24a] font-black text-base font-mono leading-none">{career.pdgaRating}</span>
-            <span className="block text-gray-500 text-[8px] uppercase tracking-wide">PDGA</span>
+            <span className="block text-[#36D7B7] font-black text-2xl font-mono leading-none">{overall}</span>
+            <span className="block text-gray-500 text-[8px] uppercase tracking-wide">Overall</span>
           </span>
-          <span className="text-[#36D7B7] font-bold text-sm font-mono">{fmtCash(career.cash)}</span>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
       </div>
@@ -4406,7 +4433,7 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
       {/* Skills + training */}
       <div className="bg-[#1a1d23] border border-white/5 rounded-xl p-3 space-y-2">
         <div className="flex items-center justify-between">
-          <p className="text-gray-400 text-xs font-bold uppercase tracking-wide">Skills · PDGA {career.pdgaRating}</p>
+          <p className="text-gray-400 text-xs font-bold uppercase tracking-wide">Skills · Overall {overall}</p>
           <p className="text-[11px] text-gray-400">Training <span className={remaining > 0 ? "text-[#36D7B7] font-bold" : "text-gray-500"}>{remaining}</span>/{career.trainPts}</p>
         </div>
         {SKILL_KEYS.map((k) => {
@@ -4417,8 +4444,8 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
             <div key={k} className="flex items-center gap-2">
               <span className="w-12 text-[11px] text-gray-300">{SKILL_LABEL[k]}</span>
               <div className="flex-1 h-2.5 bg-white/5 rounded relative overflow-hidden">
-                <div className="absolute inset-y-0 left-0 bg-[#36D7B7] rounded" style={{ width: `${val}%` }} />
-                <div className="absolute inset-y-0 w-0.5 bg-white/50" style={{ left: `${pot}%` }} />
+                <div className="absolute inset-y-0 left-0 bg-[#36D7B7] rounded" style={{ width: `${Math.min(100, val)}%` }} />
+                {pot < 100 && <div className="absolute inset-y-0 w-0.5 bg-white/40" style={{ left: `${Math.min(100, pot)}%` }} />}
               </div>
               <span className="w-9 text-right text-[11px] font-mono text-white">{val}{add ? <span className="text-[#36D7B7]">+{add}</span> : null}</span>
               <div className="flex gap-0.5 shrink-0">
@@ -4438,12 +4465,59 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
           ))}
         </div>
         <div className="flex items-center justify-between gap-2 pt-1">
-          <p className="text-gray-500 text-[10px] flex-1 leading-snug">Skills <span className="text-gray-300">only rise when you train them</span> — finish events well to earn bonus points. The tick marks potential.</p>
+          <p className="text-gray-500 text-[10px] flex-1 leading-snug">Skills <span className="text-gray-300">only rise when you train them</span>, with <span className="text-gray-300">no cap</span> — most training points come from <span className="text-gray-300">finishing events well</span>. The tick is your natural talent; train right past it.</p>
           <button type="button" onClick={onBuyTrain} disabled={career.cash < trainCost}
             className="shrink-0 rounded bg-[#36D7B7]/15 border border-[#36D7B7]/40 text-[#36D7B7] text-[11px] font-bold px-2 py-1 disabled:opacity-30 disabled:border-white/10 disabled:text-gray-500">
             +1 pt · {fmtCash(trainCost)}
           </button>
         </div>
+      </div>
+
+      {/* Career bag + Pro Shop — a disc collection entirely separate from your account */}
+      <div className="bg-[#1a1d23] border border-white/5 rounded-xl p-3 space-y-2">
+        <div className="flex items-center justify-between">
+          <p className="text-gray-400 text-xs font-bold uppercase tracking-wide">Bag · {career.bag.length}/{CAREER_BAG_MAX}</p>
+          <p className="text-[10px] text-gray-500">tap a disc to bag/unbag</p>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {career.discs.map((key) => {
+            const d = discByKey(key);
+            if (!d) return null;
+            const inBag = career.bag.includes(key);
+            return (
+              <button key={key} type="button" onClick={() => onToggleBag(key)}
+                className={`rounded-lg border px-2 py-1 text-[11px] font-semibold transition ${inBag ? "border-[#36D7B7]/70 bg-[#36D7B7]/10 text-white" : "border-white/10 bg-white/[0.02] text-gray-500"}`}>
+                <span className="w-2 h-2 rounded-full inline-block mr-1 align-[-1px]" style={{ background: d.color }} />{d.name}
+              </button>
+            );
+          })}
+        </div>
+        {shop.length > 0 ? (
+          <div className="space-y-1 pt-1.5 border-t border-white/5">
+            <p className="text-gray-500 text-[10px] font-bold uppercase tracking-wide">Pro Shop · buy with career cash</p>
+            {shop.map(({ key, cost }) => {
+              const d = discByKey(key);
+              if (!d) return null;
+              return (
+                <div key={key} className="flex items-center justify-between gap-2 text-[11px]">
+                  <span className="flex items-center gap-1.5 min-w-0">
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ background: d.color }} />
+                    <span className="text-white font-semibold truncate">{d.name}</span>
+                    <span className="text-gray-500 truncate hidden xs:inline">{d.brand}</span>
+                  </span>
+                  <button type="button" onClick={() => onBuyDisc(key)} disabled={career.cash < cost}
+                    className="shrink-0 rounded bg-[#e0923b] hover:brightness-110 text-[#0f1117] font-bold px-2 py-0.5 disabled:bg-white/10 disabled:text-gray-500">
+                    {fmtCash(cost)}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        ) : nextDisc ? (
+          <p className="text-gray-500 text-[10px] pt-1.5 border-t border-white/5">Reach <span className="text-gray-300">{STAGE_LABEL[nextDisc.stage]}</span> to unlock more discs in the Pro Shop.</p>
+        ) : (
+          <p className="text-gray-500 text-[10px] pt-1.5 border-t border-white/5">You own every disc in the bag. 🎒</p>
+        )}
       </div>
 
       {/* Sponsors */}
