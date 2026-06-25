@@ -215,9 +215,13 @@ const CAREER_DISC_SHOP: CareerDiscEntry[] = [
   { key: "zeus", cost: 18000, stage: "pro" },
 ];
 
-// Base training points handed out each season; the rest is earned by how you
-// finish, so a dominant season develops your player far faster than a quiet one.
-const SEASON_BASE_TRAIN = 6;
+// A small per-season training-point FLOOR — deliberately NOT a path to 90. Real
+// development is EARNED by finishing events well (see trainBonus in recordResult);
+// a player who only ages and never places well peaks around ~50 overall. Lightly
+// youth-weighted so a rookie isn't stuck before they can compete.
+export function seasonBaseTrain(age: number): number {
+  return age <= 19 ? 4 : age <= 27 ? 3 : 2;
+}
 
 // One generation of named rivals, born deterministically from the seed. A spread
 // of ceilings: a couple are future stars, most are solid, a few are journeymen.
@@ -293,7 +297,7 @@ export function newCareer(name: string, seed: number): Career {
   };
   return {
     v: 1, name: name.trim().slice(0, 16) || "Rookie", seed: seed >>> 0,
-    age: 14, season: 0, stage: "highschool", skills, potential, trainPts: SEASON_BASE_TRAIN,
+    age: 14, season: 0, stage: "highschool", skills, potential, trainPts: seasonBaseTrain(14),
     done: [], results: [], titles: [], seasonPoints: 0, careerPoints: 0, majors: 0,
     worldRank: null, bestWorldRank: null, seasonsAtNo1: 0, achievements: [], retired: false,
     cash: 0, sponsors: [], rivals: generateRivals(seed),
@@ -561,12 +565,13 @@ export function recordResult(c: Career, ev: CareerEvent, score: number, played: 
   // Amateur events pay no tour purse, but a strong finish earns a little
   // scholarship/sponsor cash so the career Pro Shop is reachable before turning pro.
   const amateurPay = c.stage === "pro" ? 0 : amateurCash(ev, placed, fieldN);
-  // How you finish drives how fast you develop: most of your training points come
-  // from results, not a flat per-season handout. Win the big ones to grow quickly.
+  // How you finish drives how fast you develop: training points are EARNED here,
+  // not handed out for aging — the per-season floor barely moves you, so reaching
+  // 90 takes sustained good play and 99 takes dominance. Win the big ones to grow.
   const trainBonus =
     placed === 1 ? (ev.importance === "championship" ? 6 : ev.importance === "major" ? 5 : 4)
       : placed <= 3 ? 3
-      : placed <= Math.ceil(fieldN * 0.25) ? 2
+      : placed <= Math.ceil(fieldN * 0.1) ? 2 // a top-10% finish develops you a little
       : placed <= Math.ceil(fieldN * 0.5) ? 1 // even a top-half finish teaches you something
       : 0;
   // World-ranking points — top-heavy and importance-weighted, so a season of
@@ -642,17 +647,28 @@ const GROW_RATE = 2.1;
 // them. `pot` shapes the curve: gains taper as you approach it (and again past
 // ~80), so the closer you get to 99 the more each point costs.
 function growSkill(skill: number, pot: number, age: number, invested: number, declineRate: number, isPlayer = false): number {
+  if (isPlayer) {
+    // The PLAYER's skills move EXACTLY 1:1 with the training points spent — no
+    // hidden curve and no potential gate, so every career can climb to the 99 cap.
+    // Points are EARNED by finishing events well (see trainBonus), so reaching 90
+    // is the reward for good play, never something aging hands you. Decline only
+    // bites past 35, and training a skill cancels that year's loss point-for-point.
+    let next = skill + invested;
+    if (age > 35) next -= Math.max(0, (age - 35) * 0.5 * declineRate - invested);
+    return clamp(next, 8, 99);
+  }
+  // Rivals keep the original talent-curved growth (capped at their own potential).
   const youth = age < 16 ? 1.5 : age < 20 ? 1.2 : age < 26 ? 0.9 : age <= 30 ? 0.65 : 0.45;
   const rawRoom = pot - skill;
-  // Growth is strong below your potential and nearly nil above it, so potential
-  // stays a real talent ceiling: an average career peaks around its potential,
+  // Growth is strong below their potential and nearly nil above it, so potential
+  // stays a real talent ceiling: an average rival peaks around its potential,
   // and only a high-talent one (potential near 99) climbs into the high-90s.
   const roomFactor = rawRoom <= 0 ? 0.06 : 0.38 + Math.min(rawRoom, 45) * 0.014;
   const highDamp = 1 / (1 + Math.max(0, skill - 80) * 0.05); // the last points still cost more, but stay reachable
   const gain = invested > 0 ? invested * youth * GROW_RATE * roomFactor * highDamp : 0;
   let next = skill + gain;
   if (age > 30) next -= Math.max(0, (age - 30) * 0.55 * declineRate - invested * 0.55);
-  return clamp(next, 8, isPlayer ? 99 : pot + 2);
+  return clamp(next, 8, pot + 2);
 }
 
 // Rivals improve on their own each season (a little focused work, no allocation).
@@ -722,7 +738,7 @@ export function advanceSeason(c: Career, alloc: Partial<CareerSkills>): { career
   let career: Career = {
     ...c, age, season: c.season + 1, stage, skills, skillFrac, rivals,
     cash: c.cash + stipend,
-    trainPts: SEASON_BASE_TRAIN + coachPts, done: [], seasonPoints: 0, trainBought: 0,
+    trainPts: seasonBaseTrain(age) + coachPts, done: [], seasonPoints: 0, trainBought: 0,
     rankPoints: Math.round(c.rankPoints * 0.6), // last season's results fade — staying #1 needs sustained dominance
   };
 

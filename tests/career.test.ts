@@ -17,6 +17,7 @@ import {
   signSponsor,
   trainingPointCost,
   buyTrainingPoint,
+  seasonBaseTrain,
   careerFieldHoles,
   careerCard,
   careerCardRacers,
@@ -181,8 +182,8 @@ describe("advanceSeason", () => {
     const { career } = advanceSeason(c, { power: 6 });
     expect(career.age).toBe(15); // starts at 14 (high school)
     expect(career.season).toBe(1);
-    expect(career.skills.power).toBeGreaterThan(before); // youth + training grows it
-    expect(career.trainPts).toBe(6); // refilled to the season base (rest is earned from results)
+    expect(career.skills.power).toBe(before + 6); // 1:1 — six points spent, six skill gained
+    expect(career.trainPts).toBe(seasonBaseTrain(15)); // refilled to the small season floor (rest is earned)
     expect(career.done).toHaveLength(0);
   });
   it("skills only move when you train them", () => {
@@ -380,7 +381,7 @@ describe("economy + sponsors", () => {
     c = signSponsor(c, coach.id);
     const next = advanceSeason(c, {}).career;
     expect(next.cash).toBe(c.cash + coach.stipend);
-    expect(next.trainPts).toBe(6 + 1); // base + one coach
+    expect(next.trainPts).toBe(seasonBaseTrain(26) + 1); // season floor (age 26) + one coach
   });
   it("buying a training point costs escalating cash and adds a point", () => {
     const c: Career = { ...newCareer("Pro", 14), stage: "pro", age: 25, cash: 1_000_000 };
@@ -519,6 +520,59 @@ describe("skill cap (99) + points-only growth", () => {
     const next = advanceSeason(c, { putt: 3 }).career;
     expect(next.skills.putt).toBeGreaterThan(c.skills.putt); // trained → up
     expect(next.skills.power).toBe(c.skills.power); // untrained → unchanged (young, no decline)
+  });
+});
+
+describe("1:1 training + earned progression", () => {
+  it("moves a skill EXACTLY 1:1 with the points spent", () => {
+    const c = newCareer("Linear", 77); // age 14, every skill 20
+    const before = c.skills.power;
+    const after = advanceSeason(c, { power: 5 }).career;
+    expect(after.skills.power).toBe(before + 5); // +5 points → +5 power, no curve
+  });
+
+  it("holds at 35 and only declines past it; training that skill offsets the loss", () => {
+    const vet: Career = {
+      ...newCareer("Vet", 5), age: 34, stage: "pro",
+      skills: { power: 90, control: 90, putt: 90, mental: 90 },
+    };
+    const at35 = advanceSeason(vet, {}).career; // age 34 → 35: no decline yet
+    expect(at35.skills.power).toBe(90);
+    const at36 = advanceSeason({ ...at35, age: 35 }, {}).career; // 35 → 36: now it slips
+    expect(at36.skills.power).toBeLessThan(90);
+    const trained = advanceSeason({ ...at35, age: 35 }, { power: 1 }).career; // spend on power
+    expect(trained.skills.power).toBeGreaterThanOrEqual(90); // a point cancels the decline
+  });
+
+  it("aging alone never makes you good — the base floor peaks well below 90", () => {
+    let c = newCareer("Drifter", 314);
+    let peak = careerRating(c.skills);
+    let guard = 0;
+    while (!c.retired && guard++ < 60) {
+      // spend only the per-season floor, spread across skills; never compete for bonuses
+      const pts = c.trainPts, per = Math.floor(pts / 4);
+      c = advanceSeason(c, { power: per, control: per, putt: per, mental: pts - per * 3 }).career;
+      peak = Math.max(peak, careerRating(c.skills));
+    }
+    expect(peak).toBeLessThan(70); // ~mid-40s on the floor alone — never a 90 pro on age
+  });
+
+  it("better finishes earn strictly more training points (you develop by playing well)", () => {
+    const c = newCareer("Climber", 6);
+    const minor = seasonSchedule(c).find((e) => e.importance === "minor")!;
+    const champ = seasonSchedule(c).find((e) => e.importance === "championship")!;
+    expect(recordResult(c, minor, 1, false).result.trainBonus).toBeGreaterThan(0); // win → points
+    expect(recordResult(c, minor, 999, false).result.trainBonus).toBe(0); // dead last → nothing
+    expect(recordResult(c, champ, 1, false).result.trainBonus)
+      .toBeGreaterThan(recordResult(c, minor, 1, false).result.trainBonus); // a title develops you most
+  });
+
+  it("no talent gate: any career can train a skill all the way to 99", () => {
+    // a deliberately low potential — under the old model this capped a player's growth
+    const c: Career = { ...newCareer("Underdog", 4), age: 16, potential: { power: 55, control: 55, putt: 55, mental: 55 } };
+    let s = c;
+    for (let i = 0; i < 10; i++) s = advanceSeason({ ...s, age: 16, trainPts: 12 }, { power: 12 }).career;
+    expect(s.skills.power).toBe(99); // potential no longer blocks the player
   });
 });
 
