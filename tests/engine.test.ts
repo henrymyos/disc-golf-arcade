@@ -424,10 +424,10 @@ describe("level-up disc draft (levelUpChoices)", () => {
 
 describe("hole length: which disc the drive needs", () => {
   const TIER: Record<string, string> = {
-    aviar: "putter", zone: "putter", harp: "putter",
-    buzzz: "mid", swarm: "mid", roc: "mid",
-    teebird: "fairway", firebird: "fairway", river: "fairway", pd: "fairway",
-    nukeos: "driver", destroyer: "driver", wraith: "driver", zeus: "driver",
+    aviar: "putter", zone: "putter", harp: "putter", pure: "putter",
+    buzzz: "mid", swarm: "mid", roc: "mid", mako: "mid",
+    teebird: "fairway", firebird: "fairway", river: "fairway", pd: "fairway", leopard: "fairway", thunderbird: "fairway",
+    nukeos: "driver", destroyer: "driver", wraith: "driver", zeus: "driver", sidewinder: "driver", boss: "driver",
   };
   const FULL_BAG = ADV_DISCS.map((d) => d.key);
   const driveTier = (hole: { tee: { x: number; y: number }; basket: { x: number; y: number }; elev?: number }) =>

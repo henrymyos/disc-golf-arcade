@@ -654,6 +654,15 @@ const ADV_DISCS: Disc[] = [
   advDisc("destroyer", "Destroyer", "Innova", "#e23b7b", TIER_BASE[2], "straight", "12 / 5 / -1 / 3", { turn: 0.011, sFade: 0.017 }), // fast, dependable finish
   advDisc("wraith", "Wraith", "Innova", "#e2843b", TIER_BASE[2], "straight", "11 / 5 / -1 / 3", { turn: 0.015, sFade: 0.013 }), // longer, more turnover
   advDisc("zeus", "Zeus", "Discraft", "#9b3be2", TIER_BASE[2], "overstable", "12 / 5 / -1 / 3", { fade: 0.013 }), // controllable overstable
+  // ── Expanded collection: more molds to buy in the shop / draft, each filling
+  // a distinct flight niche the starter bag doesn't cover. (Appended on purpose
+  // so existing disc indices — incl. DEFAULT_DISC_INDEX — stay put.) ──
+  advDisc("pure", "Pure", "Latitude 64", "#6ee0a0", TIER_BASE[0], "straight", "3 / 3 / -1 / 1", { turn: 0.009, sFade: 0.004 }), // understable putter — turnover putts + rollers
+  advDisc("mako", "Mako3", "Innova", "#c8e85f", TIER_BASE[1], "straight", "5 / 5 / 0 / 0", { turn: 0.002, sFade: 0.0012 }), // the dead-straight mid, almost no fade
+  advDisc("leopard", "Leopard3", "Innova", "#e89a3b", FAIRWAY_BASE, "straight", "6 / 5 / -2 / 1", { turn: 0.013, sFade: 0.004 }), // understable fairway — easy turnover + tailwind bombs
+  advDisc("thunderbird", "Thunderbird", "Innova", "#3b8ee2", FAIRWAY_BASE, "straight", "9 / 5 / 0 / 2", { turn: 0.003, sFade: 0.011 }), // stable control driver — straight with a dependable finish
+  advDisc("sidewinder", "Sidewinder", "Innova", "#d65fc8", TIER_BASE[2], "straight", "9 / 5 / -3 / 1", { turn: 0.018, sFade: 0.010 }), // big-turn distance glider for huge anhyzers
+  advDisc("boss", "Boss", "Innova", "#b03b3b", TIER_BASE[2], "overstable", "13 / 5 / -1 / 3", { fade: 0.016 }), // overstable power driver — holds a hard line into wind
 ];
 // Some advanced discs are earned, not given: each maps to the achievement that
 // unlocks it. Every player STARTS with just a putter + a midrange — the simple
@@ -674,20 +683,20 @@ const DISC_UNLOCKS: Record<string, { ach: string; label: string } | undefined> =
 const DISC_LEVEL: Record<string, number> = {
   zone: 2, swarm: 2,
   harp: 3, roc: 3, teebird: 3,
-  river: 4,
-  firebird: 5,
-  pd: 6,
+  river: 4, pure: 4, mako: 4,
+  firebird: 5, leopard: 5,
+  pd: 6, thunderbird: 6,
   // Distance drivers — held back until the double digits.
-  nukeos: 10, destroyer: 10, wraith: 11, zeus: 12,
+  nukeos: 10, destroyer: 10, sidewinder: 10, wraith: 11, boss: 11, zeus: 12,
 };
 // Coin price to buy a disc in the shop. Every disc is also free to draft at its
 // unlock level, so the shop is purely an "impatience tax": pay to add a disc to
 // the bag a few levels early. Priced so a driver costs ~a day of coins rather
 // than the old ~30k that nobody ever paid (the shop was dead money before).
 const DISC_PRICE: Record<string, number> = {
-  zone: 400, harp: 450, teebird: 600, swarm: 700, roc: 650,
-  firebird: 1100, river: 900, pd: 1300,
-  wraith: 4500, nukeos: 5500, destroyer: 6500, zeus: 7500,
+  zone: 400, harp: 450, pure: 500, teebird: 600, roc: 650, swarm: 700, mako: 750,
+  river: 900, leopard: 950, firebird: 1100, thunderbird: 1200, pd: 1300,
+  wraith: 4500, sidewinder: 5000, nukeos: 5500, destroyer: 6500, boss: 7000, zeus: 7500,
 };
 // A disc is unlocked (in your collection) if it's core (Aviar/Buzzz), already
 // acquired (`owned` — chosen at level-up or bought), or earned via its
