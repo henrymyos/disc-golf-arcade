@@ -420,6 +420,14 @@ describe("level-up disc draft (levelUpChoices)", () => {
     const all = ADV_DISCS.map((d) => d.key);
     expect(levelUpChoices(99, [], all)).toEqual([]);
   });
+  it("the first level-up (lvl 2) always hands over a fairway driver", () => {
+    const FAIRWAY = ["teebird", "river", "firebird", "pd", "leopard", "thunderbird"];
+    const choices = levelUpChoices(2, [], []);
+    expect(choices).toEqual(["teebird", "river"]); // both fairway drivers — pick = a driver
+    for (const k of choices) expect(FAIRWAY).toContain(k);
+    // if one's already owned (bought in the shop), the other fairway driver still leads
+    expect(levelUpChoices(2, [], ["teebird"])[0]).toBe("river");
+  });
 });
 
 describe("hole length: which disc the drive needs", () => {

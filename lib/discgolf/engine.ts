@@ -681,9 +681,10 @@ const DISC_UNLOCKS: Record<string, { ach: string; label: string } | undefined> =
 // choose discs as you level.) Putter/mid molds and the fairway drivers come
 // early; the distance drivers don't open up until ~level 10.
 const DISC_LEVEL: Record<string, number> = {
-  zone: 2, swarm: 2,
-  harp: 3, roc: 3, teebird: 3,
-  river: 4, pure: 4, mako: 4,
+  // Fairway drivers come early — the first level-up (lvl 2) hands one over.
+  zone: 2, swarm: 2, teebird: 2, river: 2,
+  harp: 3, roc: 3,
+  pure: 4, mako: 4,
   firebird: 5, leopard: 5,
   pd: 6, thunderbird: 6,
   // Distance drivers — held back until the double digits.
@@ -726,6 +727,21 @@ function levelUpChoices(level: number, unlocked: string[], owned: string[] = [])
     .filter((d) => discAvailableAtLevel(d, level) && !isDiscUnlocked(d, unlocked, owned, level))
     .sort((a, b) => (DISC_LEVEL[a.key] ?? 0) - (DISC_LEVEL[b.key] ?? 0) || ADV_DISCS.indexOf(a) - ADV_DISCS.indexOf(b));
   if (!cands.length) return [];
+  // A new player's FIRST level-up (lvl 2) always hands over a fairway driver: a
+  // choice between the controllable Teebird and the easy, long River — both real
+  // drivers — instead of two overstable utility discs. So you leave level 2 with
+  // a proper driver in the bag.
+  if (level === 2) {
+    const drivers = ["teebird", "river"]
+      .map((k) => discByKey(k))
+      .filter((d): d is Disc => !!d && !isDiscUnlocked(d, unlocked, owned, level));
+    if (drivers.length === 2) return drivers.map((d) => d.key);
+    if (drivers.length === 1) {
+      const other = cands.find((d) => d.key !== drivers[0].key);
+      return other ? [drivers[0].key, other.key] : [drivers[0].key];
+    }
+    // both already owned (e.g. bought in the shop) → fall through to the generic pick
+  }
   const c1 = cands[0];
   const c2 = cands.find((d) => d.key !== c1.key && d.flight !== c1.flight) ?? cands.find((d) => d.key !== c1.key);
   return c2 ? [c1.key, c2.key] : [c1.key];
