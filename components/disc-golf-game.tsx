@@ -32,7 +32,7 @@ import {
   dailyClaimKey, eventClaimKey, type Challenge, type EventRound,
 } from "@/lib/discgolf/events";
 import {
-  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, TOTAL_PAR, WINTHROP_PAR, leaderboardCourse, TOURN_KEY, TOURN_FIELD, TOURNAMENTS, tournDef, tournRoundHoles, tournPlace, tournFieldRound, tournLiveStandings, tournStandings, ACHIEVEMENTS, earnedAchievements, achievementReward, scoreLabel, courseStars, courseHoles, courseDifficultyOf, courseStarDifficulty, tournDifficulty, tournStarDifficulty, STRAIGHT_SPEED_MUL, releaseSpeedMul, ADV_DISCS, DISC_PRICE, isDiscUnlocked, levelUpChoices, validDiscIndex, DEFAULT_DISC_INDEX, BAG_MAX, discByKey, discIndexByKey, unlockedDiscKeys, reconcileBag, TOUR_COURSES, tourVenue, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, inRect, inHazard, offRibbons, dailySeed, buildRound, elevAt, vibrate, pxToFeet, distBetween, autoDiscIndex, lastInBoundsLie, stepFlight,
+  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, TOTAL_PAR, WINTHROP_PAR, leaderboardCourse, TOURN_KEY, TOURN_FIELD, TOURNAMENTS, tournDef, tournRoundHoles, tournPlace, tournFieldRound, tournLiveStandings, tournStandings, ACHIEVEMENTS, earnedAchievements, achievementReward, scoreLabel, courseStars, courseHoles, courseDifficultyOf, courseStarDifficulty, tournDifficulty, tournStarDifficulty, STRAIGHT_SPEED_MUL, releaseSpeedMul, ADV_DISCS, DISC_PRICE, isDiscUnlocked, levelUpChoices, validDiscIndex, DEFAULT_DISC_INDEX, BAG_MAX, discByKey, discIndexByKey, unlockedDiscKeys, reconcileBag, TOUR_COURSES, tourVenue, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, dailySeed, buildRound, elevAt, vibrate, pxToFeet, distBetween, autoDiscIndex, resolvePenalty, stepFlight,
 } from "@/lib/discgolf/engine";
 import type {
   Vec, Tree, Hole, Mode, Tournament, TournDef, TournLiveRow, Achievement, FlightPath, Release, Flight, GhostState,
@@ -1940,7 +1940,10 @@ export function DiscGolfGame() {
           }
         } else if (res.status === "ob" || res.status === "oob") {
           // OUT OF BOUNDS: +1 and play from where it crossed the line.
-          const inWater = hole.water.some((w) => inRect(w, f.x, f.y));
+          // resolvePenalty encapsulates the rule (water/ob kind, +1 stroke, and
+          // the new lie: drop zone if any, else the last in-bounds point).
+          const pen = resolvePenalty(res.status, hole, { x: f.x, y: f.y }, g.trailBuf, g.rest);
+          const inWater = pen.kind === "water";
           audioRef.current?.sfx(inWater ? "water" : "tree");
           vibrate(60);
           spawnBurst(
@@ -1949,11 +1952,8 @@ export function DiscGolfGame() {
             inWater ? 16 : 8, inWater ? 1.8 : 1.2,
           );
           shake(inWater ? 3 : 2);
-          // Replay from the hole's drop zone if it has one; otherwise from the
-          // last point the disc was actually in bounds (walk the recorded
-          // flight path back), falling back to this throw's start.
-          const lie = hole.dropZone ?? lastInBoundsLie(g.trailBuf, hole, g.rest);
-          g.throws += 1;
+          const lie = pen.lie ?? g.rest;
+          g.throws += pen.strokes;
           g.flash = { text: hole.dropZone ? "OB — DROP ZONE" : "OUT OF BOUNDS", at: performance.now() };
           d.x = lie.x;
           d.y = lie.y;
@@ -1979,8 +1979,9 @@ export function DiscGolfGame() {
             audioRef.current?.sfx("chains");
             rattleRef.current = performance.now();
           }
-          if ((hole.hazard ?? []).some((hz) => inHazard(hz, d.x, d.y)) || (hole.roughIsHazard && offRibbons(hole, d.x, d.y))) {
-            g.throws += 1;
+          const pen = resolvePenalty("stop", hole, { x: d.x, y: d.y }, g.trailBuf, g.rest);
+          if (pen.kind === "sand") {
+            g.throws += pen.strokes;
             g.flash = { text: "HAZARD", at: performance.now() };
             spawnBurst(d.x, d.y, ["#d9c089", "#c4a96b"], 12, 1.4);
             audioRef.current?.sfx("tree");

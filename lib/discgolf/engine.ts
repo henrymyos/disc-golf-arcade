@@ -1316,6 +1316,35 @@ function lastInBoundsLie(trail: Vec[], hole: Hole, fallback: Vec): Vec {
   return { x: fallback.x, y: fallback.y };
 }
 
+// The stroke penalty + new lie for a flight that just ended, given the
+// `stepFlight` status. This is the rule the game applies after each shot:
+//   - OB / off-world ("ob" / "oob"): +1 stroke, replay from the hole's drop
+//     zone if it has one, otherwise the last in-bounds point on the recorded
+//     flight path. `kind` is "water" when the disc ended inside a water rect
+//     (so the caller can pick a splash effect), else "ob".
+//   - At-rest ("stop") sitting in sand — a `hazard` ellipse, or the rough on a
+//     `roughIsHazard` hole: +1 stroke, play where it lies (`lie` is null).
+//   - Anything else (clean stop, still flying, holed out): no penalty.
+// `pos` is where the disc ended (the flight point for OB, the resting point for
+// a stop); `trail` is the recorded flight curve; `rest` is the prior lie, a
+// final fallback for the OB walk-back. Pure, so it's unit-tested directly.
+type PenaltyKind = "none" | "ob" | "water" | "sand";
+type Penalty = { kind: PenaltyKind; strokes: number; lie: Vec | null };
+function resolvePenalty(status: StepStatus, hole: Hole, pos: Vec, trail: Vec[], rest: Vec): Penalty {
+  if (status === "ob" || status === "oob") {
+    const water = hole.water.some((w) => inRect(w, pos.x, pos.y));
+    const lie = hole.dropZone ?? lastInBoundsLie(trail, hole, rest);
+    return { kind: water ? "water" : "ob", strokes: 1, lie };
+  }
+  if (status === "stop") {
+    const sand =
+      (hole.hazard ?? []).some((hz) => inHazard(hz, pos.x, pos.y)) ||
+      (!!hole.roughIsHazard && offRibbons(hole, pos.x, pos.y));
+    if (sand) return { kind: "sand", strokes: 1, lie: null };
+  }
+  return { kind: "none", strokes: 0, lie: null };
+}
+
 // `opts` carries Career skill effects for the player's own flights: `windMul`
 // scales how hard the wind shoves the disc (low control → blown around), and
 // `catchR` widens/narrows the basket catch radius (putting skill). Both default
@@ -1594,6 +1623,7 @@ export {
   distBetween,
   autoDiscIndex,
   lastInBoundsLie,
+  resolvePenalty,
   stepFlight,
   buildTournGhosts,
   buildRacerGhosts,
@@ -1616,6 +1646,8 @@ export type {
   Disc,
   Flight,
   StepStatus,
+  Penalty,
+  PenaltyKind,
   TournGhost,
   GhostState,
   GhostRacer,
