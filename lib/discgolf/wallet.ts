@@ -1,6 +1,7 @@
 // ── Coins economy + daily rewards. Coins are a global currency (separate from
 // the Career's cash) earned by playing, claiming the daily reward, and the
 // practice mini-games, and spent in the disc shop. Pure + deterministic. ──
+import type { Mode } from "./engine";
 
 const DAY_MS = 86_400_000;
 export function dayNumber(now: number): number {
@@ -25,11 +26,29 @@ export function dailyAvailable(daily: DailyReward | null, today: number): boolea
   return !daily || daily.day < today;
 }
 
-// Coins earned for finishing a counting round, by how far under par you went.
-export function coinsForRound(toPar: number, holes: number): number {
+// Harder, competitive modes pay a coin premium so each mode has its own
+// economic identity instead of every round paying the same flat rate.
+export function modeCoinMult(mode: Mode): number {
+  switch (mode) {
+    case "ranked":
+      return 1.5;
+    case "winthrop":
+      return 1.4;
+    case "tour":
+      return 1.3;
+    default:
+      return 1; // course + daily
+  }
+}
+
+// Coins earned for finishing a counting round, by how far under par you went,
+// scaled by an optional mode/difficulty multiplier. `toPar` is guarded so a
+// stray NaN can never poison the wallet balance.
+export function coinsForRound(toPar: number, holes: number, mult = 1): number {
+  const safeToPar = Number.isFinite(toPar) ? toPar : 0;
   const base = holes >= 18 ? 30 : 15;
-  const under = Math.max(0, -toPar);
-  return base + under * 6;
+  const under = Math.max(0, -safeToPar);
+  return Math.round((base + under * 6) * mult);
 }
 
 export function fmtCoins(n: number): string {

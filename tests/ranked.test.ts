@@ -20,20 +20,25 @@ describe("ranked weeks", () => {
 });
 
 describe("ranked RP", () => {
-  it("pays more for going low and never pays nothing", () => {
+  it("rewards going low and penalizes blow-ups (signed, so RP can fall)", () => {
     expect(roundRP(-10)).toBeGreaterThan(roundRP(0));
     expect(roundRP(0)).toBeGreaterThan(roundRP(20));
-    expect(roundRP(100)).toBeGreaterThanOrEqual(10); // floor
+    expect(roundRP(0)).toBeGreaterThan(0); // a par round still climbs
+    expect(roundRP(10)).toBeLessThan(0); // a blow-up loses points (demotion)
   });
-  it("a finished round adds RP, tracks best to-par and counts the round", () => {
+  it("a finished round applies the RP delta, tracks best to-par and counts the round", () => {
     const a = applyRankedRound(null, -3);
     expect(a.rp).toBe(roundRP(-3));
     expect(a.bestToPar).toBe(-3);
     expect(a.rounds).toBe(1);
-    const b = applyRankedRound(a, 5); // worse round still adds RP, keeps best
+    const b = applyRankedRound(a, 5); // a worse round subtracts RP but keeps best
     expect(b.rp).toBe(a.rp + roundRP(5));
     expect(b.bestToPar).toBe(-3);
     expect(b.rounds).toBe(2);
+  });
+  it("RP never falls below 0 — Bronze is the floor", () => {
+    const low = applyRankedRound({ rp: 10, bestToPar: 0, rounds: 1 }, 20); // big penalty
+    expect(low.rp).toBe(0);
   });
   it("EMPTY_RANKED is a usable zero state", () => {
     expect(EMPTY_RANKED).toEqual({ rp: 0, bestToPar: null, rounds: 0 });

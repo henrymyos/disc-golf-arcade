@@ -67,7 +67,7 @@ export function xpForLevel(level: number): number {
 
 // Resolve total XP into a level plus progress toward the next one.
 export function levelFromXp(xp: number): { level: number; into: number; need: number } {
-  const x = Math.max(0, xp);
+  const x = Number.isFinite(xp) ? Math.max(0, xp) : 0;
   let level = 1;
   while (xpForLevel(level + 1) <= x) level++;
   const cur = xpForLevel(level);

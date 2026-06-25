@@ -16,25 +16,29 @@ export function rankedCourseKey(week: number): string {
   return `ranked-${week}`;
 }
 
-// Per-round RP: a par round is worth a solid chunk; going low pays much more,
-// blowing up still pays a little so a ranked attempt is never wasted.
+// Per-round RP change, signed so the ladder reflects skill rather than play
+// time: a strong round climbs, a par-ish round nudges up, and a blow-up (worse
+// than ~+3 to par) LOSES points — so you can be demoted and only consistently
+// good play reaches the top tiers. (Previously RP only ever rose, so any player
+// reached Master just by grinding enough rounds.)
 export function roundRP(toPar: number): number {
-  return Math.max(10, Math.round(60 - toPar * 12));
+  return Math.round(40 - toPar * 14);
 }
 
 export type RankedState = {
-  rp: number;            // lifetime rank points (only ever climbs)
+  rp: number;            // rank points — rises with good play, falls with bad (floored at 0)
   bestToPar: number | null; // best (lowest) to-par on any ranked round
   rounds: number;        // ranked rounds completed
 };
 
 export const EMPTY_RANKED: RankedState = { rp: 0, bestToPar: null, rounds: 0 };
 
-// Apply a finished ranked round to a player's ranked state.
+// Apply a finished ranked round to a player's ranked state. RP can drop on a bad
+// round but never below 0 (Bronze is the floor — you can't fall out of the ladder).
 export function applyRankedRound(state: RankedState | null, toPar: number): RankedState {
   const s = state ?? EMPTY_RANKED;
   return {
-    rp: s.rp + roundRP(toPar),
+    rp: Math.max(0, s.rp + roundRP(toPar)),
     bestToPar: s.bestToPar == null ? toPar : Math.min(s.bestToPar, toPar),
     rounds: s.rounds + 1,
   };

@@ -43,10 +43,44 @@ describe("mergeProgress", () => {
     expect(m.history.map((h) => h.date)).toEqual([100, 200, 300]);
   });
 
-  it("prefers cloud settings on conflict", () => {
+  it("prefers cloud settings on a tie (no timestamps — back-compat)", () => {
     const local: Progress = { ...base, settings: { muted: false } };
     const cloud: Progress = { ...base, settings: { muted: true } };
     expect(mergeProgress(local, cloud).settings).toEqual({ muted: true });
+  });
+
+  it("newer device wins for settings/profile/bag (by updatedAt)", () => {
+    const local: Progress = { ...base, settings: { muted: false }, profile: { name: "A" }, bag: ["aviar"], updatedAt: 200 };
+    const cloud: Progress = { ...base, settings: { muted: true }, profile: { name: "B" }, bag: ["buzzz"], updatedAt: 100 };
+    const m = mergeProgress(local, cloud); // local is newer
+    expect(m.settings).toEqual({ muted: false });
+    expect(m.profile).toEqual({ name: "A" });
+    expect(m.bag).toEqual(["aviar"]);
+    expect(m.updatedAt).toBe(200);
+  });
+
+  it("merges coins as earned − spent, so spent coins aren't restored", () => {
+    // Spent down to 200 (earned 1000, spent 800); a stale cloud row still shows 1000.
+    const local: Progress = { ...base, coins: 200, coinsEarned: 1000, coinsSpent: 800 };
+    const cloud: Progress = { ...base, coins: 1000, coinsEarned: 1000, coinsSpent: 0 };
+    const m = mergeProgress(local, cloud);
+    expect(m.coins).toBe(200); // not 1000 — the old max-merge exploit is closed
+    expect(m.coinsEarned).toBe(1000);
+    expect(m.coinsSpent).toBe(800);
+  });
+
+  it("doesn't drop coins earned offline on another device", () => {
+    const a: Progress = { ...base, coins: 200, coinsEarned: 1000, coinsSpent: 800 };
+    const b: Progress = { ...base, coins: 1500, coinsEarned: 1500, coinsSpent: 0 };
+    const m = mergeProgress(a, b);
+    expect(m.coinsEarned).toBe(1500);
+    expect(m.coinsSpent).toBe(800);
+    expect(m.coins).toBe(700); // 1500 earned − 800 spent
+  });
+
+  it("legacy rows without earned/spent treat the balance as earned", () => {
+    const m = mergeProgress({ ...base, coins: 500 }, { ...base, coins: 300 });
+    expect(m.coins).toBe(500); // max(500,300) earned − 0 spent
   });
 
   it("keeps the more-advanced career save (more seasons)", () => {

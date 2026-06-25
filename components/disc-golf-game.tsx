@@ -6,11 +6,11 @@ import { submitArcadeScore, getArcadeLeaderboard } from "@/actions/arcade";
 import type { ArcadeScore } from "@/lib/arcade-types";
 import { getSupabase } from "@/lib/supabase/browser";
 import {
-  BEST_KEY, WBEST_KEY, HOLEBEST_KEY, SETTINGS_KEY, ACH_KEY, HIST_KEY, CAREER_KEY, COINS_KEY, DAILY_KEY, OWNED_KEY, PROFILE_KEY, RANKED_KEY, BAG_KEY, BAGSEEN_KEY, LEVELREWARD_KEY,
+  BEST_KEY, WBEST_KEY, HOLEBEST_KEY, SETTINGS_KEY, ACH_KEY, HIST_KEY, CAREER_KEY, COINS_KEY, DAILY_KEY, OWNED_KEY, PROFILE_KEY, RANKED_KEY, BAG_KEY, BAGSEEN_KEY, LEVELREWARD_KEY, COINSEARNED_KEY, COINSSPENT_KEY, UPDATEDAT_KEY,
   readLocalProgress, applyProgress, mergeProgress, clearLocalProgress, type Progress,
 } from "@/lib/progress";
 import {
-  dayNumber, claimDailyReward, dailyAvailable, coinsForRound, fmtCoins, type DailyReward,
+  dayNumber, claimDailyReward, dailyAvailable, coinsForRound, modeCoinMult, fmtCoins, type DailyReward,
 } from "@/lib/discgolf/wallet";
 import {
   AVATARS, DEFAULT_AVATAR, avatarOwnKey, avatarUnlocked, playerXp, levelFromXp, type PlayerProfile,
@@ -37,6 +37,7 @@ import {
 import type {
   Vec, Tree, Hole, Mode, Tournament, TournDef, TournLiveRow, Achievement, FlightPath, Release, Flight, GhostState,
 } from "@/lib/discgolf/engine";
+import { parseChallenge } from "@/lib/discgolf/challenge";
 import {
   newCareer, normalizeCareer, skillMods, momentumAfter, seasonSchedule, simEvent, recordResult, advanceSeason, retire, seasonComplete,
   placeLabel, STAGE_LABEL, SKILL_KEYS, SKILL_LABEL, SKILL_DESC, IDENTITY_MODS,
@@ -305,6 +306,8 @@ export function DiscGolfGame() {
   const [challengeOpen, setChallengeOpen] = useState(false);
   const [lobby, setLobby] = useState<{ code: string; isHost: boolean; mode: Mode } | null>(null);
   const [lobbyPlayers, setLobbyPlayers] = useState<LobbyPlayer[]>([]);
+  const [hostLeft, setHostLeft] = useState(false); // joiner's host dropped before the round started
+  const sawHostRef = useRef(false); // we've seen the host present (so a drop is real, not a join flash)
   const [onlineScores, setOnlineScores] = useState<Record<string, OnlineScore>>({});
   const [onlineView, setOnlineView] = useState<{ hole: number; par: number; myId: string } | null>(null);
   const [finalOnline, setFinalOnline] = useState(false);
@@ -331,14 +334,12 @@ export function DiscGolfGame() {
   const [finalChallenge, setFinalChallenge] = useState<Challenge | null>(null);
   useEffect(() => {
     try {
-      const raw = new URLSearchParams(location.search).get("ch");
-      if (!raw) return;
-      const [m, seedS, scoreS, nameS] = raw.split(".");
-      const seed = Number(seedS);
-      const score = Number(scoreS);
-      if ((m === "course" || m === "winthrop" || m === "daily") && Number.isInteger(seed) && Number.isInteger(score) && score > 0) {
+      // Use the shared, crash-safe parser (handles malformed encoding + dotted
+      // names) rather than a drifting inline copy.
+      const c = parseChallenge(new URLSearchParams(location.search).get("ch"));
+      if (c) {
         // eslint-disable-next-line react-hooks/set-state-in-effect
-        setChallenge({ mode: m, seed, score, name: decodeURIComponent(nameS ?? "").slice(0, 16) || "A friend" });
+        setChallenge({ mode: c.mode, seed: c.seed, score: c.score, name: c.name });
       }
     } catch { /* ignore malformed links */ }
   }, []);
@@ -403,6 +404,10 @@ export function DiscGolfGame() {
   const [coins, setCoins] = useState(0);
   const coinsRef = useRef(0);
   useEffect(() => { coinsRef.current = coins; }, [coins]);
+  // Monotonic lifetime totals behind the balance, so cross-device sync can merge
+  // coins without restoring spent ones or dropping coins earned elsewhere.
+  const coinsEarnedRef = useRef(0);
+  const coinsSpentRef = useRef(0);
   const [daily, setDaily] = useState<DailyReward | null>(null);
   const [today, setToday] = useState(0); // current day number (set on mount; avoids Date.now() in render)
   const [dailyClaim, setDailyClaim] = useState<{ coins: number; streak: number } | null>(null);
@@ -413,7 +418,14 @@ export function DiscGolfGame() {
     const next = Math.max(0, Math.round(coinsRef.current + delta));
     coinsRef.current = next;
     setCoins(next);
-    try { localStorage.setItem(COINS_KEY, String(next)); } catch { /* ignore */ }
+    // Feed the monotonic earned/spent accumulators that back the loss-free merge.
+    if (delta > 0) coinsEarnedRef.current += delta;
+    else if (delta < 0) coinsSpentRef.current += -delta;
+    try {
+      localStorage.setItem(COINS_KEY, String(next));
+      localStorage.setItem(COINSEARNED_KEY, String(Math.round(coinsEarnedRef.current)));
+      localStorage.setItem(COINSSPENT_KEY, String(Math.round(coinsSpentRef.current)));
+    } catch { /* ignore */ }
   }, []);
   const claimDaily = useCallback(() => {
     const res = claimDailyReward(daily, dayNumber(Date.now()));
@@ -663,6 +675,12 @@ export function DiscGolfGame() {
       const coinRaw = localStorage.getItem(COINS_KEY);
       const co = coinRaw != null && Number.isFinite(Number(coinRaw)) ? Number(coinRaw) : 0;
       coinsRef.current = co; setCoins(co);
+      // Earned/spent back the balance; legacy saves without them treat the
+      // current balance as "earned" so balance = earned − spent still holds.
+      const ceRaw = localStorage.getItem(COINSEARNED_KEY);
+      coinsEarnedRef.current = ceRaw != null && Number.isFinite(Number(ceRaw)) ? Number(ceRaw) : co;
+      const csRaw = localStorage.getItem(COINSSPENT_KEY);
+      coinsSpentRef.current = csRaw != null && Number.isFinite(Number(csRaw)) ? Number(csRaw) : 0;
       setDaily(JSON.parse(localStorage.getItem(DAILY_KEY) || "null"));
       setToday(dayNumber(Date.now()));
       const ow = JSON.parse(localStorage.getItem(OWNED_KEY) || "[]");
@@ -758,6 +776,9 @@ export function DiscGolfGame() {
 
   // Debounced cloud save (called after rounds, hole bests, settings changes).
   const saveProgress = useCallback(() => {
+    // Stamp the local change time on every save (even offline) so a later merge
+    // can tell which device has the newer preferences/profile.
+    try { localStorage.setItem(UPDATEDAT_KEY, String(Date.now())); } catch { /* ignore */ }
     if (!supa || !user) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => { void pushCloud(); }, 1200);
@@ -1233,7 +1254,16 @@ export function DiscGolfGame() {
     channel
       .on("presence", { event: "sync" }, () => {
         const st = channel.presenceState() as unknown as Record<string, LobbyPlayer[]>;
-        setLobbyPlayers(Object.values(st).map((arr) => arr[0]).filter(Boolean));
+        const players = Object.values(st).map((arr) => arr[0]).filter(Boolean);
+        setLobbyPlayers(players);
+        // If we're a joiner and the host disappears before the round starts, flag
+        // it so the lobby can offer to leave instead of waiting forever. Only after
+        // we've actually seen the host, so a join-time sync flash doesn't trip it.
+        if (!isHost && !onlineStartedRef.current) {
+          const hasHost = players.some((p) => p.host);
+          if (hasHost) sawHostRef.current = true;
+          setHostLeft(sawHostRef.current && !hasHost);
+        }
       })
       .on("broadcast", { event: "start" }, ({ payload }) => {
         beginOnlineRound(payload.seed as number, payload.mode as Mode);
@@ -1249,7 +1279,13 @@ export function DiscGolfGame() {
       })
       .on("broadcast", { event: "score" }, ({ payload }) => {
         const p = payload as OnlineScore & { id: string };
-        onlineScoresRef.current = { ...onlineScoresRef.current, [p.id]: { name: p.name, scores: p.scores, total: p.total, thru: p.thru } };
+        // Don't trust the peer's self-reported total/thru — recompute them from
+        // the per-hole scores so a buggy or tampered client can't inject bogus
+        // standings.
+        const scores = Array.isArray(p.scores) ? p.scores.filter((n) => Number.isFinite(n)) : [];
+        const total = scores.reduce((a, b) => a + b, 0);
+        const name = typeof p.name === "string" ? p.name.slice(0, 24) : "Player";
+        onlineScoresRef.current = { ...onlineScoresRef.current, [p.id]: { name, scores, total, thru: scores.length } };
         setOnlineScores(onlineScoresRef.current);
       })
       .subscribe((status) => {
@@ -1290,10 +1326,16 @@ export function DiscGolfGame() {
     onlineRef.current = null;
     onlineScoresRef.current = {};
     onlineStartedRef.current = null;
+    sawHostRef.current = false;
+    setHostLeft(false);
     setLobby(null);
     setLobbyPlayers([]);
     setOnlineScores({});
   }, [supa]);
+
+  // Tear down any live lobby channel if the component unmounts mid-session, so
+  // the Realtime subscription doesn't leak.
+  useEffect(() => () => { const o = onlineRef.current; if (o) void supa?.removeChannel(o.channel); }, [supa]);
 
   const selectDisc = useCallback((i: number) => {
     // Only discs carried in the bag are selectable during a round.
@@ -1534,7 +1576,11 @@ export function DiscGolfGame() {
     if (!practice) saveProgress(); // sync best/achievements/history to the cloud if signed in
     // Coins for a counting round (more for going low). Career events pay cash,
     // not coins, and are handled in their own branch above.
-    if (!practice) { setCoinReward(coinsForRound(total - pars.reduce((s, n) => s + n, 0), pars.length)); addCoins(coinsForRound(total - pars.reduce((s, n) => s + n, 0), pars.length)); }
+    if (!practice) {
+      const reward = coinsForRound(total - pars.reduce((s, n) => s + n, 0), pars.length, modeCoinMult(mode));
+      setCoinReward(reward);
+      addCoins(reward);
+    }
   }, [saveProgress, saveTournament, clearResume, saveCareer, addCoins, applyAccountLook]);
 
   // Bail out of a played Career round already in progress and let it sim from
@@ -3207,8 +3253,11 @@ export function DiscGolfGame() {
           const sl = scoreLabel(hud.throws, onlineView.par);
           const rows = Object.entries(onlineScores)
             .map(([id, s]) => ({ id, ...s }))
-            .sort((a, b) => a.total - b.total);
-          const lead = rows.length ? rows[0].total : 0;
+            // Furthest-along first, then lowest score — so someone who quit a few
+            // holes in (low `thru`) can't sit on top with an artificially small total.
+            .sort((a, b) => (b.thru - a.thru) || (a.total - b.total));
+          const maxThru = rows.reduce((m, r) => Math.max(m, r.thru), 0);
+          const lead = rows.filter((r) => r.thru === maxThru).reduce((m, r) => Math.min(m, r.total), Infinity);
           return (
             <Overlay onTap={nextHole}>
               <p className="text-gray-400 text-[11px] font-semibold uppercase tracking-[0.15em]">Hole {onlineView.hole + 1}</p>
@@ -3216,7 +3265,7 @@ export function DiscGolfGame() {
               <div className="w-full max-w-[260px] space-y-1 pt-1">
                 {rows.map((r) => (
                   <div key={r.id} className="flex items-center justify-between bg-white/5 rounded-lg px-3 py-1.5 text-sm">
-                    <span className="text-white font-semibold truncate">{r.total === lead ? "👑 " : ""}{r.id === onlineView.myId ? `${r.name} (you)` : r.name}</span>
+                    <span className="text-white font-semibold truncate">{r.thru === maxThru && r.total === lead ? "👑 " : ""}{r.id === onlineView.myId ? `${r.name} (you)` : r.name}</span>
                     <span className="text-gray-300 font-mono text-xs">thru {r.thru} · {r.total}</span>
                   </div>
                 ))}
@@ -3324,6 +3373,7 @@ export function DiscGolfGame() {
           <LobbyPanel
             lobby={lobby}
             players={lobbyPlayers}
+            hostLeft={hostLeft}
             onStart={startOnlineHost}
             onLeave={leaveLobby}
           />
@@ -3693,22 +3743,29 @@ export function DiscGolfGame() {
             )}
 
             {/* Online Friendly Challenge standings (live — updates as friends finish) */}
-            {finalOnline && (
-              <div className="bg-[#1a1d23] border border-white/5 rounded-2xl overflow-hidden">
-                {Object.entries(onlineScores)
-                  .map(([id, s]) => ({ id, ...s }))
-                  .sort((a, b) => a.total - b.total)
-                  .map((row, i) => (
+            {finalOnline && (() => {
+              const holeCount = finalPars.length;
+              // Players who completed every hole rank above anyone who left early,
+              // and only a finisher can take the 🏆 — leaving mid-round with a
+              // partial (low) total no longer "wins".
+              const rows = Object.entries(onlineScores)
+                .map(([id, s]) => ({ id, ...s, done: s.thru >= holeCount }))
+                .sort((a, b) => (a.done === b.done ? a.total - b.total : a.done ? -1 : 1));
+              const winnerId = rows.find((r) => r.done)?.id;
+              return (
+                <div className="bg-[#1a1d23] border border-white/5 rounded-2xl overflow-hidden">
+                  {rows.map((row, i) => (
                     <div key={row.id} className={`flex items-center gap-3 px-4 py-2.5 text-sm ${i ? "border-t border-white/5" : ""}`}>
                       <span className="text-gray-400 font-mono w-5">{i + 1}</span>
-                      <span className="text-white font-semibold flex-1 truncate">{i === 0 ? "🏆 " : ""}{row.name}</span>
+                      <span className="text-white font-semibold flex-1 truncate">{row.id === winnerId ? "🏆 " : ""}{row.name}{row.done ? "" : " · left"}</span>
                       <span className="text-gray-500 font-mono text-xs">thru {row.thru}</span>
                       <span className="text-gray-400 font-mono">{overStr(row.total - finalParTotal)}</span>
                       <span className="text-white font-mono font-bold w-8 text-right">{row.total}</span>
                     </div>
                   ))}
-              </div>
-            )}
+                </div>
+              );
+            })()}
 
             {/* Newly-unlocked achievements */}
             {newAchievements.length > 0 && (
@@ -4129,9 +4186,10 @@ function ChallengePanel({ online, onClose, onPassPlay, onCreate, onJoin }: {
 
 // Lobby waiting room: shows the code, live roster (Realtime presence), and a
 // Start button for the host. Friends join with the code from another device.
-function LobbyPanel({ lobby, players, onStart, onLeave }: {
+function LobbyPanel({ lobby, players, hostLeft, onStart, onLeave }: {
   lobby: { code: string; isHost: boolean; mode: Mode };
   players: LobbyPlayer[];
+  hostLeft: boolean;
   onStart: () => void;
   onLeave: () => void;
 }) {
@@ -4167,6 +4225,11 @@ function LobbyPanel({ lobby, players, onStart, onLeave }: {
             <button type="button" onClick={onStart} className={`${btn} w-full`}>Start round</button>
             {players.length < 2 && <p className="text-gray-500 text-[11px] text-center">Waiting for friends to join — you can start anytime.</p>}
           </>
+        ) : hostLeft ? (
+          <div className="space-y-2 text-center py-1">
+            <p className="text-[#e2843b] text-sm font-semibold">The host left the lobby.</p>
+            <button type="button" onClick={onLeave} className={`${btn} w-full`}>Leave lobby</button>
+          </div>
         ) : (
           <p className="text-gray-400 text-sm text-center py-2">Waiting for the host to start…</p>
         )}

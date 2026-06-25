@@ -396,8 +396,13 @@ function tournSkills(seed: number): number[] {
 function tournFieldHoles(seed: number, round: number, holes: Hole[]): number[][] {
   const skills = tournSkills(seed);
   const rng = mulberry32((seed * 31 + round * 7919) >>> 0);
+  // Couple the field's scoring to how hard the course actually is, so the star
+  // rating means something: on a tough venue the field shoots closer to par (a
+  // higher winning total), on an easy one it goes deep. Centered on a mid course
+  // (~3.5) so difficulty shifts the field a few strokes/round either way.
+  const diffAdj = (courseDifficulty(holes) - 3.5) * 0.1;
   return skills.map((sk) => {
-    const perHole = sk / 2.5 / 18;
+    const perHole = sk / 2.5 / 18 + diffAdj;
     return holes.map((h) => {
       let d = Math.round(perHole + (rng() * 2 - 1) * 0.85);
       if (rng() < 0.04) d -= 1; // the odd bomb
@@ -555,6 +560,9 @@ function earnedAchievements(scores: number[], pars: number[], mode: Mode, rounds
 // the plain "Bogey" (no prefix); 2..7 add the Double/Triple/… prefix.
 const BOGEY_PREFIX = ["", "", "Double ", "Triple ", "Quadruple ", "Quintuple ", "Sextuple ", "Septuple "];
 function scoreLabel(throws: number, par: number): { name: string; emoji: string; tone: "great" | "good" | "even" | "bad" } {
+  // A valid score is at least one stroke; guard non-positive/garbage input so it
+  // can never produce a nonsense sub-ace label (e.g. scoreLabel(0) → "Albatross").
+  if (!(throws >= 1)) throws = 1;
   if (throws === 1) return { name: "Ace!", emoji: "🎯", tone: "great" };
   const d = throws - par;
   if (d <= -4) return { name: "Condor", emoji: "🦅", tone: "great" };
@@ -618,28 +626,34 @@ const TIER_BASE: Disc[] = [
 // one way, "straight" flies the farther S-line. The fairway tier sits halfway
 // between mid and driver for distance.
 const FAIRWAY_BASE: Disc = { key: "fairway", name: "Fairway", power: 1.17, arc: 2.55, fade: 0.011, turn: 0.0055, sFade: 0.0085, friction: 0.987, color: "", blurb: "" };
-function advDisc(key: string, name: string, brand: string, color: string, base: Disc, flight: FlightPath, nums: string): Disc {
-  return { ...base, key, name, brand, color, flight, blurb: `${brand} · ${nums}` };
+// `over` lets a disc deviate from its tier's stock physics so two discs in the
+// same tier+flight aren't byte-identical. Only the curve params (turn/sFade/
+// fade) are tuned per disc — power/arc/friction stay on the tier, so carry
+// distance is unchanged and the discs differ only in how they bend, matching
+// their printed flight numbers. (straight discs: `turn` = high-speed turnover
+// while climbing, `sFade` = fade-back while descending. overstable: `fade`.)
+function advDisc(key: string, name: string, brand: string, color: string, base: Disc, flight: FlightPath, nums: string, over: Partial<Disc> = {}): Disc {
+  return { ...base, key, name, brand, color, flight, blurb: `${brand} · ${nums}`, ...over };
 }
 const ADV_DISCS: Disc[] = [
-  // Putt & approach — straight Aviar vs overstable Zone (putter tier)
+  // Putt & approach — straight Aviar vs overstable Zone/Harp (putter tier)
   advDisc("aviar", "Aviar", "Innova", "#36D7B7", TIER_BASE[0], "straight", "2 / 3 / 0 / 1"),
-  advDisc("zone", "Zone", "Discraft", "#e07b3b", TIER_BASE[0], "overstable", "4 / 3 / 0 / 3"),
-  advDisc("harp", "Harp", "Westside", "#d6b85c", TIER_BASE[0], "overstable", "3 / 1 / 0 / 4"),
-  // Midrange — straight Buzzz vs overstable Swarm (mid tier)
+  advDisc("zone", "Zone", "Discraft", "#e07b3b", TIER_BASE[0], "overstable", "4 / 3 / 0 / 3", { fade: 0.005 }),
+  advDisc("harp", "Harp", "Westside", "#d6b85c", TIER_BASE[0], "overstable", "3 / 1 / 0 / 4", { fade: 0.008 }), // harder, low-glide meat hook
+  // Midrange — straight Buzzz vs overstable Swarm/Roc (mid tier)
   advDisc("buzzz", "Buzzz", "Discraft", "#f5d24a", TIER_BASE[1], "straight", "5 / 4 / 0 / 1"),
-  advDisc("swarm", "Swarm", "Discraft", "#b85cd6", TIER_BASE[1], "overstable", "5 / 4 / 0 / 3"),
-  advDisc("roc", "Roc3", "Innova", "#7ad17a", TIER_BASE[1], "overstable", "5 / 4 / 0 / 3"),
-  // Fairway / control — straight Teebird vs overstable Firebird (fairway tier)
-  advDisc("teebird", "Teebird", "Innova", "#5fb0e8", FAIRWAY_BASE, "straight", "7 / 5 / 0 / 2"),
-  advDisc("firebird", "Firebird", "Innova", "#e2453b", FAIRWAY_BASE, "overstable", "9 / 3 / 0 / 4"),
-  advDisc("river", "River", "Latitude 64", "#5fd6c8", FAIRWAY_BASE, "straight", "7 / 7 / -1 / 1"),
-  advDisc("pd", "PD", "Discmania", "#3b6fe2", FAIRWAY_BASE, "overstable", "9 / 4 / 0 / 3"),
-  // Distance — overstable Nuke OS vs straight-flying Destroyer (driver tier)
-  advDisc("nukeos", "Nuke OS", "Discraft", "#2f6fe0", TIER_BASE[2], "overstable", "13 / 5 / 0 / 4"),
-  advDisc("destroyer", "Destroyer", "Innova", "#e23b7b", TIER_BASE[2], "straight", "12 / 5 / -1 / 3"),
-  advDisc("wraith", "Wraith", "Innova", "#e2843b", TIER_BASE[2], "straight", "11 / 5 / -1 / 3"),
-  advDisc("zeus", "Zeus", "Discraft", "#9b3be2", TIER_BASE[2], "overstable", "12 / 5 / -1 / 3"),
+  advDisc("swarm", "Swarm", "Discraft", "#b85cd6", TIER_BASE[1], "overstable", "5 / 4 / 0 / 3", { fade: 0.010 }), // more overstable
+  advDisc("roc", "Roc3", "Innova", "#7ad17a", TIER_BASE[1], "overstable", "5 / 4 / 0 / 3", { fade: 0.006 }), // workable, near-neutral
+  // Fairway / control — straight Teebird/River vs overstable Firebird/PD (fairway tier)
+  advDisc("teebird", "Teebird", "Innova", "#5fb0e8", FAIRWAY_BASE, "straight", "7 / 5 / 0 / 2", { turn: 0.004, sFade: 0.0095 }), // dead-straight, reliable fade
+  advDisc("firebird", "Firebird", "Innova", "#e2453b", FAIRWAY_BASE, "overstable", "9 / 3 / 0 / 4", { fade: 0.015 }), // hard meat hook
+  advDisc("river", "River", "Latitude 64", "#5fd6c8", FAIRWAY_BASE, "straight", "7 / 7 / -1 / 1", { turn: 0.010, sFade: 0.005 }), // understable glider
+  advDisc("pd", "PD", "Discmania", "#3b6fe2", FAIRWAY_BASE, "overstable", "9 / 4 / 0 / 3", { fade: 0.012 }), // overstable, more glide than Firebird
+  // Distance — overstable Nuke OS/Zeus vs straight Destroyer/Wraith (driver tier)
+  advDisc("nukeos", "Nuke OS", "Discraft", "#2f6fe0", TIER_BASE[2], "overstable", "13 / 5 / 0 / 4", { fade: 0.018 }), // the most overstable bomber
+  advDisc("destroyer", "Destroyer", "Innova", "#e23b7b", TIER_BASE[2], "straight", "12 / 5 / -1 / 3", { turn: 0.011, sFade: 0.017 }), // fast, dependable finish
+  advDisc("wraith", "Wraith", "Innova", "#e2843b", TIER_BASE[2], "straight", "11 / 5 / -1 / 3", { turn: 0.015, sFade: 0.013 }), // longer, more turnover
+  advDisc("zeus", "Zeus", "Discraft", "#9b3be2", TIER_BASE[2], "overstable", "12 / 5 / -1 / 3", { fade: 0.013 }), // controllable overstable
 ];
 // Some advanced discs are earned, not given: each maps to the achievement that
 // unlocks it. Every player STARTS with just a putter + a midrange — the simple
@@ -666,12 +680,14 @@ const DISC_LEVEL: Record<string, number> = {
   // Distance drivers — held back until the double digits.
   nukeos: 10, destroyer: 10, wraith: 11, zeus: 12,
 };
-// Coin price to buy a disc in the shop. Every disc is buyable at any level —
-// the distance drivers are just steep, so they're a real grind to afford.
+// Coin price to buy a disc in the shop. Every disc is also free to draft at its
+// unlock level, so the shop is purely an "impatience tax": pay to add a disc to
+// the bag a few levels early. Priced so a driver costs ~a day of coins rather
+// than the old ~30k that nobody ever paid (the shop was dead money before).
 const DISC_PRICE: Record<string, number> = {
-  zone: 1750, harp: 2000, teebird: 2500, swarm: 3000, roc: 2800,
-  firebird: 4500, river: 3800, pd: 5500,
-  wraith: 20000, nukeos: 24000, destroyer: 28000, zeus: 32000,
+  zone: 400, harp: 450, teebird: 600, swarm: 700, roc: 650,
+  firebird: 1100, river: 900, pd: 1300,
+  wraith: 4500, nukeos: 5500, destroyer: 6500, zeus: 7500,
 };
 // A disc is unlocked (in your collection) if it's core (Aviar/Buzzz), already
 // acquired (`owned` — chosen at level-up or bought), or earned via its
@@ -1213,8 +1229,10 @@ function buildTournaments(): TournDef[] {
 }
 const TOURNAMENTS: TournDef[] = buildTournaments();
 // Build one playable round. Daily = a new 9-hole course; tour = a generated
-// 18-hole pro course; course = the 18 fixed Glendoveer holes with seeded wind +
-// a jittered pin. Same seed ⇒ same round.
+// 18-hole pro course; course = the 18 fixed Glendoveer holes with seeded wind.
+// Pins are FIXED at their authored spot — every round plays the same basket
+// position (no per-round jitter), so a hole is always identical and a pin can
+// never land in water or behind a tree. Same seed ⇒ same round.
 function buildRound(seed: number, mode: Mode): Hole[] {
   const rng = mulberry32(seed);
   if (mode === "daily") return generateDailyCourse(rng);
@@ -1222,14 +1240,7 @@ function buildRound(seed: number, mode: Mode): Hole[] {
   const course = mode === "winthrop" ? WINTHROP_HOLES : HOLES;
   return course.map((h, i) => {
     const { wind, windMag } = seededWind(rng);
-    const base = h.basket;
-    const pin = clampPin(
-      { x: base.x + (rng() * 2 - 1) * 22, y: base.y + (rng() * 2 - 1) * 16 },
-      h.fairway,
-      h.fwWidth / 2 - 9,
-      base,
-    );
-    return { ...h, basket: pin, wind, windMag, elev: mode === "course" ? HOLE_ELEV[i] ?? 0 : h.elev ?? 0 };
+    return { ...h, wind, windMag, elev: mode === "course" ? HOLE_ELEV[i] ?? 0 : h.elev ?? 0 };
   });
 }
 // Elevation acts on the disc DURING flight: a per-frame pull along the hole

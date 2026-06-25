@@ -29,12 +29,23 @@ export function parForChallenge(mode: Mode, seed: number): number {
 
 export function parseChallenge(raw: string | null | undefined): ParsedChallenge | null {
   if (!raw) return null;
-  const [m, seedS, scoreS, nameS] = raw.split(".");
+  const parts = raw.split(".");
+  if (parts.length < 3) return null;
+  const [m, seedS, scoreS] = parts;
+  const nameS = parts.slice(3).join("."); // the name may itself contain dots
   const seed = Number(seedS);
   const score = Number(scoreS);
   if (m !== "course" && m !== "winthrop" && m !== "daily") return null;
   if (!Number.isInteger(seed) || !Number.isInteger(score) || score <= 0 || score > 999) return null;
-  const name = decodeURIComponent(nameS ?? "").slice(0, 16) || "A friend";
+  // A crafted/garbled link can carry malformed percent-encoding, which makes
+  // decodeURIComponent throw. parseChallenge runs server-side (page metadata +
+  // OG image) so an unguarded throw would crash those routes — fall back safely.
+  let name = "A friend";
+  try {
+    name = decodeURIComponent(nameS ?? "").slice(0, 16) || "A friend";
+  } catch {
+    name = "A friend";
+  }
   const par = parForChallenge(m, seed);
   const over = score - par;
   return { mode: m, seed, score, name, par, over, overStr: overLabel(over), courseLabel: courseLabelFor(m) };
@@ -43,5 +54,7 @@ export function parseChallenge(raw: string | null | undefined): ParsedChallenge 
 // Build the `ch` query value for a finished round.
 export function challengeParam(mode: Mode, seed: number, score: number, name: string): string {
   const clean = (name || "A friend").trim().slice(0, 16) || "A friend";
-  return `${mode}.${seed}.${score}.${encodeURIComponent(clean)}`;
+  // encodeURIComponent leaves "." unescaped, which would collide with our field
+  // delimiter and truncate dotted names — escape it so they survive round-trip.
+  return `${mode}.${seed}.${score}.${encodeURIComponent(clean).replace(/\./g, "%2E")}`;
 }

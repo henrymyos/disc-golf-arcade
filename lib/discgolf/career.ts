@@ -150,6 +150,7 @@ export type Career = {
   rivals: Rival[];
   pdgaRating: number;     // official rating (≈700–1050), tracks recent rounds
   roundRatings: number[]; // recent rated rounds (oldest → newest)
+  skillFrac?: CareerSkills; // sub-integer skill progress carried between seasons
   discs: string[];        // disc keys unlocked in THIS career (separate from your account)
   bag: string[];          // the ≤5 discs carried into career rounds
   rankPoints: number;     // rolling world-ranking points (decays each season)
@@ -197,9 +198,9 @@ type CareerDiscEntry = { key: string; cost: number; stage: CareerStage };
 // Stage-gated shop, cheapest first within a stage. Cash comes from amateur
 // scholarship money + pro purses, so the whole bag is reachable over a career.
 const CAREER_DISC_SHOP: CareerDiscEntry[] = [
-  // High school — cheap utility molds to round out the bag.
+  // High school — cheap utility molds to round out the bag. (Teebird is a core
+  // starter disc, so it's never listed here — you already own it.)
   { key: "zone", cost: 250, stage: "highschool" },
-  { key: "teebird", cost: 400, stage: "highschool" },
   { key: "swarm", cost: 450, stage: "highschool" },
   { key: "roc", cost: 600, stage: "highschool" },
   // College — fairway control + your first real drivers.
@@ -634,7 +635,7 @@ const DECLINE: CareerSkills = { power: 1.35, control: 0.95, putt: 0.7, mental: -
 // Skills only move when you TRAIN them — there's no free yearly growth. Younger
 // players develop more per point; gains shrink as you approach your potential.
 // Past 30, untrained skills decline (training a skill offsets its decline).
-const GROW_RATE = 1.8;
+const GROW_RATE = 2.1;
 // A skill ONLY moves when you spend training points on it (no free growth).
 // `isPlayer` caps every player skill at 99 — your hard ceiling; rivals instead
 // cap at their own potential, so their ceilings vary and you can still surpass
@@ -642,9 +643,13 @@ const GROW_RATE = 1.8;
 // ~80), so the closer you get to 99 the more each point costs.
 function growSkill(skill: number, pot: number, age: number, invested: number, declineRate: number, isPlayer = false): number {
   const youth = age < 16 ? 1.5 : age < 20 ? 1.2 : age < 26 ? 0.9 : age <= 30 ? 0.65 : 0.45;
-  const room = Math.max(0, pot - skill);
-  const highDamp = 1 / (1 + Math.max(0, skill - 80) * 0.085); // the last points cost the most
-  const gain = invested > 0 ? invested * youth * GROW_RATE * (0.45 + Math.min(room, 45) * 0.012) * highDamp : 0;
+  const rawRoom = pot - skill;
+  // Growth is strong below your potential and nearly nil above it, so potential
+  // stays a real talent ceiling: an average career peaks around its potential,
+  // and only a high-talent one (potential near 99) climbs into the high-90s.
+  const roomFactor = rawRoom <= 0 ? 0.06 : 0.38 + Math.min(rawRoom, 45) * 0.014;
+  const highDamp = 1 / (1 + Math.max(0, skill - 80) * 0.05); // the last points still cost more, but stay reachable
+  const gain = invested > 0 ? invested * youth * GROW_RATE * roomFactor * highDamp : 0;
   let next = skill + gain;
   if (age > 30) next -= Math.max(0, (age - 30) * 0.55 * declineRate - invested * 0.55);
   return clamp(next, 8, isPlayer ? 99 : pot + 2);
@@ -669,10 +674,12 @@ function computeWorldRank(c: Career): number {
   let better = 0;
   for (let i = 0; i < POOL; i++) {
     // Most of the pool are strong tour pros; a handful are world-beaters. Their
-    // points scale with their skill, so the very top of the pool both rates high
-    // AND banks points — you must do the same to pass them.
+    // points scale steeply with skill so the elite of the pool both rate high AND
+    // bank big points — enough that a freshly-minted pro debuts mid-pack and has
+    // to climb over several dominant seasons to pass them, rather than arriving
+    // at #1 on day one. You can still rocket up by winning everything.
     const skill = clamp(70 + (rng() * 2 - 1) * 18, 35, 100);
-    const pts = Math.max(0, (skill - 66) * 28 + (rng() * 2 - 1) * 250);
+    const pts = Math.max(0, (skill - 66) * 85 + (rng() * 2 - 1) * 250);
     if (worldStanding(skill, pts) > me) better++;
   }
   return better + 1;
@@ -683,13 +690,20 @@ function computeWorldRank(c: Career): number {
 export function advanceSeason(c: Career, alloc: Partial<CareerSkills>): { career: Career; notes: string[] } {
   const notes: string[] = [];
   const age = c.age + 1;
-  const skills: CareerSkills = {
-    power: growSkill(c.skills.power, c.potential.power, age, alloc.power ?? 0, DECLINE.power, true),
-    control: growSkill(c.skills.control, c.potential.control, age, alloc.control ?? 0, DECLINE.control, true),
-    putt: growSkill(c.skills.putt, c.potential.putt, age, alloc.putt ?? 0, DECLINE.putt, true),
-    mental: growSkill(c.skills.mental, c.potential.mental, age, alloc.mental ?? 0, DECLINE.mental, true),
-  };
-  SKILL_KEYS.forEach((k) => { skills[k] = Math.round(skills[k]); });
+  // Skills are shown as integers but tracked with a signed fractional carry, so
+  // small per-season gains accumulate instead of being rounded away every year.
+  // (Rounding each season used to wall progress at ~97 whenever points were
+  // spread across skills, making "max all skills by ~30" impossible.) The "true"
+  // skill = displayed integer + carried fraction; growth runs on the true value,
+  // then we split it back into a nearest integer + a [-0.5, 0.5) remainder.
+  const skills = {} as CareerSkills;
+  const skillFrac = {} as CareerSkills;
+  SKILL_KEYS.forEach((k) => {
+    const trueSkill = c.skills[k] + (c.skillFrac?.[k] ?? 0);
+    const grown = growSkill(trueSkill, c.potential[k], age, alloc[k] ?? 0, DECLINE[k], true);
+    skills[k] = Math.round(grown);
+    skillFrac[k] = grown - skills[k];
+  });
 
   let stage = c.stage;
   if (stage === "youth" && age >= 14) { stage = "highschool"; notes.push("🏫 You've started high school — the junior days are behind you."); }
@@ -706,7 +720,7 @@ export function advanceSeason(c: Career, alloc: Partial<CareerSkills>): { career
   const coachPts = c.sponsors.filter((sp) => sp.coach).length;
 
   let career: Career = {
-    ...c, age, season: c.season + 1, stage, skills, rivals,
+    ...c, age, season: c.season + 1, stage, skills, skillFrac, rivals,
     cash: c.cash + stipend,
     trainPts: SEASON_BASE_TRAIN + coachPts, done: [], seasonPoints: 0, trainBought: 0,
     rankPoints: Math.round(c.rankPoints * 0.6), // last season's results fade — staying #1 needs sustained dominance

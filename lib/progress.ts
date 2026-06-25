@@ -21,6 +21,9 @@ export const RANKED_KEY = "discgolf.ranked.v1";
 export const BAG_KEY = "discgolf.bag.v1"; // the ≤5 disc keys carried into rounds
 export const BAGSEEN_KEY = "discgolf.bagseen.v1"; // disc keys already auto-processed for the bag
 export const LEVELREWARD_KEY = "discgolf.levelreward.v1"; // highest level whose disc draft was resolved
+export const COINSEARNED_KEY = "discgolf.coinsEarned.v1"; // lifetime coins earned (monotonic, for loss-free merge)
+export const COINSSPENT_KEY = "discgolf.coinsSpent.v1"; // lifetime coins spent (monotonic, for loss-free merge)
+export const UPDATEDAT_KEY = "discgolf.updatedAt.v1"; // last local change time, for newer-wins preference merge
 
 export type HistoryRow = { mode: string; total: number; date: number; scores?: number[]; pars?: number[] };
 export type Progress = {
@@ -39,6 +42,9 @@ export type Progress = {
   bag: string[];
   bagSeen: string[];
   levelRewarded: number | null;
+  coinsEarned?: number; // monotonic lifetime earned (balance = earned − spent)
+  coinsSpent?: number;  // monotonic lifetime spent
+  updatedAt?: number;   // last local change time (ms), for newer-wins merges
 };
 
 // Of two career saves, keep the one further along (more seasons, then events).
@@ -79,7 +85,13 @@ export function readLocalProgress(): Progress {
   const bagSeen = parse<string[]>(localStorage.getItem(BAGSEEN_KEY), []);
   const lrRaw = localStorage.getItem(LEVELREWARD_KEY);
   const levelRewarded = lrRaw != null && Number.isFinite(Number(lrRaw)) ? Number(lrRaw) : null;
-  return { best, winthropBest, holeBest, achievements, history, settings, career, coins, daily, owned, profile, ranked, bag, bagSeen, levelRewarded };
+  const ceRaw = localStorage.getItem(COINSEARNED_KEY);
+  const coinsEarned = ceRaw != null && Number.isFinite(Number(ceRaw)) ? Number(ceRaw) : undefined;
+  const csRaw = localStorage.getItem(COINSSPENT_KEY);
+  const coinsSpent = csRaw != null && Number.isFinite(Number(csRaw)) ? Number(csRaw) : undefined;
+  const uaRaw = localStorage.getItem(UPDATEDAT_KEY);
+  const updatedAt = uaRaw != null && Number.isFinite(Number(uaRaw)) ? Number(uaRaw) : undefined;
+  return { best, winthropBest, holeBest, achievements, history, settings, career, coins, daily, owned, profile, ranked, bag, bagSeen, levelRewarded, coinsEarned, coinsSpent, updatedAt };
 }
 
 // Wipe this device's saved progress (device SETTINGS are kept). Used on sign-out
@@ -87,7 +99,7 @@ export function readLocalProgress(): Progress {
 // account's data lives in the cloud, which logging back in restores.
 export function clearLocalProgress() {
   if (typeof localStorage === "undefined") return;
-  for (const k of [BEST_KEY, WBEST_KEY, HOLEBEST_KEY, ACH_KEY, HIST_KEY, CAREER_KEY, COINS_KEY, DAILY_KEY, OWNED_KEY, PROFILE_KEY, RANKED_KEY, BAG_KEY, BAGSEEN_KEY, LEVELREWARD_KEY]) {
+  for (const k of [BEST_KEY, WBEST_KEY, HOLEBEST_KEY, ACH_KEY, HIST_KEY, CAREER_KEY, COINS_KEY, DAILY_KEY, OWNED_KEY, PROFILE_KEY, RANKED_KEY, BAG_KEY, BAGSEEN_KEY, LEVELREWARD_KEY, COINSEARNED_KEY, COINSSPENT_KEY, UPDATEDAT_KEY]) {
     try { localStorage.removeItem(k); } catch { /* ignore */ }
   }
 }
@@ -110,6 +122,9 @@ export function applyProgress(p: Progress) {
     if (p.bag?.length) localStorage.setItem(BAG_KEY, JSON.stringify(p.bag));
     if (p.bagSeen?.length) localStorage.setItem(BAGSEEN_KEY, JSON.stringify(p.bagSeen));
     if (p.levelRewarded != null) localStorage.setItem(LEVELREWARD_KEY, String(p.levelRewarded));
+    if (p.coinsEarned != null) localStorage.setItem(COINSEARNED_KEY, String(Math.max(0, Math.round(p.coinsEarned))));
+    if (p.coinsSpent != null) localStorage.setItem(COINSSPENT_KEY, String(Math.max(0, Math.round(p.coinsSpent))));
+    if (p.updatedAt != null) localStorage.setItem(UPDATEDAT_KEY, String(p.updatedAt));
   } catch { /* ignore */ }
 }
 
@@ -152,23 +167,44 @@ export function mergeProgress(a: Progress, b: Progress): Progress {
     rounds: Math.max(ra.rounds ?? 0, rb.rounds ?? 0),
   };
 
+  // Coins as a loss-free CRDT: reconcile monotonic earned + spent totals (each
+  // max-merged) and derive balance = earned − spent. This neither restores spent
+  // coins (the old `Math.max(coins)` exploit: spend on one device, re-sync, get
+  // them back) nor drops coins earned offline on another device. Legacy rows
+  // without the totals fall back to treating the stored balance as "earned".
+  const coinsEarned = Math.max(a.coinsEarned ?? a.coins ?? 0, b.coinsEarned ?? b.coins ?? 0);
+  const coinsSpent = Math.max(a.coinsSpent ?? 0, b.coinsSpent ?? 0);
+  const coins = Math.max(0, coinsEarned - coinsSpent);
+
+  // Newer device wins for single-value preferences (settings/profile/bag), by
+  // last-change time — so an offline edit isn't silently clobbered by a stale
+  // cloud row (the old "cloud always wins" rule lost local edits). Ties prefer
+  // cloud (b) for back-compat with rows that predate the timestamp.
+  const ua = a.updatedAt ?? 0, ub = b.updatedAt ?? 0;
+  const newer = ua > ub ? a : b; // strictly-newer local wins; tie → cloud (b)
+  const older = newer === a ? b : a;
+  const updatedAt = Math.max(ua, ub);
+
   return {
     best: minDefined(a.best, b.best),
     winthropBest: minDefined(a.winthropBest, b.winthropBest),
     holeBest,
     achievements,
     history: history.slice(-100),
-    settings: b.settings ?? a.settings, // prefer cloud settings on conflict
+    settings: newer.settings ?? older.settings,
     career: moreAdvancedCareer(a.career ?? null, b.career ?? null),
-    coins: Math.max(a.coins ?? 0, b.coins ?? 0), // keep the higher balance so coins aren't lost
+    coins,
+    coinsEarned,
+    coinsSpent,
+    updatedAt,
     daily,
     owned: Array.from(new Set([...(a.owned ?? []), ...(b.owned ?? [])])),
-    profile: b.profile ?? a.profile, // prefer cloud profile on conflict
+    profile: newer.profile ?? older.profile,
     ranked,
-    // Bag is a curated choice — prefer the cloud's (non-empty) layout; the
+    // Bag is a curated choice — keep the newer device's (non-empty) layout; the
     // component re-reconciles against unlocks after merge. Seen-set unions so a
     // disc already processed on one device isn't re-auto-added on another.
-    bag: (b.bag?.length ? b.bag : a.bag) ?? [],
+    bag: (newer.bag?.length ? newer.bag : older.bag) ?? [],
     bagSeen: Array.from(new Set([...(a.bagSeen ?? []), ...(b.bagSeen ?? [])])),
     // Highest resolved level-up draft — keep the further-along device's.
     levelRewarded: a.levelRewarded == null ? b.levelRewarded : b.levelRewarded == null ? a.levelRewarded : Math.max(a.levelRewarded, b.levelRewarded),
