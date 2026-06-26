@@ -635,9 +635,8 @@ export function DiscGolfGame() {
     return dailyN + weeklyN;
   })();
 
-  // A resumable Daily round takes over the Daily Challenge button (Single Player
-  // page); any other interrupted solo round shows as a banner above the menu.
-  const dailyResume = resumeRound && resumeRound.mode === "daily" ? resumeRound : null;
+  // An interrupted solo round shows as a resume banner above the menu. The Daily is
+  // deliberately excluded — it's one-and-done, so exiting it means starting over.
   const resumeBanner = resumeRound && resumeRound.mode !== "daily" ? resumeRound : null;
   const menuTopMargin = challenge || resumeBanner ? "mt-3" : "mt-7";
 
@@ -722,7 +721,8 @@ export function DiscGolfGame() {
 
   // Snapshot / clear the resumable solo round.
   const persistResume = useCallback((g: GameState) => {
-    if (g.practice || g.party || g.online || g.career || tournamentPlayRef.current || challengePlayRef.current || careerPlayRef.current) return;
+    // The Daily is one-and-done: exit it and you start over, so never snapshot it.
+    if (g.mode === "daily" || g.practice || g.party || g.online || g.career || tournamentPlayRef.current || challengePlayRef.current || careerPlayRef.current) return;
     const scores = g.scores.slice(0, g.holeIndex + 1).map((n) => n ?? 0);
     try {
       localStorage.setItem(RESUME_KEY, JSON.stringify({ v: 1, mode: g.mode, seed: g.seed, scores }));
@@ -2506,15 +2506,15 @@ export function DiscGolfGame() {
           ctx.shadowBlur = 0;
         }
 
-        // Slider track + knob (the pull-back handle), colored by power.
+        // Slider track + knob (the pull-back handle). Neutral white so it never
+        // reads as a disc-color change — the only color cue is red in the cancel zone.
         ctx.strokeStyle = "rgba(255,255,255,0.55)";
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.moveTo(dsx, dsy);
         ctx.lineTo(kx, ky);
         ctx.stroke();
-        const pc = inCancel ? "#e23b3b" : power < 0.5 ? "#36D7B7" : power < 0.85 ? "#f5d24a" : "#e23b3b";
-        ctx.fillStyle = dr.active ? pc : "rgba(255,255,255,0.7)";
+        ctx.fillStyle = inCancel ? "#e23b3b" : dr.active ? "rgba(255,255,255,0.92)" : "rgba(255,255,255,0.7)";
         ctx.beginPath();
         ctx.arc(kx, ky, dr.active ? 5 : 4, 0, Math.PI * 2);
         ctx.fill();
@@ -3175,8 +3175,8 @@ export function DiscGolfGame() {
                 </button>
               )}
 
-              {/* Resume an interrupted solo round (Daily resumes live on the
-                  Daily Challenge button instead — see the Single Player page). */}
+              {/* Resume an interrupted solo round (the Daily is excluded — exiting
+                  it restarts, so it never offers a resume). */}
               {resumeBanner && (
                 <button
                   type="button"
@@ -3220,15 +3220,9 @@ export function DiscGolfGame() {
               {hub === "solo" && (
                 <div className={`w-full flex flex-col gap-2 ${menuTopMargin}`}>
                   <button type="button" onClick={() => setHub("home")} className={`${titleCardSm} !flex-none self-start px-3`}>‹ Back</button>
-                  {dailyResume ? (
-                    <button type="button" onClick={() => startResume(dailyResume)} className={titleCard}>
-                      ↻ Resume Daily · hole {dailyResume.scores.length + 1}
-                    </button>
-                  ) : (
-                    <button type="button" onClick={() => startGame("daily")} className={titleCard}>
-                      Daily Challenge
-                    </button>
-                  )}
+                  <button type="button" onClick={() => startGame("daily")} className={titleCard}>
+                    Daily Challenge
+                  </button>
                   <button type="button" onClick={() => setCoursesOpen(true)} className={titleCard}>
                     Challenge the Arcade
                   </button>
@@ -3531,7 +3525,6 @@ export function DiscGolfGame() {
             leftHanded={leftHanded} setLeftHanded={setLeftHanded}
             showGhost={showGhost} setShowGhost={setShowGhost}
             muted={muted} onToggleSound={toggleMute}
-            unlocked={unlocked}
           />
         )}
 
@@ -4909,6 +4902,7 @@ function ProfilePanel({ profile, coins, owned, unlocked, roundsPlayed, bestScore
   const lvl = levelFromXp(playerXp(roundsPlayed, unlocked.length, discsOwned));
   const pct = lvl.need ? Math.round((lvl.into / lvl.need) * 100) : 100;
   const over = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
+  const [badgeInfo, setBadgeInfo] = useState<Achievement | null>(null); // tapped badge → its how-to-earn card
   return (
     <div className="absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start justify-center rounded-lg">
       <div className="w-full max-w-xs space-y-3.5 my-auto text-left">
@@ -4993,23 +4987,24 @@ function ProfilePanel({ profile, coins, owned, unlocked, roundsPlayed, bestScore
           <p className="text-gray-600 text-[10px] mt-1.5">Tap a locked avatar to buy it with coins, then tap again to wear it.</p>
         </div>
 
-        {/* Badges */}
+        {/* Badges — tap one to see how it's earned */}
         <div>
-          <p className="text-gray-400 text-xs font-semibold mb-1.5">Badges ({unlocked.length}/{ACHIEVEMENTS.length})</p>
+          <p className="text-gray-400 text-xs font-semibold mb-1.5">Badges ({unlocked.length}/{ACHIEVEMENTS.length}) <span className="text-gray-600 font-normal">· tap for details</span></p>
           <div className="grid grid-cols-3 gap-1.5">
             {ACHIEVEMENTS.map((a) => {
               const earned = unlocked.includes(a.id);
               return (
-                <div
+                <button
+                  type="button"
                   key={a.id}
-                  title={a.desc}
-                  className={`rounded-lg px-1.5 py-2 text-center border ${
+                  onClick={() => setBadgeInfo(a)}
+                  className={`rounded-lg px-1.5 py-2 text-center border transition hover:border-white/30 ${
                     earned ? "bg-[#f5d24a]/10 border-[#f5d24a]/30" : "bg-white/5 border-white/5"
                   }`}
                 >
                   <div className={`text-lg leading-none ${earned ? "" : "grayscale opacity-40"}`}>{a.emoji}</div>
                   <div className={`text-[8px] mt-1 leading-tight ${earned ? "text-gray-300" : "text-gray-600"}`}>{a.name}</div>
-                </div>
+                </button>
               );
             })}
           </div>
@@ -5033,6 +5028,24 @@ function ProfilePanel({ profile, coins, owned, unlocked, roundsPlayed, bestScore
 
         <button type="button" onClick={onClose} className={`${btn} w-full`}>Done</button>
       </div>
+
+      {/* Badge detail — how it's earned (and the coin bounty), tapped from the grid */}
+      {badgeInfo && (() => {
+        const earned = unlocked.includes(badgeInfo.id);
+        return (
+          <div className="absolute inset-0 z-[70] flex items-center justify-center bg-black/70 backdrop-blur-sm p-5" onClick={() => setBadgeInfo(null)}>
+            <div className="w-full max-w-[280px] rounded-2xl bg-gradient-to-b from-[#1c2233] to-[#0f1117] border border-white/10 p-5 text-center shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <div className={`text-4xl leading-none ${earned ? "" : "grayscale opacity-50"}`}>{badgeInfo.emoji}</div>
+              <h3 className="text-white font-black text-lg mt-2">{badgeInfo.name}</h3>
+              <p className="text-gray-300 text-sm mt-1">{badgeInfo.desc}</p>
+              <p className={`text-xs font-bold mt-3 inline-flex items-center gap-1 ${earned ? "text-[#36D7B7]" : "text-[#f5d24a]"}`}>
+                {earned ? "✓ Earned" : <>Reward +{badgeInfo.coins} <Coin className="!w-3 !h-3" /></>}
+              </p>
+              <button type="button" onClick={() => setBadgeInfo(null)} className="w-full text-gray-500 hover:text-gray-300 text-xs py-1.5 mt-3 transition">Close</button>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -5806,9 +5819,8 @@ function SettingsPanel(props: {
   setShowGhost: (b: boolean) => void;
   muted: boolean;
   onToggleSound: () => void;
-  unlocked: string[];
 }) {
-  const { onClose, throwStyle, setThrowStyle, musicVolume, setMusicVolume, leftHanded, setLeftHanded, showGhost, setShowGhost, muted, onToggleSound, unlocked } = props;
+  const { onClose, throwStyle, setThrowStyle, musicVolume, setMusicVolume, leftHanded, setLeftHanded, showGhost, setShowGhost, muted, onToggleSound } = props;
   const seg = (active: boolean) =>
     `flex-1 rounded-md px-2 py-2 text-xs font-bold transition ${active ? "bg-[#4B3DFF] text-white" : "text-gray-400 hover:text-white"}`;
   return (
@@ -5870,23 +5882,6 @@ function SettingsPanel(props: {
             onChange={(e) => setMusicVolume(Number(e.target.value))}
             className="w-full accent-[#36D7B7]"
           />
-        </div>
-
-        <div>
-          <p className="text-gray-400 text-xs font-semibold mb-2">Achievements ({unlocked.length}/{ACHIEVEMENTS.length})</p>
-          <div className="space-y-1.5">
-            {ACHIEVEMENTS.map((a) => {
-              const got = unlocked.includes(a.id);
-              return (
-                <div key={a.id} className={`flex items-center gap-2 text-sm ${got ? "" : "opacity-40"}`}>
-                  <span className="text-lg">{got ? a.emoji : "🔒"}</span>
-                  <span className="text-white font-semibold shrink-0">{a.name}</span>
-                  <span className="text-gray-500 text-xs flex-1 truncate">— {a.desc}</span>
-                  <span className={`font-mono text-xs shrink-0 inline-flex items-center gap-1 ${got ? "text-gray-600" : "text-[#f5d24a]"}`}>{got ? "✓" : <>+{a.coins} <Coin className="!w-2.5 !h-2.5" /></>}</span>
-                </div>
-              );
-            })}
-          </div>
         </div>
 
         <button type="button" onClick={onClose} className={`${btn} w-full`}>Done</button>
