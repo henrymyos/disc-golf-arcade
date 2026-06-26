@@ -194,28 +194,27 @@ export const CAREER_BAG_MAX = 5;
 // cosmetics catalog so the UI can render them; storage + spend live here. ──
 export type CareerLook = { discSkin: string; basketSkin: string; aimStyle: string; groundTheme: string; celebration: string; trail: string };
 export const DEFAULT_CAREER_LOOK: CareerLook = { discSkin: "white", basketSkin: "steel", aimStyle: "white", groundTheme: "classic", celebration: "classic", trail: "classic" };
-type CareerDiscEntry = { key: string; cost: number; stage: CareerStage };
-// Stage-gated shop, cheapest first within a stage. Cash comes from amateur
-// scholarship money + pro purses, so the whole bag is reachable over a career.
+type CareerDiscEntry = { key: string; cost: number };
+// The whole shop is open from day one (like the normal game) — price is the only
+// gate, so you save your amateur/scholarship cash and buy what you want. Tuned so
+// a top distance driver (destroyer etc.) is reachable in your SECOND season if you
+// play and place in your events. (Teebird is a core starter, so it's never listed.)
 const CAREER_DISC_SHOP: CareerDiscEntry[] = [
-  // High school — cheap utility molds to round out the bag. (Teebird is a core
-  // starter disc, so it's never listed here — you already own it.)
-  { key: "zone", cost: 250, stage: "highschool" },
-  { key: "swarm", cost: 450, stage: "highschool" },
-  { key: "roc", cost: 600, stage: "highschool" },
-  // An early, forgiving distance driver — reachable in your second season if you
-  // play (and place in) every event, so you don't have to wait until the pro tour.
-  { key: "sidewinder", cost: 2000, stage: "highschool" },
-  // College — fairway control + your first real drivers.
-  { key: "harp", cost: 1200, stage: "college" },
-  { key: "river", cost: 1800, stage: "college" },
-  { key: "firebird", cost: 2400, stage: "college" },
-  { key: "pd", cost: 3200, stage: "college" },
-  // Pro — the distance bombers.
-  { key: "wraith", cost: 9000, stage: "pro" },
-  { key: "destroyer", cost: 12000, stage: "pro" },
-  { key: "nukeos", cost: 15000, stage: "pro" },
-  { key: "zeus", cost: 18000, stage: "pro" },
+  // Putters + mids + control — cheap, bag-rounding molds.
+  { key: "zone", cost: 300 },
+  { key: "swarm", cost: 450 },
+  { key: "harp", cost: 550 },
+  { key: "roc", cost: 700 },
+  // Fairways.
+  { key: "river", cost: 1200 },
+  { key: "firebird", cost: 1600 },
+  { key: "pd", cost: 2200 },
+  // Distance drivers — the save-up goals, but all in reach by your second year.
+  { key: "sidewinder", cost: 2800 },
+  { key: "wraith", cost: 3500 },
+  { key: "destroyer", cost: 4000 },
+  { key: "nukeos", cost: 4600 },
+  { key: "zeus", cost: 5200 },
 ];
 
 // A small per-season training-point FLOOR — deliberately NOT a path to 90. Real
@@ -535,6 +534,16 @@ export function careerLiveStandings(field: FieldPlayer[], myName: string, myScor
   return rows.map((r, i) => ({ rank: i + 1, name: r.name, total: r.total, toPar: r.total - parThru, you: r.you }));
 }
 
+// Account coins paid for PLAYING a career event, by where you FINISH (and how big
+// the event is): win big, mid-pack earns a little, last place still gets a token
+// for showing up; the marquee events pay the most. Simmed events still pay nothing
+// — coins are the reward for actually playing the round. Exported for the preview.
+export function careerCoins(importance: CareerEvent["importance"], placed: number, fieldN: number): number {
+  const peak = importance === "championship" ? 140 : importance === "major" ? 95 : 60;
+  const frac = Math.max(0, (fieldN - placed) / Math.max(1, fieldN - 1)); // 1 at a win → 0 at last
+  return Math.round(8 + (peak - 8) * Math.pow(frac, 1.5));
+}
+
 // Training points earned for a finish — placement + event importance. Exported so
 // the hub can preview "what you'll earn here" before you commit to playing.
 export function trainBonusFor(importance: CareerEvent["importance"], placed: number, fieldN: number): number {
@@ -829,18 +838,11 @@ export function spendSkillPoint(c: Career, skill: keyof CareerSkills, delta: num
 
 // ── Career disc collection: a Pro Shop (cash) + bag curation, all separate from
 // your account's discs. ──
-const STAGE_RANK: Record<CareerStage, number> = { youth: 0, highschool: 1, college: 2, pro: 3, retired: 3 };
-// Discs you can buy right now: in the shop, unlocked by your stage, not yet owned.
+// Every disc you don't already own, cheapest first — the whole catalog is open
+// from the start, so the only thing between you and a disc is saving the cash.
 export function careerDiscShop(c: Career): { key: string; cost: number }[] {
   const owned = new Set(c.discs);
-  return CAREER_DISC_SHOP
-    .filter((d) => !owned.has(d.key) && STAGE_RANK[c.stage] >= STAGE_RANK[d.stage])
-    .map((d) => ({ key: d.key, cost: d.cost }));
-}
-// The next disc that unlocks at a later stage (teaser for the shop), or null.
-export function nextCareerDisc(c: Career): { key: string; cost: number; stage: CareerStage } | null {
-  const owned = new Set(c.discs);
-  return CAREER_DISC_SHOP.find((d) => !owned.has(d.key) && STAGE_RANK[c.stage] < STAGE_RANK[d.stage]) ?? null;
+  return CAREER_DISC_SHOP.filter((d) => !owned.has(d.key)).sort((a, b) => a.cost - b.cost);
 }
 // Disc "class" so a freshly-bought disc can slot into the bag sensibly.
 const CAREER_DISC_CLASS: Record<string, string> = {
@@ -871,7 +873,7 @@ function autoBagDisc(bag: string[], key: string): string[] {
 export function buyCareerDisc(c: Career, key: string): Career {
   if (c.discs.includes(key)) return c;
   const entry = CAREER_DISC_SHOP.find((d) => d.key === key);
-  if (!entry || STAGE_RANK[c.stage] < STAGE_RANK[entry.stage] || c.cash < entry.cost) return c;
+  if (!entry || c.cash < entry.cost) return c; // no stage gate — just need the cash
   return { ...c, cash: c.cash - entry.cost, discs: [...c.discs, key], bag: autoBagDisc(c.bag, key) };
 }
 // Add/remove an owned disc from the career bag (keeps 1..CAREER_BAG_MAX in it).

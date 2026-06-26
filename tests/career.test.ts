@@ -31,10 +31,10 @@ import {
   SKILL_KEYS,
   CAREER_CORE_DISCS,
   CAREER_BAG_MAX,
+  careerCoins,
   careerDiscShop,
   buyCareerDisc,
   toggleCareerBag,
-  nextCareerDisc,
   buyCareerCosmetic,
   equipCareerLook,
   DEFAULT_CAREER_LOOK,
@@ -455,13 +455,13 @@ describe("career disc progression (separate from the account)", () => {
     expect(c.discs).toEqual(CAREER_CORE_DISCS);
     expect(c.bag).toEqual(CAREER_CORE_DISCS);
   });
-  it("the shop is stage-gated and grows as you climb", () => {
-    const hs = newCareer("HS", 2);
-    const hsShop = careerDiscShop(hs).map((d) => d.key);
-    expect(hsShop.length).toBeGreaterThan(0);
-    expect(hsShop).not.toContain("destroyer"); // a pro driver isn't offered in high school
-    const pro: Career = { ...hs, stage: "pro" };
-    expect(careerDiscShop(pro).map((d) => d.key)).toContain("destroyer");
+  it("offers every disc from the start — you just save up for them", () => {
+    const hs = newCareer("HS", 2); // a 14-year-old freshman
+    const shop = careerDiscShop(hs);
+    const keys = shop.map((d) => d.key);
+    expect(keys).toContain("destroyer"); // a top driver is on the shelf immediately — no stage gate
+    expect(keys).toContain("zeus");
+    expect(shop.map((d) => d.cost)).toEqual([...shop.map((d) => d.cost)].sort((a, b) => a - b)); // cheapest first
   });
   it("buying a disc spends cash, adds it to the collection, and drops it in the bag", () => {
     const c: Career = { ...newCareer("Buy", 3), cash: 1000 };
@@ -471,11 +471,11 @@ describe("career disc progression (separate from the account)", () => {
     expect(after.bag).toContain(offer.key);
     expect(after.cash).toBe(1000 - offer.cost);
   });
-  it("can't buy without enough cash, or buy a disc above your stage", () => {
+  it("can't buy without enough cash, but any disc is buyable once you can afford it", () => {
     const broke: Career = { ...newCareer("Broke", 4), cash: 0 };
-    expect(buyCareerDisc(broke, careerDiscShop(broke)[0].key).discs).toEqual(CAREER_CORE_DISCS);
+    expect(buyCareerDisc(broke, careerDiscShop(broke)[0].key).discs).toEqual(CAREER_CORE_DISCS); // broke → no buy
     const hs: Career = { ...newCareer("HS", 5), cash: 999999 };
-    expect(buyCareerDisc(hs, "destroyer").discs).not.toContain("destroyer"); // pro-only, ignored in HS
+    expect(buyCareerDisc(hs, "destroyer").discs).toContain("destroyer"); // freshman with cash CAN buy a top driver
   });
   it("buying a disc when the bag is full swaps it in (a driver doesn't sit unused behind starters)", () => {
     // A full bag of starters (2 putters, 2 mids, 1 fairway), then buy a driver.
@@ -487,12 +487,6 @@ describe("career disc progression (separate from the account)", () => {
     expect(c.discs).toContain("destroyer");
     expect(c.bag).toContain("destroyer"); // auto-bagged
     expect(c.bag.length).toBe(CAREER_BAG_MAX); // still capped
-  });
-  it("nextCareerDisc teases a disc from a later stage", () => {
-    const hs = newCareer("HS", 6);
-    const next = nextCareerDisc(hs);
-    expect(next).toBeTruthy();
-    expect(["college", "pro"]).toContain(next!.stage);
   });
   it("bag curation keeps 1..MAX owned discs", () => {
     let c: Career = { ...newCareer("Bag", 7), cash: 100000, stage: "pro" };
@@ -622,6 +616,13 @@ describe("trainBonusFor (reward preview) + early driver", () => {
   it("offers an early distance driver (sidewinder) in high school", () => {
     const hs = newCareer("HS", 9);
     expect(careerDiscShop(hs).map((d) => d.key)).toContain("sidewinder"); // reachable by year 2
+  });
+  it("careerCoins pays by placement: win > mid > last, and big events pay more", () => {
+    const fieldN = 40;
+    expect(careerCoins("minor", 1, fieldN)).toBeGreaterThan(careerCoins("minor", 20, fieldN)); // win beats mid-pack
+    expect(careerCoins("minor", 20, fieldN)).toBeGreaterThan(careerCoins("minor", 40, fieldN)); // mid beats last
+    expect(careerCoins("minor", 40, fieldN)).toBeGreaterThanOrEqual(0); // last still pays a token, never negative
+    expect(careerCoins("championship", 1, fieldN)).toBeGreaterThan(careerCoins("minor", 1, fieldN)); // marquee win pays most
   });
 });
 

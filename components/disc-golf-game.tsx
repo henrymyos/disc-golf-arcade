@@ -42,7 +42,7 @@ import {
   newCareer, normalizeCareer, skillMods, momentumAfter, seasonSchedule, simEvent, recordResult, advanceSeason, retire, seasonComplete,
   placeLabel, STAGE_LABEL, SKILL_KEYS, SKILL_LABEL, SKILL_DESC, IDENTITY_MODS,
   availableSponsors, signSponsor, trainingPointCost, buyTrainingPoint, spendSkillPoint, trainBonusFor, topRivals, fmtCash, SPONSOR_CAP,
-  careerRating, careerDiscShop, buyCareerDisc, toggleCareerBag, nextCareerDisc, CAREER_BAG_MAX,
+  careerRating, careerCoins as coinsForFinish, careerDiscShop, buyCareerDisc, toggleCareerBag, CAREER_BAG_MAX,
   buyCareerCosmetic, equipCareerLook, DEFAULT_CAREER_LOOK, type CareerLook,
   careerFieldForRound, careerCardRacers, careerLiveStandings,
   type Career, type CareerEvent, type EventResult, type CareerSkills, type SkillMods, type FieldPlayer,
@@ -1402,10 +1402,10 @@ export function DiscGolfGame() {
         setCareerLastResult(result);
         // Career progress stays sandboxed inside the Career object — no bests,
         // history, achievements, disc unlocks, or XP leak to your real account.
-        // The one thing that does cross over: playing a career round still pays
-        // account coins (scaled by how far under par you went), so the mode
-        // still feeds your wallet just like a normal round.
-        const reward = coinsForRound(total - g.roundHoles.reduce((s, h) => s + h.par, 0), g.roundHoles.length);
+        // The one thing that does cross over: playing a career round pays account
+        // coins by where you FINISH (win big, mid-pack less), so the mode still
+        // feeds your wallet — reward harder play, not just an under-par score.
+        const reward = coinsForFinish(ev.importance, result.placed, result.field);
         setCareerCoins(reward);
         addCoins(reward);
       } else {
@@ -4528,8 +4528,7 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
   const trainCost = trainingPointCost(career);
   const rivals = topRivals(career);
   const overall = Math.round(careerRating(career.skills)); // the single headline number — rises as you train
-  const shop = careerDiscShop(career); // discs buyable now (career cash, stage-gated)
-  const nextDisc = nextCareerDisc(career); // a teaser disc unlocking at a later stage
+  const shop = careerDiscShop(career); // every disc you don't own, cheapest first (career cash)
   // Current in-play effect of each skill, so the benefit of training is concrete.
   const mods = skillMods(career.skills);
   const effectFor = (k: keyof CareerSkills): string => {
@@ -4683,10 +4682,8 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
               );
             })}
           </div>
-        ) : nextDisc ? (
-          <p className="text-gray-500 text-[10px] pt-1.5 border-t border-white/5">Reach <span className="text-gray-300">{STAGE_LABEL[nextDisc.stage]}</span> to unlock more discs in the Pro Shop.</p>
         ) : (
-          <p className="text-gray-500 text-[10px] pt-1.5 border-t border-white/5">You own every disc in the bag. 🎒</p>
+          <p className="text-gray-500 text-[10px] pt-1.5 border-t border-white/5">You own every disc in the shop. 🎒</p>
         )}
       </div>
 
@@ -4764,13 +4761,15 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
                   <p className="text-white text-sm font-semibold truncate">{ev.name}</p>
                   <p className="text-[10px] text-gray-500"><span className={impColor}>{impWord}</span> · {courseLabel} · {ev.fieldSize} players</p>
                   {ev.character && <p className="text-[10px] text-gray-500 truncate">{ev.emoji} {ev.character}</p>}
-                  {!r && (
-                    <p className="text-[9px] text-gray-500 mt-0.5 leading-tight">
-                      <span className="text-[#36D7B7] font-semibold">+{trainBonusFor(ev.importance, 1, ev.fieldSize + 1)} skill pt{trainBonusFor(ev.importance, 1, ev.fieldSize + 1) > 1 ? "s" : ""}</span> to win · +3 top-3 · +1 top-½
-                      <span className="text-gray-600"> · </span>
-                      <span className="text-[#f5d24a]">{ev.holes >= 18 ? 30 : 15}+6/under</span> <Coin className="!w-2.5 !h-2.5 align-[-1px]" /> if played
-                    </p>
-                  )}
+                  {!r && (() => {
+                    const fieldN = ev.fieldSize + 1;
+                    return (
+                      <div className="text-[9px] text-gray-500 mt-0.5 leading-tight space-y-0.5">
+                        <p><span className="text-[#36D7B7] font-semibold">▲ skill pts</span> win +{trainBonusFor(ev.importance, 1, fieldN)} · top-3 +3 · top-½ +1</p>
+                        <p><span className="text-[#f5d24a] font-semibold">◆ coins</span> win {coinsForFinish(ev.importance, 1, fieldN)} · top-3 {coinsForFinish(ev.importance, 3, fieldN)} · top-½ {coinsForFinish(ev.importance, Math.ceil(fieldN / 2), fieldN)} <Coin className="!w-2.5 !h-2.5 align-[-1px]" /> <span className="text-gray-600">if played</span></p>
+                      </div>
+                    );
+                  })()}
                 </div>
                 {r ? (
                   <span className={`shrink-0 text-xs font-bold ${r.win ? "text-[#f5d24a]" : "text-gray-300"}`} title={r.played ? "played" : "simmed"}>{placeLabel(r.placed)} <span className="text-gray-500 font-normal">{r.played ? "▶" : "⚡"}</span></span>
