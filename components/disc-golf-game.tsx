@@ -42,7 +42,7 @@ import {
   newCareer, normalizeCareer, skillMods, momentumAfter, seasonSchedule, simEvent, recordResult, advanceSeason, retire,
   placeLabel, STAGE_LABEL, SKILL_KEYS, SKILL_LABEL, SKILL_DESC, IDENTITY_MODS,
   seasonEnergy, eventEnergyCost, canEnterEvent,
-  availableSponsors, signSponsor, trainingPointCost, buyTrainingPoint, spendSkillPoint, trainBonusFor, topRivals, fmtCash, SPONSOR_CAP,
+  availableSponsors, signSponsor, sponsorBrandLock, trainingPointCost, buyTrainingPoint, spendSkillPoint, trainBonusFor, topRivals, fmtCash, SPONSOR_CAP,
   careerRating, careerCoins as coinsForFinish, careerDiscShop, buyCareerDisc, toggleCareerBag, CAREER_BAG_MAX,
   buyCareerCosmetic, equipCareerLook, DEFAULT_CAREER_LOOK, type CareerLook,
   careerFieldForRound, careerCardRacers, careerLiveStandings, careerHoleLenScale,
@@ -4524,6 +4524,7 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
   const undone = sched.filter((e) => !career.done.includes(e.id)); // events you haven't entered yet
   const enterable = undone.filter((e) => canEnterEvent(career, e)).length; // …of those, how many you can still afford
   const sponsorOffers = availableSponsors(career);
+  const brandLock = sponsorBrandLock(career); // the disc brand a manufacturer deal locks your bag to (or null)
   const trainCost = trainingPointCost(career);
   const rivals = topRivals(career);
   const overall = Math.round(careerRating(career.skills)); // the single headline number — rises as you train
@@ -4647,6 +4648,7 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
           <p className="text-gray-400 text-xs font-bold uppercase tracking-wide">Bag · {career.bag.length}/{CAREER_BAG_MAX}</p>
           <p className="text-[10px] text-gray-500">tap a disc for details</p>
         </div>
+        {brandLock && <p className="text-[#f5d24a] text-[10px] -mt-1">🥏 {brandLock} deal — your bag &amp; shop are {brandLock} discs only.</p>}
         <div className="flex flex-wrap gap-1.5">
           {career.discs.map((key) => {
             const d = discByKey(key);
@@ -4737,20 +4739,24 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
           <p className="text-gray-600 text-[11px]">Win events and raise your rating to attract sponsors.</p>
         )}
         {career.sponsors.map((s) => (
-          <div key={s.id} className="flex items-center justify-between text-[11px]">
-            <span className="text-white">{s.name}{s.coach ? " 🎓" : ""}</span>
-            <span className="text-gray-400 font-mono">{fmtCash(s.stipend)}/yr</span>
+          <div key={s.id} className={`flex items-center justify-between text-[11px] ${s.brand ? "text-[#f5d24a]" : ""}`}>
+            <span className={s.brand ? "font-bold" : "text-white"}>{s.brand ? "🥏 " : ""}{s.name}{s.coach ? " 🎓" : ""}{s.brand ? <span className="text-gray-500 font-normal"> · {s.brand} discs only</span> : ""}</span>
+            <span className={s.brand ? "font-mono" : "text-gray-400 font-mono"}>{fmtCash(s.stipend)}/yr</span>
           </div>
         ))}
-        {sponsorOffers.map((s) => (
-          <div key={s.id} className="flex items-center justify-between gap-2 bg-white/[0.03] rounded px-2 py-1.5">
-            <div className="min-w-0">
-              <p className="text-white text-xs font-semibold truncate">{s.name}{s.coach ? " 🎓" : ""}</p>
-              <p className="text-gray-500 text-[10px]">{fmtCash(s.signing)} signing · {fmtCash(s.stipend)}/yr{s.coach ? " · +1 training" : ""}</p>
+        {sponsorOffers.map((s) => {
+          const isSwitch = !!s.brand && !!brandLock; // already have a manufacturer → this one swaps it
+          return (
+            <div key={s.id} className={`flex items-center justify-between gap-2 rounded px-2 py-1.5 ${s.brand ? "bg-[#f5d24a]/[0.07] border border-[#f5d24a]/25" : "bg-white/[0.03]"}`}>
+              <div className="min-w-0">
+                <p className={`text-xs font-semibold truncate ${s.brand ? "text-[#f5d24a]" : "text-white"}`}>{s.brand ? "🥏 " : ""}{s.name}{s.coach ? " 🎓" : ""}</p>
+                <p className="text-gray-500 text-[10px]">{!isSwitch && `${fmtCash(s.signing)} signing · `}{fmtCash(s.stipend)}/yr{s.coach ? " · +1 training" : ""}</p>
+                {s.brand && <p className="text-[#e0923b] text-[10px] font-semibold">Exclusive — you’ll carry only {s.brand} discs{isSwitch ? " (switches your current deal)" : ""}.</p>}
+              </div>
+              <button type="button" onClick={() => onSign(s.id)} className="shrink-0 rounded bg-[#e0923b] hover:brightness-110 text-[#0f1117] text-[11px] font-bold px-2.5 py-1">{isSwitch ? "Switch" : "Sign"}</button>
             </div>
-            <button type="button" onClick={() => onSign(s.id)} className="shrink-0 rounded bg-[#e0923b] hover:brightness-110 text-[#0f1117] text-[11px] font-bold px-2.5 py-1">Sign</button>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Schedule — a slate too big for your season energy, so you choose which to

@@ -15,6 +15,7 @@ import {
   normalizeCareer,
   availableSponsors,
   signSponsor,
+  sponsorBrandLock,
   trainingPointCost,
   buyTrainingPoint,
   seasonBaseTrain,
@@ -45,7 +46,7 @@ import {
   type CareerSkills,
 } from "../lib/discgolf/career";
 import { careerFieldForRound } from "../lib/discgolf/career";
-import { CATCH_R, buildRound } from "../lib/discgolf/engine";
+import { CATCH_R, buildRound, discByKey } from "../lib/discgolf/engine";
 
 describe("newCareer", () => {
   it("starts a 14-year-old high-school freshman with headroom and a starter PDGA", () => {
@@ -463,6 +464,64 @@ describe("economy + sponsors", () => {
   it("can't buy training without enough cash", () => {
     const broke: Career = { ...newCareer("Broke", 15), cash: 0 };
     expect(buyTrainingPoint(broke).trainPts).toBe(broke.trainPts); // unchanged
+  });
+});
+
+describe("manufacturer sponsorships (brand-exclusive deals)", () => {
+  const elitePro = (): Career => ({ ...newCareer("Ace", 77), stage: "pro", age: 27, skills: { power: 86, control: 86, putt: 86, stamina: 50 } });
+  const brandOf = (k: string) => discByKey(k)?.brand;
+
+  it("offers Innova/Discraft only to an elite pro", () => {
+    const ids = availableSponsors(elitePro()).map((s) => s.id);
+    expect(ids).toContain("innova");
+    expect(ids).toContain("discraft");
+    const mid = { ...elitePro(), skills: { power: 60, control: 60, putt: 60, stamina: 50 } };
+    expect(availableSponsors(mid).map((s) => s.id)).not.toContain("innova"); // rating too low
+    const am = { ...elitePro(), stage: "college" as const, age: 20 };
+    expect(availableSponsors(am).map((s) => s.id)).not.toContain("discraft"); // not a pro yet
+  });
+
+  it("signing pays the bonus, grants the lineup, and rebuilds a brand-only bag", () => {
+    const elite = elitePro();
+    const signed = signSponsor(elite, "innova");
+    expect(sponsorBrandLock(signed)).toBe("Innova");
+    expect(signed.cash).toBe(elite.cash + 220000);
+    expect(signed.bag.length).toBeGreaterThanOrEqual(4);
+    expect(signed.bag.every((k) => brandOf(k) === "Innova")).toBe(true);
+    expect(signed.discs).toContain("destroyer"); // granted Innova's plastic
+  });
+
+  it("locks the bag + shop to the brand — off-brand discs can't be bagged or bought", () => {
+    const signed = signSponsor(elitePro(), "innova");
+    const room = toggleCareerBag(signed, signed.bag[signed.bag.length - 1]); // free a slot
+    expect(toggleCareerBag(room, "buzzz").bag).toEqual(room.bag); // Buzzz is Discraft → rejected
+    const spare = room.discs.find((k) => brandOf(k) === "Innova" && !room.bag.includes(k))!;
+    expect(toggleCareerBag(room, spare).bag).toContain(spare); // an Innova disc is fine
+    const partial = { ...signed, discs: ["aviar"], bag: ["aviar"] }; // expose the shop filter
+    const shop = careerDiscShop(partial);
+    expect(shop.length).toBeGreaterThan(0);
+    expect(shop.every((d) => brandOf(d.key) === "Innova")).toBe(true);
+    expect(shop.map((d) => d.key)).not.toContain("zone"); // Discraft filtered out
+    expect(buyCareerDisc(partial, "zone")).toBe(partial); // can't buy off-brand
+  });
+
+  it("switching manufacturers swaps the bag without a 2nd bonus or extra slot", () => {
+    const innova = signSponsor(elitePro(), "innova");
+    const discraft = signSponsor(innova, "discraft");
+    expect(sponsorBrandLock(discraft)).toBe("Discraft");
+    expect(discraft.sponsors.filter((s) => s.brand)).toHaveLength(1); // still one manufacturer
+    expect(discraft.sponsors.length).toBe(innova.sponsors.length); // no extra slot
+    expect(discraft.cash).toBe(innova.cash); // no second signing bonus
+    expect(discraft.bag.every((k) => brandOf(k) === "Discraft")).toBe(true);
+    expect(availableSponsors(innova).map((s) => s.id)).toContain("discraft"); // rival offered for switching
+  });
+
+  it("a manufacturer deal takes one of your 3 slots", () => {
+    let c = elitePro();
+    for (const id of ["global", "summitdiscs", "voltathletic"]) c = signSponsor(c, id);
+    expect(c.sponsors).toHaveLength(SPONSOR_CAP);
+    expect(availableSponsors(c).map((s) => s.id)).not.toContain("innova"); // no slot for the first deal
+    expect(signSponsor(c, "innova")).toBe(c); // and signing is a no-op
   });
 });
 
