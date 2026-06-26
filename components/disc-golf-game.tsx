@@ -4487,6 +4487,7 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
   const [sessionBase, setSessionBase] = useState<CareerSkills>(() => career?.skills ?? { power: 0, control: 0, putt: 0, mental: 0 });
   const [confirm, setConfirm] = useState<"retire" | "abandon" | null>(null);
   const [showStyle, setShowStyle] = useState(false);
+  const [showShop, setShowShop] = useState(false); // Pro Shop disc list, collapsed by default
   const [discInfo, setDiscInfo] = useState<string | null>(null); // disc key for the details modal
   /* eslint-disable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
   // Re-baseline only when the season rolls over (NOT on every skill spend), so the
@@ -4669,26 +4670,33 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
           })}
         </div>
         {shop.length > 0 ? (
-          <div className="space-y-1 pt-1.5 border-t border-white/5">
-            <p className="text-gray-500 text-[10px] font-bold uppercase tracking-wide">Pro Shop · buy with career cash</p>
-            {shop.map(({ key, cost }) => {
-              const d = discByKey(key);
-              if (!d) return null;
-              return (
-                <div key={key} className="flex items-center justify-between gap-2 text-[11px]">
-                  <button type="button" onClick={() => setDiscInfo(key)} className="flex items-center gap-1.5 min-w-0 text-left hover:opacity-80">
-                    <span className="w-2 h-2 rounded-full shrink-0" style={{ background: d.color }} />
-                    <span className="text-white font-semibold truncate">{d.name}</span>
-                    <span className="text-gray-500 truncate hidden xs:inline">{d.brand}</span>
-                    <span className="text-gray-600 shrink-0">ⓘ</span>
-                  </button>
-                  <button type="button" onClick={() => onBuyDisc(key)} disabled={career.cash < cost}
-                    className="shrink-0 rounded bg-[#e0923b] hover:brightness-110 text-[#0f1117] font-bold px-2 py-0.5 disabled:bg-white/10 disabled:text-gray-500">
-                    {fmtCash(cost)}
-                  </button>
-                </div>
-              );
-            })}
+          <div className="pt-1.5 border-t border-white/5">
+            <button type="button" onClick={() => setShowShop((s) => !s)} className="w-full flex items-center justify-between">
+              <p className="text-gray-500 text-[10px] font-bold uppercase tracking-wide">Pro Shop · {shop.length} disc{shop.length > 1 ? "s" : ""} · career cash</p>
+              <span className="text-gray-500 text-[11px]">{showShop ? "Hide ▲" : "Shop ▼"}</span>
+            </button>
+            {showShop && (
+              <div className="space-y-1 mt-1.5">
+                {shop.map(({ key, cost }) => {
+                  const d = discByKey(key);
+                  if (!d) return null;
+                  return (
+                    <div key={key} className="flex items-center justify-between gap-2 text-[11px]">
+                      <button type="button" onClick={() => setDiscInfo(key)} className="flex items-center gap-1.5 min-w-0 text-left hover:opacity-80">
+                        <span className="w-2 h-2 rounded-full shrink-0" style={{ background: d.color }} />
+                        <span className="text-white font-semibold truncate">{d.name}</span>
+                        <span className="text-gray-500 truncate hidden xs:inline">{d.brand}</span>
+                        <span className="text-gray-600 shrink-0">ⓘ</span>
+                      </button>
+                      <button type="button" onClick={() => onBuyDisc(key)} disabled={career.cash < cost}
+                        className="shrink-0 rounded bg-[#e0923b] hover:brightness-110 text-[#0f1117] font-bold px-2 py-0.5 disabled:bg-white/10 disabled:text-gray-500">
+                        {fmtCash(cost)}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         ) : (
           <p className="text-gray-500 text-[10px] pt-1.5 border-t border-white/5">You own every disc in the shop. 🎒</p>
