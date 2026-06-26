@@ -233,8 +233,8 @@ export const DEFAULT_CAREER_LOOK: CareerLook = { discSkin: "white", basketSkin: 
 type CareerDiscEntry = { key: string; cost: number };
 // The whole shop is open from day one (like the normal game) — price is the only
 // gate, so you save your amateur/scholarship cash and buy what you want. Tuned so
-// a top distance driver (destroyer etc.) is reachable in your SECOND season if you
-// play and place in your events. (Teebird is a core starter, so it's never listed.)
+// the iconic Destroyer distance driver is affordable in your SECOND year with
+// ordinary play (see amateurCash). (Teebird is a core starter, so it's never listed.)
 const CAREER_DISC_SHOP: CareerDiscEntry[] = [
   // Putters + mids + control — cheap, bag-rounding molds.
   { key: "zone", cost: 300 },
@@ -250,8 +250,8 @@ const CAREER_DISC_SHOP: CareerDiscEntry[] = [
   // played career is never hard-gated by the disc economy on the long courses.
   // The rest stay save-up goals that reward placing well.
   { key: "sidewinder", cost: 1200 },
-  { key: "wraith", cost: 2600 },
-  { key: "destroyer", cost: 3200 },
+  { key: "wraith", cost: 2400 },
+  { key: "destroyer", cost: 2800 }, // the iconic distance driver — affordable in your 2nd year with average play
   { key: "nukeos", cost: 4000 },
   { key: "zeus", cost: 4800 },
 ];
@@ -736,12 +736,17 @@ function prizeFor(ev: CareerEvent, placed: number): number {
   if (placed > Math.max(5, Math.floor(ev.fieldSize * 0.25))) return 0;
   return Math.round((purse * Math.pow(0.6, placed - 1)) / 100) * 100;
 }
-// Amateur "scholarship" cash for a top finish — boosted so the Pro Shop is
-// reachable through school. Top-heavy, importance-scaled; ~top quarter pays.
+// Amateur "scholarship" cash — boosted + broadened so the Pro Shop is reachable
+// through school with ordinary play, not just by winning. The whole TOP HALF of
+// the field earns something (scaled by how high you finish), so an average player
+// who places mid-pack steadily banks cash and can afford a real distance driver
+// (the Destroyer) by their second year. Importance-scaled; top-heavy but gentle.
 function amateurCash(ev: CareerEvent, placed: number, fieldN: number): number {
-  if (placed > Math.max(4, Math.ceil(fieldN * 0.25))) return 0;
+  const cutoff = Math.max(5, Math.ceil(fieldN * 0.5)); // top half (at least 5) is paid
+  if (placed > cutoff) return 0;
   const top = ev.importance === "championship" ? 4000 : ev.importance === "major" ? 2000 : 1000;
-  return Math.round((top * Math.pow(0.72, placed - 1)) / 50) * 50;
+  const frac = (cutoff - placed + 1) / cutoff; // 1 at a win → ~1/cutoff at the cut line
+  return Math.round((top * Math.pow(frac, 1.2)) / 50) * 50;
 }
 // World-ranking points from a finish: a per-event peak (by importance) shared
 // out steeply by placement, so wins are worth far more than mid-pack finishes.
