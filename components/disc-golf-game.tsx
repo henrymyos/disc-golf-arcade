@@ -32,7 +32,7 @@ import {
   dailyClaimKey, eventClaimKey, type Challenge, type EventRound,
 } from "@/lib/discgolf/events";
 import {
-  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, TOTAL_PAR, WINTHROP_PAR, leaderboardCourse, TOURN_KEY, TOURN_FIELD, TOURNAMENTS, tournDef, tournRoundHoles, tournPlace, tournFieldRound, tournLiveStandings, tournStandings, ACHIEVEMENTS, earnedAchievements, achievementReward, scoreLabel, courseStars, courseHoles, courseDifficultyOf, courseStarDifficulty, tournDifficulty, tournStarDifficulty, STRAIGHT_SPEED_MUL, releaseSpeedMul, ADV_DISCS, DISC_PRICE, isDiscUnlocked, levelUpChoices, validDiscIndex, DEFAULT_DISC_INDEX, BAG_MAX, discByKey, discIndexByKey, unlockedDiscKeys, reconcileBag, TOUR_COURSES, tourVenue, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, dailySeed, buildRound, elevAt, vibrate, pxToFeet, distBetween, autoDiscIndex, resolvePenalty, stepFlight,
+  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, TOTAL_PAR, WINTHROP_PAR, leaderboardCourse, TOURN_KEY, TOURN_FIELD, TOURNAMENTS, tournDef, tournRoundPlayHoles, tournPlace, tournFieldRound, tournLiveStandings, tournStandings, ACHIEVEMENTS, earnedAchievements, achievementReward, scoreLabel, courseStars, courseHoles, courseDifficultyOf, courseStarDifficulty, tournDifficulty, tournStarDifficulty, STRAIGHT_SPEED_MUL, releaseSpeedMul, ADV_DISCS, DISC_PRICE, isDiscUnlocked, levelUpChoices, validDiscIndex, DEFAULT_DISC_INDEX, BAG_MAX, discByKey, discIndexByKey, unlockedDiscKeys, reconcileBag, TOUR_COURSES, tourVenue, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, dailySeed, buildRound, elevAt, vibrate, pxToFeet, distBetween, autoDiscIndex, windAlong, resolvePenalty, stepFlight,
 } from "@/lib/discgolf/engine";
 import type {
   Vec, Tree, Hole, Mode, Tournament, TournDef, TournLiveRow, Achievement, FlightPath, Release, Flight, GhostState,
@@ -933,7 +933,9 @@ export function DiscGolfGame() {
     const g = stateRef.current;
     if (!g || g.mini) return;
     const hole = g.roundHoles[g.holeIndex];
-    const i = autoDiscIndex(distBetween(g.rest, hole.basket), activeBagRef.current, hole.elev ?? 0);
+    // Club for the lie: distance to the basket, the slope AT this lie, and the
+    // wind along the shot (headwind → club up, tailwind → club down).
+    const i = autoDiscIndex(distBetween(g.rest, hole.basket), activeBagRef.current, elevAt(hole, g.rest.y), windAlong(hole, g.rest));
     g.discIndex = i;
     discIndexRef.current = i;
     setDiscIndex(i);
@@ -1515,7 +1517,7 @@ export function DiscGolfGame() {
         const hasCut = def.cut && nRounds >= 3;
         const roundIdx = t.myTotals.length;
         const myTotals = [...t.myTotals, total];
-        const fieldTotals = [...t.fieldTotals, tournFieldRound(t.seed, roundIdx, tournRoundHoles(def.rounds[roundIdx]))];
+        const fieldTotals = [...t.fieldTotals, tournFieldRound(t.seed, roundIdx, tournRoundPlayHoles(t.seed, roundIdx, def.rounds[roundIdx]))];
         let madeCut = t.madeCut;
         let finished = false;
         if (hasCut && roundIdx === 1) {
@@ -1523,7 +1525,7 @@ export function DiscGolfGame() {
           const sorted = [...sums].sort((a, b) => a - b);
           const line = sorted[Math.floor(sorted.length / 2) - 1];
           madeCut = myTotals[0] + myTotals[1] <= line;
-          if (!madeCut) { finished = true; fieldTotals.push(tournFieldRound(t.seed, 2, tournRoundHoles(def.rounds[2]))); } // field plays on
+          if (!madeCut) { finished = true; fieldTotals.push(tournFieldRound(t.seed, 2, tournRoundPlayHoles(t.seed, 2, def.rounds[2]))); } // field plays on
         }
         if (myTotals.length >= nRounds) finished = true;
         const next: Tournament = { ...t, myTotals, fieldTotals, madeCut, finished, round: roundIdx + 1 };

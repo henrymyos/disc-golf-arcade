@@ -20,6 +20,8 @@ import {
   distToSeg,
   fullPowerRange,
   autoDiscIndex,
+  windAlong,
+  tournFieldRound,
   distBetween,
   pxToFeet,
   STRAIGHT_SPEED_MUL,
@@ -288,6 +290,13 @@ describe("fullPowerRange", () => {
     expect(uphill).toBeLessThan(flat);
     expect(downhill).toBeGreaterThan(flat);
   });
+  it("a tailwind lengthens carry, a headwind shortens it", () => {
+    const windless = fullPowerRange(disc("destroyer"), 0, 1, 0);
+    const tail = fullPowerRange(disc("destroyer"), 0, 1, 0.01); // wind carries it on
+    const head = fullPowerRange(disc("destroyer"), 0, 1, -0.01); // wind knocks it down
+    expect(tail).toBeGreaterThan(windless);
+    expect(head).toBeLessThan(windless);
+  });
 });
 
 describe("disc unlocks", () => {
@@ -358,6 +367,19 @@ describe("auto-caddie disc selection", () => {
     expect(["zone", "swarm"]).toContain(disc(autoDiscIndex(20, bag, 0)).key);
   });
 
+  it("clubs up into a headwind and not up with a tailwind", () => {
+    const bag = ["aviar", "buzzz", "teebird", "destroyer"]; // putter→mid→fairway→distance
+    // Windless reach of the chosen disc — bigger number = more disc.
+    const wr = (i: number) => fullPowerRange(disc(i), 0, STRAIGHT_SPEED_MUL);
+    const rem = reach("buzzz") * 0.98; // a shot the midrange just covers when it's calm
+    const calm = autoDiscIndex(rem, bag, 0, 0);
+    const head = autoDiscIndex(rem, bag, 0, -0.012); // into the wind
+    const tail = autoDiscIndex(rem, bag, 0, 0.012); // downwind
+    expect(disc(calm).key).toBe("buzzz");
+    expect(wr(head)).toBeGreaterThan(wr(calm)); // headwind eats the carry → reach for more disc
+    expect(wr(tail)).toBeLessThanOrEqual(wr(calm)); // downwind never needs more disc
+  });
+
   it("pxToFeet reads realistic disc carries: mid ~300, fairway ~400, driver ~500 ft", () => {
     expect(pxToFeet(0)).toBe(0);
     expect(pxToFeet(100)).toBeLessThan(pxToFeet(200));
@@ -368,6 +390,17 @@ describe("auto-caddie disc selection", () => {
     expect(carry("teebird")).toBeLessThanOrEqual(430);
     expect(carry("destroyer")).toBeGreaterThanOrEqual(490); // distance ≈ 500
     expect(carry("destroyer")).toBeLessThanOrEqual(560);
+  });
+});
+
+describe("windAlong (wind sensed along the shot)", () => {
+  // Basket sits at a lower y than the tee, so "toward the basket" is −y.
+  const hole = { tee: { x: 0, y: 900 }, basket: { x: 0, y: 200 } } as never;
+  const h = (wind: { x: number; y: number } | undefined) => ({ ...(hole as object), wind } as never);
+  it("reads a tailwind positive, a headwind negative, and no wind as zero", () => {
+    expect(windAlong(h({ x: 0, y: -0.01 }), { x: 0, y: 900 })).toBeGreaterThan(0); // blowing toward the basket
+    expect(windAlong(h({ x: 0, y: 0.01 }), { x: 0, y: 900 })).toBeLessThan(0); // blowing back at the tee
+    expect(windAlong(h(undefined), { x: 0, y: 900 })).toBe(0);
   });
 });
 
@@ -629,6 +662,29 @@ describe("tournament", () => {
     const rows = tournLiveStandings(fresh, def, 10, 3); // 10 strokes thru 3 holes
     expect(rows.filter((r) => r.you)).toHaveLength(1);
     expect(rows[0].rank).toBe(1);
+  });
+});
+
+describe("tournament field feels wind + elevation (everywhere, not just career)", () => {
+  // The bots score on the same wind/elevation holes you play, so conditions move
+  // the whole field — uphill/into-the-wind plays harder, downhill/downwind easier.
+  const seed = 4242;
+  const round = 0;
+  const base = buildRound(seed, "course");
+  const sum = (holes: typeof base) => tournFieldRound(seed, round, holes).reduce((a, b) => a + b, 0);
+
+  it("an uphill course costs the field strokes a downhill one gives back", () => {
+    const uphill = base.map((h) => ({ ...h, wind: undefined, windMag: 0, elev: 2, elevZones: undefined }));
+    const downhill = base.map((h) => ({ ...h, wind: undefined, windMag: 0, elev: -2, elevZones: undefined }));
+    expect(sum(uphill)).toBeGreaterThan(sum(downhill));
+  });
+
+  it("a headwind course plays tougher than the same course downwind", () => {
+    // Same wind magnitude (so raw course difficulty is unchanged) — only the
+    // DIRECTION flips, isolating the along-the-shot effect on the field.
+    const headwind = base.map((h) => ({ ...h, wind: { x: 0, y: 0.012 }, windMag: 0.012, elev: 0, elevZones: undefined }));
+    const tailwind = base.map((h) => ({ ...h, wind: { x: 0, y: -0.012 }, windMag: 0.012, elev: 0, elevZones: undefined }));
+    expect(sum(headwind)).toBeGreaterThan(sum(tailwind));
   });
 });
 

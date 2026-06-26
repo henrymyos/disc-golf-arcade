@@ -368,9 +368,21 @@ type Tournament = {
 function tournDef(id: string): TournDef | undefined {
   return TOURNAMENTS.find((d) => d.id === id);
 }
-// A round's base hole layout (used for field scoring + ghosts, like the field).
+// A round's bare hole layout (no wind) — used for par + the static difficulty rating.
 function tournRoundHoles(round: TournRound): Hole[] {
   return courseHoles(round.mode, round.seed);
+}
+// The seed a tournament round is actually PLAYED from: tour venues use their fixed
+// venue seed; Glendoveer/Winthrop derive a per-round seed so each round's wind +
+// pins differ. Matches the seed the player's round is built with (see startGame).
+function tournRoundSeed(tournSeed: number, round: number, rd: TournRound): number {
+  return rd.seed ?? ((tournSeed + round * 1013904223) | 0);
+}
+// The wind-/elevation-bearing holes a tournament round is played on — the SAME
+// ones YOU face that round — so the field is scored against the real conditions
+// instead of a calm, flat stand-in. (tournRoundHoles stays the bare layout.)
+function tournRoundPlayHoles(tournSeed: number, round: number, rd: TournRound): Hole[] {
+  return buildRound(tournRoundSeed(tournSeed, round, rd), rd.mode);
 }
 // A tournament's difficulty = the average difficulty of the courses it visits.
 function tournDifficulty(def: TournDef): number {
@@ -391,8 +403,28 @@ function tournSkills(seed: number): number[] {
   const rng = mulberry32((seed ^ 0x9e3779b9) >>> 0);
   return TOURN_NAMES.map(() => rng() * 29 - 25);
 }
+// Signed per-hole conditions, in strokes, for the field's score: WIND projected
+// onto the tee→basket axis (tailwind eases, headwind hardens, crosswind a touch
+// harder) plus SIGNED elevation (downhill eases, uphill hardens). This is what
+// lets the bots feel wind + incline/decline OUTSIDE career too — exactly the way
+// the player's disc does on those same holes. (Mirrors career's holeDifficulty.)
+function holeConditions(h: Hole): number {
+  let wind = 0;
+  if (h.wind) {
+    const ax = h.basket.x - h.tee.x, ay = h.basket.y - h.tee.y;
+    const len = Math.hypot(ax, ay) || 1;
+    const along = (h.wind.x * ax + h.wind.y * ay) / len; // >0 = tailwind (helps)
+    const cross = Math.abs(h.wind.x * ay - h.wind.y * ax) / len; // sideways magnitude
+    wind = (-along + cross * 0.5) / 0.018;
+  }
+  const elev = h.elevZones?.length ? h.elevZones.reduce((s, z) => s + z.elev, 0) / h.elevZones.length : (h.elev ?? 0);
+  return wind * 0.6 + (elev / 2) * 0.5; // tailwind/downhill −, headwind/uphill +
+}
 // Hole-by-hole field scores for a round on `holes`, so live standings exist
-// mid-round. Skill is fixed across rounds (same player all weekend).
+// mid-round. Skill is fixed across rounds (same player all weekend). When `holes`
+// carry wind/elevation (the played layout), each hole's conditions shift the
+// field's score on that hole, so windy/uphill holes cost the bots and downwind/
+// downhill holes reward them — just like they do for you.
 function tournFieldHoles(seed: number, round: number, holes: Hole[]): number[][] {
   const skills = tournSkills(seed);
   const rng = mulberry32((seed * 31 + round * 7919) >>> 0);
@@ -404,7 +436,7 @@ function tournFieldHoles(seed: number, round: number, holes: Hole[]): number[][]
   return skills.map((sk) => {
     const perHole = sk / 2.5 / 18 + diffAdj;
     return holes.map((h) => {
-      let d = Math.round(perHole + (rng() * 2 - 1) * 0.85);
+      let d = Math.round(perHole + holeConditions(h) + (rng() * 2 - 1) * 0.85);
       if (rng() < 0.04) d -= 1; // the odd bomb
       if (rng() < 0.05) d += 1; // and the odd blow-up
       return Math.max(1, h.par + d);
@@ -426,7 +458,7 @@ function tournCutLine(t: Tournament): number {
 type TournLiveRow = { rank: number; name: string; total: number; toPar: number; you: boolean };
 function tournLiveStandings(t: Tournament, def: TournDef, myRoundSoFar: number, holesPlayed: number): TournLiveRow[] {
   const roundIdx = t.myTotals.length;
-  const holes = tournRoundHoles(def.rounds[roundIdx]);
+  const holes = tournRoundPlayHoles(t.seed, roundIdx, def.rounds[roundIdx]); // the wind/elev holes you actually play
   const fieldHoles = tournFieldHoles(t.seed, roundIdx, holes);
   let active = TOURN_NAMES.map((_, i) => i);
   if (tournHasCut(def) && roundIdx === 2 && t.fieldTotals.length >= 2) {
@@ -1294,7 +1326,7 @@ function vibrate(pattern: number | number[]) {
 // Forward carry of a full-power throw with this disc (obstacle-free, straight),
 // in world px — used to draw the "reach" line. Mirrors the real flight physics
 // including the hole's elevation and the straight-flight speed boost.
-function fullPowerRange(disc: Disc, elev: number | undefined, speedMul = 1): number {
+function fullPowerRange(disc: Disc, elev: number | undefined, speedMul = 1, alongWind = 0): number {
   let y = 0;
   let vy = disc.power * (1.2 + 3.35) * speedMul; // power = 1
   let h = 0;
@@ -1305,12 +1337,22 @@ function fullPowerRange(disc: Disc, elev: number | undefined, speedMul = 1): num
     vh -= GRAVITY;
     if (h <= 0) { h = 0; vh = 0; }
     const airborne = h > AIRBORNE_H;
-    // `vy` here is forward speed, so the uphill pull subtracts from it.
-    if (airborne) vy -= (elev ?? 0) * SLOPE_PULL;
+    // `vy` here is forward speed, so the uphill pull subtracts from it and a
+    // tailwind (alongWind > 0) adds to it, a headwind subtracts — same as flight.
+    if (airborne) vy += alongWind - (elev ?? 0) * SLOPE_PULL;
     vy *= airborne ? disc.friction : elevGroundFriction(elev);
     if (!airborne && vy < STOP_SPEED) break;
   }
   return y;
+}
+// The wind's component ALONG the throw (lie → basket), signed: positive is a
+// tailwind that carries the disc on, negative a headwind that knocks it down. Fed
+// to the auto-caddie so it clubs up into the wind and down with it.
+function windAlong(hole: Hole, from: Vec): number {
+  if (!hole.wind) return 0;
+  const ax = hole.basket.x - from.x, ay = hole.basket.y - from.y;
+  const len = Math.hypot(ax, ay) || 1;
+  return (hole.wind.x * ax + hole.wind.y * ay) / len;
 }
 // World px → feet, for the on-screen distance readout. Tuned to realistic disc
 // golf carries: a full-power straight midrange (~160px) ≈ 290ft, a fairway
@@ -1331,9 +1373,9 @@ function distBetween(a: Vec, b: Vec): number {
 // longest straight in the bag; if the bag has no straight discs at all, the
 // best-fitting disc of any flight. Overstable discs aren't auto-picked when a
 // straight option exists (those are for manual shaping).
-function autoDiscIndex(remaining: number, bag: string[], elev = 0): number {
+function autoDiscIndex(remaining: number, bag: string[], elev = 0, alongWind = 0): number {
   const inBag = ADV_DISCS
-    .map((d, i) => ({ i, d, reach: fullPowerRange(d, elev, d.flight === "straight" ? STRAIGHT_SPEED_MUL : 1) }))
+    .map((d, i) => ({ i, d, reach: fullPowerRange(d, elev, d.flight === "straight" ? STRAIGHT_SPEED_MUL : 1, alongWind) }))
     .filter((x) => bag.includes(x.d.key));
   if (!inBag.length) return DEFAULT_DISC_INDEX;
   const straight = inBag.filter((x) => x.d.flight === "straight").sort((a, b) => a.reach - b.reach);
@@ -1523,7 +1565,7 @@ function buildRacerGhosts(seed: number, holeIndex: number, hole: Hole, racers: G
 // round 3), with per-hole scores matching tournFieldHoles, as ghost discs.
 function buildTournGhosts(t: Tournament, def: TournDef, holeIndex: number, hole: Hole, now: number): GhostState {
   const roundIdx = t.myTotals.length;
-  const fieldHoles = tournFieldHoles(t.seed, roundIdx, tournRoundHoles(def.rounds[roundIdx]));
+  const fieldHoles = tournFieldHoles(t.seed, roundIdx, tournRoundPlayHoles(t.seed, roundIdx, def.rounds[roundIdx]));
   const skills = tournSkills(t.seed);
   let active = TOURN_NAMES.map((_, i) => i);
   if (tournHasCut(def) && roundIdx === 2 && t.fieldTotals.length >= 2) {
@@ -1586,6 +1628,7 @@ export {
   TOURNAMENTS,
   tournDef,
   tournRoundHoles,
+  tournRoundPlayHoles,
   tournRoundPar,
   tournHasCut,
   tournPlace,
@@ -1657,6 +1700,7 @@ export {
   fullPowerRange,
   pxToFeet,
   distBetween,
+  windAlong,
   autoDiscIndex,
   lastInBoundsLie,
   resolvePenalty,
