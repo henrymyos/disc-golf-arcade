@@ -445,10 +445,12 @@ export function seasonSchedule(c: Career): CareerEvent[] {
       return out;
     }
     case "highschool": {
-      // ~6 events. Calibrated for a raw freshman (all skills start at 20) — clearly
-      // beatable early (try hard and you contend from event one), toughening each
-      // season via `ramp` so you keep developing to keep winning.
-      const out = take(HS_NAMES, 4).map((n, i) => ev(`hs${i + 1}`, n, i % 2 ? "course" : "daily", "minor", 20 + i * 2, 19 + ramp + i));
+      // ~6 events. Calibrated for a raw freshman (all skills start at 20). The
+      // regular-season events are SHORT 9-hole opens — open, low-hazard courses a
+      // rookie can score on and win from event one. The two capstones (Regional
+      // Qualifier + State Championship) are the full 18-hole Glendoveer test, the
+      // big tournaments you grow into. Fields toughen each season via `ramp`.
+      const out = take(HS_NAMES, 4).map((n, i) => ev(`hs${i + 1}`, n, "daily", "minor", 20 + i * 2, 19 + ramp + i));
       out.push(ev("hsq", "Regional Qualifier", "course", "major", 24, 23 + ramp));
       out.push(ev("hss", "State Championship", "course", "championship", 28, 29 + ramp));
       return out;
