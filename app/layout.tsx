@@ -27,6 +27,12 @@ export const viewport = {
   // Lets env(safe-area-inset-*) report real values so the control panel can
   // pad itself above curved phone corners / the home indicator.
   viewportFit: "cover" as const,
+  // Lock the scale so mobile browsers don't zoom in when you focus a text field,
+  // and pinch-zoom can't drift the fixed game board off-screen.
+  width: "device-width" as const,
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export default function RootLayout({

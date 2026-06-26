@@ -24,3 +24,22 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* The app is a fixed-size board (the game root is h-[100dvh] overflow-hidden), so
+   the page itself must never scroll or rubber-band. Lock the document and kill
+   overscroll so you can't swipe the whole screen up/down or trigger pull-to-
+   refresh. Panels that DO need to scroll are fixed overlays with their own
+   overflow-y-auto, so they still scroll within their own area. */
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+/* Inner scroll regions keep their gestures to themselves — a scroll that hits the
+   end doesn't chain out to bounce the page. */
+.overflow-y-auto,
+.overflow-auto {
+  overscroll-behavior: contain;
+}
