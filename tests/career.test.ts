@@ -343,14 +343,23 @@ describe("field reacts to course conditions (wind / slope / hazards)", () => {
   const c = newCareer("Pro", 9);
   const holes = buildRound(123, "course");
   const ev = { id: "cond", name: "Conditions", mode: "course" as const, par: 66, holes: 18, fieldSize: 40, fieldMean: 70, importance: "minor" as const };
-  const calm = holes.map((h) => ({ ...h, windMag: 0, elev: 0, elevZones: undefined, water: [], hazard: [] }));
-  const stormy = holes.map((h) => ({ ...h, windMag: 0.018, elev: 2, elevZones: undefined, water: h.water, hazard: h.hazard }));
+  // Basket sits at a lower y than the tee, so toward the basket is −y: a headwind
+  // blows +y, a tailwind −y.
+  const calm = holes.map((h) => ({ ...h, wind: { x: 0, y: 0 }, windMag: 0, elev: 0, elevZones: undefined, water: [], hazard: [] }));
+  const stormy = holes.map((h) => ({ ...h, wind: { x: 0, y: 0.018 }, windMag: 0.018, elev: 2, elevZones: undefined, water: h.water, hazard: h.hazard }));
   const avgTotal = (f: ReturnType<typeof careerFieldForRound>) => f.reduce((s, p) => s + p.total, 0) / f.length;
 
-  it("the same field scores worse in tough conditions", () => {
+  it("the same field scores worse into a headwind, uphill, with hazards", () => {
     const easy = avgTotal(careerFieldForRound(c, ev, calm));
     const hard = avgTotal(careerFieldForRound(c, ev, stormy));
-    expect(hard).toBeGreaterThan(easy); // wind + uphill cost the bots strokes too
+    expect(hard).toBeGreaterThan(easy); // headwind + uphill + hazards cost the bots strokes too
+  });
+
+  it("downhill AND downwind helps the whole field, not just the human", () => {
+    const downhillDownwind = holes.map((h) => ({ ...h, wind: { x: 0, y: -0.018 }, windMag: 0.018, elev: -2, elevZones: undefined, water: [], hazard: [] }));
+    const kind = avgTotal(careerFieldForRound(c, ev, downhillDownwind));
+    const neutral = avgTotal(careerFieldForRound(c, ev, calm));
+    expect(kind).toBeLessThan(neutral); // a downhill, downwind hole plays easier for the bots like it does for you
   });
 });
 

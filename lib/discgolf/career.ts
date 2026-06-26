@@ -429,17 +429,34 @@ export function genField(c: Career, ev: CareerEvent): number[] {
   return Array.from({ length: ev.fieldSize }, () => scoreFromRating(fieldOpponentRating(ev, rng), ev, rng));
 }
 
-// How much harder a hole plays for the field (extra strokes), from its wind,
-// uphill slope, water/sand and a tight fairway. Used so the bots' scores — and
-// the on-course ghosts' shot counts — respond to conditions like you do.
+// How much a hole helps or hurts the field's score (signed extra strokes), from
+// its wind, slope, water/sand and a tight fairway. The wind and slope terms are
+// SIGNED and DIRECTIONAL so the whole field feels conditions exactly like you do:
+// a downhill/downwind hole plays easier for the bots (negative difficulty) and an
+// uphill/headwind hole harder — no more free human edge on the kind holes. Used
+// for the bots' scores and the on-course ghosts' shot counts.
 function holeDifficulty(h: Hole): number {
-  const wind = (h.windMag ?? 0) / 0.018; // 0..1
+  // Wind projected onto the tee→basket axis: tailwind (toward the basket) eases the
+  // hole, headwind hardens it, crosswind is a touch harder either way. (Falls back
+  // to raw magnitude if a hole carries no wind vector.)
+  let wind: number;
+  if (h.wind) {
+    const ax = h.basket.x - h.tee.x, ay = h.basket.y - h.tee.y;
+    const len = Math.hypot(ax, ay) || 1;
+    const along = (h.wind.x * ax + h.wind.y * ay) / len; // >0 = tailwind (helps)
+    const cross = Math.abs(h.wind.x * ay - h.wind.y * ax) / len; // sideways magnitude
+    wind = (-along + cross * 0.5) / 0.018; // headwind/cross → +, tailwind → −
+  } else {
+    wind = (h.windMag ?? 0) / 0.018;
+  }
+  // Signed slope: uphill (+elev) plays longer/harder, downhill (−elev) easier —
+  // the same carry the player gets, so the field isn't blind to a downhill hole.
   const elev = h.elevZones?.length ? h.elevZones.reduce((s, z) => s + z.elev, 0) / h.elevZones.length : (h.elev ?? 0);
-  const up = Math.max(0, elev) / 2; // 0..1 (uphill plays longer)
+  const slope = elev / 2; // −1..+1
   const water = (h.water?.length ?? 0) > 0 ? 0.4 : 0;
   const sand = Math.min(3, h.hazard?.length ?? 0) * 0.12;
   const narrow = Math.max(0, (118 - h.fwWidth) / 118); // tighter corridor → harder
-  return wind * 0.6 + up * 0.5 + water + sand + narrow * 0.5;
+  return wind * 0.6 + slope * 0.5 + water + sand + narrow * 0.5;
 }
 
 function hashId(id: string): number {
