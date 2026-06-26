@@ -5,18 +5,19 @@
 // logic here is pure + deterministic so it's testable and resumes cleanly. ──
 import { mulberry32, CATCH_R, TOTAL_PAR, WINTHROP_PAR, tourPars, tourCharacter, tourVenue, type Mode, type Hole, type TournLiveRow, type GhostRacer } from "./engine";
 
-export type CareerSkills = { power: number; control: number; putt: number; mental: number };
-export const SKILL_KEYS: (keyof CareerSkills)[] = ["power", "control", "putt", "mental"];
+export type CareerSkills = { power: number; control: number; putt: number; stamina: number };
+export const SKILL_KEYS: (keyof CareerSkills)[] = ["power", "control", "putt", "stamina"];
 export const SKILL_LABEL: Record<keyof CareerSkills, string> = {
-  power: "Power", control: "Control", putt: "Putting", mental: "Mental",
+  power: "Power", control: "Control", putt: "Putting", stamina: "Stamina",
 };
-// What each skill does when you PLAY a round — shown in the hub so the benefit
-// of training is obvious.
+// What each skill does — shown in the hub so the benefit of training is obvious.
+// Power/Control/Putt change how you PLAY a round; Stamina is an economy stat that
+// sets how much season ENERGY you have to enter events (see seasonEnergy).
 export const SKILL_DESC: Record<keyof CareerSkills, string> = {
   power: "Throw distance — 99 = full range",
   control: "Aim accuracy — low spreads your shots into a cone",
   putt: "Basket catch size — 99 = normal",
-  mental: "Momentum: birdies boost you, bogeys bite (99 = unshakeable)",
+  stamina: "Season energy — more events you can enter each year (99 = the full slate)",
 };
 
 // How skills bend the real game when you PLAY an event. At 99 every skill plays
@@ -24,36 +25,51 @@ export const SKILL_DESC: Record<keyof CareerSkills, string> = {
 //   power      → throw distance        (99 = full, lower = every shot is shorter)
 //   putt       → basket catch radius   (99 = normal circle, lower = smaller)
 //   control    → aim spread, a release cone (99 = dead-on your line, lower = wider)
-//   mental     → momentum after a hole (birdie boosts everything next hole, bogey
-//                hurts; high mental kills the bogey penalty and sweetens birdies)
+//   stamina    → NOT an in-round effect — it sets your season energy pool (the
+//                number of events you can afford to enter; see seasonEnergy).
 export type SkillMods = { speedMul: number; catchR: number; windMul: number; aimSpread: number; birdieBoost: number; bogeyPenalty: number };
 export const IDENTITY_MODS: SkillMods = { speedMul: 1, catchR: CATCH_R, windMul: 1, aimSpread: 0, birdieBoost: 0, bogeyPenalty: 0 };
 export function skillMods(s: CareerSkills): SkillMods {
   const power = Math.min(1, clamp(s.power) / 99);
   const putt = Math.min(1, clamp(s.putt) / 99);
   const control = Math.min(1, clamp(s.control) / 99);
-  const mental = Math.min(1, clamp(s.mental) / 99);
   return {
     speedMul: 0.62 + 0.38 * power,             // 0.62 (beginner) … 1.0 (full range at 99)
     catchR: CATCH_R * (0.7 + 0.4 * putt),      // 0.7× (small basket) … 1.1× normal at 99
     windMul: 1,                                 // wind hits you normally now (control no longer fights it)
     aimSpread: 0.32 * (1 - control),           // 0 rad (dead-on) … ~±18° cone — wild at low control
-    birdieBoost: 0.1 * mental,                 // none at low mental → +10% at 99
-    bogeyPenalty: 0.16 * (1 - mental),         // 0 at 99 (tilt-proof) … 0.16 (rattled) after a bogey
+    birdieBoost: 0,                             // momentum retired with the Mental skill — every hole is neutral
+    bogeyPenalty: 0,
   };
 }
-// The momentum multiplier for the NEXT hole, given the hole you just shot. Birdie
-// or better → boost; bogey or worse → penalty (zeroed out by elite mental); par → reset.
-export function momentumAfter(mods: SkillMods, strokes: number, par: number): number {
-  const delta = strokes - par;
-  if (delta <= -1) return 1 + mods.birdieBoost;
-  if (delta >= 1) return 1 - mods.bogeyPenalty;
+// Momentum is retired (Stamina replaced Mental, which used to drive it). Every
+// hole now plays neutral — kept as a stable 1 so existing callers don't change.
+export function momentumAfter(_mods: SkillMods, _strokes: number, _par: number): number {
   return 1;
 }
 
-// One overall number (0..100) used for simulated results + world ranking.
+// One overall number (0..100) used for simulated results + world ranking. Stamina
+// is an ENERGY/economy stat and does NOT make you shoot lower, so it's excluded —
+// Overall is the weighted average of the three playing skills (sums to 1.0).
 export function careerRating(s: CareerSkills): number {
-  return 0.32 * s.power + 0.26 * s.control + 0.3 * s.putt + 0.12 * s.mental;
+  return 0.37 * s.power + 0.30 * s.control + 0.33 * s.putt;
+}
+
+// ── Energy: the season budget you spend to ENTER events. Bigger events cost more
+// (and pay more), so you pick which/how many to play; a full slate always costs
+// more than even a maxed pool, so there's always a choice. Stamina sets the pool. ──
+export const EVENT_ENERGY: Record<CareerEvent["importance"], number> = { minor: 2, major: 3, championship: 4 };
+export function eventEnergyCost(ev: CareerEvent): number {
+  return EVENT_ENERGY[ev.importance];
+}
+// Season energy pool from Stamina: ~8 (untrained) … ~24 (maxed). Train Stamina to
+// afford more events per season → more total coins/cash/training/rank.
+export function seasonEnergy(stamina: number): number {
+  return Math.round(8 + (clamp(stamina) / 99) * 16);
+}
+// Can you still afford to enter this event?
+export function canEnterEvent(c: Career, ev: CareerEvent): boolean {
+  return c.energy >= eventEnergyCost(ev);
 }
 
 export type CareerStage = "youth" | "highschool" | "college" | "pro" | "retired";
@@ -146,6 +162,7 @@ export type Career = {
   achievements: string[];
   retired: boolean;
   cash: number;
+  energy: number;         // season energy pool — spent to ENTER events (refilled each season from Stamina)
   sponsors: Sponsor[];
   rivals: Rival[];
   pdgaRating: number;     // official rating (≈700–1050), tracks recent rounds
@@ -237,10 +254,10 @@ function generateRivals(seed: number): Rival[] {
     const potBase = 50 + talent * 45; // 50..95 ceiling
     const pot = (b: number) => Math.round(clamp(potBase + (rng() * 2 - 1) * 8 + b, 40, 99));
     const start = (lo: number, hi: number) => Math.round(lo + rng() * (hi - lo));
-    const skills: CareerSkills = { power: start(15, 26), control: start(15, 26), putt: start(15, 26), mental: start(18, 30) };
+    const skills: CareerSkills = { power: start(15, 26), control: start(15, 26), putt: start(15, 26), stamina: start(18, 30) };
     const potential: CareerSkills = {
       power: Math.max(skills.power + 14, pot(2)), control: Math.max(skills.control + 14, pot(0)),
-      putt: Math.max(skills.putt + 14, pot(0)), mental: Math.max(skills.mental + 12, pot(-4)),
+      putt: Math.max(skills.putt + 14, pot(0)), stamina: Math.max(skills.stamina + 12, pot(-4)),
     };
     return { id: `r${i}`, name: names[i], color: RIVAL_PALETTE[i % RIVAL_PALETTE.length], skills, potential, titles: 0, beat: 0, lost: 0, pdgaRating: pdgaFromInternal(careerRating(skills)), roundRatings: [] };
   });
@@ -290,38 +307,49 @@ export function newCareer(name: string, seed: number): Career {
   const talent = rng(); // 0..1 overall ceiling shift
   const pot = (base: number) => Math.round(clamp(base + talent * 26 + rng() * 16, 40, 99));
   // A raw high-school freshman: every skill starts at 20, all upside ahead.
-  const skills: CareerSkills = { power: 20, control: 20, putt: 20, mental: 20 };
+  const skills: CareerSkills = { power: 20, control: 20, putt: 20, stamina: 20 };
   const potential: CareerSkills = {
     power: Math.max(skills.power + 15, pot(58)),
     control: Math.max(skills.control + 15, pot(58)),
     putt: Math.max(skills.putt + 15, pot(58)),
-    mental: Math.max(skills.mental + 12, pot(55)),
+    stamina: Math.max(skills.stamina + 12, pot(55)),
   };
   return {
     v: 1, name: name.trim().slice(0, 16) || "Rookie", seed: seed >>> 0,
     age: 14, season: 0, stage: "highschool", skills, potential, trainPts: 0, // start with nothing — earn your first points by playing
     done: [], results: [], titles: [], seasonPoints: 0, careerPoints: 0, majors: 0,
     worldRank: null, bestWorldRank: null, seasonsAtNo1: 0, achievements: [], retired: false,
-    cash: 0, sponsors: [], rivals: generateRivals(seed),
+    cash: 1000, energy: seasonEnergy(skills.stamina), sponsors: [], rivals: generateRivals(seed),
     pdgaRating: pdgaFromInternal(careerRating(skills)), roundRatings: [],
     discs: [...CAREER_CORE_DISCS], bag: [...CAREER_CORE_DISCS], rankPoints: 0, trainBought: 0,
     cosmetics: [], look: { ...DEFAULT_CAREER_LOOK },
   };
 }
 
-// Backfill new fields on a save from before economy/rivals/PDGA existed.
+// Backfill new fields on a save from before economy/rivals/PDGA existed. Also
+// migrates the old 4th skill (`mental`) onto `stamina` so existing careers keep a
+// trained value (it now governs energy rather than momentum).
 export function normalizeCareer(c: Career): Career {
+  // Old saves carry `mental`; map it onto `stamina` for skills + potential.
+  const withStamina = (sk: CareerSkills): CareerSkills => {
+    const os = sk as unknown as Record<string, number>;
+    return { power: os.power, control: os.control, putt: os.putt, stamina: os.stamina ?? os.mental ?? 20 };
+  };
+  const skills = withStamina(c.skills);
+  const potential = withStamina(c.potential);
+  const skillFrac = c.skillFrac ? withStamina(c.skillFrac) : c.skillFrac;
   let rivals = c.rivals;
   if (!rivals || rivals.length === 0) {
     rivals = generateRivals(c.seed);
     // age the rivals up to the career's current season so they're peers, not kids
     for (let s = 0; s < c.season; s++) rivals = rivals.map((r) => growRival(r, 11 + s));
   }
-  rivals = rivals.map((r) => ({ ...r, pdgaRating: r.pdgaRating ?? pdgaFromInternal(rivalRating(r)), roundRatings: r.roundRatings ?? [] }));
+  rivals = rivals.map((r) => ({ ...r, skills: withStamina(r.skills), potential: withStamina(r.potential), pdgaRating: r.pdgaRating ?? pdgaFromInternal(rivalRating({ ...r, skills: withStamina(r.skills) })), roundRatings: r.roundRatings ?? [] }));
   const discs = c.discs?.length ? c.discs : [...CAREER_CORE_DISCS];
   return {
-    ...c, cash: c.cash ?? 0, sponsors: c.sponsors ?? [], rivals,
-    pdgaRating: c.pdgaRating ?? pdgaFromInternal(careerRating(c.skills)),
+    ...c, skills, potential, skillFrac, cash: c.cash ?? 0,
+    energy: c.energy ?? seasonEnergy(skills.stamina), sponsors: c.sponsors ?? [], rivals,
+    pdgaRating: c.pdgaRating ?? pdgaFromInternal(careerRating(skills)),
     roundRatings: c.roundRatings ?? [],
     discs,
     bag: c.bag?.length ? c.bag.slice(0, CAREER_BAG_MAX) : discs.slice(0, CAREER_BAG_MAX),
@@ -351,10 +379,28 @@ function tourCourseSeed(careerSeed: number, fullId: string): number {
   return (careerSeed ^ hashId(fullId) ^ 0x51ed270b) >>> 0;
 }
 
+// Event-name pools, drawn WITHOUT replacement each season so a full slate reads
+// as distinct named events. Larger than any single season needs so picks vary.
+const YOUTH_NAMES = ["Junior Open", "Pee-Wee Classic", "Sapling Showdown", "Rookie Invitational", "Backyard Open", "Sunday Juniors"];
+const HS_NAMES = ["Eagle Invitational", "Hometown Classic", "Riverside Open", "Lakeside Tournament", "Pine Ridge Open", "Cedar Valley Classic", "Northgate Open"];
+const COLLEGE_NAMES = ["Conference Opener", "Autumn Collegiate", "Sunbelt Showdown", "Campus Classic", "University Open", "Inter-Collegiate Cup", "Quad Cities Collegiate"];
+const PRO_MINORS = ["Spring Open", "Maple Hill Tour Stop", "Emerald Cup", "Music City Open", "Ledgestone Open", "Discraft Classic", "Portland Open", "Las Vegas Challenge", "Jonesboro Open", "Texas States", "Kansas City Wide Open", "Beaver State Fling", "Idlewild Open", "Great Lakes Open", "Delaware Disc Classic", "Santa Cruz Masters"];
+const PRO_MAJORS = ["The Memorial Major", "European Open", "Champions Cup", "United States Disc Golf Championship", "Open de France"];
+const PRO_CHAMPS = ["Tour Championship", "Players Cup Final", "Grand Slam Finale"];
+
 // The events on offer this season, by stage. Deterministic from seed + season.
+// Each stage offers a CHOOSABLE slate (you spend season energy to enter the ones
+// you want): youth ~4, high school ~6, college ~8, pro ~14–15.
 export function seasonSchedule(c: Career): CareerEvent[] {
   const rng = mulberry32((c.seed * 2654435761 + c.season * 40503) >>> 0);
   const pick = <T,>(arr: T[]) => arr[Math.floor(rng() * arr.length)];
+  // Shuffle a pool and take n distinct names (suffixing if a stage ever needs more
+  // names than the pool holds).
+  const take = (arr: string[], n: number): string[] => {
+    const a = [...arr];
+    for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+    return Array.from({ length: n }, (_, i) => (i < a.length ? a[i] : `${a[i % a.length]} ${Math.floor(i / a.length) + 1}`));
+  };
   const ev = (id: string, name: string, mode: Mode, importance: CareerEvent["importance"], fieldSize: number, fieldMean: number): CareerEvent => {
     const fullId = `${c.season}-${id}`;
     if (mode === "tour") {
@@ -368,36 +414,38 @@ export function seasonSchedule(c: Career): CareerEvent[] {
   };
   const ramp = c.season * 0.6; // the field slowly toughens season over season within a stage
   switch (c.stage) {
-    case "youth":
-      return [
-        ev("jr1", "Junior Open", "daily", "minor", 12, 14 + ramp),
-        ev("jrc", "Junior Championship", "daily", "championship", 16, 20 + ramp),
-      ];
-    case "highschool":
-      // Calibrated for a raw freshman (all skills start at 20) — beatable early,
-      // toughening each season so you have to keep developing to keep winning.
-      return [
-        ev("hs1", pick(["Eagle Invitational", "Hometown Classic", "Riverside Open"]), "daily", "minor", 20, 24 + ramp),
-        ev("hs2", "Regional Qualifier", pick(["course", "daily"]) as Mode, "major", 24, 28 + ramp),
-        ev("hss", "State Championship", "course", "championship", 28, 34 + ramp),
-      ];
-    case "college":
-      return [
-        ev("co1", pick(["Conference Opener", "Autumn Collegiate", "Sunbelt Showdown"]), "tour", "minor", 28, 40 + ramp),
-        ev("co2", "Conference Championship", "winthrop", "major", 32, 46 + ramp),
-        ev("con", "College Nationals", "winthrop", "championship", 36, 52 + ramp),
-      ];
+    case "youth": {
+      // ~4 junior events — a few opens plus the Junior Championship.
+      const out = take(YOUTH_NAMES, 3).map((n, i) => ev(`jr${i + 1}`, n, "daily", "minor", 12 + i * 2, 14 + ramp + i));
+      out.push(ev("jrc", "Junior Championship", "daily", "championship", 16, 20 + ramp));
+      return out;
+    }
+    case "highschool": {
+      // ~6 events. Calibrated for a raw freshman (all skills start at 20) — beatable
+      // early, toughening each season so you keep developing to keep winning.
+      const out = take(HS_NAMES, 4).map((n, i) => ev(`hs${i + 1}`, n, i % 2 ? "course" : "daily", "minor", 20 + i * 2, 24 + ramp + i));
+      out.push(ev("hsq", "Regional Qualifier", "course", "major", 24, 28 + ramp));
+      out.push(ev("hss", "State Championship", "course", "championship", 28, 34 + ramp));
+      return out;
+    }
+    case "college": {
+      // ~8 events, building to Nationals at Winthrop Lake.
+      const out = take(COLLEGE_NAMES, 5).map((n, i) => ev(`co${i + 1}`, n, "tour", "minor", 28 + i * 2, 40 + ramp + i));
+      out.push(ev("cc1", "Conference Championship", "winthrop", "major", 32, 46 + ramp));
+      out.push(ev("cc2", pick(["Regional Championship", "Division Finals"]), "tour", "major", 32, 47 + ramp));
+      out.push(ev("con", "College Nationals", "winthrop", "championship", 36, 52 + ramp));
+      return out;
+    }
     case "pro": {
-      // The pro tour rolls through a rotating slate of generated venues, with the
-      // World Championship at classic Glendoveer every other season.
-      const out: CareerEvent[] = [
-        ev("pt1", pick(["Spring Open", "Maple Hill Tour Stop", "Emerald Cup", "Music City Open"]), "tour", "minor", 72, 66 + ramp * 0.4),
-        ev("pt2", pick(["Ledgestone Open", "Discraft Classic", "Portland Open", "Las Vegas Challenge"]), "tour", "minor", 72, 68 + ramp * 0.4),
-        ev("pt3", pick(["Jonesboro Open", "Texas States", "Kansas City Wide Open"]), "tour", "minor", 80, 70 + ramp * 0.4),
-        ev("maj", pick(["The Memorial Major", "European Open", "Champions Cup"]), "tour", "major", 90, 72 + ramp * 0.4),
-      ];
+      // The full pro tour: ~10 rotating tour stops, three majors, a season-ending
+      // Tour Championship, and the World Championship at classic Glendoveer every
+      // other season — far more than your season energy can enter, so you choose.
+      const out: CareerEvent[] = [];
+      take(PRO_MINORS, 10).forEach((n, i) => out.push(ev(`pt${i + 1}`, n, "tour", "minor", 72 + (i % 3) * 4, 66 + ramp * 0.4 + (i % 4))));
+      take(PRO_MAJORS, 3).forEach((n, i) => out.push(ev(`maj${i + 1}`, n, "tour", "major", 90, 72 + ramp * 0.4)));
+      out.push(ev("champ", pick(PRO_CHAMPS), "tour", "championship", 96, 76 + ramp * 0.4));
       // A World Championship lands every other season once you're established.
-      if (c.season % 2 === 1) out.push(ev("wc", "World Championship", "course", "championship", 96, 76 + ramp * 0.4));
+      if (c.season % 2 === 1) out.push(ev("wc", "World Championship", "course", "championship", 96, 78 + ramp * 0.4));
       return out;
     }
     default:
@@ -634,6 +682,7 @@ export function recordResult(c: Career, ev: CareerEvent, score: number, played: 
     done: [...c.done, ev.id],
     results: [...c.results, result].slice(-RESULT_CAP),
     titles, rivals,
+    energy: Math.max(0, c.energy - eventEnergyCost(ev)), // entering an event (played or simmed) spends its energy
     cash: c.cash + prize + amateurPay,
     rankPoints: c.rankPoints + earnedRankPts,
     trainPts: c.trainPts + trainBonus,
@@ -669,7 +718,7 @@ function rankPointsFor(ev: CareerEvent, placed: number, fieldN: number): number 
 }
 
 // Per-skill decline speed once you age past your prime (power fades fastest).
-const DECLINE: CareerSkills = { power: 1.35, control: 0.95, putt: 0.7, mental: -0.2 };
+const DECLINE: CareerSkills = { power: 1.35, control: 0.95, putt: 0.7, stamina: 0.6 };
 
 // Skills only move when you TRAIN them — there's no free yearly growth. Younger
 // players develop more per point; gains shrink as you approach your potential.
@@ -709,7 +758,7 @@ function growSkill(skill: number, pot: number, age: number, invested: number, de
 function growRival(r: Rival, age: number): Rival {
   const focus = age <= 30 ? 1.2 : 0;
   const g = (k: keyof CareerSkills) => Math.round(growSkill(r.skills[k], r.potential[k], age, focus, DECLINE[k]));
-  return { ...r, skills: { power: g("power"), control: g("control"), putt: g("putt"), mental: g("mental") } };
+  return { ...r, skills: { power: g("power"), control: g("control"), putt: g("putt"), stamina: g("stamina") } };
 }
 
 // World rank among a synthetic pro pool. A player's standing blends raw skill
@@ -772,6 +821,7 @@ export function advanceSeason(c: Career, alloc: Partial<CareerSkills>): { career
   let career: Career = {
     ...c, age, season: c.season + 1, stage, skills, skillFrac, rivals,
     cash: c.cash + stipend,
+    energy: seasonEnergy(skills.stamina), // refill the season energy pool from your (newly trained) Stamina
     trainPts: seasonBaseTrain(age) + coachPts, done: [], seasonPoints: 0, trainBought: 0,
     rankPoints: Math.round(c.rankPoints * 0.6), // last season's results fade — staying #1 needs sustained dominance
   };

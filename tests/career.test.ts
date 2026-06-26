@@ -20,6 +20,9 @@ import {
   seasonBaseTrain,
   spendSkillPoint,
   trainBonusFor,
+  seasonEnergy,
+  eventEnergyCost,
+  canEnterEvent,
   careerFieldHoles,
   careerCard,
   careerCardRacers,
@@ -50,13 +53,16 @@ describe("newCareer", () => {
     expect(c.age).toBe(14);
     expect(c.stage).toBe("highschool");
     expect(c.retired).toBe(false);
-    for (const k of ["power", "control", "putt", "mental"] as (keyof CareerSkills)[]) {
+    for (const k of ["power", "control", "putt", "stamina"] as (keyof CareerSkills)[]) {
       expect(c.skills[k]).toBeLessThan(45);
       expect(c.potential[k]).toBeGreaterThan(c.skills[k]);
     }
     expect(c.pdgaRating).toBeGreaterThanOrEqual(740); // a beginner-ish rating
     expect(c.pdgaRating).toBeLessThanOrEqual(860);
     expect(c.roundRatings).toEqual([]);
+    // Starts with $1,000 seed cash and a season energy pool sized by Stamina.
+    expect(c.cash).toBe(1000);
+    expect(c.energy).toBe(seasonEnergy(c.skills.stamina));
   });
   it("is deterministic for a given name + seed", () => {
     expect(JSON.stringify(newCareer("A", 7))).toBe(JSON.stringify(newCareer("A", 7)));
@@ -65,8 +71,8 @@ describe("newCareer", () => {
 
 describe("skillMods", () => {
   it("maps each skill to its in-round effect — 99 plays like normal golf, lower is harder", () => {
-    const low = skillMods({ power: 0, control: 0, putt: 0, mental: 0 });
-    const high = skillMods({ power: 99, control: 99, putt: 99, mental: 99 });
+    const low = skillMods({ power: 0, control: 0, putt: 0, stamina: 0 });
+    const high = skillMods({ power: 99, control: 99, putt: 99, stamina: 99 });
     // Power → distance: 99 = full range, lower = shorter.
     expect(high.speedMul).toBeCloseTo(1, 1);
     expect(low.speedMul).toBeLessThan(1);
@@ -76,12 +82,12 @@ describe("skillMods", () => {
     // Control → aim cone: 99 = dead-on your line, lower = wider spread.
     expect(high.aimSpread).toBeCloseTo(0, 2);
     expect(low.aimSpread).toBeGreaterThan(high.aimSpread);
-    // Mental → momentum: 99 = no penalty after a bogey + a real birdie boost;
-    // low = no birdie boost and a full bogey hit.
-    expect(high.bogeyPenalty).toBeCloseTo(0, 2);
-    expect(low.bogeyPenalty).toBeGreaterThan(0);
-    expect(high.birdieBoost).toBeGreaterThan(0);
-    expect(low.birdieBoost).toBeCloseTo(0, 2);
+    // Stamina is an ENERGY stat — it has no in-round effect, so momentum is gone:
+    // every player is tilt-proof with no birdie boost regardless of skills.
+    expect(high.bogeyPenalty).toBe(0);
+    expect(low.bogeyPenalty).toBe(0);
+    expect(high.birdieBoost).toBe(0);
+    expect(low.birdieBoost).toBe(0);
   });
   it("identity mods are neutral (normal play == maxed skills)", () => {
     expect(IDENTITY_MODS.speedMul).toBe(1);
@@ -90,24 +96,61 @@ describe("skillMods", () => {
     expect(IDENTITY_MODS.birdieBoost).toBe(0);
     expect(IDENTITY_MODS.bogeyPenalty).toBe(0);
   });
-  it("momentumAfter: low mental gets no birdie boost (but still a bogey hit); high mental is boosted + tilt-proof", () => {
-    const rookie = skillMods({ power: 50, control: 50, putt: 50, mental: 0 });
-    const pro = skillMods({ power: 50, control: 50, putt: 50, mental: 99 });
-    expect(momentumAfter(rookie, 2, 3)).toBe(1); // low mental → no birdie bonus
-    expect(momentumAfter(rookie, 4, 3)).toBeLessThan(1); // …but a bogey still bites
-    expect(momentumAfter(pro, 2, 3)).toBeGreaterThan(1); // high mental → birdie boost
-    expect(momentumAfter(pro, 4, 3)).toBeCloseTo(1, 2); // …and no bogey hit
-    expect(momentumAfter(pro, 3, 3)).toBe(1); // par → reset
+  it("momentumAfter is retired — every hole plays neutral (always 1)", () => {
+    const mods = skillMods({ power: 50, control: 50, putt: 50, stamina: 50 });
+    expect(momentumAfter(mods, 2, 3)).toBe(1); // birdie → neutral
+    expect(momentumAfter(mods, 4, 3)).toBe(1); // bogey → neutral
+    expect(momentumAfter(mods, 3, 3)).toBe(1); // par → neutral
   });
 });
 
 describe("careerRating", () => {
   it("rises monotonically with skills and stays in range", () => {
-    const lo = careerRating({ power: 10, control: 10, putt: 10, mental: 10 });
-    const hi = careerRating({ power: 90, control: 90, putt: 90, mental: 90 });
+    const lo = careerRating({ power: 10, control: 10, putt: 10, stamina: 10 });
+    const hi = careerRating({ power: 90, control: 90, putt: 90, stamina: 90 });
     expect(lo).toBeGreaterThanOrEqual(0);
     expect(hi).toBeLessThanOrEqual(100);
     expect(hi).toBeGreaterThan(lo);
+    // All three playing skills at 99 ⇒ Overall 99 (weights sum to 1).
+    expect(careerRating({ power: 99, control: 99, putt: 99, stamina: 0 })).toBeCloseTo(99, 5);
+  });
+  it("ignores Stamina — it's an energy stat, not a playing skill", () => {
+    const base = { power: 60, control: 60, putt: 60, stamina: 20 };
+    expect(careerRating({ ...base, stamina: 99 })).toBe(careerRating(base)); // training stamina doesn't change rating
+    expect(careerRating({ ...base, power: 80 })).toBeGreaterThan(careerRating(base)); // training power does
+  });
+});
+
+describe("energy economy", () => {
+  it("seasonEnergy grows with Stamina (more events you can enter)", () => {
+    expect(seasonEnergy(99)).toBeGreaterThan(seasonEnergy(50));
+    expect(seasonEnergy(50)).toBeGreaterThan(seasonEnergy(8));
+    expect(seasonEnergy(20)).toBeGreaterThanOrEqual(8);
+  });
+  it("event energy cost scales with importance, and canEnterEvent gates on the pool", () => {
+    const c = newCareer("E", 5);
+    const sched = seasonSchedule({ ...c, stage: "pro" });
+    const minor = sched.find((e) => e.importance === "minor")!;
+    const champ = sched.find((e) => e.importance === "championship")!;
+    expect(eventEnergyCost(champ)).toBeGreaterThan(eventEnergyCost(minor));
+    expect(canEnterEvent({ ...c, energy: eventEnergyCost(champ) }, champ)).toBe(true);
+    expect(canEnterEvent({ ...c, energy: eventEnergyCost(champ) - 1 }, champ)).toBe(false);
+  });
+  it("entering an event (played or simmed) spends its energy and never goes negative", () => {
+    const c = { ...newCareer("E", 6), stage: "pro" as const, energy: 5 };
+    const sched = seasonSchedule(c);
+    const ev = sched.find((e) => e.importance === "minor")!; // costs 2
+    const after = recordResult(c, ev, ev.par, false).career;
+    expect(after.energy).toBe(5 - eventEnergyCost(ev));
+    const drained = recordResult({ ...c, energy: 1 }, ev, ev.par, false).career;
+    expect(drained.energy).toBe(0); // clamped, never below 0
+  });
+  it("advancing a season refills energy from the (newly trained) Stamina", () => {
+    const c = { ...newCareer("Refill", 7), trainPts: 3, energy: 0 };
+    const trained = spendSkillPoint(spendSkillPoint(spendSkillPoint(c, "stamina", 1), "stamina", 1), "stamina", 1);
+    const next = advanceSeason(trained, {}).career;
+    expect(next.energy).toBe(seasonEnergy(next.skills.stamina));
+    expect(next.energy).toBeGreaterThan(0);
   });
 });
 
@@ -118,6 +161,21 @@ describe("seasonSchedule", () => {
     expect(sched.length).toBeGreaterThanOrEqual(2);
     expect(sched.every((e) => e.id.startsWith("0-"))).toBe(true);
     expect(sched.some((e) => e.importance === "championship")).toBe(true);
+  });
+  it("offers a big, choosable slate that grows by stage (unique ids + names)", () => {
+    const count = (stage: Career["stage"], season = 1) => seasonSchedule({ ...newCareer("S", 3), stage, season }).length;
+    expect(count("youth")).toBeGreaterThanOrEqual(3); // ~4
+    expect(count("highschool")).toBeGreaterThanOrEqual(5); // ~6
+    expect(count("college")).toBeGreaterThanOrEqual(7); // ~8
+    const pro = count("pro");
+    expect(pro).toBeGreaterThanOrEqual(12);
+    expect(pro).toBeLessThanOrEqual(15);
+    // A pro slate is too big for even a maxed energy pool, so you must choose.
+    const proSched = seasonSchedule({ ...newCareer("S", 3), stage: "pro", season: 1 });
+    const totalCost = proSched.reduce((s, e) => s + eventEnergyCost(e), 0);
+    expect(totalCost).toBeGreaterThan(seasonEnergy(99));
+    expect(new Set(proSched.map((e) => e.id)).size).toBe(proSched.length); // ids unique
+    expect(new Set(proSched.map((e) => e.name)).size).toBe(proSched.length); // names unique
   });
   it("college schedule includes Nationals at Winthrop", () => {
     const c: Career = { ...newCareer("U", 1), stage: "college", age: 19, season: 2 };
@@ -209,8 +267,8 @@ describe("advanceSeason", () => {
   it("declines an aging veteran's power", () => {
     const c: Career = {
       ...newCareer("Vet", 5), age: 36, stage: "pro",
-      skills: { power: 90, control: 90, putt: 90, mental: 90 },
-      potential: { power: 95, control: 95, putt: 95, mental: 95 },
+      skills: { power: 90, control: 90, putt: 90, stamina: 90 },
+      potential: { power: 95, control: 95, putt: 95, stamina: 95 },
     };
     const after = advanceSeason(c, {}).career.skills;
     expect(after.power).toBeLessThan(90); // power fades with age
@@ -372,22 +430,22 @@ describe("economy + sponsors", () => {
     const pev = seasonSchedule(pro)[0];
     const r = recordResult(pro, pev, 1, false);
     expect(r.result.prize).toBeGreaterThan(0);
-    expect(r.career.cash).toBe(r.result.prize);
+    expect(r.career.cash).toBe(pro.cash + r.result.prize); // prize added on top of seed cash
   });
   it("offers sponsors by stage + rating, caps signings, and pays a signing bonus", () => {
-    const c: Career = { ...newCareer("HS", 12), stage: "highschool", age: 15, skills: { power: 50, control: 50, putt: 50, mental: 50 } };
+    const c: Career = { ...newCareer("HS", 12), stage: "highschool", age: 15, skills: { power: 50, control: 50, putt: 50, stamina: 50 } };
     const offers = availableSponsors(c);
     expect(offers.length).toBeGreaterThan(0);
     const signed = signSponsor(c, offers[0].id);
     expect(signed.sponsors).toHaveLength(1);
-    expect(signed.cash).toBe(offers[0].signing);
+    expect(signed.cash).toBe(c.cash + offers[0].signing); // signing bonus added to seed cash
     // can't exceed the cap
     let s = signed;
     for (const o of availableSponsors(s)) s = signSponsor(s, o.id);
     expect(s.sponsors.length).toBeLessThanOrEqual(SPONSOR_CAP);
   });
   it("sponsor stipends + coaches pay out and add training at season's end", () => {
-    let c: Career = { ...newCareer("Pro", 13), stage: "pro", age: 25, cash: 100000, skills: { power: 85, control: 85, putt: 85, mental: 85 } };
+    let c: Career = { ...newCareer("Pro", 13), stage: "pro", age: 25, cash: 100000, skills: { power: 85, control: 85, putt: 85, stamina: 85 } };
     const coach = availableSponsors(c).find((o) => o.coach)!;
     c = signSponsor(c, coach.id);
     const next = advanceSeason(c, {}).career;
@@ -515,7 +573,7 @@ describe("career disc progression (separate from the account)", () => {
 
 describe("skill cap (99) + points-only growth", () => {
   it("training pushes a skill up to 99 but never past it", () => {
-    let c: Career = { ...newCareer("Maxed", 9), age: 16, skills: { power: 90, control: 90, putt: 90, mental: 90 }, potential: { power: 95, control: 95, putt: 95, mental: 95 } };
+    let c: Career = { ...newCareer("Maxed", 9), age: 16, skills: { power: 90, control: 90, putt: 90, stamina: 90 }, potential: { power: 95, control: 95, putt: 95, stamina: 95 } };
     for (let i = 0; i < 8; i++) c = advanceSeason({ ...c, age: 16, trainPts: 12 }, { power: 12 }).career;
     expect(c.skills.power).toBe(99); // climbs to the cap...
     SKILL_KEYS.forEach((k) => expect(c.skills[k]).toBeLessThanOrEqual(99)); // ...and never beyond it
@@ -539,7 +597,7 @@ describe("1:1 training + earned progression", () => {
   it("holds at 35 and only declines past it; training that skill offsets the loss", () => {
     const vet: Career = {
       ...newCareer("Vet", 5), age: 34, stage: "pro",
-      skills: { power: 90, control: 90, putt: 90, mental: 90 },
+      skills: { power: 90, control: 90, putt: 90, stamina: 90 },
     };
     const at35 = advanceSeason(vet, {}).career; // age 34 → 35: no decline yet
     expect(at35.skills.power).toBe(90);
@@ -556,7 +614,7 @@ describe("1:1 training + earned progression", () => {
     while (!c.retired && guard++ < 60) {
       // spend only the per-season floor, spread across skills; never compete for bonuses
       const pts = c.trainPts, per = Math.floor(pts / 4);
-      c = advanceSeason(c, { power: per, control: per, putt: per, mental: pts - per * 3 }).career;
+      c = advanceSeason(c, { power: per, control: per, putt: per, stamina: pts - per * 3 }).career;
       peak = Math.max(peak, careerRating(c.skills));
     }
     expect(peak).toBeLessThan(70); // ~mid-40s on the floor alone — never a 90 pro on age
@@ -574,7 +632,7 @@ describe("1:1 training + earned progression", () => {
 
   it("no talent gate: any career can train a skill all the way to 99", () => {
     // a deliberately low potential — under the old model this capped a player's growth
-    const c: Career = { ...newCareer("Underdog", 4), age: 16, potential: { power: 55, control: 55, putt: 55, mental: 55 } };
+    const c: Career = { ...newCareer("Underdog", 4), age: 16, potential: { power: 55, control: 55, putt: 55, stamina: 55 } };
     let s = c;
     for (let i = 0; i < 10; i++) s = advanceSeason({ ...s, age: 16, trainPts: 12 }, { power: 12 }).career;
     expect(s.skills.power).toBe(99); // potential no longer blocks the player
@@ -601,9 +659,9 @@ describe("immediate skill allocation (spendSkillPoint)", () => {
   it("won't spend with no points, won't pass 99, won't refund below the floor", () => {
     const broke: Career = { ...newCareer("Imm", 4), trainPts: 0 };
     expect(spendSkillPoint(broke, "power", 1)).toBe(broke); // no points → unchanged
-    const maxed: Career = { ...newCareer("Imm", 4), trainPts: 5, skills: { power: 99, control: 50, putt: 50, mental: 50 } };
+    const maxed: Career = { ...newCareer("Imm", 4), trainPts: 5, skills: { power: 99, control: 50, putt: 50, stamina: 50 } };
     expect(spendSkillPoint(maxed, "power", 1).skills.power).toBe(99); // capped at 99
-    const floored: Career = { ...newCareer("Imm", 4), skills: { power: 8, control: 8, putt: 8, mental: 8 } };
+    const floored: Career = { ...newCareer("Imm", 4), skills: { power: 8, control: 8, putt: 8, stamina: 8 } };
     expect(spendSkillPoint(floored, "power", -1)).toBe(floored); // can't drop below 8
   });
 });
@@ -659,7 +717,7 @@ describe("career cosmetics (post-max cash sink)", () => {
 
 describe("world ranking rewards winning", () => {
   it("a season of dominant results banks ranking points and ranks better than a quiet season", () => {
-    const base: Career = { ...newCareer("Pro", 88), stage: "pro", age: 26, skills: { power: 80, control: 80, putt: 80, mental: 80 } };
+    const base: Career = { ...newCareer("Pro", 88), stage: "pro", age: 26, skills: { power: 80, control: 80, putt: 80, stamina: 80 } };
     const sched = seasonSchedule(base);
     // win everything
     let winner = base;

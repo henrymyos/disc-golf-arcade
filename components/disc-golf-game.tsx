@@ -39,8 +39,9 @@ import type {
 } from "@/lib/discgolf/engine";
 import { parseChallenge } from "@/lib/discgolf/challenge";
 import {
-  newCareer, normalizeCareer, skillMods, momentumAfter, seasonSchedule, simEvent, recordResult, advanceSeason, retire, seasonComplete,
+  newCareer, normalizeCareer, skillMods, momentumAfter, seasonSchedule, simEvent, recordResult, advanceSeason, retire,
   placeLabel, STAGE_LABEL, SKILL_KEYS, SKILL_LABEL, SKILL_DESC, IDENTITY_MODS,
+  seasonEnergy, eventEnergyCost, canEnterEvent,
   availableSponsors, signSponsor, trainingPointCost, buyTrainingPoint, spendSkillPoint, trainBonusFor, topRivals, fmtCash, SPONSOR_CAP,
   careerRating, careerCoins as coinsForFinish, careerDiscShop, buyCareerDisc, toggleCareerBag, CAREER_BAG_MAX,
   buyCareerCosmetic, equipCareerLook, DEFAULT_CAREER_LOOK, type CareerLook,
@@ -117,7 +118,7 @@ type GameState = {
   career?: { eventId: string; eventName: string; venue?: string; character?: string; emoji?: string }; // round is a played Career event
   mini?: { kind: "putt" | "target"; station: number; makes: number; best: number; points: number; attempts: number; total: number; lastPts?: number }; // practice mini-game
   skill: SkillMods; // Career skill effects on flight (identity for normal play)
-  momentum?: number; // Career "mental" momentum for the current hole (1 = neutral); set from the last hole's result
+  momentum?: number; // legacy per-hole momentum multiplier — always 1 now (momentum retired with the Mental skill)
   seed: number; // round seed (drives wind + pins)
   roundHoles: Hole[]; // this round's holes (wind/pins baked in)
   disc: { x: number; y: number; vx: number; vy: number };
@@ -1358,11 +1359,11 @@ export function DiscGolfGame() {
     // fairway. Straight throws carry farther; the hole's slope acts on the
     // disc in-flight (see SLOPE_PULL in stepFlight), not on the launch.
     const pathMul = (g.path === "straight" ? STRAIGHT_SPEED_MUL : 1) * releaseSpeedMul(g.release);
-    // Career skills bend the shot: momentum (mental) scales distance + catch,
-    // and low control adds a random release-angle error within the aim cone.
+    // Career skills bend the shot: low control adds a random release-angle error
+    // within the aim cone. (momentum is retired → mo is always 1.)
     const mo = g.momentum ?? 1;
     const speed = disc.power * (1.2 + g.power * 3.35) * pathMul * g.skill.speedMul * mo;
-    const spread = (g.skill.aimSpread ?? 0) / mo; // a birdie steadies your aim; a bogey widens it
+    const spread = (g.skill.aimSpread ?? 0) / mo;
     const angle = g.angle + (Math.random() * 2 - 1) * spread;
     g.disc.vx = Math.cos(angle) * speed;
     g.disc.vy = Math.sin(angle) * speed;
@@ -2045,8 +2046,8 @@ export function DiscGolfGame() {
       } else if (g.phase === "holed") {
         if (g.holedAt && performance.now() - g.holedAt > 850) {
           g.scores[g.holeIndex] = g.throws;
-          // Mental/momentum: a birdie steadies + boosts you next hole, a bogey
-          // rattles you (high mental cancels the hit). Neutral outside Career.
+          // Momentum was retired with the Mental skill, so this is always neutral (1)
+          // now — kept wired so the call site is ready if momentum ever returns.
           g.momentum = momentumAfter(g.skill, g.throws, g.roundHoles[g.holeIndex].par);
           persistResume(g); // snapshot a resumable solo round after each hole
           // Online: record my hole, broadcast my full card (self-healing against
@@ -2813,11 +2814,6 @@ export function DiscGolfGame() {
         hudItem("PIN", `${pxToFeet(distBetween(g.rest, hole.basket))}ft`, "#9cc4e8");
         hudItem("THR", `${g.throws}`, "#ffffff");
         hudItem("TO PAR", overStr, over < 0 ? "#36D7B7" : over > 0 ? "#e08a3b" : "#cbd5e1");
-        // Career "mental" momentum carried from the last hole (boost ▲ / rattled ▼).
-        if (g.career && (g.momentum ?? 1) !== 1) {
-          const pct = Math.round(((g.momentum ?? 1) - 1) * 100);
-          hudItem("FORM", `${pct >= 0 ? "▲+" : "▼"}${Math.abs(pct)}%`, pct >= 0 ? "#36D7B7" : "#e08a3b");
-        }
       }
       if (g.mode === "daily") {
         ctx.font = "bold 7px ui-monospace, monospace";
@@ -4484,7 +4480,7 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
   // Training is applied immediately now (each +/- spends a point on the spot). We
   // remember the skills at the start of this view so the − button can only undo
   // points you've added this session, not re-spec ones earned in past seasons.
-  const [sessionBase, setSessionBase] = useState<CareerSkills>(() => career?.skills ?? { power: 0, control: 0, putt: 0, mental: 0 });
+  const [sessionBase, setSessionBase] = useState<CareerSkills>(() => career?.skills ?? { power: 0, control: 0, putt: 0, stamina: 0 });
   const [confirm, setConfirm] = useState<"retire" | "abandon" | null>(null);
   const [showStyle, setShowStyle] = useState(false);
   const [showShop, setShowShop] = useState(false); // Pro Shop disc list, collapsed by default
@@ -4522,7 +4518,7 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
           <h2 className="text-white font-black text-xl">🌟 Career</h2>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
-        <p className="text-gray-300 text-sm">Start as a 14-year-old freshman with two discs and a dream — a clean slate, kept <span className="text-white">completely separate from your main account</span>. Earn training points by <span className="text-white">finishing events well</span> and spend them on four skills (<span className="text-white">1 point = +1, up to 99</span>) — play well to build a 90-overall pro; aging alone won&apos;t. Unlock discs in the <span className="text-[#e0923b]">Pro Shop</span>. Climb from high school to college (Nationals at Winthrop Lake) to the pro tour and chase <span className="text-[#f5d24a]">World #1</span>. Play the big rounds yourself; sim the rest — any coins you earn still go to your account.</p>
+        <p className="text-gray-300 text-sm">Start as a 14-year-old freshman with two discs and $1,000 — a clean slate, kept <span className="text-white">completely separate from your main account</span>. Earn training points by <span className="text-white">finishing events well</span> and spend them on four skills (<span className="text-white">1 point = +1, up to 99</span>): <span className="text-white">Power, Control, Putting</span> set your scores, and <span className="text-[#f5d24a]">Stamina</span> sets your <span className="text-[#f5d24a]">season energy</span>. Each year offers far more events than you can enter — <span className="text-white">spend energy to choose which to play</span> (bigger events cost more and pay more), so train Stamina to play more. Unlock discs in the <span className="text-[#e0923b]">Pro Shop</span>. Climb from high school to college (Nationals at Winthrop Lake) to the pro tour and chase <span className="text-[#f5d24a]">World #1</span>. Play the big rounds yourself or sim them — any coins you earn still go to your account.</p>
         <input type="text" value={name} maxLength={16} onChange={(e) => setName(e.target.value)} placeholder="Your name" className="w-full bg-[#1a1d23] border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-[#e0923b]" />
         <button type="button" onClick={() => onStart(name)} className={`${btn} w-full`}>Begin career</button>
       </div></div>
@@ -4531,8 +4527,8 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
   const sched = seasonSchedule(career);
   const resultFor = (id: string) => career.results.find((r) => r.eventId === id);
   const added = SKILL_KEYS.reduce((s, k) => s + Math.max(0, career.skills[k] - sessionBase[k]), 0); // points spent this view
-  const canAdvance = seasonComplete(career);
-  const undone = sched.filter((e) => !career.done.includes(e.id));
+  const undone = sched.filter((e) => !career.done.includes(e.id)); // events you haven't entered yet
+  const enterable = undone.filter((e) => canEnterEvent(career, e)).length; // …of those, how many you can still afford
   const sponsorOffers = availableSponsors(career);
   const trainCost = trainingPointCost(career);
   const rivals = topRivals(career);
@@ -4544,7 +4540,7 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
     if (k === "power") return `${Math.round(mods.speedMul * 100)}% dist`; // 100% at 99
     if (k === "control") return `cone ±${((mods.aimSpread * 180) / Math.PI).toFixed(0)}°`; // 0° at 99
     if (k === "putt") return `basket ${Math.round((mods.catchR / CATCH_R) * 100)}%`; // 100% at 99
-    return mods.bogeyPenalty < 0.005 ? "tilt-proof" : `bogey −${Math.round(mods.bogeyPenalty * 100)}%`;
+    return `${seasonEnergy(career.skills.stamina)} ⚡/season`; // stamina → season energy pool
   };
 
   // Retired legacy screen.
@@ -4587,6 +4583,7 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
               ? <span className="text-[#f5d24a] font-bold">World #{career.worldRank}</span>
               : <span className="text-gray-500">PDGA {career.pdgaRating}</span>}
             <span className="text-[#36D7B7] font-bold font-mono ml-2">{fmtCash(career.cash)}</span>
+            <span className="text-[#f5d24a] font-bold font-mono ml-2" title="Season energy — spend it to enter events">⚡{career.energy}</span>
           </p>
         </div>
         <div className="shrink-0 flex items-center gap-2">
@@ -4642,7 +4639,7 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
           ))}
         </div>
         <div className="flex items-center justify-between gap-2 pt-1">
-          <p className="text-gray-500 text-[10px] flex-1 leading-snug"><span className="text-gray-300">1 point = +1 skill</span> (max 99), <span className="text-gray-300">applied instantly</span>. You <span className="text-gray-300">earn points by finishing events well</span> — no free ride, so <span className="text-gray-300">play well to reach 90 overall, dominate to push toward 99</span>. Skills slip a little after 35.</p>
+          <p className="text-gray-500 text-[10px] flex-1 leading-snug"><span className="text-gray-300">1 point = +1 skill</span> (max 99), <span className="text-gray-300">applied instantly</span>. <span className="text-gray-300">Power/Control/Putting</span> drive your scores + Overall; <span className="text-gray-300">Stamina</span> sets your <span className="text-[#f5d24a]">season energy</span> (more events/year). You <span className="text-gray-300">earn points by finishing events well</span> — play well to reach 90 overall, dominate to push toward 99. Skills slip a little after 35.</p>
           <button type="button" onClick={onBuyTrain} disabled={career.cash < trainCost}
             className="shrink-0 rounded bg-[#36D7B7]/15 border border-[#36D7B7]/40 text-[#36D7B7] text-[11px] font-bold px-2 py-1 disabled:opacity-30 disabled:border-white/10 disabled:text-gray-500">
             +1 pt · {fmtCash(trainCost)}
@@ -4762,20 +4759,26 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
         ))}
       </div>
 
-      {/* Schedule */}
+      {/* Schedule — a slate too big for your season energy, so you choose which to
+          enter. Each event costs energy (bigger = more, and pays more). */}
       <div className="space-y-1.5">
-        <p className="text-gray-400 text-xs font-bold uppercase tracking-wide">Schedule</p>
+        <div className="flex items-baseline justify-between">
+          <p className="text-gray-400 text-xs font-bold uppercase tracking-wide">Schedule · pick your events</p>
+          <p className="text-[10px] text-gray-500"><span className="text-[#f5d24a] font-mono font-bold">⚡{career.energy}</span> energy left</p>
+        </div>
         {sched.map((ev) => {
           const r = resultFor(ev.id);
           const impColor = ev.importance === "championship" ? "text-[#f5d24a]" : ev.importance === "major" ? "text-[#5fb0e8]" : "text-gray-500";
           const impWord = ev.importance === "championship" ? "Championship" : ev.importance === "major" ? "Major" : "Tour";
           const courseLabel = ev.venue ?? (ev.mode === "winthrop" ? "Winthrop Lake" : ev.mode === "course" ? "Glendoveer" : "9-hole");
+          const cost = eventEnergyCost(ev);
+          const broke = !canEnterEvent(career, ev); // can't afford the energy to enter
           return (
-            <div key={ev.id} className="bg-[#1a1d23] border border-white/5 rounded-lg px-3 py-2">
+            <div key={ev.id} className={`bg-[#1a1d23] border border-white/5 rounded-lg px-3 py-2 ${!r && broke ? "opacity-60" : ""}`}>
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
                   <p className="text-white text-sm font-semibold truncate">{ev.name}</p>
-                  <p className="text-[10px] text-gray-500"><span className={impColor}>{impWord}</span> · {courseLabel} · {ev.fieldSize} players</p>
+                  <p className="text-[10px] text-gray-500"><span className={impColor}>{impWord}</span> · {courseLabel} · {ev.fieldSize} players · <span className="text-[#f5d24a] font-mono">{cost}⚡</span></p>
                   {ev.character && <p className="text-[10px] text-gray-500 truncate">{ev.emoji} {ev.character}</p>}
                   {!r && (() => {
                     const fieldN = ev.fieldSize + 1;
@@ -4789,6 +4792,8 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
                 </div>
                 {r ? (
                   <span className={`shrink-0 text-xs font-bold ${r.win ? "text-[#f5d24a]" : "text-gray-300"}`} title={r.played ? "played" : "simmed"}>{placeLabel(r.placed)} <span className="text-gray-500 font-normal">{r.played ? "▶" : "⚡"}</span></span>
+                ) : broke ? (
+                  <span className="shrink-0 text-[10px] text-gray-500 text-right leading-tight">out of<br />energy</span>
                 ) : (
                   <div className="shrink-0 flex gap-1">
                     <button type="button" onClick={() => onPlay(ev)} className="rounded bg-[#4B3DFF] hover:bg-[#3a2ee0] text-white text-xs font-bold px-2.5 py-1">Play</button>
@@ -4818,14 +4823,12 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
         ))}
       </div>
 
-      {/* Advance / sim-remaining */}
-      {canAdvance ? (
-        <button type="button" onClick={onAdvance} className={`${btn} w-full`}>Advance to next season ▶</button>
-      ) : (
-        <button type="button" onClick={() => undone.forEach((ev) => onSim(ev))} className="w-full rounded-lg bg-white/5 border border-white/10 hover:border-white/25 text-gray-200 text-sm font-bold py-2.5 transition">
-          ⚡ Sim remaining {undone.length} event{undone.length === 1 ? "" : "s"}
-        </button>
+      {/* Advance — available any time. Leftover energy is lost at season's end, so
+          nudge you to spend it on the events you can still afford. */}
+      {enterable > 0 && (
+        <p className="text-[10px] text-gray-500 text-center -mb-0.5">You can still enter <span className="text-[#f5d24a] font-semibold">{enterable}</span> more event{enterable === 1 ? "" : "s"} with your <span className="text-[#f5d24a] font-mono">⚡{career.energy}</span> — unspent energy is lost when the season ends.</p>
       )}
+      <button type="button" onClick={onAdvance} className={`${btn} w-full`}>Advance to next season ▶</button>
       <div className="flex items-center justify-between pt-0.5">
         {career.stage === "pro" ? (
           confirm === "retire" ? (
