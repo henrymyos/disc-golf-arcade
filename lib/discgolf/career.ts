@@ -203,6 +203,9 @@ const CAREER_DISC_SHOP: CareerDiscEntry[] = [
   { key: "zone", cost: 250, stage: "highschool" },
   { key: "swarm", cost: 450, stage: "highschool" },
   { key: "roc", cost: 600, stage: "highschool" },
+  // An early, forgiving distance driver — reachable in your second season if you
+  // play (and place in) every event, so you don't have to wait until the pro tour.
+  { key: "sidewinder", cost: 2000, stage: "highschool" },
   // College — fairway control + your first real drivers.
   { key: "harp", cost: 1200, stage: "college" },
   { key: "river", cost: 1800, stage: "college" },
@@ -297,7 +300,7 @@ export function newCareer(name: string, seed: number): Career {
   };
   return {
     v: 1, name: name.trim().slice(0, 16) || "Rookie", seed: seed >>> 0,
-    age: 14, season: 0, stage: "highschool", skills, potential, trainPts: seasonBaseTrain(14),
+    age: 14, season: 0, stage: "highschool", skills, potential, trainPts: 0, // start with nothing — earn your first points by playing
     done: [], results: [], titles: [], seasonPoints: 0, careerPoints: 0, majors: 0,
     worldRank: null, bestWorldRank: null, seasonsAtNo1: 0, achievements: [], retired: false,
     cash: 0, sponsors: [], rivals: generateRivals(seed),
@@ -532,6 +535,16 @@ export function careerLiveStandings(field: FieldPlayer[], myName: string, myScor
   return rows.map((r, i) => ({ rank: i + 1, name: r.name, total: r.total, toPar: r.total - parThru, you: r.you }));
 }
 
+// Training points earned for a finish — placement + event importance. Exported so
+// the hub can preview "what you'll earn here" before you commit to playing.
+export function trainBonusFor(importance: CareerEvent["importance"], placed: number, fieldN: number): number {
+  return placed === 1 ? (importance === "championship" ? 6 : importance === "major" ? 5 : 4)
+    : placed <= 3 ? 3
+    : placed <= Math.ceil(fieldN * 0.1) ? 2 // a top-10% finish develops you a little
+    : placed <= Math.ceil(fieldN * 0.5) ? 1 // even a top-half finish teaches you something
+    : 0;
+}
+
 // Record a finished event (played or simmed). Folds in your recurring rivals
 // (placement, head-to-head, who actually won), prize money, points + titles.
 // `field` may be supplied (a played round's conditions-aware field) so placement
@@ -568,12 +581,7 @@ export function recordResult(c: Career, ev: CareerEvent, score: number, played: 
   // How you finish drives how fast you develop: training points are EARNED here,
   // not handed out for aging — the per-season floor barely moves you, so reaching
   // 90 takes sustained good play and 99 takes dominance. Win the big ones to grow.
-  const trainBonus =
-    placed === 1 ? (ev.importance === "championship" ? 6 : ev.importance === "major" ? 5 : 4)
-      : placed <= 3 ? 3
-      : placed <= Math.ceil(fieldN * 0.1) ? 2 // a top-10% finish develops you a little
-      : placed <= Math.ceil(fieldN * 0.5) ? 1 // even a top-half finish teaches you something
-      : 0;
+  const trainBonus = trainBonusFor(ev.importance, placed, fieldN);
   // World-ranking points — top-heavy and importance-weighted, so a season of
   // winning everything vaults you up the rankings while a quiet season barely moves you.
   const earnedRankPts = rankPointsFor(ev, placed, fieldN);
@@ -801,6 +809,24 @@ export function buyTrainingPoint(c: Career): Career {
   return { ...c, cash: c.cash - cost, trainPts: c.trainPts + 1, trainBought: c.trainBought + 1 };
 }
 
+// Immediate 1:1 skill training: spend a point to raise a skill on the spot (or
+// refund one to lower it). The hub applies this instantly — no waiting for the
+// season to roll over. Clamped to the 99 ceiling / an 8 floor; manual edits clear
+// the fractional carry so the next season's decline math starts from a clean int.
+export function spendSkillPoint(c: Career, skill: keyof CareerSkills, delta: number): Career {
+  const frac = (val: number): CareerSkills | undefined =>
+    c.skillFrac ? { ...c.skillFrac, [skill]: val } : c.skillFrac;
+  if (delta > 0) {
+    if (c.trainPts <= 0 || c.skills[skill] >= 99) return c;
+    return { ...c, trainPts: c.trainPts - 1, skills: { ...c.skills, [skill]: c.skills[skill] + 1 }, skillFrac: frac(0) };
+  }
+  if (delta < 0) {
+    if (c.skills[skill] <= 8) return c;
+    return { ...c, trainPts: c.trainPts + 1, skills: { ...c.skills, [skill]: c.skills[skill] - 1 }, skillFrac: frac(0) };
+  }
+  return c;
+}
+
 // ── Career disc collection: a Pro Shop (cash) + bag curation, all separate from
 // your account's discs. ──
 const STAGE_RANK: Record<CareerStage, number> = { youth: 0, highschool: 1, college: 2, pro: 3, retired: 3 };
@@ -821,7 +847,7 @@ const CAREER_DISC_CLASS: Record<string, string> = {
   aviar: "putter", zone: "putter", harp: "putter",
   buzzz: "mid", swarm: "mid", roc: "mid",
   teebird: "fairway", firebird: "fairway", river: "fairway", pd: "fairway",
-  destroyer: "driver", wraith: "driver", nukeos: "driver", zeus: "driver",
+  sidewinder: "driver", destroyer: "driver", wraith: "driver", nukeos: "driver", zeus: "driver",
 };
 // Drop a newly-bought disc straight into the bag so it's usable right away: if
 // there's room, add it; if the bag is full, swap out a disc from an

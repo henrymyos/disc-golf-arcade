@@ -18,6 +18,8 @@ import {
   trainingPointCost,
   buyTrainingPoint,
   seasonBaseTrain,
+  spendSkillPoint,
+  trainBonusFor,
   careerFieldHoles,
   careerCard,
   careerCardRacers,
@@ -573,6 +575,53 @@ describe("1:1 training + earned progression", () => {
     let s = c;
     for (let i = 0; i < 10; i++) s = advanceSeason({ ...s, age: 16, trainPts: 12 }, { power: 12 }).career;
     expect(s.skills.power).toBe(99); // potential no longer blocks the player
+  });
+});
+
+describe("immediate skill allocation (spendSkillPoint)", () => {
+  it("a new career starts with 0 points to spend — you earn them by playing", () => {
+    expect(newCareer("Rookie", 1).trainPts).toBe(0);
+  });
+  it("spending a point raises the skill by exactly 1 and costs a point, on the spot", () => {
+    const c: Career = { ...newCareer("Imm", 2), trainPts: 3 };
+    const after = spendSkillPoint(c, "power", 1);
+    expect(after.skills.power).toBe(c.skills.power + 1);
+    expect(after.trainPts).toBe(2);
+  });
+  it("refunds a point when you take an addition back", () => {
+    let c: Career = { ...newCareer("Imm", 3), trainPts: 2 };
+    c = spendSkillPoint(c, "putt", 1);
+    c = spendSkillPoint(c, "putt", -1);
+    expect(c.skills.putt).toBe(newCareer("Imm", 3).skills.putt);
+    expect(c.trainPts).toBe(2);
+  });
+  it("won't spend with no points, won't pass 99, won't refund below the floor", () => {
+    const broke: Career = { ...newCareer("Imm", 4), trainPts: 0 };
+    expect(spendSkillPoint(broke, "power", 1)).toBe(broke); // no points → unchanged
+    const maxed: Career = { ...newCareer("Imm", 4), trainPts: 5, skills: { power: 99, control: 50, putt: 50, mental: 50 } };
+    expect(spendSkillPoint(maxed, "power", 1).skills.power).toBe(99); // capped at 99
+    const floored: Career = { ...newCareer("Imm", 4), skills: { power: 8, control: 8, putt: 8, mental: 8 } };
+    expect(spendSkillPoint(floored, "power", -1)).toBe(floored); // can't drop below 8
+  });
+});
+
+describe("trainBonusFor (reward preview) + early driver", () => {
+  it("previews more points for better finishes and bigger events", () => {
+    expect(trainBonusFor("championship", 1, 30)).toBe(6);
+    expect(trainBonusFor("major", 1, 30)).toBe(5);
+    expect(trainBonusFor("minor", 1, 30)).toBe(4);
+    expect(trainBonusFor("minor", 3, 30)).toBe(3);
+    expect(trainBonusFor("minor", 30, 30)).toBe(0); // dead last → nothing
+  });
+  it("matches what recordResult actually grants", () => {
+    const c = newCareer("Match", 6);
+    const ev = seasonSchedule(c).find((e) => e.importance === "championship")!;
+    const res = recordResult(c, ev, 1, false); // win it
+    expect(res.result.trainBonus).toBe(trainBonusFor(ev.importance, res.result.placed, res.result.field));
+  });
+  it("offers an early distance driver (sidewinder) in high school", () => {
+    const hs = newCareer("HS", 9);
+    expect(careerDiscShop(hs).map((d) => d.key)).toContain("sidewinder"); // reachable by year 2
   });
 });
 

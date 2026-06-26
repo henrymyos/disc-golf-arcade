@@ -41,7 +41,7 @@ import { parseChallenge } from "@/lib/discgolf/challenge";
 import {
   newCareer, normalizeCareer, skillMods, momentumAfter, seasonSchedule, simEvent, recordResult, advanceSeason, retire, seasonComplete,
   placeLabel, STAGE_LABEL, SKILL_KEYS, SKILL_LABEL, SKILL_DESC, IDENTITY_MODS,
-  availableSponsors, signSponsor, trainingPointCost, buyTrainingPoint, topRivals, fmtCash, SPONSOR_CAP,
+  availableSponsors, signSponsor, trainingPointCost, buyTrainingPoint, spendSkillPoint, trainBonusFor, topRivals, fmtCash, SPONSOR_CAP,
   careerRating, careerDiscShop, buyCareerDisc, toggleCareerBag, nextCareerDisc, CAREER_BAG_MAX,
   buyCareerCosmetic, equipCareerLook, DEFAULT_CAREER_LOOK, type CareerLook,
   careerFieldForRound, careerCardRacers, careerLiveStandings,
@@ -2451,34 +2451,40 @@ export function DiscGolfGame() {
             for (let i = 0; i < 360; i++) { const r = stepFlight(f, aimDisc, sign, path, hole, releaseRef.current, { catchR: eCatchR, windMul: g.skill.windMul }); out.push({ x: f.x, y: f.y }); if (r.status !== "fly") break; }
             return out;
           };
+          // Trace the centre flight first so the cone can match its drawn length.
+          const pts = trace(g.angle);
+          // Only reveal the first half of the flight, fading from solid to gone.
+          const shown = Math.max(2, Math.floor(pts.length * 0.5));
           // Control cone: low control fans the aim into a range your disc might
           // actually go. Draw a filled amber wedge + bold edges so the possible
-          // landing area is clear (collapses to nothing at 99 control).
+          // landing area is clear (collapses to nothing at 99 control). The edges
+          // run exactly as far as the main aim line and fade out alongside it.
           if (spread > 0.002) {
             const left = trace(g.angle - spread);
             const right = trace(g.angle + spread);
-            const n = Math.max(2, Math.floor(Math.min(left.length, right.length) * 0.6));
+            const n = Math.max(2, Math.min(shown, left.length, right.length));
             // Filled wedge — the area the disc could end up in.
             ctx.beginPath();
             ctx.moveTo(left[0].x, left[0].y - cam);
             for (let i = 1; i < n; i++) ctx.lineTo(left[i].x, left[i].y - cam);
             for (let i = n - 1; i >= 0; i--) ctx.lineTo(right[i].x, right[i].y - cam);
             ctx.closePath();
-            ctx.fillStyle = "rgba(240,170,70,0.18)";
+            ctx.fillStyle = "rgba(240,170,70,0.15)";
             ctx.fill();
-            // Bold solid edges bounding the spread.
+            // Bold edges bounding the spread — same reach + fade as the aim line.
             ctx.lineWidth = 2;
-            ctx.strokeStyle = "rgba(245,180,80,0.9)";
+            ctx.strokeStyle = "rgb(245,180,80)";
             for (const ep of [left, right]) {
-              ctx.beginPath();
-              ctx.moveTo(ep[0].x, ep[0].y - cam);
-              for (let i = 1; i < n; i++) ctx.lineTo(ep[i].x, ep[i].y - cam);
-              ctx.stroke();
+              for (let i = 0; i < n - 1; i++) {
+                ctx.globalAlpha = Math.max(0.04, 0.9 * (1 - Math.pow(i / (shown - 1), 1.4)));
+                ctx.beginPath();
+                ctx.moveTo(ep[i].x, ep[i].y - cam);
+                ctx.lineTo(ep[i + 1].x, ep[i + 1].y - cam);
+                ctx.stroke();
+              }
             }
+            ctx.globalAlpha = 1;
           }
-          const pts = trace(g.angle);
-          // Only reveal the first half of the flight, fading from solid to gone.
-          const shown = Math.max(2, Math.floor(pts.length * 0.5));
           const aimStyle = cosmeticByKey(AIM_STYLES, aimStyleRef.current) ?? AIM_STYLES[0];
           ctx.lineWidth = 2;
           ctx.strokeStyle = aimStyle.color;
@@ -3423,7 +3429,8 @@ export function DiscGolfGame() {
             onStart={startNewCareer}
             onPlay={(ev) => { const c = careerRef.current; if (c) startCareerEvent(c, ev); }}
             onSim={simCareerEvent}
-            onAdvance={advanceCareerSeason}
+            onAllocateSkill={(k, d) => { const c = careerRef.current; if (c) saveCareer(spendSkillPoint(c, k, d)); }}
+            onAdvance={() => advanceCareerSeason({})}
             onRetire={() => { const c = careerRef.current; if (c) saveCareer(retire(c)); }}
             onAbandon={() => { saveCareer(null); setCareerLastResult(null); setCareerNotes([]); }}
             onSign={(id) => { const c = careerRef.current; if (c) saveCareer(signSponsor(c, id)); }}
@@ -4444,7 +4451,7 @@ const CAREER_STYLE_CATS: { slot: keyof CareerLook; prefix: string; label: string
   { slot: "celebration", prefix: COSMETIC_PREFIX.celebration, label: "Win pop", items: CELEBRATIONS.map((i) => ({ key: i.key, name: i.name, price: i.price, color: i.colors[0] ?? "#888" })) },
   { slot: "trail", prefix: "trail", label: "Trail", items: TRAILS.filter((i) => i.key !== "none").map((i) => ({ key: i.key, name: i.name, price: i.price, color: i.colors[0] ?? "#888" })) },
 ];
-function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, onPlay, onSim, onAdvance, onRetire, onAbandon, onSign, onBuyTrain, onBuyDisc, onToggleBag, onBuyCosmetic, onEquipLook, dismissNotes }: {
+function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, onPlay, onSim, onAllocateSkill, onAdvance, onRetire, onAbandon, onSign, onBuyTrain, onBuyDisc, onToggleBag, onBuyCosmetic, onEquipLook, dismissNotes }: {
   career: Career | null;
   lastResult: EventResult | null;
   lastCoins: number;
@@ -4453,7 +4460,8 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
   onStart: (name: string) => void;
   onPlay: (ev: CareerEvent) => void;
   onSim: (ev: CareerEvent) => void;
-  onAdvance: (alloc: Partial<CareerSkills>) => void;
+  onAllocateSkill: (skill: keyof CareerSkills, delta: number) => void;
+  onAdvance: () => void;
   onRetire: () => void;
   onAbandon: () => void;
   onSign: (id: string) => void;
@@ -4465,13 +4473,18 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
   dismissNotes: () => void;
 }) {
   const [name, setName] = useState("");
-  const [alloc, setAlloc] = useState<CareerSkills>({ power: 0, control: 0, putt: 0, mental: 0 });
+  // Training is applied immediately now (each +/- spends a point on the spot). We
+  // remember the skills at the start of this view so the − button can only undo
+  // points you've added this session, not re-spec ones earned in past seasons.
+  const [sessionBase, setSessionBase] = useState<CareerSkills>(() => career?.skills ?? { power: 0, control: 0, putt: 0, mental: 0 });
   const [confirm, setConfirm] = useState<"retire" | "abandon" | null>(null);
   const [showStyle, setShowStyle] = useState(false);
   const [discInfo, setDiscInfo] = useState<string | null>(null); // disc key for the details modal
-  /* eslint-disable react-hooks/set-state-in-effect */
-  useEffect(() => { setAlloc({ power: 0, control: 0, putt: 0, mental: 0 }); setConfirm(null); }, [career?.season, career?.retired]);
-  /* eslint-enable react-hooks/set-state-in-effect */
+  /* eslint-disable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
+  // Re-baseline only when the season rolls over (NOT on every skill spend), so the
+  // − button keeps undoing this season's additions without resetting mid-edit.
+  useEffect(() => { if (career) setSessionBase(career.skills); setConfirm(null); }, [career?.season, career?.retired]);
+  /* eslint-enable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
 
   const wrap = "absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start justify-center rounded-lg";
   const card = "w-full max-w-sm space-y-3 my-auto text-left";
@@ -4508,8 +4521,7 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
   }
   const sched = seasonSchedule(career);
   const resultFor = (id: string) => career.results.find((r) => r.eventId === id);
-  const spent = SKILL_KEYS.reduce((s, k) => s + alloc[k], 0);
-  const remaining = career.trainPts - spent;
+  const added = SKILL_KEYS.reduce((s, k) => s + Math.max(0, career.skills[k] - sessionBase[k]), 0); // points spent this view
   const canAdvance = seasonComplete(career);
   const undone = sched.filter((e) => !career.done.includes(e.id));
   const sponsorOffers = availableSponsors(career);
@@ -4592,21 +4604,22 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
       <div className="bg-[#1a1d23] border border-white/5 rounded-xl p-3 space-y-2">
         <div className="flex items-center justify-between">
           <p className="text-gray-400 text-xs font-bold uppercase tracking-wide">Skills · Overall {overall}</p>
-          <p className="text-[11px] text-gray-400">Training <span className={remaining > 0 ? "text-[#36D7B7] font-bold" : "text-gray-500"}>{remaining}</span>/{career.trainPts}</p>
+          <p className="text-[11px] text-gray-400">Points to spend <span className={career.trainPts > 0 ? "text-[#36D7B7] font-bold" : "text-gray-500"}>{career.trainPts}</span>{added > 0 ? <span className="text-gray-500"> · +{added} this season</span> : null}</p>
         </div>
         {SKILL_KEYS.map((k) => {
           const val = career.skills[k];
-          const add = alloc[k];
+          const canAdd = career.trainPts > 0 && val < 99;
+          const canRemove = val > sessionBase[k]; // only undo points added this session
           return (
             <div key={k} className="flex items-center gap-2">
               <span className="w-12 text-[11px] text-gray-300">{SKILL_LABEL[k]}</span>
               <div className="flex-1 h-2.5 bg-white/5 rounded relative overflow-hidden">
-                <div className="absolute inset-y-0 left-0 bg-[#36D7B7] rounded" style={{ width: `${Math.min(100, val)}%` }} />
+                <div className="absolute inset-y-0 left-0 bg-[#36D7B7] rounded transition-all" style={{ width: `${Math.min(100, val)}%` }} />
               </div>
-              <span className="w-9 text-right text-[11px] font-mono text-white">{val}{add ? <span className="text-[#36D7B7]">+{add}</span> : null}</span>
+              <span className="w-7 text-right text-[11px] font-mono text-white">{val}</span>
               <div className="flex gap-0.5 shrink-0">
-                <button type="button" onClick={() => setAlloc((a) => ({ ...a, [k]: Math.max(0, a[k] - 1) }))} disabled={add === 0} className="w-5 h-5 rounded bg-white/10 text-white text-xs leading-none disabled:opacity-30">−</button>
-                <button type="button" onClick={() => setAlloc((a) => (remaining > 0 ? { ...a, [k]: a[k] + 1 } : a))} disabled={remaining <= 0} className="w-5 h-5 rounded bg-white/10 text-white text-xs leading-none disabled:opacity-30">+</button>
+                <button type="button" onClick={() => onAllocateSkill(k, -1)} disabled={!canRemove} className="w-5 h-5 rounded bg-white/10 text-white text-xs leading-none disabled:opacity-30">−</button>
+                <button type="button" onClick={() => onAllocateSkill(k, 1)} disabled={!canAdd} className="w-5 h-5 rounded bg-white/10 text-white text-xs leading-none disabled:opacity-30">+</button>
               </div>
             </div>
           );
@@ -4621,7 +4634,7 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
           ))}
         </div>
         <div className="flex items-center justify-between gap-2 pt-1">
-          <p className="text-gray-500 text-[10px] flex-1 leading-snug"><span className="text-gray-300">1 point = +1 skill</span> (max 99), spent at season&apos;s end. You <span className="text-gray-300">earn points by finishing events well</span> — no free ride, so <span className="text-gray-300">play well to reach 90 overall, dominate to push toward 99</span>. Skills slip a little after 35.</p>
+          <p className="text-gray-500 text-[10px] flex-1 leading-snug"><span className="text-gray-300">1 point = +1 skill</span> (max 99), <span className="text-gray-300">applied instantly</span>. You <span className="text-gray-300">earn points by finishing events well</span> — no free ride, so <span className="text-gray-300">play well to reach 90 overall, dominate to push toward 99</span>. Skills slip a little after 35.</p>
           <button type="button" onClick={onBuyTrain} disabled={career.cash < trainCost}
             className="shrink-0 rounded bg-[#36D7B7]/15 border border-[#36D7B7]/40 text-[#36D7B7] text-[11px] font-bold px-2 py-1 disabled:opacity-30 disabled:border-white/10 disabled:text-gray-500">
             +1 pt · {fmtCash(trainCost)}
@@ -4751,6 +4764,13 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
                   <p className="text-white text-sm font-semibold truncate">{ev.name}</p>
                   <p className="text-[10px] text-gray-500"><span className={impColor}>{impWord}</span> · {courseLabel} · {ev.fieldSize} players</p>
                   {ev.character && <p className="text-[10px] text-gray-500 truncate">{ev.emoji} {ev.character}</p>}
+                  {!r && (
+                    <p className="text-[9px] text-gray-500 mt-0.5 leading-tight">
+                      <span className="text-[#36D7B7] font-semibold">+{trainBonusFor(ev.importance, 1, ev.fieldSize + 1)} skill pt{trainBonusFor(ev.importance, 1, ev.fieldSize + 1) > 1 ? "s" : ""}</span> to win · +3 top-3 · +1 top-½
+                      <span className="text-gray-600"> · </span>
+                      <span className="text-[#f5d24a]">{ev.holes >= 18 ? 30 : 15}+6/under</span> <Coin className="!w-2.5 !h-2.5 align-[-1px]" /> if played
+                    </p>
+                  )}
                 </div>
                 {r ? (
                   <span className={`shrink-0 text-xs font-bold ${r.win ? "text-[#f5d24a]" : "text-gray-300"}`} title={r.played ? "played" : "simmed"}>{placeLabel(r.placed)} <span className="text-gray-500 font-normal">{r.played ? "▶" : "⚡"}</span></span>
@@ -4785,7 +4805,7 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
 
       {/* Advance / sim-remaining */}
       {canAdvance ? (
-        <button type="button" onClick={() => onAdvance(alloc)} className={`${btn} w-full`}>Advance to next season ▶</button>
+        <button type="button" onClick={onAdvance} className={`${btn} w-full`}>Advance to next season ▶</button>
       ) : (
         <button type="button" onClick={() => undone.forEach((ev) => onSim(ev))} className="w-full rounded-lg bg-white/5 border border-white/10 hover:border-white/25 text-gray-200 text-sm font-bold py-2.5 transition">
           ⚡ Sim remaining {undone.length} event{undone.length === 1 ? "" : "s"}
