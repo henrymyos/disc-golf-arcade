@@ -3,7 +3,7 @@
 // Lake), and the pro tour. Events can be SIMULATED from your skills or PLAYED
 // as real rounds (your skills change how the disc flies — see skillMods). All
 // logic here is pure + deterministic so it's testable and resumes cleanly. ──
-import { mulberry32, CATCH_R, TOTAL_PAR, WINTHROP_PAR, tourPars, tourCharacter, tourVenue, type Mode, type Hole, type TournLiveRow, type GhostRacer } from "./engine";
+import { mulberry32, CATCH_R, TOTAL_PAR, WINTHROP_PAR, tourPars, tourCharacter, tourVenue, discByKey, type Mode, type Hole, type TournLiveRow, type GhostRacer } from "./engine";
 
 export type CareerSkills = { power: number; control: number; putt: number; stamina: number };
 export const SKILL_KEYS: (keyof CareerSkills)[] = ["power", "control", "putt", "stamina"];
@@ -34,10 +34,10 @@ export function skillMods(s: CareerSkills): SkillMods {
   const putt = Math.min(1, clamp(s.putt) / 99);
   const control = Math.min(1, clamp(s.control) / 99);
   return {
-    speedMul: 0.62 + 0.38 * power,             // 0.62 (beginner) … 1.0 (full range at 99)
-    catchR: CATCH_R * (0.7 + 0.4 * putt),      // 0.7× (small basket) … 1.1× normal at 99
+    speedMul: 0.74 + 0.26 * power,             // 0.74 (beginner, ~80% carry) … 1.0 (full range at 99)
+    catchR: CATCH_R * (0.80 + 0.30 * putt),    // 0.80× (forgiving) … 1.1× normal at 99
     windMul: 1,                                 // wind hits you normally now (control no longer fights it)
-    aimSpread: 0.32 * (1 - control),           // 0 rad (dead-on) … ~±18° cone — wild at low control
+    aimSpread: 0.20 * (1 - control),           // 0 rad (dead-on) … ~±11° cone — gentler on a rookie so trying hard pays off
     birdieBoost: 0,                             // momentum retired with the Mental skill — every hole is neutral
     bogeyPenalty: 0,
   };
@@ -46,6 +46,17 @@ export function skillMods(s: CareerSkills): SkillMods {
 // hole now plays neutral — kept as a stable 1 so existing callers don't change.
 export function momentumAfter(_mods: SkillMods, _strokes: number, _par: number): number {
   return 1;
+}
+
+// Early-career courses play SHORT so a developing player can reach greens with a
+// putter/midrange/fairway instead of needing a distance driver — easing back to
+// full length by college. Scales every hole's length (see materializeHole's
+// lenMul in the engine); 1 = normal. Junior + the first high-school seasons are
+// the most forgiving, lengthening as you grow into the bag.
+export function careerHoleLenScale(c: Career): number {
+  if (c.stage === "youth") return 0.64;
+  if (c.stage === "highschool") return Math.min(1, 0.72 + 0.06 * c.season); // ~0.72 (freshman) → ~0.9 (senior)
+  return 1; // college + pro: full length
 }
 
 // One overall number (0..100) used for simulated results + world ranking. Stamina
@@ -132,12 +143,13 @@ export type Rival = {
 export type Sponsor = {
   id: string;
   name: string;
-  tier: number; // 1 local … 4 global
+  tier: number; // 1 local … 4 global … 5 manufacturer (marquee, exclusive)
   signing: number; // one-time cash on signing
   stipend: number; // cash per season
   coach: boolean; // grants +1 training point each season
   reqRating: number; // skill rating needed to be offered
   reqStage: CareerStage; // earliest stage offered
+  brand?: string; // a MANUFACTURER deal: locks your career bag to this disc brand only
 };
 
 export type Career = {
@@ -185,7 +197,9 @@ const RIVAL_NAMES = [
 ];
 const RIVAL_PALETTE = ["#e23b7b", "#5fb0e8", "#b85cd6", "#e2a13b", "#36D7B7", "#f5d24a"];
 
-// Sponsors unlock by reputation (rating + stage). Sign up to 3.
+// Sponsors unlock by reputation (rating + stage). Sign up to 3 — one of which can
+// be a MANUFACTURER deal (Innova / Discraft): the marquee late-game contract that
+// pays a fortune but locks your bag to that brand's discs only (see signSponsor).
 const SPONSOR_CAP = 3;
 const SPONSOR_POOL: Sponsor[] = [
   { id: "localdisc", name: "Hometown Disc Shop", tier: 1, signing: 200, stipend: 150, coach: false, reqRating: 0, reqStage: "highschool" },
@@ -195,6 +209,10 @@ const SPONSOR_POOL: Sponsor[] = [
   { id: "voltathletic", name: "Volt Athletic", tier: 3, signing: 15000, stipend: 12000, coach: false, reqRating: 66, reqStage: "pro" },
   { id: "summitdiscs", name: "Summit Discs", tier: 3, signing: 30000, stipend: 22000, coach: true, reqRating: 72, reqStage: "pro" },
   { id: "global", name: "Global Sportswear", tier: 4, signing: 90000, stipend: 60000, coach: true, reqRating: 80, reqStage: "pro" },
+  // Manufacturer deals — only a genuine top-tour pro lands one. Huge money + their
+  // full disc lineup, but you carry ONLY their plastic from then on.
+  { id: "innova", name: "Innova", tier: 5, signing: 220000, stipend: 140000, coach: true, reqRating: 82, reqStage: "pro", brand: "Innova" },
+  { id: "discraft", name: "Discraft", tier: 5, signing: 220000, stipend: 140000, coach: true, reqRating: 82, reqStage: "pro", brand: "Discraft" },
 ];
 
 // ── Career disc collection. Career mode runs its OWN disc progression, totally
@@ -415,17 +433,19 @@ export function seasonSchedule(c: Career): CareerEvent[] {
   const ramp = c.season * 0.6; // the field slowly toughens season over season within a stage
   switch (c.stage) {
     case "youth": {
-      // ~4 junior events — a few opens plus the Junior Championship.
-      const out = take(YOUTH_NAMES, 3).map((n, i) => ev(`jr${i + 1}`, n, "daily", "minor", 12 + i * 2, 14 + ramp + i));
-      out.push(ev("jrc", "Junior Championship", "daily", "championship", 16, 20 + ramp));
+      // ~4 junior events — a few opens plus the Junior Championship. A gentle
+      // field so a raw beginner can place well from their very first event.
+      const out = take(YOUTH_NAMES, 3).map((n, i) => ev(`jr${i + 1}`, n, "daily", "minor", 12 + i * 2, 11 + ramp + i));
+      out.push(ev("jrc", "Junior Championship", "daily", "championship", 16, 16 + ramp));
       return out;
     }
     case "highschool": {
-      // ~6 events. Calibrated for a raw freshman (all skills start at 20) — beatable
-      // early, toughening each season so you keep developing to keep winning.
-      const out = take(HS_NAMES, 4).map((n, i) => ev(`hs${i + 1}`, n, i % 2 ? "course" : "daily", "minor", 20 + i * 2, 24 + ramp + i));
-      out.push(ev("hsq", "Regional Qualifier", "course", "major", 24, 28 + ramp));
-      out.push(ev("hss", "State Championship", "course", "championship", 28, 34 + ramp));
+      // ~6 events. Calibrated for a raw freshman (all skills start at 20) — clearly
+      // beatable early (try hard and you contend from event one), toughening each
+      // season via `ramp` so you keep developing to keep winning.
+      const out = take(HS_NAMES, 4).map((n, i) => ev(`hs${i + 1}`, n, i % 2 ? "course" : "daily", "minor", 20 + i * 2, 19 + ramp + i));
+      out.push(ev("hsq", "Regional Qualifier", "course", "major", 24, 23 + ramp));
+      out.push(ev("hss", "State Championship", "course", "championship", 28, 29 + ramp));
       return out;
     }
     case "college": {
@@ -859,18 +879,69 @@ const STAGE_ORDER: CareerStage[] = ["youth", "highschool", "college", "pro", "re
 
 // ── Sponsorships ──
 export { SPONSOR_CAP };
+// The disc brand a signed MANUFACTURER deal locks your career bag to (or null).
+export function sponsorBrandLock(c: Career): string | null {
+  return c.sponsors.find((s) => s.brand)?.brand ?? null;
+}
+// Every career-shop / core disc that belongs to a given brand — the pool a
+// manufacturer deal grants you and restricts your bag to.
+function brandUniverseKeys(brand: string): string[] {
+  const all = Array.from(new Set([...CAREER_CORE_DISCS, ...CAREER_DISC_SHOP.map((d) => d.key)]));
+  return all.filter((k) => discByKey(k)?.brand === brand);
+}
+// Build a sensible ≤BAG_MAX bag out of a brand's discs: one of each class present
+// (putter→mid→fairway→driver), then fill the rest preferring drivers + mids.
+function brandBag(brandKeys: string[]): string[] {
+  const cls = (k: string) => CAREER_DISC_CLASS[k] ?? "mid";
+  const byClass: Record<string, string[]> = {};
+  brandKeys.forEach((k) => { (byClass[cls(k)] ??= []).push(k); });
+  const bag: string[] = [];
+  ["putter", "mid", "fairway", "driver"].forEach((cl) => { if (byClass[cl]?.length) bag.push(byClass[cl][0]); });
+  for (const cl of ["driver", "mid", "fairway", "putter"]) {
+    for (const k of byClass[cl] ?? []) { if (bag.length >= CAREER_BAG_MAX) break; if (!bag.includes(k)) bag.push(k); }
+  }
+  return bag.slice(0, CAREER_BAG_MAX);
+}
+// Apply a manufacturer deal: grant the brand's full lineup and rebuild the bag so
+// it's brand-only and immediately playable.
+function applyBrandDeal(c: Career, brand: string): Career {
+  const keys = brandUniverseKeys(brand);
+  const discs = Array.from(new Set([...c.discs, ...keys]));
+  return { ...c, discs, bag: brandBag(keys) };
+}
 // Sponsor offers you currently qualify for (by rating + stage) and haven't signed.
+// Regular sponsors need one of your 3 slots free. A MANUFACTURER deal also takes a
+// slot the first time, but if you already hold one, the rival brand is still
+// offered as a SWITCH (no slot needed — it replaces your current deal).
 export function availableSponsors(c: Career): Sponsor[] {
-  if (c.sponsors.length >= SPONSOR_CAP || c.retired) return [];
+  if (c.retired) return [];
   const rating = careerRating(c.skills);
   const reached = STAGE_ORDER.indexOf(c.stage);
   const signed = new Set(c.sponsors.map((s) => s.id));
-  return SPONSOR_POOL.filter((s) => !signed.has(s.id) && rating >= s.reqRating && reached >= STAGE_ORDER.indexOf(s.reqStage));
+  const hasBrand = c.sponsors.some((s) => s.brand);
+  const slotFree = c.sponsors.length < SPONSOR_CAP;
+  return SPONSOR_POOL.filter((s) => {
+    if (signed.has(s.id)) return false;
+    if (rating < s.reqRating || reached < STAGE_ORDER.indexOf(s.reqStage)) return false;
+    if (s.brand) return hasBrand || slotFree; // switch (have one) or a free slot for the first
+    return slotFree;
+  });
 }
 export function signSponsor(c: Career, id: string): Career {
-  if (c.sponsors.length >= SPONSOR_CAP) return c;
   const s = SPONSOR_POOL.find((x) => x.id === id);
   if (!s || c.sponsors.some((x) => x.id === id)) return c;
+  if (s.brand) {
+    const current = c.sponsors.find((x) => x.brand);
+    if (current) {
+      // SWITCH manufacturers: replace the deal in place (no extra slot, no second
+      // signing bonus to farm), then rebuild the bag for the new brand.
+      return applyBrandDeal({ ...c, sponsors: c.sponsors.map((x) => (x.brand ? s : x)) }, s.brand);
+    }
+    // First manufacturer deal — needs a free slot; pays the signing bonus.
+    if (c.sponsors.length >= SPONSOR_CAP) return c;
+    return applyBrandDeal({ ...c, sponsors: [...c.sponsors, s], cash: c.cash + s.signing }, s.brand);
+  }
+  if (c.sponsors.length >= SPONSOR_CAP) return c;
   return { ...c, sponsors: [...c.sponsors, s], cash: c.cash + s.signing };
 }
 
@@ -906,10 +977,15 @@ export function spendSkillPoint(c: Career, skill: keyof CareerSkills, delta: num
 // ── Career disc collection: a Pro Shop (cash) + bag curation, all separate from
 // your account's discs. ──
 // Every disc you don't already own, cheapest first — the whole catalog is open
-// from the start, so the only thing between you and a disc is saving the cash.
+// from the start, so the only thing between you and a disc is saving the cash. A
+// manufacturer deal restricts the shop to that brand (you can't buy what you can't play).
 export function careerDiscShop(c: Career): { key: string; cost: number }[] {
   const owned = new Set(c.discs);
-  return CAREER_DISC_SHOP.filter((d) => !owned.has(d.key)).sort((a, b) => a.cost - b.cost);
+  const lock = sponsorBrandLock(c);
+  return CAREER_DISC_SHOP
+    .filter((d) => !owned.has(d.key))
+    .filter((d) => !lock || discByKey(d.key)?.brand === lock)
+    .sort((a, b) => a.cost - b.cost);
 }
 // Disc "class" so a freshly-bought disc can slot into the bag sensibly.
 const CAREER_DISC_CLASS: Record<string, string> = {
@@ -939,11 +1015,14 @@ function autoBagDisc(bag: string[], key: string): string[] {
 }
 export function buyCareerDisc(c: Career, key: string): Career {
   if (c.discs.includes(key)) return c;
+  const lock = sponsorBrandLock(c);
+  if (lock && discByKey(key)?.brand !== lock) return c; // exclusive deal — off-brand discs aren't for sale
   const entry = CAREER_DISC_SHOP.find((d) => d.key === key);
   if (!entry || c.cash < entry.cost) return c; // no stage gate — just need the cash
   return { ...c, cash: c.cash - entry.cost, discs: [...c.discs, key], bag: autoBagDisc(c.bag, key) };
 }
-// Add/remove an owned disc from the career bag (keeps 1..CAREER_BAG_MAX in it).
+// Add/remove an owned disc from the career bag (keeps 1..CAREER_BAG_MAX in it). A
+// manufacturer deal makes the bag brand-exclusive: off-brand discs can't be added.
 export function toggleCareerBag(c: Career, key: string): Career {
   if (!c.discs.includes(key)) return c;
   if (c.bag.includes(key)) {
@@ -951,6 +1030,8 @@ export function toggleCareerBag(c: Career, key: string): Career {
     return { ...c, bag: c.bag.filter((k) => k !== key) };
   }
   if (c.bag.length >= CAREER_BAG_MAX) return c;
+  const lock = sponsorBrandLock(c);
+  if (lock && discByKey(key)?.brand !== lock) return c; // only the sponsor's plastic
   return { ...c, bag: [...c.bag, key] };
 }
 

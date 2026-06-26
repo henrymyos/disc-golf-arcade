@@ -1085,7 +1085,7 @@ function pointOnPath(pts: Vec[], t: number): Vec {
 // of water, sand, or trees). Obstacles are placed INSIDE the fairway corridor
 // (within ±fwWidth/2 of the centerline) so they're real hazards to navigate,
 // not scenery sitting out in the already-OB rough.
-type GenOpts = { par?: number; tighten?: number; waterChance?: number; waterMax?: number; hazardChance?: number; hazardMax?: number; extraTreesHi?: number };
+type GenOpts = { par?: number; tighten?: number; waterChance?: number; waterMax?: number; hazardChance?: number; hazardMax?: number; extraTreesHi?: number; lenScale?: number };
 function genDailyHole(rng: () => number, opts: GenOpts = {}): Hole {
   const r = (a: number, b: number) => a + rng() * (b - a);
   const pickN = (arr: number[]) => arr[Math.floor(rng() * arr.length)];
@@ -1170,15 +1170,18 @@ function genDailyHole(rng: () => number, opts: GenOpts = {}): Hole {
   // Length variety: like a real course, not every hole is a max-driver shot.
   // Many par-3s play short enough to reach with a midrange or fairway off the
   // tee; par 4/5 keep their length (their drives still need distance). Rolled
-  // last so obstacle placement for a given seed is unchanged.
-  const lenMul = par <= 3 ? pickN([0.6, 0.7, 0.82, 1, 1]) : 1;
+  // last so obstacle placement for a given seed is unchanged. `opts.lenScale`
+  // (<1) shrinks every hole on top of that — used by early-career courses so a
+  // developing player can reach without a distance driver.
+  const lenMul = (par <= 3 ? pickN([0.6, 0.7, 0.82, 1, 1]) : 1) * (opts.lenScale ?? 1);
   return materializeHole({ par, lenMul, tee: TEE, basket: { x: basketX, y: basketY }, fairway: pts, fwWidth, trees, water, hazard, elev });
 }
 // A fresh, seeded 9-hole course — different every day (the Daily Challenge).
-function generateDailyCourse(rng: () => number): Hole[] {
+// `lenScale` (<1) shrinks every hole for early-career play; 1 = normal daily.
+function generateDailyCourse(rng: () => number, lenScale = 1): Hole[] {
   const holes: Hole[] = [];
   for (let i = 0; i < 9; i++) {
-    const h = genDailyHole(rng);
+    const h = genDailyHole(rng, lenScale === 1 ? {} : { lenScale });
     const { wind, windMag } = seededWind(rng);
     holes.push({ ...h, wind, windMag });
   }
@@ -1213,12 +1216,12 @@ function tourCharacter(seed: number): { character: string; emoji: string } {
 }
 // A procedurally-generated 18-hole pro "tour" course with a venue character,
 // using the pars from tourPars(seed). Deterministic.
-function generateTourCourse(seed: number): Hole[] {
+function generateTourCourse(seed: number, lenScale = 1): Hole[] {
   const pars = tourPars(seed);
   const style = tourStyle(seed);
   const rng = mulberry32((seed ^ 0x2545f491) >>> 0);
   return pars.map((par) => {
-    const h = genDailyHole(rng, { par, ...style.gen });
+    const h = genDailyHole(rng, { par, ...style.gen, ...(lenScale === 1 ? {} : { lenScale }) });
     const { wind, windMag } = seededWind(rng);
     return { ...h, wind: { x: wind.x * style.windMul, y: wind.y * style.windMul }, windMag: windMag * style.windMul };
   });
@@ -1290,12 +1293,18 @@ const TOURNAMENTS: TournDef[] = buildTournaments();
 // Pins are FIXED at their authored spot — every round plays the same basket
 // position (no per-round jitter), so a hole is always identical and a pin can
 // never land in water or behind a tree. Same seed ⇒ same round.
-function buildRound(seed: number, mode: Mode): Hole[] {
+// `lenScale` (<1) shortens every hole — early-career play sets it so a developing
+// player can reach greens without a distance driver. The fixed courses
+// (Glendoveer/Winthrop) are re-materialized from their templates at the scaled
+// length; 1 (the default for all normal play) returns the unchanged courses.
+function buildRound(seed: number, mode: Mode, lenScale = 1): Hole[] {
   const rng = mulberry32(seed);
-  if (mode === "daily") return generateDailyCourse(rng);
-  if (mode === "tour" || mode === "ranked") return generateTourCourse(seed);
-  const course = mode === "winthrop" ? WINTHROP_HOLES : HOLES;
-  return course.map((h, i) => {
+  if (mode === "daily") return generateDailyCourse(rng, lenScale);
+  if (mode === "tour" || mode === "ranked") return generateTourCourse(seed, lenScale);
+  const templates = mode === "winthrop" ? WINTHROP_TEMPLATES : HOLE_TEMPLATES;
+  const full = mode === "winthrop" ? WINTHROP_HOLES : HOLES;
+  return templates.map((t, i) => {
+    const h = lenScale === 1 ? full[i] : materializeHole({ ...t, lenMul: (t.lenMul ?? 1) * lenScale });
     const { wind, windMag } = seededWind(rng);
     return { ...h, wind, windMag, elev: mode === "course" ? HOLE_ELEV[i] ?? 0 : h.elev ?? 0 };
   });

@@ -45,7 +45,7 @@ import {
   availableSponsors, signSponsor, trainingPointCost, buyTrainingPoint, spendSkillPoint, trainBonusFor, topRivals, fmtCash, SPONSOR_CAP,
   careerRating, careerCoins as coinsForFinish, careerDiscShop, buyCareerDisc, toggleCareerBag, CAREER_BAG_MAX,
   buyCareerCosmetic, equipCareerLook, DEFAULT_CAREER_LOOK, type CareerLook,
-  careerFieldForRound, careerCardRacers, careerLiveStandings,
+  careerFieldForRound, careerCardRacers, careerLiveStandings, careerHoleLenScale,
   type Career, type CareerEvent, type EventResult, type CareerSkills, type SkillMods, type FieldPlayer,
 } from "@/lib/discgolf/career";
 
@@ -1008,7 +1008,8 @@ export function DiscGolfGame() {
       for (let i = 0; i < ev.id.length; i++) h = (Math.imul(h, 31) + ev.id.charCodeAt(i)) >>> 0;
       seed = h | 0;
     }
-    const roundHoles = buildRound(seed, ev.mode);
+    // Early-career courses play short so you can compete without a distance driver.
+    const roundHoles = buildRound(seed, ev.mode, careerHoleLenScale(c));
     // The field reacts to this course's wind/slope/hazards (card + live board).
     careerFieldRef.current = careerFieldForRound(c, ev, roundHoles);
     // Career carries its OWN bag (its separate disc collection), not your account bag.
@@ -4771,7 +4772,7 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
                   <p className="text-white text-sm font-semibold truncate">{ev.name}</p>
-                  <p className="text-[10px] text-gray-500"><span className={impColor}>{impWord}</span> · {courseLabel} · {ev.fieldSize} players · <span className="text-[#f5d24a] font-mono">{cost}⚡</span></p>
+                  <p className="text-[10px] text-gray-500"><span className={impColor}>{impWord}</span> · {courseLabel} · {ev.fieldSize + 1} players · <span className="text-[#f5d24a] font-mono">{cost}⚡</span></p>
                   {ev.character && <p className="text-[10px] text-gray-500 truncate">{ev.emoji} {ev.character}</p>}
                   {!r && (() => {
                     const fieldN = ev.fieldSize + 1;
