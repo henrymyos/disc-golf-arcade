@@ -3036,7 +3036,13 @@ export function DiscGolfGame() {
   return (
     <div className="h-[100dvh] w-full bg-[#0f1117] flex flex-col select-none overflow-hidden">
       {/* Play area — canvas fills the available space, keeping its aspect ratio */}
-      <div ref={playAreaRef} className="relative flex-1 min-h-0 flex items-center justify-center px-2 pt-2 pb-1">
+      <div
+        ref={playAreaRef}
+        className="relative flex-1 min-h-0 flex items-center justify-center px-2 pb-1"
+        // Keep the board (and its top status pill) clear of the notch / Dynamic
+        // Island in a home-screen PWA — pad down past the top safe area.
+        style={{ paddingTop: "max(env(safe-area-inset-top), 0.5rem)" }}
+      >
         <canvas
           ref={canvasRef}
           width={W}
