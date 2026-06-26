@@ -15,6 +15,7 @@ import {
   normalizeCareer,
   availableSponsors,
   signSponsor,
+  unsignSponsor,
   sponsorBrandLock,
   trainingPointCost,
   buyTrainingPoint,
@@ -505,15 +506,37 @@ describe("manufacturer sponsorships (brand-exclusive deals)", () => {
     expect(buyCareerDisc(partial, "zone")).toBe(partial); // can't buy off-brand
   });
 
-  it("switching manufacturers swaps the bag without a 2nd bonus or extra slot", () => {
+  it("switching manufacturers swaps the bag in place; each brand's bonus pays once", () => {
     const innova = signSponsor(elitePro(), "innova");
     const discraft = signSponsor(innova, "discraft");
     expect(sponsorBrandLock(discraft)).toBe("Discraft");
     expect(discraft.sponsors.filter((s) => s.brand)).toHaveLength(1); // still one manufacturer
     expect(discraft.sponsors.length).toBe(innova.sponsors.length); // no extra slot
-    expect(discraft.cash).toBe(innova.cash); // no second signing bonus
+    expect(discraft.cash).toBe(innova.cash + 220000); // first Discraft deal pays its bonus
     expect(discraft.bag.every((k) => brandOf(k) === "Discraft")).toBe(true);
+    const back = signSponsor(discraft, "innova"); // already repped Innova
+    expect(sponsorBrandLock(back)).toBe("Innova");
+    expect(back.cash).toBe(discraft.cash); // no repeat bonus for a brand you've had
     expect(availableSponsors(innova).map((s) => s.id)).toContain("discraft"); // rival offered for switching
+  });
+
+  it("can drop a sponsor to switch, and re-signing it pays no second bonus", () => {
+    const signed = signSponsor(elitePro(), "global"); // pays the signing bonus once
+    expect(signed.sponsors.map((s) => s.id)).toContain("global");
+    const dropped = unsignSponsor(signed, "global");
+    expect(dropped.sponsors.map((s) => s.id)).not.toContain("global"); // slot freed
+    expect(dropped.cash).toBe(signed.cash); // you keep cash already paid (no clawback)
+    const resigned = signSponsor(dropped, "global");
+    expect(resigned.sponsors.map((s) => s.id)).toContain("global"); // can re-sign
+    expect(resigned.cash).toBe(dropped.cash); // …but no farmed second bonus
+  });
+
+  it("dropping a manufacturer deal lifts the brand lock", () => {
+    const signed = signSponsor(elitePro(), "innova");
+    expect(sponsorBrandLock(signed)).toBe("Innova");
+    const dropped = unsignSponsor(signed, "innova");
+    expect(sponsorBrandLock(dropped)).toBeNull(); // bag/shop reopen to every brand
+    expect(toggleCareerBag({ ...dropped, bag: dropped.bag.slice(0, 1) }, "buzzz").bag).toContain("buzzz"); // off-brand allowed again
   });
 
   it("a manufacturer deal takes one of your 3 slots", () => {

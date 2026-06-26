@@ -42,7 +42,7 @@ import {
   newCareer, normalizeCareer, skillMods, momentumAfter, seasonSchedule, simEvent, recordResult, advanceSeason, retire,
   placeLabel, STAGE_LABEL, SKILL_KEYS, SKILL_LABEL, SKILL_DESC, IDENTITY_MODS,
   seasonEnergy, eventEnergyCost, canEnterEvent,
-  availableSponsors, signSponsor, sponsorBrandLock, trainingPointCost, buyTrainingPoint, spendSkillPoint, trainBonusFor, topRivals, fmtCash, SPONSOR_CAP,
+  availableSponsors, signSponsor, unsignSponsor, sponsorBrandLock, trainingPointCost, buyTrainingPoint, spendSkillPoint, trainBonusFor, topRivals, fmtCash, SPONSOR_CAP,
   careerRating, careerCoins as coinsForFinish, careerDiscShop, buyCareerDisc, toggleCareerBag, CAREER_BAG_MAX,
   buyCareerCosmetic, equipCareerLook, DEFAULT_CAREER_LOOK, type CareerLook,
   careerFieldForRound, careerCardRacers, careerLiveStandings, careerHoleLenScale,
@@ -3433,6 +3433,7 @@ export function DiscGolfGame() {
             onRetire={() => { const c = careerRef.current; if (c) saveCareer(retire(c)); }}
             onAbandon={() => { saveCareer(null); setCareerLastResult(null); setCareerNotes([]); }}
             onSign={(id) => { const c = careerRef.current; if (c) saveCareer(signSponsor(c, id)); }}
+            onUnsign={(id) => { const c = careerRef.current; if (c) saveCareer(unsignSponsor(c, id)); }}
             onBuyTrain={() => { const c = careerRef.current; if (c) saveCareer(buyTrainingPoint(c)); }}
             onBuyDisc={(key) => { const c = careerRef.current; if (c) saveCareer(buyCareerDisc(c, key)); }}
             onToggleBag={(key) => { const c = careerRef.current; if (c) saveCareer(toggleCareerBag(c, key)); }}
@@ -4449,7 +4450,7 @@ const CAREER_STYLE_CATS: { slot: keyof CareerLook; prefix: string; label: string
   { slot: "celebration", prefix: COSMETIC_PREFIX.celebration, label: "Win pop", items: CELEBRATIONS.map((i) => ({ key: i.key, name: i.name, price: i.price, color: i.colors[0] ?? "#888" })) },
   { slot: "trail", prefix: "trail", label: "Trail", items: TRAILS.filter((i) => i.key !== "none").map((i) => ({ key: i.key, name: i.name, price: i.price, color: i.colors[0] ?? "#888" })) },
 ];
-function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, onPlay, onSim, onAllocateSkill, onAdvance, onRetire, onAbandon, onSign, onBuyTrain, onBuyDisc, onToggleBag, onBuyCosmetic, onEquipLook, dismissNotes }: {
+function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, onPlay, onSim, onAllocateSkill, onAdvance, onRetire, onAbandon, onSign, onUnsign, onBuyTrain, onBuyDisc, onToggleBag, onBuyCosmetic, onEquipLook, dismissNotes }: {
   career: Career | null;
   lastResult: EventResult | null;
   lastCoins: number;
@@ -4463,6 +4464,7 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
   onRetire: () => void;
   onAbandon: () => void;
   onSign: (id: string) => void;
+  onUnsign: (id: string) => void;
   onBuyTrain: () => void;
   onBuyDisc: (key: string) => void;
   onToggleBag: (key: string) => void;
@@ -4476,6 +4478,7 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
   // points you've added this session, not re-spec ones earned in past seasons.
   const [sessionBase, setSessionBase] = useState<CareerSkills>(() => career?.skills ?? { power: 0, control: 0, putt: 0, stamina: 0 });
   const [confirm, setConfirm] = useState<"retire" | "abandon" | null>(null);
+  const [dropId, setDropId] = useState<string | null>(null); // sponsor pending a drop confirmation
   const [showStyle, setShowStyle] = useState(false);
   const [showShop, setShowShop] = useState(false); // Pro Shop disc list, collapsed by default
   const [discInfo, setDiscInfo] = useState<string | null>(null); // disc key for the details modal
@@ -4739,9 +4742,16 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
           <p className="text-gray-600 text-[11px]">Win events and raise your rating to attract sponsors.</p>
         )}
         {career.sponsors.map((s) => (
-          <div key={s.id} className={`flex items-center justify-between text-[11px] ${s.brand ? "text-[#f5d24a]" : ""}`}>
-            <span className={s.brand ? "font-bold" : "text-white"}>{s.brand ? "🥏 " : ""}{s.name}{s.coach ? " 🎓" : ""}{s.brand ? <span className="text-gray-500 font-normal"> · {s.brand} discs only</span> : ""}</span>
-            <span className={s.brand ? "font-mono" : "text-gray-400 font-mono"}>{fmtCash(s.stipend)}/yr</span>
+          <div key={s.id} className={`flex items-center justify-between gap-2 text-[11px] ${s.brand ? "text-[#f5d24a]" : ""}`}>
+            <span className={`min-w-0 truncate ${s.brand ? "font-bold" : "text-white"}`}>{s.brand ? "🥏 " : ""}{s.name}{s.coach ? " 🎓" : ""}{s.brand ? <span className="text-gray-500 font-normal"> · {s.brand} discs only</span> : ""}</span>
+            <span className="shrink-0 flex items-center gap-2">
+              <span className={s.brand ? "font-mono" : "text-gray-400 font-mono"}>{fmtCash(s.stipend)}/yr</span>
+              {dropId === s.id ? (
+                <span className="text-[10px] text-gray-400">Drop? <button type="button" onClick={() => { onUnsign(s.id); setDropId(null); }} className="text-[#e2453b] font-bold">Yes</button> · <button type="button" onClick={() => setDropId(null)} className="text-gray-300">No</button></span>
+              ) : (
+                <button type="button" onClick={() => setDropId(s.id)} title="Drop this sponsor" className="text-gray-500 hover:text-[#e2453b] text-sm leading-none">×</button>
+              )}
+            </span>
           </div>
         ))}
         {sponsorOffers.map((s) => {

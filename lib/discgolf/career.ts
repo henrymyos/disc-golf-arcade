@@ -176,6 +176,7 @@ export type Career = {
   cash: number;
   energy: number;         // season energy pool — spent to ENTER events (refilled each season from Stamina)
   sponsors: Sponsor[];
+  sponsorBonusClaimed?: string[]; // sponsor ids whose one-time signing bonus has been paid (so dropping + re-signing can't farm it)
   rivals: Rival[];
   pdgaRating: number;     // official rating (≈700–1050), tracks recent rounds
   roundRatings: number[]; // recent rated rounds (oldest → newest)
@@ -337,7 +338,7 @@ export function newCareer(name: string, seed: number): Career {
     age: 14, season: 0, stage: "highschool", skills, potential, trainPts: 0, // start with nothing — earn your first points by playing
     done: [], results: [], titles: [], seasonPoints: 0, careerPoints: 0, majors: 0,
     worldRank: null, bestWorldRank: null, seasonsAtNo1: 0, achievements: [], retired: false,
-    cash: 1000, energy: seasonEnergy(skills.stamina), sponsors: [], rivals: generateRivals(seed),
+    cash: 1000, energy: seasonEnergy(skills.stamina), sponsors: [], sponsorBonusClaimed: [], rivals: generateRivals(seed),
     pdgaRating: pdgaFromInternal(careerRating(skills)), roundRatings: [],
     discs: [...CAREER_CORE_DISCS], bag: [...CAREER_CORE_DISCS], rankPoints: 0, trainBought: 0,
     cosmetics: [], look: { ...DEFAULT_CAREER_LOOK },
@@ -366,7 +367,11 @@ export function normalizeCareer(c: Career): Career {
   const discs = c.discs?.length ? c.discs : [...CAREER_CORE_DISCS];
   return {
     ...c, skills, potential, skillFrac, cash: c.cash ?? 0,
-    energy: c.energy ?? seasonEnergy(skills.stamina), sponsors: c.sponsors ?? [], rivals,
+    energy: c.energy ?? seasonEnergy(skills.stamina), sponsors: c.sponsors ?? [],
+    // Existing saves: treat their currently-signed sponsors as already-paid, so a
+    // first drop + re-sign after this update can't re-collect those bonuses.
+    sponsorBonusClaimed: c.sponsorBonusClaimed ?? (c.sponsors ?? []).map((s) => s.id),
+    rivals,
     pdgaRating: c.pdgaRating ?? pdgaFromInternal(careerRating(skills)),
     roundRatings: c.roundRatings ?? [],
     discs,
@@ -930,19 +935,31 @@ export function availableSponsors(c: Career): Sponsor[] {
 export function signSponsor(c: Career, id: string): Career {
   const s = SPONSOR_POOL.find((x) => x.id === id);
   if (!s || c.sponsors.some((x) => x.id === id)) return c;
+  // A sponsor's signing bonus is paid at most ONCE per career — re-signing one you
+  // dropped earlier pays nothing (you just resume its stipend/coach).
+  const claimed = c.sponsorBonusClaimed ?? [];
+  const bonus = claimed.includes(id) ? 0 : s.signing;
+  const sponsorBonusClaimed = claimed.includes(id) ? claimed : [...claimed, id];
   if (s.brand) {
     const current = c.sponsors.find((x) => x.brand);
     if (current) {
-      // SWITCH manufacturers: replace the deal in place (no extra slot, no second
-      // signing bonus to farm), then rebuild the bag for the new brand.
-      return applyBrandDeal({ ...c, sponsors: c.sponsors.map((x) => (x.brand ? s : x)) }, s.brand);
+      // SWITCH manufacturers: replace the deal in place (no extra slot), pay the new
+      // brand's bonus only if you've never repped them before, then rebuild the bag.
+      return applyBrandDeal({ ...c, sponsors: c.sponsors.map((x) => (x.brand ? s : x)), cash: c.cash + bonus, sponsorBonusClaimed }, s.brand);
     }
-    // First manufacturer deal — needs a free slot; pays the signing bonus.
-    if (c.sponsors.length >= SPONSOR_CAP) return c;
-    return applyBrandDeal({ ...c, sponsors: [...c.sponsors, s], cash: c.cash + s.signing }, s.brand);
+    if (c.sponsors.length >= SPONSOR_CAP) return c; // first manufacturer deal needs a free slot
+    return applyBrandDeal({ ...c, sponsors: [...c.sponsors, s], cash: c.cash + bonus, sponsorBonusClaimed }, s.brand);
   }
   if (c.sponsors.length >= SPONSOR_CAP) return c;
-  return { ...c, sponsors: [...c.sponsors, s], cash: c.cash + s.signing };
+  return { ...c, sponsors: [...c.sponsors, s], cash: c.cash + bonus, sponsorBonusClaimed };
+}
+// Drop a sponsor — frees its slot so you can switch who reps you. You keep cash
+// already paid but forfeit its future stipend/coach. Dropping a manufacturer deal
+// lifts the brand lock (your bag/shop reopen to every brand). The signing bonus
+// stays "claimed", so re-signing it later pays no second bonus.
+export function unsignSponsor(c: Career, id: string): Career {
+  if (!c.sponsors.some((x) => x.id === id)) return c;
+  return { ...c, sponsors: c.sponsors.filter((x) => x.id !== id) };
 }
 
 // ── Economy: spend cash on extra training points (escalating cost per season) ──
