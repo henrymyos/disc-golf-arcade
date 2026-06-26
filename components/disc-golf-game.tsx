@@ -4480,6 +4480,10 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
   const [confirm, setConfirm] = useState<"retire" | "abandon" | null>(null);
   const [dropId, setDropId] = useState<string | null>(null); // sponsor pending a drop confirmation
   const [tab, setTab] = useState<"skills" | "bag" | "schedule" | "sponsors">("skills"); // career hub tab
+  const scrollRef = useRef<HTMLDivElement>(null); // the tab panel's scroll region
+  // Each tab shares one scroll container, so switching would otherwise keep the
+  // previous tab's scroll offset — jump back to the top whenever the tab changes.
+  useEffect(() => { scrollRef.current?.scrollTo(0, 0); }, [tab]);
   const [showStyle, setShowStyle] = useState(false);
   const [showShop, setShowShop] = useState(false); // Pro Shop disc list, collapsed by default
   const [discInfo, setDiscInfo] = useState<string | null>(null); // disc key for the details modal
@@ -4603,7 +4607,7 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
       </div>
 
       {/* Scrolling content — the ONLY part that scrolls, so the header + tabs stay put */}
-      <div className="flex-1 min-h-0 overflow-y-auto space-y-3 -mx-0.5 px-0.5">
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto space-y-3 -mx-0.5 px-0.5">
       {lastResult && (
         <div className={`rounded-lg px-3 py-2 text-sm border ${lastResult.win ? "border-[#f5d24a]/50 bg-[#f5d24a]/10 text-[#f5d24a]" : "border-white/10 bg-white/5 text-gray-200"}`}>
           <div>{lastResult.name}: <span className="font-bold">{placeLabel(lastResult.placed)}</span> of {lastResult.field} · {toPar(lastResult.toPar)} ({lastResult.score}){lastResult.prize > 0 && <span className="text-[#36D7B7]"> · +{fmtCash(lastResult.prize)}</span>}{lastCoins > 0 && <span className="text-[#f5d24a]"> · +{lastCoins} <Coin className="!w-3 !h-3 align-[-1px]" /></span>}</div>
