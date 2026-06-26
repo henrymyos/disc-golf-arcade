@@ -4479,6 +4479,7 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
   const [sessionBase, setSessionBase] = useState<CareerSkills>(() => career?.skills ?? { power: 0, control: 0, putt: 0, stamina: 0 });
   const [confirm, setConfirm] = useState<"retire" | "abandon" | null>(null);
   const [dropId, setDropId] = useState<string | null>(null); // sponsor pending a drop confirmation
+  const [tab, setTab] = useState<"skills" | "bag" | "schedule" | "rivals" | "sponsors">("skills"); // career hub tab
   const [showStyle, setShowStyle] = useState(false);
   const [showShop, setShowShop] = useState(false); // Pro Shop disc list, collapsed by default
   const [discInfo, setDiscInfo] = useState<string | null>(null); // disc key for the details modal
@@ -4603,7 +4604,17 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
         </div>
       )}
 
+      {/* Tabs — your name/Overall/cash/energy stay pinned in the header above; the
+          view below switches between Skills, Bag, Events, Rivals and Sponsors so
+          you don't have to scroll the whole hub. */}
+      <div className="flex gap-1 bg-[#1a1d23] border border-white/10 rounded-lg p-1 text-[11px] font-bold">
+        {([["skills", "Skills"], ["bag", "Bag"], ["schedule", "Events"], ["rivals", "Rivals"], ["sponsors", "Sponsors"]] as const).map(([key, label]) => (
+          <button key={key} type="button" onClick={() => setTab(key)} className={`flex-1 rounded-md py-1.5 transition ${tab === key ? "bg-[#4B3DFF] text-white" : "text-gray-400 hover:text-white"}`}>{label}</button>
+        ))}
+      </div>
+
       {/* Skills + training */}
+      {tab === "skills" && (
       <div className="bg-[#1a1d23] border border-white/5 rounded-xl p-3 space-y-2">
         <div className="flex items-center justify-between">
           <p className="text-gray-400 text-xs font-bold uppercase tracking-wide">Skills · Overall {overall}</p>
@@ -4644,7 +4655,9 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
           </button>
         </div>
       </div>
+      )}
 
+      {tab === "bag" && (<>
       {/* Career bag + Pro Shop — a disc collection entirely separate from your account */}
       <div className="bg-[#1a1d23] border border-white/5 rounded-xl p-3 space-y-2">
         <div className="flex items-center justify-between">
@@ -4734,8 +4747,10 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
           </div>
         )}
       </div>
+      </>)}
 
       {/* Sponsors */}
+      {tab === "sponsors" && (
       <div className="bg-[#1a1d23] border border-white/5 rounded-xl p-3 space-y-1.5">
         <p className="text-gray-400 text-xs font-bold uppercase tracking-wide">Sponsors ({career.sponsors.length}/{SPONSOR_CAP})</p>
         {career.sponsors.length === 0 && sponsorOffers.length === 0 && (
@@ -4768,9 +4783,11 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
           );
         })}
       </div>
+      )}
 
       {/* Schedule — a slate too big for your season energy, so you choose which to
           enter. Each event costs energy (bigger = more, and pays more). */}
+      {tab === "schedule" && (
       <div className="space-y-1.5">
         <div className="flex items-baseline justify-between">
           <p className="text-gray-400 text-xs font-bold uppercase tracking-wide">Schedule · pick your events</p>
@@ -4815,8 +4832,10 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
           );
         })}
       </div>
+      )}
 
       {/* Rivals board — PDGA tracked the same way as yours, so it's comparable */}
+      {tab === "rivals" && (
       <div className="space-y-1">
         <div className="flex items-baseline justify-between">
           <p className="text-gray-400 text-xs font-bold uppercase tracking-wide">Rivals · PDGA · record</p>
@@ -4832,9 +4851,10 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
           </div>
         ))}
       </div>
+      )}
 
-      {/* Advance — available any time. Leftover energy is lost at season's end, so
-          nudge you to spend it on the events you can still afford. */}
+      {/* Advance + retire/abandon stay pinned below every tab so the season-flow
+          controls are always reachable. Leftover energy is lost at season's end. */}
       {enterable > 0 && (
         <p className="text-[10px] text-gray-500 text-center -mb-0.5">You can still enter <span className="text-[#f5d24a] font-semibold">{enterable}</span> more event{enterable === 1 ? "" : "s"} with your <span className="text-[#f5d24a] font-mono">⚡{career.energy}</span> — unspent energy is lost when the season ends.</p>
       )}
