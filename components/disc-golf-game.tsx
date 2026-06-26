@@ -42,7 +42,7 @@ import {
   newCareer, normalizeCareer, skillMods, momentumAfter, seasonSchedule, simEvent, recordResult, advanceSeason, retire,
   placeLabel, STAGE_LABEL, SKILL_KEYS, SKILL_LABEL, SKILL_DESC, IDENTITY_MODS,
   seasonEnergy, eventEnergyCost, canEnterEvent,
-  availableSponsors, signSponsor, unsignSponsor, sponsorBrandLock, trainingPointCost, buyTrainingPoint, spendSkillPoint, trainBonusFor, topRivals, fmtCash, SPONSOR_CAP,
+  availableSponsors, signSponsor, unsignSponsor, sponsorBrandLock, trainingPointCost, buyTrainingPoint, spendSkillPoint, trainBonusFor, fmtCash, SPONSOR_CAP,
   careerRating, careerCoins as coinsForFinish, careerDiscShop, buyCareerDisc, toggleCareerBag, CAREER_BAG_MAX,
   buyCareerCosmetic, equipCareerLook, DEFAULT_CAREER_LOOK, type CareerLook,
   careerFieldForRound, careerCardRacers, careerLiveStandings, careerHoleLenScale,
@@ -4479,7 +4479,7 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
   const [sessionBase, setSessionBase] = useState<CareerSkills>(() => career?.skills ?? { power: 0, control: 0, putt: 0, stamina: 0 });
   const [confirm, setConfirm] = useState<"retire" | "abandon" | null>(null);
   const [dropId, setDropId] = useState<string | null>(null); // sponsor pending a drop confirmation
-  const [tab, setTab] = useState<"skills" | "bag" | "schedule" | "rivals" | "sponsors">("skills"); // career hub tab
+  const [tab, setTab] = useState<"skills" | "bag" | "schedule" | "sponsors">("skills"); // career hub tab
   const [showStyle, setShowStyle] = useState(false);
   const [showShop, setShowShop] = useState(false); // Pro Shop disc list, collapsed by default
   const [discInfo, setDiscInfo] = useState<string | null>(null); // disc key for the details modal
@@ -4530,7 +4530,6 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
   const sponsorOffers = availableSponsors(career);
   const brandLock = sponsorBrandLock(career); // the disc brand a manufacturer deal locks your bag to (or null)
   const trainCost = trainingPointCost(career);
-  const rivals = topRivals(career);
   const overall = Math.round(careerRating(career.skills)); // the single headline number — rises as you train
   const shop = careerDiscShop(career); // every disc you don't own, cheapest first (career cash)
   // Current in-play effect of each skill, so the benefit of training is concrete.
@@ -4572,8 +4571,9 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
 
   // Season hub.
   return (
-    <div className={wrap}><div className={card}>
-      <div className="flex items-center justify-between">
+    <div className="absolute inset-0 z-30 bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex justify-center">
+      <div className="w-full max-w-sm h-full flex flex-col gap-3 text-left">
+      <div className="shrink-0 flex items-center justify-between">
         <div className="min-w-0">
           <h2 className="text-white font-black text-lg leading-tight truncate">{career.name}</h2>
           <p className="text-gray-400 text-[11px]">{STAGE_LABEL[career.stage]} · Age {career.age} · Season {career.season + 1}</p>
@@ -4594,24 +4594,25 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
         </div>
       </div>
 
+      {/* Tabs — pinned near the top so they never move as you switch; only the
+          panel BELOW scrolls. The header's Overall/cash/energy stay on every tab. */}
+      <div className="shrink-0 flex gap-1 bg-[#1a1d23] border border-white/10 rounded-lg p-1 text-[11px] font-bold">
+        {([["skills", "Skills"], ["bag", "Bag"], ["schedule", "Events"], ["sponsors", "Sponsors"]] as const).map(([key, label]) => (
+          <button key={key} type="button" onClick={() => setTab(key)} className={`flex-1 rounded-md py-1.5 transition ${tab === key ? "bg-[#4B3DFF] text-white" : "text-gray-400 hover:text-white"}`}>{label}</button>
+        ))}
+      </div>
+
+      {/* Scrolling content — the ONLY part that scrolls, so the header + tabs stay put */}
+      <div className="flex-1 min-h-0 overflow-y-auto space-y-3 -mx-0.5 px-0.5">
       {lastResult && (
         <div className={`rounded-lg px-3 py-2 text-sm border ${lastResult.win ? "border-[#f5d24a]/50 bg-[#f5d24a]/10 text-[#f5d24a]" : "border-white/10 bg-white/5 text-gray-200"}`}>
           <div>{lastResult.name}: <span className="font-bold">{placeLabel(lastResult.placed)}</span> of {lastResult.field} · {toPar(lastResult.toPar)} ({lastResult.score}){lastResult.prize > 0 && <span className="text-[#36D7B7]"> · +{fmtCash(lastResult.prize)}</span>}{lastCoins > 0 && <span className="text-[#f5d24a]"> · +{lastCoins} <Coin className="!w-3 !h-3 align-[-1px]" /></span>}</div>
           <div className="text-[10px] text-gray-400 mt-0.5">
-            Beat {lastResult.beatRivals}/{lastResult.rivalCount} rivals{lastResult.winnerName ? ` · ${lastResult.winnerName} took the title` : ""}
-            {lastResult.trainBonus > 0 && <span className="text-[#36D7B7]"> · +{lastResult.trainBonus} training pt{lastResult.trainBonus > 1 ? "s" : ""}</span>}
+            {lastResult.win ? <span className="text-[#f5d24a]">🏆 You took the title!</span> : lastResult.winnerName ? `${lastResult.winnerName} won the event` : null}
+            {lastResult.trainBonus > 0 && <span className="text-[#36D7B7]">{lastResult.win || lastResult.winnerName ? " · " : ""}+{lastResult.trainBonus} training pt{lastResult.trainBonus > 1 ? "s" : ""}</span>}
           </div>
         </div>
       )}
-
-      {/* Tabs — your name/Overall/cash/energy stay pinned in the header above; the
-          view below switches between Skills, Bag, Events, Rivals and Sponsors so
-          you don't have to scroll the whole hub. */}
-      <div className="flex gap-1 bg-[#1a1d23] border border-white/10 rounded-lg p-1 text-[11px] font-bold">
-        {([["skills", "Skills"], ["bag", "Bag"], ["schedule", "Events"], ["rivals", "Rivals"], ["sponsors", "Sponsors"]] as const).map(([key, label]) => (
-          <button key={key} type="button" onClick={() => setTab(key)} className={`flex-1 rounded-md py-1.5 transition ${tab === key ? "bg-[#4B3DFF] text-white" : "text-gray-400 hover:text-white"}`}>{label}</button>
-        ))}
-      </div>
 
       {/* Skills + training */}
       {tab === "skills" && (
@@ -4834,27 +4835,11 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
       </div>
       )}
 
-      {/* Rivals board — PDGA tracked the same way as yours, so it's comparable */}
-      {tab === "rivals" && (
-      <div className="space-y-1">
-        <div className="flex items-baseline justify-between">
-          <p className="text-gray-400 text-xs font-bold uppercase tracking-wide">Rivals · PDGA · record</p>
-          <p className="text-[10px] text-gray-500">you: <span className="text-[#f5d24a] font-mono">{career.pdgaRating}</span></p>
-        </div>
-        {[...rivals].sort((a, b) => b.pdgaRating - a.pdgaRating).map((r) => (
-          <div key={r.id} className="flex items-center gap-2 bg-[#1a1d23] border border-white/5 rounded-lg px-3 py-1.5 text-xs">
-            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: r.color }} />
-            <span className="text-white font-semibold flex-1 truncate">{r.name}</span>
-            {r.titles > 0 && <span className="text-[#f5d24a] text-[10px]">🏆{r.titles}</span>}
-            <span className={`font-mono text-[11px] w-9 text-right ${r.pdgaRating > career.pdgaRating ? "text-[#e0923b]" : "text-[#36D7B7]"}`}>{r.pdgaRating}</span>
-            <span className="font-mono text-[11px] w-9 text-right"><span className="text-[#36D7B7]">{r.beat}</span><span className="text-gray-600">-</span><span className="text-[#e2453b]">{r.lost}</span></span>
-          </div>
-        ))}
       </div>
-      )}
 
       {/* Advance + retire/abandon stay pinned below every tab so the season-flow
           controls are always reachable. Leftover energy is lost at season's end. */}
+      <div className="shrink-0 space-y-2 pt-0.5">
       {enterable > 0 && (
         <p className="text-[10px] text-gray-500 text-center -mb-0.5">You can still enter <span className="text-[#f5d24a] font-semibold">{enterable}</span> more event{enterable === 1 ? "" : "s"} with your <span className="text-[#f5d24a] font-mono">⚡{career.energy}</span> — unspent energy is lost when the season ends.</p>
       )}
@@ -4872,6 +4857,7 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
         ) : (
           <button type="button" onClick={() => setConfirm("abandon")} className="text-gray-600 hover:text-gray-400 text-xs">Abandon</button>
         )}
+      </div>
       </div>
 
       {/* Disc details modal — flight numbers + type, with the contextual action */}
