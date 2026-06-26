@@ -245,20 +245,24 @@ const CAREER_DISC_SHOP: CareerDiscEntry[] = [
   { key: "river", cost: 1200 },
   { key: "firebird", cost: 1600 },
   { key: "pd", cost: 2200 },
-  // Distance drivers — the save-up goals, but all in reach by your second year.
-  { key: "sidewinder", cost: 2800 },
-  { key: "wraith", cost: 3500 },
-  { key: "destroyer", cost: 4000 },
-  { key: "nukeos", cost: 4600 },
-  { key: "zeus", cost: 5200 },
+  // Distance drivers. The Sidewinder is a cheap, understable FIRST driver any
+  // player can afford before college (when the holes reach full length) — so a
+  // played career is never hard-gated by the disc economy on the long courses.
+  // The rest stay save-up goals that reward placing well.
+  { key: "sidewinder", cost: 1200 },
+  { key: "wraith", cost: 2600 },
+  { key: "destroyer", cost: 3200 },
+  { key: "nukeos", cost: 4000 },
+  { key: "zeus", cost: 4800 },
 ];
 
-// A small per-season training-point FLOOR — deliberately NOT a path to 90. Real
-// development is EARNED by finishing events well (see trainBonus in recordResult);
-// a player who only ages and never places well peaks around ~50 overall. Lightly
-// youth-weighted so a rookie isn't stuck before they can compete.
+// A per-season training-point FLOOR — guaranteed development every season just
+// for competing, so a player who struggles and never places well still steadily
+// improves and is never permanently stuck (they reach a respectable mid-tier on
+// the floor alone). Placing well (trainBonus in recordResult) is still what lifts
+// you from mid-tier to elite. Youth-weighted so a rookie develops fastest.
 export function seasonBaseTrain(age: number): number {
-  return age <= 19 ? 4 : age <= 27 ? 3 : 2;
+  return age <= 19 ? 6 : age <= 27 ? 4 : 3;
 }
 
 // One generation of named rivals, born deterministically from the seed. A spread
@@ -467,12 +471,15 @@ export function seasonSchedule(c: Career): CareerEvent[] {
       // The full pro tour: ~10 rotating tour stops, three majors, a season-ending
       // Tour Championship, and the World Championship at classic Glendoveer every
       // other season — far more than your season energy can enter, so you choose.
+      // Pro fields are genuine world-class talent (mean ~78–88 + a tail of stars),
+      // so even an elite player can't just show up and sweep — winning the tour
+      // takes a truly dominant season, and the marquee events are the hardest.
       const out: CareerEvent[] = [];
-      take(PRO_MINORS, 10).forEach((n, i) => out.push(ev(`pt${i + 1}`, n, "tour", "minor", 72 + (i % 3) * 4, 66 + ramp * 0.4 + (i % 4))));
-      take(PRO_MAJORS, 3).forEach((n, i) => out.push(ev(`maj${i + 1}`, n, "tour", "major", 90, 72 + ramp * 0.4)));
-      out.push(ev("champ", pick(PRO_CHAMPS), "tour", "championship", 96, 76 + ramp * 0.4));
+      take(PRO_MINORS, 10).forEach((n, i) => out.push(ev(`pt${i + 1}`, n, "tour", "minor", 72 + (i % 3) * 4, 78 + ramp * 0.4 + (i % 4))));
+      take(PRO_MAJORS, 3).forEach((n, i) => out.push(ev(`maj${i + 1}`, n, "tour", "major", 90, 84 + ramp * 0.4)));
+      out.push(ev("champ", pick(PRO_CHAMPS), "tour", "championship", 96, 87 + ramp * 0.4));
       // A World Championship lands every other season once you're established.
-      if (c.season % 2 === 1) out.push(ev("wc", "World Championship", "course", "championship", 96, 78 + ramp * 0.4));
+      if (c.season % 2 === 1) out.push(ev("wc", "World Championship", "course", "championship", 96, 89 + ramp * 0.4));
       return out;
     }
     default:
@@ -799,13 +806,15 @@ function computeWorldRank(c: Career): number {
   const me = worldStanding(careerRating(c.skills), c.rankPoints);
   let better = 0;
   for (let i = 0; i < POOL; i++) {
-    // Most of the pool are strong tour pros; a handful are world-beaters. Their
-    // points scale steeply with skill so the elite of the pool both rate high AND
-    // bank big points — enough that a freshly-minted pro debuts mid-pack and has
-    // to climb over several dominant seasons to pass them, rather than arriving
-    // at #1 on day one. You can still rocket up by winning everything.
-    const skill = clamp(70 + (rng() * 2 - 1) * 18, 35, 100);
-    const pts = Math.max(0, (skill - 66) * 85 + (rng() * 2 - 1) * 250);
+    // Most of the pool are strong tour pros; a top ~5% are genuine world-beaters
+    // who both rate near the ceiling AND bank big points. So reaching #1 demands
+    // being among the very best (≈98–99 skill) AND winning the tour — a
+    // freshly-minted pro debuts mid-pack and a merely-very-good player tops out a
+    // few spots short, rather than arriving at #1 the moment they turn pro.
+    const skill = rng() < 0.05
+      ? clamp(86 + rng() * 10, 35, 100)           // ~5% elite: 86..96 — a maxed player can edge them
+      : clamp(70 + (rng() * 2 - 1) * 16, 35, 100); // the field: 54..86
+    const pts = Math.max(0, (skill - 66) * 95 + (rng() * 2 - 1) * 250);
     if (worldStanding(skill, pts) > me) better++;
   }
   return better + 1;
