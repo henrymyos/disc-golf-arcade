@@ -35,6 +35,11 @@ body {
   height: 100%;
   overflow: hidden;
   overscroll-behavior: none;
+  /* The app is dark (#0f1117) edge to edge. In an iOS home-screen PWA the bottom
+     safe area (home-indicator strip) is painted with the <html> element's own
+     background — NOT the body's — so without this it renders pure black. Pin both
+     to the app color so the board reaches the very bottom with no black bar. */
+  background-color: #0f1117;
 }
 
 /* Inner scroll regions keep their gestures to themselves — a scroll that hits the
