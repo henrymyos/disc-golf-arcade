@@ -626,10 +626,10 @@ describe("pro-tour courses", () => {
 describe("course difficulty (1–5 stars)", () => {
   it("difficultyStars maps the score range onto 1–5 (5 = very hard)", () => {
     expect(difficultyStars(1.0)).toBe(1);
-    expect(difficultyStars(8.0)).toBe(2);
-    expect(difficultyStars(8.45)).toBe(3);
-    expect(difficultyStars(9.5)).toBe(4);
-    expect(difficultyStars(10.4)).toBe(5);
+    expect(difficultyStars(5.0)).toBe(2);
+    expect(difficultyStars(5.5)).toBe(3);
+    expect(difficultyStars(6.0)).toBe(4);
+    expect(difficultyStars(6.5)).toBe(5);
     expect(difficultyStars(99)).toBe(5);
   });
   it("rates a busier course harder than a wide-open one", () => {

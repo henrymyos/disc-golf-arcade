@@ -206,10 +206,10 @@ function treeTarget(h: Hole): number {
   const hi = h.par >= 5 ? 32 : h.par === 4 ? 28 : 21;
   const lo = h.par >= 5 ? 27 : h.par === 4 ? 22 : 15;
   const band = Math.max(lo, Math.min(hi, n));
-  // Thin the band by ~15% (clamp bounds scaled to match) — the corridors were
-  // reading too cluttered, so every hole drops about a sixth of its trees while
-  // the weaving lane still forces a shaped line.
-  return Math.max(9, Math.min(29, Math.round(band * (h.treeMul ?? 1) * 0.85)));
+  // Roughly halve the band (clamp bounds scaled to match) — the fairways were
+  // reading too cluttered, so trees only line the edges of a clearly-open lane
+  // rather than packing the corridor.
+  return Math.max(5, Math.min(15, Math.round(band * (h.treeMul ?? 1) * 0.42)));
 }
 // True if a tree of radius `m` centred at (x,y) would sit in or touch a pond
 // (water = OB), a grass OB island, or a sand bunker. Trees don't grow out of a
@@ -244,21 +244,20 @@ function populateTrees(h: Hole): Tree[] {
   const target = treeTarget(h);
   if (out.length >= target) return out;
   const half = h.fwWidth / 2;
-  // Trees LINE the two edges of a clear, winding fairway lane instead of being
-  // scattered across it — so there's an obvious (if curving) gap to throw down,
-  // not trunks in the open the whole way. Ordered stations marching down the hole
-  // each drop a trunk on either lane edge, tracing two weaving tree lines; a small
-  // squared-bias depth lets a few sit back in the rough so it isn't a flat fence.
-  // The lane still curves enough that a straight rip at the pin clips a line at the
-  // bends, so you have to read it and shape/aim — but the fairway stays accessible.
-  const laneHW = half * 0.4;    // open fairway half-width — clearly throwable lane
-  const amp = half * 0.5;       // how far the fairway curves off the centerline
-  const waves = h.par >= 5 ? 2.5 : h.par === 4 ? 2 : 1.5; // gentler curve than a slalom
+  // Trees stand in two tight lines hugging the edges of one wide, clearly-open
+  // fairway lane that follows the corridor to the basket — so there's always an
+  // obvious gap to throw down, never trunks scattered across the fairway. Ordered
+  // stations march down the hole dropping a pair of trunks (a "gate") right at
+  // the lane edges; the lane bends gently (one soft curve), so you still shape a
+  // shot, but the open middle stays wide and continuous the whole way in.
+  const laneHW = half * 0.5;    // open fairway half-width — a wide, obvious lane
+  const amp = half * 0.2;       // a single gentle bow off the centerline
+  const waves = h.par >= 5 ? 1.5 : 1; // at most a bend or two over the whole hole
   const rng = mulberry32(((Math.round(h.basket.x) * 73856093) ^ (Math.round(h.basket.y) * 19349663) ^ (h.worldH * 83492791) ^ (h.par * 0x9e3779b1)) >>> 0);
   const phase = rng();
-  const steps = Math.max(6, Math.ceil(target / 2)); // ~2 trees per step (one per edge)
+  const steps = Math.max(4, Math.ceil(target / 2)); // ~2 trees per step (one per edge)
   for (let s = 0; s < steps && out.length < target; s++) {
-    const f = 0.05 + ((s + 0.5) / steps) * 0.9; // ordered down the length → clean lines
+    const f = 0.06 + ((s + 0.5) / steps) * 0.88; // ordered down the length → clean lines
     const base = pointOnPath(h.fairway, f);
     const ahead = pointOnPath(h.fairway, Math.min(1, f + 0.02));
     const tx = ahead.x - base.x, tyv = ahead.y - base.y;
@@ -267,8 +266,8 @@ function populateTrees(h: Hole): Tree[] {
     const laneC = Math.sin((f * waves + phase) * Math.PI * 2) * amp; // lane centre at this f
     for (const side of [-1, 1] as const) {
       if (out.length >= target) break;
-      const depth = rng() * rng() * (half * 0.5); // mostly on the edge line, a few back in rough
-      let o = laneC + side * (laneHW + depth);
+      const jitter = rng() * 6; // tiny outward jitter so the line looks natural, stays crisp
+      let o = laneC + side * (laneHW + jitter);
       o = Math.max(-half * 0.97, Math.min(half * 0.97, o));
       if (Math.abs(o - laneC) < laneHW - 2) continue; // keep the fairway lane clear
       const x = base.x + nx * o, y = base.y + ny * o;
@@ -435,14 +434,14 @@ function courseDifficulty(holes: Hole[]): number {
   return s / holes.length;
 }
 // Difficulty as a 1–5 star rating (5 = very difficult). Thresholds calibrated to
-// the spread of the play-courses (~5.5 easiest to ~9.8 hardest) now that the
-// corridor is filled with trees scaled by venue character — open "Links" venues
+// the spread of the play-courses (~4.3 easiest to ~7.0 hardest) now that trees
+// only line a clear lane and are scaled by venue character — open "Links" venues
 // read 1★ while dense "Wooded"/technical ones hit 5★, instead of all piling up.
 function difficultyStars(diff: number): 1 | 2 | 3 | 4 | 5 {
-  if (diff >= 10.4) return 5;
-  if (diff >= 9.5) return 4;
-  if (diff >= 8.45) return 3;
-  if (diff >= 8.0) return 2;
+  if (diff >= 6.5) return 5;
+  if (diff >= 6.0) return 4;
+  if (diff >= 5.5) return 3;
+  if (diff >= 5.0) return 2;
   return 1;
 }
 // Convenience: a course's raw difficulty / star difficulty from (mode, seed).
