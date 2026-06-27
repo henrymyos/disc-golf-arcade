@@ -54,7 +54,11 @@ import {
   generateTourCourse,
   buildTournGhosts,
   ghostPosAt,
+  treesAtLie,
+  stepFlight,
   type Tournament,
+  type Hole,
+  type Flight,
 } from "../lib/discgolf/engine";
 
 describe("scoreLabel", () => {
@@ -735,5 +739,40 @@ describe("materializeHole", () => {
     expect(h.par).toBe(3);
     expect(h.worldH).toBeGreaterThan(448);
     expect(h.tee.y).toBeGreaterThan(h.basket.y);
+  });
+});
+
+describe("throw-through-a-tree-you're-behind", () => {
+  // A long open hole with one tree right in front of the tee, directly on the
+  // line to the basket — exactly the "stuck right behind a tree" situation.
+  const hole: Hole = {
+    par: 4, worldH: 2000, worldW: 320,
+    tee: { x: 160, y: 1950 }, basket: { x: 160, y: 60 },
+    fairway: [{ x: 160, y: 1950 }, { x: 160, y: 60 }], fwWidth: 600,
+    trees: [{ x: 160, y: 1936, r: 10 }], water: [], hazard: [], elev: 0,
+  };
+  const tee = { x: 160, y: 1950 };
+
+  it("treesAtLie flags a tree you're right up against and ignores far ones", () => {
+    expect(treesAtLie(hole, tee.x, tee.y)).toEqual([hole.trees[0]]); // 14px away → flagged
+    expect(treesAtLie(hole, 160, 1900)).toEqual([]);                 // 36px away → not flagged
+  });
+
+  it("a normal throw bounces off the tree, but a ghosted throw passes through it", () => {
+    const launch = (): Flight => ({ x: tee.x, y: tee.y, vx: 0, vy: -14, h: 0, vh: 2.5, fadeTurn: 0 });
+    const run = (ghost: boolean) => {
+      const f = launch();
+      let hit = false;
+      for (let i = 0; i < 200; i++) {
+        const r = stepFlight(f, ADV_DISCS[0], -1, "straight", hole, "flat", ghost ? { ghostTrees: hole.trees } : {});
+        if (r.treeHit) hit = true;
+        if (r.status !== "fly") break;
+      }
+      return { hit, y: f.y };
+    };
+    expect(run(false).hit).toBe(true);   // collides with the trunk it's behind
+    const through = run(true);
+    expect(through.hit).toBe(false);     // ghosted: no collision
+    expect(through.y).toBeLessThan(1900); // and the disc actually flew on down the fairway
   });
 });

@@ -1493,11 +1493,22 @@ function resolvePenalty(status: StepStatus, hole: Hole, pos: Vec, trail: Vec[], 
   return { kind: "none", strokes: 0, lie: null };
 }
 
+// Trees the disc is resting right up against — close enough that in real life
+// you'd just throw past the trunk from your stance. A throw from here passes
+// THROUGH them (stepFlight skips any tree handed in via `opts.ghostTrees`), and
+// the renderer shows them translucent so you can see you're clear. It's
+// direction-agnostic: a tree you're nearly touching won't reappear in your
+// flight once you've thrown away from it, so there's no need to gate on aim.
+function treesAtLie(hole: Hole, x: number, y: number): Tree[] {
+  return hole.trees.filter((tr) => Math.hypot(x - tr.x, y - tr.y) <= tr.r + DISC_R * 3);
+}
+
 // `opts` carries Career skill effects for the player's own flights: `windMul`
 // scales how hard the wind shoves the disc (low control → blown around), and
-// `catchR` widens/narrows the basket catch radius (putting skill). Both default
-// to the neutral values, so non-career play is unchanged.
-function stepFlight(f: Flight, disc: Disc, fadeSign: number, path: FlightPath, hole: Hole, release: Release = "flat", opts: { catchR?: number; windMul?: number } = {}): { status: StepStatus; treeHit: boolean } {
+// `catchR` widens/narrows the basket catch radius (putting skill). `ghostTrees`
+// lists trees to ignore for collision (you're throwing through one you're stuck
+// behind). All default to neutral, so non-career / open-lie play is unchanged.
+function stepFlight(f: Flight, disc: Disc, fadeSign: number, path: FlightPath, hole: Hole, release: Release = "flat", opts: { catchR?: number; windMul?: number; ghostTrees?: Tree[] } = {}): { status: StepStatus; treeHit: boolean } {
   const catchR = opts.catchR ?? CATCH_R;
   const windMul = opts.windMul ?? 1;
   f.x += f.vx;
@@ -1545,9 +1556,12 @@ function stepFlight(f: Flight, disc: Disc, fadeSign: number, path: FlightPath, h
 
   if (f.x < 2 || f.x > (hole.worldW ?? W) - 2 || f.y < 2 || f.y > hole.worldH - 2) return { status: "oob", treeHit: false };
 
-  // Trees are tall — they block at ANY height, so you must go around them.
+  // Trees are tall — they block at ANY height, so you must go around them. The
+  // exception: a tree you're stuck right behind is "ghosted" for this throw, so
+  // you can throw through the gap past the trunk like you would in real life.
   let treeHit = false;
   for (const tr of hole.trees) {
+    if (opts.ghostTrees?.includes(tr)) continue;
     const dist = Math.hypot(f.x - tr.x, f.y - tr.y);
     const min = tr.r + DISC_R;
     if (dist < min && dist > 0) {
@@ -1774,6 +1788,7 @@ export {
   autoDiscIndex,
   lastInBoundsLie,
   resolvePenalty,
+  treesAtLie,
   stepFlight,
   buildTournGhosts,
   buildRacerGhosts,

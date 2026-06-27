@@ -32,7 +32,7 @@ import {
   dailyClaimKey, eventClaimKey, type Challenge, type EventRound,
 } from "@/lib/discgolf/events";
 import {
-  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, TOTAL_PAR, WINTHROP_PAR, leaderboardCourse, TOURN_KEY, TOURN_FIELD, TOURNAMENTS, tournDef, tournRoundPlayHoles, tournPlace, tournFieldRound, tournLiveStandings, tournStandings, ACHIEVEMENTS, earnedAchievements, achievementReward, scoreLabel, courseStars, courseHoles, courseDifficultyOf, courseStarDifficulty, tournDifficulty, tournStarDifficulty, STRAIGHT_SPEED_MUL, releaseSpeedMul, ADV_DISCS, DISC_PRICE, isDiscUnlocked, levelUpChoices, validDiscIndex, DEFAULT_DISC_INDEX, BAG_MAX, discByKey, discIndexByKey, unlockedDiscKeys, reconcileBag, TOUR_COURSES, tourVenue, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, dailySeed, buildRound, elevAt, vibrate, pxToFeet, distBetween, autoDiscIndex, windAlong, resolvePenalty, stepFlight,
+  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, TOTAL_PAR, WINTHROP_PAR, leaderboardCourse, TOURN_KEY, TOURN_FIELD, TOURNAMENTS, tournDef, tournRoundPlayHoles, tournPlace, tournFieldRound, tournLiveStandings, tournStandings, ACHIEVEMENTS, earnedAchievements, achievementReward, scoreLabel, courseStars, courseHoles, courseDifficultyOf, courseStarDifficulty, tournDifficulty, tournStarDifficulty, STRAIGHT_SPEED_MUL, releaseSpeedMul, ADV_DISCS, DISC_PRICE, isDiscUnlocked, levelUpChoices, validDiscIndex, DEFAULT_DISC_INDEX, BAG_MAX, discByKey, discIndexByKey, unlockedDiscKeys, reconcileBag, TOUR_COURSES, tourVenue, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, dailySeed, buildRound, elevAt, vibrate, pxToFeet, distBetween, autoDiscIndex, windAlong, resolvePenalty, treesAtLie, stepFlight,
 } from "@/lib/discgolf/engine";
 import type {
   Vec, Tree, Hole, Mode, Tournament, TournDef, TournLiveRow, Achievement, FlightPath, Release, Flight, GhostState,
@@ -132,6 +132,7 @@ type GameState = {
   shotPaths: Vec[][]; // the actual flight path of each completed shot this hole
   roundPaths: Vec[][][]; // shotPaths of every finished hole (for the best-round ghost)
   trailBuf: Vec[]; // path of the shot currently in the air
+  ghostTrees: Tree[]; // trees the lie is right behind — thrown through, drawn translucent
   holedAt: number | null;
   fadeTurn: number; // radians the current flight has curved so far
   fadeSign: number; // -1 backhand (left), +1 forehand (right)
@@ -157,6 +158,7 @@ function freshHole(hole: Hole) {
     throws: 0,
     shotPaths: [] as Vec[][],
     trailBuf: [] as Vec[],
+    ghostTrees: [] as Tree[],
     holedAt: null as number | null,
     fadeTurn: 0,
     fadeSign: -1,
@@ -940,6 +942,9 @@ export function DiscGolfGame() {
     g.discIndex = i;
     discIndexRef.current = i;
     setDiscIndex(i);
+    // A tree you've come to rest right behind is "ghosted": you throw through it
+    // (real-life gap past the trunk), and it's drawn translucent so you can see.
+    g.ghostTrees = treesAtLie(hole, g.rest.x, g.rest.y);
   }, []);
 
   const startGame = useCallback((mode?: Mode, seedOverride?: number) => {
@@ -1917,7 +1922,7 @@ export function DiscGolfGame() {
         const d = g.disc;
         const disc = ADV_DISCS[g.discIndex];
         const f: Flight = { x: d.x, y: d.y, vx: d.vx, vy: d.vy, h: g.h, vh: g.vh, fadeTurn: g.fadeTurn };
-        const res = stepFlight(f, disc, g.fadeSign, g.path, hole, g.release, { catchR: g.skill.catchR * (g.momentum ?? 1), windMul: g.skill.windMul });
+        const res = stepFlight(f, disc, g.fadeSign, g.path, hole, g.release, { catchR: g.skill.catchR * (g.momentum ?? 1), windMul: g.skill.windMul, ghostTrees: g.ghostTrees });
         d.x = f.x;
         d.y = f.y;
         d.vx = f.vx;
@@ -2341,7 +2346,14 @@ export function DiscGolfGame() {
         }
       }
       drawBasket(ctx, hole.basket.x + rattle, hole.basket.y - cam, g.skill.catchR * (g.momentum ?? 1), cosmeticByKey(BASKET_SKINS, basketSkinRef.current));
-      for (const tr of hole.trees) drawTree(ctx, { x: tr.x, y: tr.y - cam, r: tr.r });
+      for (const tr of hole.trees) {
+        // A tree you're stuck right behind goes translucent — a cue that this
+        // throw passes through it (the aim line runs straight on through, too).
+        const ghosted = g.ghostTrees?.includes(tr);
+        if (ghosted) ctx.globalAlpha = 0.4;
+        drawTree(ctx, { x: tr.x, y: tr.y - cam, r: tr.r });
+        if (ghosted) ctx.globalAlpha = 1;
+      }
 
       // Tournament rivals playing the hole alongside you (simulated field).
       if ((tournamentPlayRef.current || careerPlayRef.current) && ghostsRef.current?.holeIndex === g.holeIndex) {
@@ -2452,7 +2464,7 @@ export function DiscGolfGame() {
           const trace = (ang: number) => {
             const f: Flight = { x: g.disc.x, y: g.disc.y, vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed, h: 0, vh: power * aimDisc.arc, fadeTurn: 0 };
             const out: { x: number; y: number }[] = [{ x: f.x, y: f.y }];
-            for (let i = 0; i < 360; i++) { const r = stepFlight(f, aimDisc, sign, path, hole, releaseRef.current, { catchR: eCatchR, windMul: g.skill.windMul }); out.push({ x: f.x, y: f.y }); if (r.status !== "fly") break; }
+            for (let i = 0; i < 360; i++) { const r = stepFlight(f, aimDisc, sign, path, hole, releaseRef.current, { catchR: eCatchR, windMul: g.skill.windMul, ghostTrees: g.ghostTrees }); out.push({ x: f.x, y: f.y }); if (r.status !== "fly") break; }
             return out;
           };
           // Trace the centre flight first so the cone can match its drawn length.
