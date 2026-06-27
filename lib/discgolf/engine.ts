@@ -208,6 +208,22 @@ function treeTarget(h: Hole): number {
   const band = Math.max(lo, Math.min(hi, n));
   return Math.max(11, Math.min(34, Math.round(band * (h.treeMul ?? 1))));
 }
+// True if a tree of radius `m` centred at (x,y) would sit in or touch a pond
+// (water = OB), a grass OB island, or a sand bunker. Trees don't grow out of a
+// hazard and one standing in the water/sand just reads as broken, so any fill
+// tree that would land in a hazard shape is rejected. Geometry mirrors the
+// landing tests: water/obZones are rectangles (inRect), bunkers are inscribed
+// ellipses (inHazard) — here grown by `m` instead of shrunk by DISC_R.
+function treeInHazard(h: Hole, x: number, y: number, m: number): boolean {
+  for (const w of h.water) if (x > w.x - m && x < w.x + w.w + m && y > w.y - m && y < w.y + w.h + m) return true;
+  for (const ob of h.obZones ?? []) if (x > ob.x - m && x < ob.x + ob.w + m && y > ob.y - m && y < ob.y + ob.h + m) return true;
+  for (const hz of h.hazard ?? []) {
+    const rx = hz.w / 2 + m, ry = hz.h / 2 + m;
+    const nx = (x - (hz.x + hz.w / 2)) / rx, ny = (y - (hz.y + hz.h / 2)) / ry;
+    if (nx * nx + ny * ny <= 1) return true;
+  }
+  return false;
+}
 // Fill a hole's open corridor with trees so the player has to PICK and shape a
 // shot instead of bombing a wide-open fairway. Each hole is brought up to its
 // length-scaled target, with trees scattered down the whole length on both sides —
@@ -218,7 +234,10 @@ function treeTarget(h: Hole): number {
 // Existing authored trees (green rings, tree walls) are kept and counted. Runs at
 // the end of materializeHole, so it covers Glendoveer, Winthrop, daily and tour.
 function populateTrees(h: Hole): Tree[] {
-  const out: Tree[] = [...h.trees];
+  // Drop any authored tree whose trunk overlaps a hazard (test grown by the
+  // tree's own radius), then keep fill trees clear of hazards too — no trunks
+  // standing in water, sand, or OB anywhere.
+  const out: Tree[] = h.trees.filter((t) => !treeInHazard(h, t.x, t.y, t.r));
   const target = treeTarget(h);
   if (out.length >= target) return out;
   const half = h.fwWidth / 2;
@@ -253,6 +272,7 @@ function populateTrees(h: Hole): Tree[] {
       if (Math.hypot(x - h.basket.x, y - h.basket.y) < 26) continue; // keep the green clear
       if (Math.hypot(x - h.tee.x, y - h.tee.y) < 44) continue;       // keep the tee pad clear
       if (out.some((t) => Math.hypot(x - t.x, y - t.y) < 13)) continue; // no stacking
+      if (treeInHazard(h, x, y, 12)) continue; // never plant in water, sand, or OB
       out.push({ x, y, r: 9 + Math.round(rng() * 2) });
     }
   }
@@ -416,7 +436,7 @@ function courseDifficulty(holes: Hole[]): number {
 // corridor is filled with trees scaled by venue character — open "Links" venues
 // read 1★ while dense "Wooded"/technical ones hit 5★, instead of all piling up.
 function difficultyStars(diff: number): 1 | 2 | 3 | 4 | 5 {
-  if (diff >= 11.9) return 5;
+  if (diff >= 11.7) return 5;
   if (diff >= 10.5) return 4;
   if (diff >= 9.0) return 3;
   if (diff >= 8.4) return 2;
