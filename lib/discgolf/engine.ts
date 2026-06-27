@@ -379,12 +379,14 @@ function courseDifficulty(holes: Hole[]): number {
   return s / holes.length;
 }
 // Difficulty as a 1–5 star rating (5 = very difficult). Thresholds calibrated to
-// the spread of the play-courses (~2.5 easiest to ~4.9 hardest).
+// the spread of the play-courses (~3.2 easiest to ~6.1 hardest) now that every
+// sparse hole carries double trees — so the open links courses still read 1–2★
+// while the tight/technical venues hit 5★, instead of everything piling at the top.
 function difficultyStars(diff: number): 1 | 2 | 3 | 4 | 5 {
-  if (diff >= 4.6) return 5;
-  if (diff >= 3.9) return 4;
-  if (diff >= 3.3) return 3;
-  if (diff >= 2.6) return 2;
+  if (diff >= 5.7) return 5;
+  if (diff >= 5.0) return 4;
+  if (diff >= 4.3) return 3;
+  if (diff >= 3.4) return 2;
   return 1;
 }
 // Convenience: a course's raw difficulty / star difficulty from (mode, seed).
