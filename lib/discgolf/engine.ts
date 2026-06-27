@@ -279,7 +279,11 @@ function materializeHole(t: Omit<Hole, "worldH">): Hole {
     fwWidth: t.fwWidth,
     trees: t.trees.map((tr) => ({ x: tr.x, y: ty(tr.y), r: tr.r })),
     water: t.water.map((w) => ({ x: w.x, y: ty(w.y), w: w.w, h: w.h * scale })),
-    hazard: (t.hazard ?? []).map((o) => ({ x: o.x, y: ty(o.y), w: o.w, h: o.h * scale })),
+    // Hazards are ROUND bunkers: diameter = their width (the x-axis is already in
+    // world px), centered on the box and NOT squashed by the vertical stretch — so
+    // even on a short hole they stay big, catchable circles instead of the thin
+    // slivers you could almost never come to rest fully inside.
+    hazard: (t.hazard ?? []).map((o) => { const d = o.w; return { x: o.x, y: ty(o.y + o.h / 2) - d / 2, w: d, h: d }; }),
     obZones: t.obZones?.map((o) => ({ x: o.x, y: ty(o.y), w: o.w, h: o.h * scale })),
     dropZone: t.dropZone ? { x: t.dropZone.x, y: ty(t.dropZone.y) } : undefined,
     walls: t.walls?.map((wl) => ({ x: wl.x, y: ty(wl.y), w: wl.w })),
@@ -1229,12 +1233,16 @@ function genDailyHole(rng: () => number, opts: GenOpts = {}): Hole {
   const sandBox = (p: Vec): Water => {
     const side = rng() < 0.5 ? 1 : -1;
     const half = fwWidth / 2;
-    const w = Math.round(Math.max(14, Math.min(r(22, 34), half - 8)));
-    const h = Math.round(r(16, 24));
-    const near = p.x + side * r(2, Math.max(2, (half - w - 4) * 0.7)); // far edge stays within `half`
-    const left = side > 0 ? near : near - w;
-    const x = Math.round(Math.max(8, Math.min(300 - w, left)));
-    return { x, y: Math.round(p.y - h / 2), w, h };
+    // A ROUND bunker, big enough to actually land in — but never so wide it seals
+    // off the corridor (always leaves a ~28px landing lane). materializeHole keeps
+    // it circular (diameter = this width) in world space. Three r() draws, same as
+    // the old elliptical bunker, so every course's trees/pins/water are untouched.
+    const d = Math.round(Math.max(28, Math.min(r(34, 48), fwWidth - 28)));
+    const jitter = r(-6, 6);                        // small along-fairway nudge (keeps the RNG stream stable)
+    const reach = Math.max(0, half - d / 2 - 2);    // how far the center can sit off the centerline
+    const cx = p.x + side * r(reach * 0.4, reach);  // biased to one side so a lane is left opposite
+    const x = Math.round(Math.max(8, Math.min(312 - d, cx - d / 2)));
+    return { x, y: Math.round(p.y - d / 2 + jitter), w: d, h: d };
   };
   const hazard: Water[] = [];
   for (let i = 0; i < (opts.hazardMax ?? 1); i++) {
