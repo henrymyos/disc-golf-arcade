@@ -182,6 +182,13 @@ const HOLE_TEMPLATES: Omit<Hole, "worldH">[] = [
 const DRIVE = 330;
 const TEE_BEHIND = 120;
 const worldHForPar = (par: number) => (par <= 3 ? 510 : par === 4 ? 680 : 890);
+// World px ↔ feet for the on-screen distance readout (pxToFeet, defined later, is
+// the same factor). No hole is allowed to play shorter than MIN_HOLE_FT — even a
+// length-scaled early-career or short procedural hole — so materializeHole grows
+// any hole whose straight tee→basket line would read shorter up to this floor.
+const FEET_PER_PX = 1.8;
+const MIN_HOLE_FT = 200;
+const MIN_HOLE_PX = MIN_HOLE_FT / FEET_PER_PX; // ≈111px
 // The holes were playing too easy, so any hole that isn't already densely wooded
 // gets each of its trees paired with a second trunk a short hop away — doubling
 // its tree count to pinch the lane and make the hole play harder. Holes that
@@ -248,7 +255,17 @@ function materializeHole(t: Omit<Hole, "worldH">): Hole {
   // `lenMul` shortens a hole below its par default so its drive can be a
   // midrange/fairway shot rather than a max driver (clamped so the tee pad +
   // green still fit).
-  const worldH = Math.round(worldHForPar(t.par) * Math.max(0.5, t.lenMul ?? 1));
+  let worldH = Math.round(worldHForPar(t.par) * Math.max(0.5, t.lenMul ?? 1));
+  // Length floor: a hole's straight tee→basket line must read at least MIN_HOLE_FT.
+  // Only the vertical span scales with worldH (the dogleg's x-offset is fixed), so
+  // solve for the y-span the floor needs and grow worldH until the line reaches it.
+  const dx0 = t.basket.x - t.tee.x;
+  const span = 416 - t.basket.y; // template tee-row (416) → basket-row
+  if (span > 0) {
+    const needDy = Math.sqrt(Math.max(0, MIN_HOLE_PX * MIN_HOLE_PX - dx0 * dx0));
+    const minWorldH = Math.ceil(60 + TEE_BEHIND + (416 - 50) * (needDy / span));
+    if (minWorldH > worldH) worldH = minWorldH;
+  }
   const scale = (worldH - 60 - TEE_BEHIND) / (416 - 50); // template y[50..416] → world[60..tee]
   const ty = (y: number) => 60 + (y - 50) * scale;
   const h: Hole = {
@@ -1426,10 +1443,10 @@ function windAlong(hole: Hole, from: Vec): number {
   const len = Math.hypot(ax, ay) || 1;
   return (hole.wind.x * ax + hole.wind.y * ay) / len;
 }
-// World px → feet, for the on-screen distance readout. Tuned to realistic disc
-// golf carries: a full-power straight midrange (~160px) ≈ 290ft, a fairway
-// (~221px) ≈ 400ft, and a distance driver (~300px) ≈ 540ft.
-const FEET_PER_PX = 1.8;
+// World px → feet, for the on-screen distance readout. FEET_PER_PX (1.8, defined
+// up top by the hole-length floor) is tuned to realistic disc golf carries: a
+// full-power straight midrange (~160px) ≈ 290ft, a fairway (~221px) ≈ 400ft, and
+// a distance driver (~300px) ≈ 540ft.
 function pxToFeet(px: number): number {
   return Math.round(px * FEET_PER_PX);
 }
@@ -1618,6 +1635,10 @@ type TournGhost = { idx: number; name: string; color: string; path: Vec[]; shotD
 type GhostState = { holeIndex: number; startAt: number; ghosts: TournGhost[] };
 const GHOST_PALETTE = ["#e23b7b", "#5fb0e8", "#b85cd6", "#e2a13b"];
 const N_RIVALS = 4;
+// How far a rival's drive/approach carries (px) when laying out their shot path —
+// a solid throw, so on a short hole they go straight at the basket in one like you
+// would, rather than dribbling down the fairway.
+const GHOST_DRIVE = DRIVE * 0.9;
 
 // Generic ghost builder: turn a list of racers (name, color, shot count for THIS
 // hole) into discs that play the hole tee → fairway landings → basket, one node
@@ -1628,14 +1649,28 @@ function buildRacerGhosts(seed: number, holeIndex: number, hole: Hole, racers: G
     const s = Math.max(1, rc.shots);
     const rng = mulberry32((seed ^ (gi * 2654435761) ^ (holeIndex * 40503) ^ 0x77777) >>> 0);
     const path: Vec[] = [{ x: hole.tee.x, y: hole.tee.y }];
+    // Throws it takes to REACH the green. On a short hole this is 1, so the first
+    // throw flies right at the basket like a real drive; any remaining strokes are
+    // putts that close in on the cup — instead of evenly dawdling down the fairway.
+    const reach = Math.max(1, Math.ceil(distBetween(hole.tee, hole.basket) / GHOST_DRIVE));
     for (let k = 1; k < s; k++) {
-      const f = 1 - Math.pow(1 - k / s, 1.25); // cover more ground early
-      const base = pointOnPath(hole.fairway, f);
-      const ahead = pointOnPath(hole.fairway, Math.min(1, f + 0.02));
-      const dx = ahead.x - base.x, dy = ahead.y - base.y;
-      const len = Math.hypot(dx, dy) || 1;
-      const j = (rng() * 2 - 1) * hole.fwWidth * 0.22; // lateral spread within the corridor
-      path.push({ x: base.x + (-dy / len) * j, y: base.y + (dx / len) * j });
+      if (k >= reach) {
+        // On/around the green — short putts converging on the basket.
+        const putt = k - reach;        // 0 = the approach that lands on the green
+        const last = s - 1 - reach;    // index of the final putt before holing out
+        const spread = hole.fwWidth * 0.16 * (last > 0 ? 1 - putt / (last + 1) : 0.5);
+        const ang = rng() * Math.PI * 2;
+        path.push({ x: hole.basket.x + Math.cos(ang) * spread, y: hole.basket.y + Math.sin(ang) * spread });
+      } else {
+        // Still advancing down the fairway — reach the green (f→1) on throw #reach.
+        const f = k / reach;
+        const base = pointOnPath(hole.fairway, f);
+        const ahead = pointOnPath(hole.fairway, Math.min(1, f + 0.02));
+        const dx = ahead.x - base.x, dy = ahead.y - base.y;
+        const len = Math.hypot(dx, dy) || 1;
+        const j = (rng() * 2 - 1) * hole.fwWidth * 0.22; // lateral spread within the corridor
+        path.push({ x: base.x + (-dy / len) * j, y: base.y + (dx / len) * j });
+      }
     }
     path.push({ x: hole.basket.x, y: hole.basket.y });
     // Each shot = a couple seconds standing over the disc, then a quick flight,
