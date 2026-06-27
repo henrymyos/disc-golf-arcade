@@ -54,8 +54,8 @@ export function momentumAfter(_mods: SkillMods, _strokes: number, _par: number):
 // lenMul in the engine); 1 = normal. Junior + the first high-school seasons are
 // the most forgiving, lengthening as you grow into the bag.
 export function careerHoleLenScale(c: Career): number {
-  if (c.stage === "youth") return 0.64;
-  if (c.stage === "highschool") return Math.min(1, 0.72 + 0.06 * c.season); // ~0.72 (freshman) → ~0.9 (senior)
+  if (c.stage === "youth") return 0.74;
+  if (c.stage === "highschool") return Math.min(1, 0.84 + 0.04 * c.season); // ~0.84 (freshman) → ~0.96 (senior)
   return 1; // college + pro: full length
 }
 
@@ -444,19 +444,20 @@ export function seasonSchedule(c: Career): CareerEvent[] {
     case "youth": {
       // ~4 junior events — a few opens plus the Junior Championship. A gentle
       // field so a raw beginner can place well from their very first event.
-      const out = take(YOUTH_NAMES, 3).map((n, i) => ev(`jr${i + 1}`, n, "daily", "minor", 12 + i * 2, 11 + ramp + i));
-      out.push(ev("jrc", "Junior Championship", "daily", "championship", 16, 16 + ramp));
+      const out = take(YOUTH_NAMES, 3).map((n, i) => ev(`jr${i + 1}`, n, "daily", "minor", 12 + i * 2, 15 + ramp + i));
+      out.push(ev("jrc", "Junior Championship", "daily", "championship", 16, 21 + ramp));
       return out;
     }
     case "highschool": {
       // ~6 events. Calibrated for a raw freshman (all skills start at 20). The
-      // regular-season events are SHORT 9-hole opens — open, low-hazard courses a
-      // rookie can score on and win from event one. The two capstones (Regional
-      // Qualifier + State Championship) are the full 18-hole Glendoveer test, the
-      // big tournaments you grow into. Fields toughen each season via `ramp`.
-      const out = take(HS_NAMES, 4).map((n, i) => ev(`hs${i + 1}`, n, "daily", "minor", 20 + i * 2, 19 + ramp + i));
-      out.push(ev("hsq", "Regional Qualifier", "course", "major", 24, 23 + ramp));
-      out.push(ev("hss", "State Championship", "course", "championship", 28, 29 + ramp));
+      // regular-season events are 9-hole opens — driver-optional but long enough
+      // that a good round wins by a stroke or two, not a runaway (see
+      // careerHoleLenScale). The two capstones (Regional Qualifier + State
+      // Championship) are the full 18-hole Glendoveer test, the big tournaments
+      // you grow into. Fields toughen each season via `ramp`.
+      const out = take(HS_NAMES, 4).map((n, i) => ev(`hs${i + 1}`, n, "daily", "minor", 20 + i * 2, 26 + ramp + i));
+      out.push(ev("hsq", "Regional Qualifier", "course", "major", 24, 30 + ramp));
+      out.push(ev("hss", "State Championship", "course", "championship", 28, 36 + ramp));
       return out;
     }
     case "college": {
