@@ -246,12 +246,6 @@ describe("generated obstacles stay in bounds", () => {
       expect(boxInCorridor(hole, h), `${label}: a sand box never reaches the in-bounds corridor`).toBe(true);
   };
 
-  it("Academy courses keep every tree, pond and bunker in play", () => {
-    // "academy" is the generated 9-hole course the early Career plays (it used to
-    // back the Daily Challenge, which now serves real course holes instead).
-    for (let seed = 0; seed < 60; seed++)
-      buildRound(seed, "academy").forEach((h, i) => checkHole(h, `academy seed ${seed} hole ${i + 1}`));
-  });
   it("the listed pro-tour venues keep every obstacle in play", () => {
     for (const c of TOUR_COURSES)
       generateTourCourse(c.seed).forEach((h, i) => checkHole(h, `${c.name} hole ${i + 1}`));
@@ -286,6 +280,17 @@ describe("Daily Challenge is assembled from real courses", () => {
     expect(buildRound(7, "daily").map(sig)).toEqual(buildRound(7, "daily").map(sig));
     expect(buildRound(7, "daily").map(sig)).not.toEqual(buildRound(8, "daily").map(sig));
   });
+  it("the early-Career 'academy' events are the same real holes, just shortened", () => {
+    const len = (hs: Hole[]) => hs.reduce((s, h) => s + h.worldH, 0);
+    for (let seed = 0; seed < 30; seed++) {
+      const full = buildRound(seed, "academy", 1); // same picks at normal length
+      const short = buildRound(seed, "academy", 0.74); // youth length-shrink
+      expect(short).toHaveLength(9);
+      for (const h of full)
+        expect(pool.has(sig(h)), `academy seed ${seed}: a hole that belongs to no course`).toBe(true);
+      expect(len(short)).toBeLessThan(len(full)); // shrunk so a beginner can reach greens
+    }
+  });
 });
 
 describe("geometry", () => {
@@ -314,11 +319,11 @@ describe("round sand bunkers", () => {
     expect(hz.w).toBe(40); // diameter = authored width, not shrunk by the short hole
   });
   it("generated bunkers are sizable circles you can actually land in", () => {
-    // The procedural generator (academy/tour) is what sandBox sizes — real authored
+    // The procedural generator (tour/ranked) is what sandBox sizes — real authored
     // courses can carry smaller hazards, so we assert the size floor on generated holes.
     let n = 0;
     for (let seed = 0; seed < 60; seed++)
-      for (const h of buildRound(seed, "academy"))
+      for (const h of buildRound(seed, "tour"))
         for (const hz of h.hazard ?? []) {
           expect(hz.w).toBe(hz.h); // round
           expect(hz.w).toBeGreaterThanOrEqual(28); // big enough that inHazard (− discR) leaves a real target
