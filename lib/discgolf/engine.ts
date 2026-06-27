@@ -196,17 +196,20 @@ function pathLength(pts: Vec[]): number {
   return s;
 }
 // How many trees a hole should carry — scales with its length so the wide-open
-// fairways fill in and the longest par 4s/5s reach ~20–30, while short holes stay
-// lighter. ~1 tree per 24px of corridor, clamped to a per-par band, then scaled by
-// the venue's tree density (h.treeMul) so a "Wooded" course stays denser than an
-// open "Links" one instead of every course filling to the same level. Fixed
-// courses and the daily leave treeMul at 1, so they land squarely in the 20–30 band.
+// fairways fill in and the longest par 4s/5s reach ~23–27, while short holes stay
+// lighter. ~1 tree per 18px of corridor, clamped to a per-par band, thinned ~15%,
+// then scaled by the venue's tree density (h.treeMul) so a "Wooded" course stays
+// denser than an open "Links" one instead of every course filling to the same
+// level. Fixed courses and the daily leave treeMul at 1, landing in the ~17–25 band.
 function treeTarget(h: Hole): number {
   const n = Math.round(pathLength(h.fairway) / 18);
   const hi = h.par >= 5 ? 32 : h.par === 4 ? 28 : 21;
   const lo = h.par >= 5 ? 27 : h.par === 4 ? 22 : 15;
   const band = Math.max(lo, Math.min(hi, n));
-  return Math.max(11, Math.min(34, Math.round(band * (h.treeMul ?? 1))));
+  // Thin the band by ~15% (clamp bounds scaled to match) — the corridors were
+  // reading too cluttered, so every hole drops about a sixth of its trees while
+  // the weaving lane still forces a shaped line.
+  return Math.max(9, Math.min(29, Math.round(band * (h.treeMul ?? 1) * 0.85)));
 }
 // True if a tree of radius `m` centred at (x,y) would sit in or touch a pond
 // (water = OB), a grass OB island, or a sand bunker. Trees don't grow out of a
@@ -436,10 +439,10 @@ function courseDifficulty(holes: Hole[]): number {
 // corridor is filled with trees scaled by venue character — open "Links" venues
 // read 1★ while dense "Wooded"/technical ones hit 5★, instead of all piling up.
 function difficultyStars(diff: number): 1 | 2 | 3 | 4 | 5 {
-  if (diff >= 11.7) return 5;
-  if (diff >= 10.5) return 4;
-  if (diff >= 9.0) return 3;
-  if (diff >= 8.4) return 2;
+  if (diff >= 10.4) return 5;
+  if (diff >= 9.5) return 4;
+  if (diff >= 8.45) return 3;
+  if (diff >= 8.0) return 2;
   return 1;
 }
 // Convenience: a course's raw difficulty / star difficulty from (mode, seed).
