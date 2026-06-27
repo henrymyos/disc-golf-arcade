@@ -595,7 +595,11 @@ const HOLE_ELEV = [0, -2, 0, 0, -2, -2, 2, -1, 0, 0, -2, -1, 1, -1, 0, 0, 0, 0];
 // venues live in the Career schedule). Lets the pro tour visit many courses.
 // "ranked" = a weekly procedurally-generated 18-hole course shared by everyone
 // that week (the async global ranked ladder); built like a tour course.
-type Mode = "daily" | "course" | "winthrop" | "tour" | "ranked";
+// "daily" = the Daily Challenge (9 REAL holes mixed from the app's courses).
+// "academy" = the procedurally-generated short 9-hole course the early Career
+// (youth/high-school) events play — kept separate so the Daily can use real holes
+// without changing the gentle, beginner-friendly Career layouts.
+type Mode = "daily" | "academy" | "course" | "winthrop" | "tour" | "ranked";
 
 // Achievements — evaluated from a finished round's per-hole scores. Each pays a
 // one-time coin bounty (`coins`) the first time it's unlocked, scaled to how
@@ -1376,18 +1380,53 @@ function buildTournaments(): TournDef[] {
   return list;
 }
 const TOURNAMENTS: TournDef[] = buildTournaments();
-// Build one playable round. Daily = a new 9-hole course; tour = a generated
-// 18-hole pro course; course = the 18 fixed Glendoveer holes with seeded wind.
-// Pins are FIXED at their authored spot — every round plays the same basket
-// position (no per-round jitter), so a hole is always identical and a pin can
-// never land in water or behind a tree. Same seed ⇒ same round.
+// Every REAL hole in the app's playable courses — Glendoveer East, Winthrop Lake,
+// and the eight pro-tour venues (the exact set shown on "Play Courses"). This is
+// the pool the Daily Challenge draws from, so the daily always serves holes that
+// exist in a real course and never invents its own. Built once and cached.
+let DAILY_POOL: Hole[] | null = null;
+function dailyHolePool(): Hole[] {
+  if (DAILY_POOL) return DAILY_POOL;
+  const pool: Hole[] = [];
+  // Glendoveer plays with its authored elevation profile (the same per-hole values
+  // "course" mode applies); Winthrop and the tour venues already carry their own.
+  HOLES.forEach((h, i) => pool.push({ ...h, elev: HOLE_ELEV[i] ?? 0 }));
+  pool.push(...WINTHROP_HOLES);
+  for (const c of TOUR_COURSES) pool.push(...generateTourCourse(c.seed));
+  DAILY_POOL = pool;
+  return pool;
+}
+// The Daily Challenge: 9 DISTINCT real holes sampled from across every course in
+// the app (see dailyHolePool), in a seed-shuffled order, each handed the day's
+// seeded wind so the daily still varies day to day. Deterministic — same seed ⇒
+// same nine holes. It never makes up a hole; every one comes from a real course.
+function generateDailyMix(rng: () => number): Hole[] {
+  const pool = dailyHolePool();
+  const idx = pool.map((_, i) => i);
+  const n = Math.min(9, idx.length);
+  for (let i = 0; i < n; i++) {
+    const j = i + Math.floor(rng() * (idx.length - i)); // partial Fisher–Yates → 9 distinct
+    [idx[i], idx[j]] = [idx[j], idx[i]];
+  }
+  return idx.slice(0, n).map((i) => {
+    const { wind, windMag } = seededWind(rng);
+    return { ...pool[i], wind, windMag };
+  });
+}
+// Build one playable round. Daily = 9 real holes mixed from the app's courses;
+// academy = a generated short 9-hole course for the early Career; tour = a
+// generated 18-hole pro course; course = the 18 fixed Glendoveer holes with
+// seeded wind. Pins are FIXED at their authored spot — every round plays the same
+// basket position (no per-round jitter), so a hole is always identical and a pin
+// can never land in water or behind a tree. Same seed ⇒ same round.
 // `lenScale` (<1) shortens every hole — early-career play sets it so a developing
 // player can reach greens without a distance driver. The fixed courses
 // (Glendoveer/Winthrop) are re-materialized from their templates at the scaled
 // length; 1 (the default for all normal play) returns the unchanged courses.
 function buildRound(seed: number, mode: Mode, lenScale = 1): Hole[] {
   const rng = mulberry32(seed);
-  if (mode === "daily") return generateDailyCourse(rng, lenScale);
+  if (mode === "daily") return generateDailyMix(rng);
+  if (mode === "academy") return generateDailyCourse(rng, lenScale);
   if (mode === "tour" || mode === "ranked") return generateTourCourse(seed, lenScale);
   const templates = mode === "winthrop" ? WINTHROP_TEMPLATES : HOLE_TEMPLATES;
   const full = mode === "winthrop" ? WINTHROP_HOLES : HOLES;

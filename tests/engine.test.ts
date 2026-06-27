@@ -246,9 +246,11 @@ describe("generated obstacles stay in bounds", () => {
       expect(boxInCorridor(hole, h), `${label}: a sand box never reaches the in-bounds corridor`).toBe(true);
   };
 
-  it("Daily courses keep every tree, pond and bunker in play", () => {
+  it("Academy courses keep every tree, pond and bunker in play", () => {
+    // "academy" is the generated 9-hole course the early Career plays (it used to
+    // back the Daily Challenge, which now serves real course holes instead).
     for (let seed = 0; seed < 60; seed++)
-      buildRound(seed, "daily").forEach((h, i) => checkHole(h, `daily seed ${seed} hole ${i + 1}`));
+      buildRound(seed, "academy").forEach((h, i) => checkHole(h, `academy seed ${seed} hole ${i + 1}`));
   });
   it("the listed pro-tour venues keep every obstacle in play", () => {
     for (const c of TOUR_COURSES)
@@ -259,6 +261,30 @@ describe("generated obstacles stay in bounds", () => {
     // all six venue characters and a wide spread of layouts are covered.
     for (let seed = 0; seed < 240; seed++)
       generateTourCourse(seed).forEach((h, i) => checkHole(h, `tour seed ${seed} hole ${i + 1}`));
+  });
+});
+
+describe("Daily Challenge is assembled from real courses", () => {
+  // The daily must serve holes that EXIST in the app's playable courses —
+  // Glendoveer East, Winthrop Lake, and the eight pro-tour venues — never an
+  // invented one. Signature = the fields that identify a hole's layout (wind is
+  // re-seeded per day, so it's excluded).
+  const sig = (h: Hole) => `${h.par}|${Math.round(h.tee.x)}|${h.worldH}|${Math.round(h.basket.x)}|${Math.round(h.basket.y)}|${h.trees.length}`;
+  const pool = new Set<string>();
+  HOLES.forEach((h) => pool.add(sig(h)));
+  WINTHROP_HOLES.forEach((h) => pool.add(sig(h)));
+  for (const c of TOUR_COURSES) generateTourCourse(c.seed).forEach((h) => pool.add(sig(h)));
+  it("serves 9 holes a day, every one drawn from a real course", () => {
+    for (let seed = 0; seed < 40; seed++) {
+      const daily = buildRound(seed, "daily");
+      expect(daily).toHaveLength(9);
+      for (const h of daily)
+        expect(pool.has(sig(h)), `daily seed ${seed}: a hole that belongs to no course`).toBe(true);
+    }
+  });
+  it("is deterministic but varies across days", () => {
+    expect(buildRound(7, "daily").map(sig)).toEqual(buildRound(7, "daily").map(sig));
+    expect(buildRound(7, "daily").map(sig)).not.toEqual(buildRound(8, "daily").map(sig));
   });
 });
 
@@ -277,6 +303,28 @@ describe("geometry", () => {
   it("a hazard smaller than the disc can never contain it", () => {
     const tiny = { x: 0, y: 0, w: 4, h: 4 };
     expect(inHazard(tiny, 2, 2)).toBe(false);
+  });
+});
+
+describe("round sand bunkers", () => {
+  it("materializes hazards as circles, un-squashed even on a short hole", () => {
+    const t = { par: 3 as const, lenMul: 0.5, tee: { x: 160, y: 416 }, basket: { x: 160, y: 100 }, fairway: [{ x: 160, y: 416 }, { x: 160, y: 100 }], fwWidth: 120, trees: [], water: [], hazard: [{ x: 130, y: 240, w: 40, h: 18 }] };
+    const hz = materializeHole(t).hazard![0];
+    expect(hz.w).toBe(hz.h); // a circle, not a flat ellipse
+    expect(hz.w).toBe(40); // diameter = authored width, not shrunk by the short hole
+  });
+  it("generated bunkers are sizable circles you can actually land in", () => {
+    // The procedural generator (academy/tour) is what sandBox sizes — real authored
+    // courses can carry smaller hazards, so we assert the size floor on generated holes.
+    let n = 0;
+    for (let seed = 0; seed < 60; seed++)
+      for (const h of buildRound(seed, "academy"))
+        for (const hz of h.hazard ?? []) {
+          expect(hz.w).toBe(hz.h); // round
+          expect(hz.w).toBeGreaterThanOrEqual(28); // big enough that inHazard (− discR) leaves a real target
+          n++;
+        }
+    expect(n).toBeGreaterThan(0);
   });
 });
 

@@ -396,7 +396,7 @@ function parForMode(mode: Mode): { par: number; holes: number } {
   if (mode === "winthrop") return { par: WINTHROP_PAR, holes: 18 };
   if (mode === "course") return { par: TOTAL_PAR, holes: 18 };
   if (mode === "tour") return { par: 70, holes: 18 }; // placeholder; tour events set real par from the seed
-  return { par: 27, holes: 9 }; // daily-style 9-hole event (par ~27)
+  return { par: 27, holes: 9 }; // "academy": generated 9-hole event (par ~27)
 }
 
 // Venue naming + the procedural layouts live in the engine (tourVenue /
@@ -444,8 +444,8 @@ export function seasonSchedule(c: Career): CareerEvent[] {
     case "youth": {
       // ~4 junior events — a few opens plus the Junior Championship. A gentle
       // field so a raw beginner can place well from their very first event.
-      const out = take(YOUTH_NAMES, 3).map((n, i) => ev(`jr${i + 1}`, n, "daily", "minor", 12 + i * 2, 15 + ramp + i));
-      out.push(ev("jrc", "Junior Championship", "daily", "championship", 16, 21 + ramp));
+      const out = take(YOUTH_NAMES, 3).map((n, i) => ev(`jr${i + 1}`, n, "academy", "minor", 12 + i * 2, 15 + ramp + i));
+      out.push(ev("jrc", "Junior Championship", "academy", "championship", 16, 21 + ramp));
       return out;
     }
     case "highschool": {
@@ -455,7 +455,7 @@ export function seasonSchedule(c: Career): CareerEvent[] {
       // careerHoleLenScale). The two capstones (Regional Qualifier + State
       // Championship) are the full 18-hole Glendoveer test, the big tournaments
       // you grow into. Fields toughen each season via `ramp`.
-      const out = take(HS_NAMES, 4).map((n, i) => ev(`hs${i + 1}`, n, "daily", "minor", 20 + i * 2, 26 + ramp + i));
+      const out = take(HS_NAMES, 4).map((n, i) => ev(`hs${i + 1}`, n, "academy", "minor", 20 + i * 2, 26 + ramp + i));
       out.push(ev("hsq", "Regional Qualifier", "course", "major", 24, 30 + ramp));
       out.push(ev("hss", "State Championship", "course", "championship", 28, 36 + ramp));
       return out;

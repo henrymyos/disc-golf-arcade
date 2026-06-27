@@ -69,7 +69,7 @@ const TOURNBEST_KEY = "discgolf.tournplaces.v1"; // best finishing place per tou
 const ENTRY_KEY = "discgolf.entry.v1"; // "offline" | "auth" — which front-door choice was made
 type ResumeSnap = { v: 1; mode: Mode; seed: number; scores: number[] };
 function holesForMode(mode: Mode): number {
-  return mode === "daily" ? 9 : 18;
+  return mode === "daily" || mode === "academy" ? 9 : 18;
 }
 function readResume(): ResumeSnap | null {
   try {
