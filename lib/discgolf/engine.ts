@@ -222,35 +222,39 @@ function populateTrees(h: Hole): Tree[] {
   const target = treeTarget(h);
   if (out.length >= target) return out;
   const half = h.fwWidth / 2;
-  // The open lane swings FURTHER off the centerline than it is wide (amp > gapHalf),
-  // so at each weave it fully clears the tee→basket straight line — you can't just
-  // rip it at the pin, you have to read the gap and shape/aim a specific shot. The
-  // lane stays continuous and throwable, so the hole is always playable.
-  const amp = half * 0.55;      // how far the open lane weaves off the centerline
-  const gapHalf = half * 0.3;   // half-width of the always-clear lane (twisting gap)
-  const waves = h.par >= 5 ? 3 : h.par === 4 ? 2.5 : 2; // lane wiggles more on long holes
+  // Trees LINE the two edges of a clear, winding fairway lane instead of being
+  // scattered across it — so there's an obvious (if curving) gap to throw down,
+  // not trunks in the open the whole way. Ordered stations marching down the hole
+  // each drop a trunk on either lane edge, tracing two weaving tree lines; a small
+  // squared-bias depth lets a few sit back in the rough so it isn't a flat fence.
+  // The lane still curves enough that a straight rip at the pin clips a line at the
+  // bends, so you have to read it and shape/aim — but the fairway stays accessible.
+  const laneHW = half * 0.4;    // open fairway half-width — clearly throwable lane
+  const amp = half * 0.5;       // how far the fairway curves off the centerline
+  const waves = h.par >= 5 ? 2.5 : h.par === 4 ? 2 : 1.5; // gentler curve than a slalom
   const rng = mulberry32(((Math.round(h.basket.x) * 73856093) ^ (Math.round(h.basket.y) * 19349663) ^ (h.worldH * 83492791) ^ (h.par * 0x9e3779b1)) >>> 0);
   const phase = rng();
-  let placed = 0;
-  for (let i = 0; out.length < target && i < target * 8; i++) {
-    const f = 0.07 + ((i * 0.6180339887 + phase) % 1) * 0.86; // golden-ratio spread along the length
+  const steps = Math.max(6, Math.ceil(target / 2)); // ~2 trees per step (one per edge)
+  for (let s = 0; s < steps && out.length < target; s++) {
+    const f = 0.05 + ((s + 0.5) / steps) * 0.9; // ordered down the length → clean lines
     const base = pointOnPath(h.fairway, f);
     const ahead = pointOnPath(h.fairway, Math.min(1, f + 0.02));
     const tx = ahead.x - base.x, tyv = ahead.y - base.y;
     const L = Math.hypot(tx, tyv) || 1;
     const nx = -tyv / L, ny = tx / L; // unit perpendicular to travel
-    const lane = Math.sin((f * waves + phase) * Math.PI * 2) * amp; // open-lane offset at this f
-    const side = placed % 2 === 0 ? 1 : -1; // alternate sides so both fill down the length
-    const mag = gapHalf + rng() * (half * 0.95 - gapHalf); // outside the lane, out toward the edge
-    let o = lane + side * mag;
-    o = Math.max(-half * 0.95, Math.min(half * 0.95, o));
-    if (Math.abs(o - lane) < gapHalf) continue; // never block the lane
-    const x = base.x + nx * o, y = base.y + ny * o;
-    if (Math.hypot(x - h.basket.x, y - h.basket.y) < 28) continue; // keep the green clear
-    if (Math.hypot(x - h.tee.x, y - h.tee.y) < 46) continue;       // keep the tee pad clear
-    if (out.some((t) => Math.hypot(x - t.x, y - t.y) < 16)) continue; // no stacking
-    out.push({ x, y, r: 9 + Math.round(rng() * 2) });
-    placed++;
+    const laneC = Math.sin((f * waves + phase) * Math.PI * 2) * amp; // lane centre at this f
+    for (const side of [-1, 1] as const) {
+      if (out.length >= target) break;
+      const depth = rng() * rng() * (half * 0.5); // mostly on the edge line, a few back in rough
+      let o = laneC + side * (laneHW + depth);
+      o = Math.max(-half * 0.97, Math.min(half * 0.97, o));
+      if (Math.abs(o - laneC) < laneHW - 2) continue; // keep the fairway lane clear
+      const x = base.x + nx * o, y = base.y + ny * o;
+      if (Math.hypot(x - h.basket.x, y - h.basket.y) < 26) continue; // keep the green clear
+      if (Math.hypot(x - h.tee.x, y - h.tee.y) < 44) continue;       // keep the tee pad clear
+      if (out.some((t) => Math.hypot(x - t.x, y - t.y) < 13)) continue; // no stacking
+      out.push({ x, y, r: 9 + Math.round(rng() * 2) });
+    }
   }
   return out;
 }
