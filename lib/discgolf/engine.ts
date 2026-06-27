@@ -182,6 +182,64 @@ const HOLE_TEMPLATES: Omit<Hole, "worldH">[] = [
 const DRIVE = 330;
 const TEE_BEHIND = 120;
 const worldHForPar = (par: number) => (par <= 3 ? 510 : par === 4 ? 680 : 890);
+// The holes were playing too easy, so any hole that isn't already densely wooded
+// gets each of its trees paired with a second trunk a short hop away — doubling
+// its tree count to pinch the lane and make the hole play harder. Holes that
+// already have a lot of trees (DENSE_TREES+) are left alone so the tunnels don't
+// turn impassable, and a deliberately open hole (0 trees) stays open. Offsets are
+// keyed off the tree's index (no RNG), so a hole is identical every time it's
+// played. Runs on the MATERIALIZED (world-coord) hole at the end of
+// materializeHole — so it covers every course (Glendoveer, Winthrop, daily, tour),
+// which all funnel through there.
+const DENSE_TREES = 8; // "a lot of trees already" — at/above this, add no more
+// Closest point on a polyline to (px,py) — used to pull a doubled trunk back into
+// the fairway corridor when its offset would have pushed it out into the rough.
+function nearestOnPath(px: number, py: number, pts: Vec[]): Vec {
+  let best = pts[0], bd = Infinity;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i + 1];
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const l2 = dx * dx + dy * dy;
+    let t = l2 ? ((px - a.x) * dx + (py - a.y) * dy) / l2 : 0;
+    t = Math.max(0, Math.min(1, t));
+    const cx = a.x + t * dx, cy = a.y + t * dy;
+    const d = Math.hypot(px - cx, py - cy);
+    if (d < bd) { bd = d; best = { x: cx, y: cy }; }
+  }
+  return best;
+}
+function thickenTrees(h: Hole): Tree[] {
+  const trees = h.trees;
+  if (trees.length === 0 || trees.length >= DENSE_TREES) return trees;
+  const half = h.fwWidth / 2;
+  const out: Tree[] = [];
+  for (let i = 0; i < trees.length; i++) {
+    const tr = trees[i];
+    out.push(tr);
+    // A second trunk offset from the first; alternate the lean per tree so the
+    // pairs fan into a thicket instead of all shifting the same direction.
+    const dx = (i % 2 === 0 ? 1 : -1) * 22;
+    const dy = (i % 3 === 0 ? -1 : 1) * 22;
+    let sx = tr.x + dx, sy = tr.y + dy;
+    // Never drop the new trunk on the pin: if it lands in the green, mirror it to
+    // the far side of its parent instead.
+    if (Math.hypot(sx - h.basket.x, sy - h.basket.y) < 20) { sx = tr.x - dx; sy = tr.y - dy; }
+    // If the parent sits inside the fairway corridor (the procedural daily/tour
+    // gates are placed in-bounds on purpose), keep the new trunk in-bounds too:
+    // pull it back toward the centerline if the offset crossed the edge. Authored
+    // trees that already live out in the rough (green rings, tree walls) keep
+    // their free placement.
+    if (!offRibbons(h, tr.x, tr.y) && offRibbons(h, sx, sy)) {
+      const c = nearestOnPath(sx, sy, h.fairway);
+      const d = Math.hypot(sx - c.x, sy - c.y) || 1;
+      const k = (half * 0.9) / d; // land at 0.9·half from the centerline → in-bounds
+      sx = c.x + (sx - c.x) * k;
+      sy = c.y + (sy - c.y) * k;
+    }
+    out.push({ x: sx, y: sy, r: tr.r });
+  }
+  return out;
+}
 // Stretch an authored template (tee y≈416, basket near the top) into a full hole
 // whose length scales with par. Shared by Glendoveer and the procedural daily.
 // The tee keeps its authored x — putting the tee off-center (e.g. far left)
@@ -193,7 +251,7 @@ function materializeHole(t: Omit<Hole, "worldH">): Hole {
   const worldH = Math.round(worldHForPar(t.par) * Math.max(0.5, t.lenMul ?? 1));
   const scale = (worldH - 60 - TEE_BEHIND) / (416 - 50); // template y[50..416] → world[60..tee]
   const ty = (y: number) => 60 + (y - 50) * scale;
-  return {
+  const h: Hole = {
     par: t.par,
     worldH,
     worldW: t.worldW,
@@ -212,6 +270,9 @@ function materializeHole(t: Omit<Hole, "worldH">): Hole {
     elev: t.elev,
     elevZones: t.elevZones, // fractions of tee→basket, so no rescaling needed
   };
+  // Double up the trees on sparse holes (world coords, so the in-corridor check
+  // matches play exactly).
+  return { ...h, trees: thickenTrees(h) };
 }
 const HOLES: Hole[] = HOLE_TEMPLATES.map(materializeHole);
 const TOTAL_PAR = HOLES.reduce((s, h) => s + h.par, 0);
