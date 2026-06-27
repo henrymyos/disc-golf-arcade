@@ -52,7 +52,7 @@ type Water = { x: number; y: number; w: number; h: number };
 // `lenMul` scales a hole's length below its par default (e.g. 0.68 ≈ a short
 // par-3 you can reach off the tee with a midrange instead of a driver). Not a
 // world coordinate — it's a multiplier applied in materializeHole.
-type Hole = { par: number; worldH: number; worldW?: number; lenMul?: number; tee: Vec; basket: Vec; fairway: Vec[]; fairways?: Vec[][]; fwWidth: number; trees: Tree[]; water: Water[]; hazard?: Water[]; obZones?: Water[]; dropZone?: Vec; walls?: { x: number; y: number; w: number }[]; roughIsHazard?: boolean; wind?: Vec; windMag?: number; elev?: number; elevZones?: { to: number; elev: number }[] };
+type Hole = { par: number; worldH: number; worldW?: number; lenMul?: number; tee: Vec; basket: Vec; fairway: Vec[]; fairways?: Vec[][]; fwWidth: number; trees: Tree[]; water: Water[]; hazard?: Water[]; obZones?: Water[]; dropZone?: Vec; walls?: { x: number; y: number; w: number }[]; roughIsHazard?: boolean; wind?: Vec; windMag?: number; elev?: number; elevZones?: { to: number; elev: number }[]; treeMul?: number };
 
 // Holes are authored in this old 448-tall frame, then stretched to a length
 // that scales with par (below).
@@ -189,61 +189,68 @@ const worldHForPar = (par: number) => (par <= 3 ? 510 : par === 4 ? 680 : 890);
 const FEET_PER_PX = 1.8;
 const MIN_HOLE_FT = 200;
 const MIN_HOLE_PX = MIN_HOLE_FT / FEET_PER_PX; // ≈111px
-// The holes were playing too easy, so any hole that isn't already densely wooded
-// gets each of its trees paired with a second trunk a short hop away — doubling
-// its tree count to pinch the lane and make the hole play harder. Holes that
-// already have a lot of trees (DENSE_TREES+) are left alone so the tunnels don't
-// turn impassable, and a deliberately open hole (0 trees) stays open. Offsets are
-// keyed off the tree's index (no RNG), so a hole is identical every time it's
-// played. Runs on the MATERIALIZED (world-coord) hole at the end of
-// materializeHole — so it covers every course (Glendoveer, Winthrop, daily, tour),
-// which all funnel through there.
-const DENSE_TREES = 8; // "a lot of trees already" — at/above this, add no more
-// Closest point on a polyline to (px,py) — used to pull a doubled trunk back into
-// the fairway corridor when its offset would have pushed it out into the rough.
-function nearestOnPath(px: number, py: number, pts: Vec[]): Vec {
-  let best = pts[0], bd = Infinity;
-  for (let i = 0; i < pts.length - 1; i++) {
-    const a = pts[i], b = pts[i + 1];
-    const dx = b.x - a.x, dy = b.y - a.y;
-    const l2 = dx * dx + dy * dy;
-    let t = l2 ? ((px - a.x) * dx + (py - a.y) * dy) / l2 : 0;
-    t = Math.max(0, Math.min(1, t));
-    const cx = a.x + t * dx, cy = a.y + t * dy;
-    const d = Math.hypot(px - cx, py - cy);
-    if (d < bd) { bd = d; best = { x: cx, y: cy }; }
-  }
-  return best;
+// Length of a polyline (the fairway centerline), in px.
+function pathLength(pts: Vec[]): number {
+  let s = 0;
+  for (let i = 0; i < pts.length - 1; i++) s += Math.hypot(pts[i + 1].x - pts[i].x, pts[i + 1].y - pts[i].y);
+  return s;
 }
-function thickenTrees(h: Hole): Tree[] {
-  const trees = h.trees;
-  if (trees.length === 0 || trees.length >= DENSE_TREES) return trees;
+// How many trees a hole should carry — scales with its length so the wide-open
+// fairways fill in and the longest par 4s/5s reach ~20–30, while short holes stay
+// lighter. ~1 tree per 24px of corridor, clamped to a per-par band, then scaled by
+// the venue's tree density (h.treeMul) so a "Wooded" course stays denser than an
+// open "Links" one instead of every course filling to the same level. Fixed
+// courses and the daily leave treeMul at 1, so they land squarely in the 20–30 band.
+function treeTarget(h: Hole): number {
+  const n = Math.round(pathLength(h.fairway) / 18);
+  const hi = h.par >= 5 ? 32 : h.par === 4 ? 28 : 21;
+  const lo = h.par >= 5 ? 27 : h.par === 4 ? 22 : 15;
+  const band = Math.max(lo, Math.min(hi, n));
+  return Math.max(11, Math.min(34, Math.round(band * (h.treeMul ?? 1))));
+}
+// Fill a hole's open corridor with trees so the player has to PICK and shape a
+// shot instead of bombing a wide-open fairway. Each hole is brought up to its
+// length-scaled target, with trees scattered down the whole length on both sides —
+// but always kept OUT of a winding open lane, so a navigable (if twisting) line
+// always exists and the hole never becomes an impassable wall. Deterministic
+// (seeded per hole, no Date/Math.random) and placed in world coords inside the
+// fairway corridor, so the in-bounds invariant holds for procedural holes too.
+// Existing authored trees (green rings, tree walls) are kept and counted. Runs at
+// the end of materializeHole, so it covers Glendoveer, Winthrop, daily and tour.
+function populateTrees(h: Hole): Tree[] {
+  const out: Tree[] = [...h.trees];
+  const target = treeTarget(h);
+  if (out.length >= target) return out;
   const half = h.fwWidth / 2;
-  const out: Tree[] = [];
-  for (let i = 0; i < trees.length; i++) {
-    const tr = trees[i];
-    out.push(tr);
-    // A second trunk offset from the first; alternate the lean per tree so the
-    // pairs fan into a thicket instead of all shifting the same direction.
-    const dx = (i % 2 === 0 ? 1 : -1) * 22;
-    const dy = (i % 3 === 0 ? -1 : 1) * 22;
-    let sx = tr.x + dx, sy = tr.y + dy;
-    // Never drop the new trunk on the pin: if it lands in the green, mirror it to
-    // the far side of its parent instead.
-    if (Math.hypot(sx - h.basket.x, sy - h.basket.y) < 20) { sx = tr.x - dx; sy = tr.y - dy; }
-    // If the parent sits inside the fairway corridor (the procedural daily/tour
-    // gates are placed in-bounds on purpose), keep the new trunk in-bounds too:
-    // pull it back toward the centerline if the offset crossed the edge. Authored
-    // trees that already live out in the rough (green rings, tree walls) keep
-    // their free placement.
-    if (!offRibbons(h, tr.x, tr.y) && offRibbons(h, sx, sy)) {
-      const c = nearestOnPath(sx, sy, h.fairway);
-      const d = Math.hypot(sx - c.x, sy - c.y) || 1;
-      const k = (half * 0.9) / d; // land at 0.9·half from the centerline → in-bounds
-      sx = c.x + (sx - c.x) * k;
-      sy = c.y + (sy - c.y) * k;
-    }
-    out.push({ x: sx, y: sy, r: tr.r });
+  // The open lane swings FURTHER off the centerline than it is wide (amp > gapHalf),
+  // so at each weave it fully clears the tee→basket straight line — you can't just
+  // rip it at the pin, you have to read the gap and shape/aim a specific shot. The
+  // lane stays continuous and throwable, so the hole is always playable.
+  const amp = half * 0.55;      // how far the open lane weaves off the centerline
+  const gapHalf = half * 0.3;   // half-width of the always-clear lane (twisting gap)
+  const waves = h.par >= 5 ? 3 : h.par === 4 ? 2.5 : 2; // lane wiggles more on long holes
+  const rng = mulberry32(((Math.round(h.basket.x) * 73856093) ^ (Math.round(h.basket.y) * 19349663) ^ (h.worldH * 83492791) ^ (h.par * 0x9e3779b1)) >>> 0);
+  const phase = rng();
+  let placed = 0;
+  for (let i = 0; out.length < target && i < target * 8; i++) {
+    const f = 0.07 + ((i * 0.6180339887 + phase) % 1) * 0.86; // golden-ratio spread along the length
+    const base = pointOnPath(h.fairway, f);
+    const ahead = pointOnPath(h.fairway, Math.min(1, f + 0.02));
+    const tx = ahead.x - base.x, tyv = ahead.y - base.y;
+    const L = Math.hypot(tx, tyv) || 1;
+    const nx = -tyv / L, ny = tx / L; // unit perpendicular to travel
+    const lane = Math.sin((f * waves + phase) * Math.PI * 2) * amp; // open-lane offset at this f
+    const side = placed % 2 === 0 ? 1 : -1; // alternate sides so both fill down the length
+    const mag = gapHalf + rng() * (half * 0.95 - gapHalf); // outside the lane, out toward the edge
+    let o = lane + side * mag;
+    o = Math.max(-half * 0.95, Math.min(half * 0.95, o));
+    if (Math.abs(o - lane) < gapHalf) continue; // never block the lane
+    const x = base.x + nx * o, y = base.y + ny * o;
+    if (Math.hypot(x - h.basket.x, y - h.basket.y) < 28) continue; // keep the green clear
+    if (Math.hypot(x - h.tee.x, y - h.tee.y) < 46) continue;       // keep the tee pad clear
+    if (out.some((t) => Math.hypot(x - t.x, y - t.y) < 16)) continue; // no stacking
+    out.push({ x, y, r: 9 + Math.round(rng() * 2) });
+    placed++;
   }
   return out;
 }
@@ -290,10 +297,11 @@ function materializeHole(t: Omit<Hole, "worldH">): Hole {
     roughIsHazard: t.roughIsHazard,
     elev: t.elev,
     elevZones: t.elevZones, // fractions of tee→basket, so no rescaling needed
+    treeMul: t.treeMul, // venue-character tree density (≥1 woodier, <1 more open)
   };
-  // Double up the trees on sparse holes (world coords, so the in-corridor check
-  // matches play exactly).
-  return { ...h, trees: thickenTrees(h) };
+  // Fill the corridor with trees (world coords, so the in-corridor check matches
+  // play exactly) — see populateTrees.
+  return { ...h, trees: populateTrees(h) };
 }
 const HOLES: Hole[] = HOLE_TEMPLATES.map(materializeHole);
 const TOTAL_PAR = HOLES.reduce((s, h) => s + h.par, 0);
@@ -400,14 +408,14 @@ function courseDifficulty(holes: Hole[]): number {
   return s / holes.length;
 }
 // Difficulty as a 1–5 star rating (5 = very difficult). Thresholds calibrated to
-// the spread of the play-courses (~3.2 easiest to ~6.1 hardest) now that every
-// sparse hole carries double trees — so the open links courses still read 1–2★
-// while the tight/technical venues hit 5★, instead of everything piling at the top.
+// the spread of the play-courses (~5.5 easiest to ~9.8 hardest) now that the
+// corridor is filled with trees scaled by venue character — open "Links" venues
+// read 1★ while dense "Wooded"/technical ones hit 5★, instead of all piling up.
 function difficultyStars(diff: number): 1 | 2 | 3 | 4 | 5 {
-  if (diff >= 5.7) return 5;
-  if (diff >= 5.0) return 4;
-  if (diff >= 4.3) return 3;
-  if (diff >= 3.4) return 2;
+  if (diff >= 11.9) return 5;
+  if (diff >= 10.5) return 4;
+  if (diff >= 9.0) return 3;
+  if (diff >= 8.4) return 2;
   return 1;
 }
 // Convenience: a course's raw difficulty / star difficulty from (mode, seed).
@@ -1173,7 +1181,7 @@ function pointOnPath(pts: Vec[], t: number): Vec {
 // of water, sand, or trees). Obstacles are placed INSIDE the fairway corridor
 // (within ±fwWidth/2 of the centerline) so they're real hazards to navigate,
 // not scenery sitting out in the already-OB rough.
-type GenOpts = { par?: number; tighten?: number; waterChance?: number; waterMax?: number; hazardChance?: number; hazardMax?: number; extraTreesHi?: number; lenScale?: number };
+type GenOpts = { par?: number; tighten?: number; waterChance?: number; waterMax?: number; hazardChance?: number; hazardMax?: number; extraTreesHi?: number; lenScale?: number; treeMul?: number };
 function genDailyHole(rng: () => number, opts: GenOpts = {}): Hole {
   const r = (a: number, b: number) => a + rng() * (b - a);
   const pickN = (arr: number[]) => arr[Math.floor(rng() * arr.length)];
@@ -1266,7 +1274,7 @@ function genDailyHole(rng: () => number, opts: GenOpts = {}): Hole {
   // (<1) shrinks every hole on top of that — used by early-career courses so a
   // developing player can reach without a distance driver.
   const lenMul = (par <= 3 ? pickN([0.6, 0.7, 0.82, 1, 1]) : 1) * (opts.lenScale ?? 1);
-  return materializeHole({ par, lenMul, tee: TEE, basket: { x: basketX, y: basketY }, fairway: pts, fwWidth, trees, water, hazard, elev });
+  return materializeHole({ par, lenMul, tee: TEE, basket: { x: basketX, y: basketY }, fairway: pts, fwWidth, trees, water, hazard, elev, treeMul: opts.treeMul });
 }
 // A fresh, seeded 9-hole course — different every day (the Daily Challenge).
 // `lenScale` (<1) shrinks every hole for early-career play; 1 = normal daily.
@@ -1291,12 +1299,12 @@ function tourPars(seed: number): number[] {
 // its hole generation + wind, so courses feel distinct, not interchangeable. ──
 type TourStyle = { character: string; emoji: string; gen: GenOpts; windMul: number };
 const TOUR_STYLES: TourStyle[] = [
-  { character: "Wooded", emoji: "🌲", gen: { tighten: 0.84, extraTreesHi: 6, waterChance: 0.18, hazardChance: 0.28 }, windMul: 0.65 },
-  { character: "Water-laden", emoji: "💧", gen: { tighten: 0.96, waterChance: 0.72, waterMax: 2, hazardChance: 0.25, extraTreesHi: 3 }, windMul: 1.0 },
-  { character: "Links (open & windy)", emoji: "🌬", gen: { tighten: 1.08, extraTreesHi: 2, waterChance: 0.2, hazardChance: 0.55, hazardMax: 2 }, windMul: 1.8 },
-  { character: "Sandy", emoji: "🏜", gen: { tighten: 0.96, hazardChance: 0.82, hazardMax: 2, waterChance: 0.18, extraTreesHi: 3 }, windMul: 1.1 },
-  { character: "Tight & technical", emoji: "🎯", gen: { tighten: 0.8, extraTreesHi: 5, waterChance: 0.35, hazardChance: 0.45 }, windMul: 0.85 },
-  { character: "Parkland", emoji: "🏞", gen: { tighten: 0.92 }, windMul: 1.0 },
+  { character: "Wooded", emoji: "🌲", gen: { tighten: 0.84, extraTreesHi: 6, waterChance: 0.18, hazardChance: 0.28, treeMul: 1.35 }, windMul: 0.65 },
+  { character: "Water-laden", emoji: "💧", gen: { tighten: 0.96, waterChance: 0.72, waterMax: 2, hazardChance: 0.25, extraTreesHi: 3, treeMul: 0.95 }, windMul: 1.0 },
+  { character: "Links (open & windy)", emoji: "🌬", gen: { tighten: 1.08, extraTreesHi: 2, waterChance: 0.2, hazardChance: 0.55, hazardMax: 2, treeMul: 0.85 }, windMul: 1.8 },
+  { character: "Sandy", emoji: "🏜", gen: { tighten: 0.96, hazardChance: 0.82, hazardMax: 2, waterChance: 0.18, extraTreesHi: 3, treeMul: 0.95 }, windMul: 1.1 },
+  { character: "Tight & technical", emoji: "🎯", gen: { tighten: 0.8, extraTreesHi: 5, waterChance: 0.35, hazardChance: 0.45, treeMul: 1.2 }, windMul: 0.85 },
+  { character: "Parkland", emoji: "🏞", gen: { tighten: 0.92, treeMul: 1.0 }, windMul: 1.0 },
 ];
 function tourStyle(seed: number): TourStyle {
   return TOUR_STYLES[(seed >>> 3) % TOUR_STYLES.length];
@@ -1660,7 +1668,12 @@ function stepFlight(f: Flight, disc: Disc, fadeSign: number, path: FlightPath, h
   if (!airborne) {
     const settling = f.vh <= 0;
     if (settling) {
-      if (Math.hypot(f.x - hole.basket.x, f.y - hole.basket.y) < catchR) return { status: "hole", treeHit };
+      // A disc screaming at the basket tends to blow through the chains, so the
+      // catch radius shrinks with horizontal speed: a controlled approach or putt
+      // (slow, sp ≲ 0.45) catches in the full radius, while a full-power bomb has
+      // to be nearly dead-center to drop. Keeps throw-in eagles possible but hard.
+      const effCatchR = catchR * Math.max(0.3, Math.min(1, 1 - (sp - 0.45) / 1.7));
+      if (Math.hypot(f.x - hole.basket.x, f.y - hole.basket.y) < effCatchR) return { status: "hole", treeHit };
       // Off every fairway ribbon, or in water, is out of bounds — except on
       // hazard-rough holes, where off-ribbon is a playable +1 (handled at rest).
       if (!hole.roughIsHazard && offRibbons(hole, f.x, f.y)) return { status: "ob", treeHit };
