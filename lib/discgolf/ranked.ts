@@ -1,12 +1,14 @@
-// Async global ranked ladder. Rather than fragile real-time matchmaking, every
-// player competes on the SAME procedurally-generated 18-hole course for a given
-// week (seeded by the week number), and their scores land on a shared weekly
-// leaderboard that resets each week. A persistent rank-point (RP) total carries
-// across weeks and maps to a tier, giving a sense of climbing a ladder.
+// Ranked ladder. Every ranked round is a FRESH 18-hole course played against a
+// field of AI opponents whose strength scales with your tier — so each round is a
+// real competition you place in, and you can play as many as you like. Your
+// finishing POSITION drives your rank points (RP): win big, mid-pack treads water,
+// the back half loses points. A persistent RP total maps to a climbing tier, and
+// consecutive podium finishes build a streak for bonus RP. A single global
+// best-to-par board (comparable across the fresh courses) is the secondary chase.
 
 const WEEK_MS = 7 * 86_400_000;
 
-// The week bucket (UTC) — everyone in the same week plays the same ranked course.
+// The week bucket (UTC). Kept for the weekly-reset board key shape + back-compat.
 export function weekSeed(now: number): number {
   return Math.floor(now / WEEK_MS);
 }
@@ -16,33 +18,17 @@ export function rankedCourseKey(week: number): string {
   return `ranked-${week}`;
 }
 
-// Per-round RP change, signed so the ladder reflects skill rather than play
-// time: a strong round climbs, a par-ish round nudges up, and a blow-up (worse
-// than ~+3 to par) LOSES points — so you can be demoted and only consistently
-// good play reaches the top tiers. (Previously RP only ever rose, so any player
-// reached Master just by grinding enough rounds.)
-export function roundRP(toPar: number): number {
-  return Math.round(40 - toPar * 14);
-}
+// The single global ranked board is an ALL-TIME best-to-par board — comparable
+// across the fresh per-round courses (raw strokes aren't). `ranked-0` reuses the
+// allowed `ranked-N` key shape; to-par is stored as `toPar + OFFSET` so it lands
+// in the board's positive stroke range and "lowest wins" still means best to-par.
+export const RANKED_BOARD_KEY = "ranked-0";
+export const RANKED_PAR_OFFSET = 100;
+export function encodeToParScore(toPar: number): number { return Math.round(toPar) + RANKED_PAR_OFFSET; }
+export function decodeToParScore(stored: number): number { return stored - RANKED_PAR_OFFSET; }
 
-export type RankedState = {
-  rp: number;            // rank points — rises with good play, falls with bad (floored at 0)
-  bestToPar: number | null; // best (lowest) to-par on any ranked round
-  rounds: number;        // ranked rounds completed
-};
-
-export const EMPTY_RANKED: RankedState = { rp: 0, bestToPar: null, rounds: 0 };
-
-// Apply a finished ranked round to a player's ranked state. RP can drop on a bad
-// round but never below 0 (Bronze is the floor — you can't fall out of the ladder).
-export function applyRankedRound(state: RankedState | null, toPar: number): RankedState {
-  const s = state ?? EMPTY_RANKED;
-  return {
-    rp: Math.max(0, s.rp + roundRP(toPar)),
-    bestToPar: s.bestToPar == null ? toPar : Math.min(s.bestToPar, toPar),
-    rounds: s.rounds + 1,
-  };
-}
+// How many AI opponents fill a ranked round (you make it a field of N+1).
+export const RANKED_FIELD = 24;
 
 export type Tier = { key: string; name: string; emoji: string; color: string; min: number };
 
@@ -67,4 +53,105 @@ export function tierFromRP(rp: number): { tier: Tier; next: Tier | null; into: n
   const into = x - tier.min;
   const need = next ? next.min - tier.min : 0;
   return { tier, next, into, need };
+}
+function tierIndex(rp: number): number {
+  return TIERS.indexOf(tierFromRP(rp).tier);
+}
+
+// Opponent field strength (mean rating, ~0..99) by tier — Bronze fields are
+// beatable, Master fields are near-pro. So as you climb, the competition stiffens
+// and your placement naturally settles at your real skill level (the ladder
+// self-gates instead of letting anyone grind to the top).
+export function rankedFieldMean(rp: number): number {
+  const byTier: Record<string, number> = { bronze: 42, silver: 54, gold: 64, platinum: 72, diamond: 80, master: 88 };
+  const t = tierFromRP(rp);
+  const base = byTier[t.tier.key] ?? 60;
+  // Nudge up within a tier as you near the next, so progress feels continuous.
+  const within = t.need ? (t.into / t.need) * 4 : 0;
+  return base + within;
+}
+
+// RP for finishing `place` of `field` (1 = win). A win is a big gain, mid-pack is
+// roughly neutral, the back half bleeds points — so only consistently strong
+// finishes climb. Range ≈ −35 (last) … +55 (a full-field win).
+export function placementRP(place: number, field: number): number {
+  const frac = field <= 1 ? 1 : (field - place) / (field - 1); // 1 at a win → 0 at last
+  return Math.round(-35 + frac * 90);
+}
+
+// A podium (top-3) finish extends your streak; each consecutive one adds an
+// escalating bonus (capped), rewarding hot runs. streak 1 → 0, 2 → +10 … cap +50.
+export function streakBonus(streak: number): number {
+  return Math.min(50, Math.max(0, streak - 1) * 10);
+}
+
+export type RankedState = {
+  rp: number;            // lifetime rank points — rises with strong finishes, falls with weak ones (floored at 0)
+  bestToPar: number | null; // best (lowest) to-par on any ranked round
+  rounds: number;        // ranked rounds completed
+  streak: number;        // current consecutive-podium (top-3) streak
+  bestStreak: number;    // longest podium streak reached
+  wins: number;          // 1st-place finishes
+  podiums: number;       // top-3 finishes
+};
+
+export const EMPTY_RANKED: RankedState = { rp: 0, bestToPar: null, rounds: 0, streak: 0, bestStreak: 0, wins: 0, podiums: 0 };
+
+// Fill in any fields a legacy/partial saved state is missing (older saves only had
+// rp/bestToPar/rounds), so the ladder keeps working across the upgrade.
+export function normalizeRanked(state: Partial<RankedState> | null | undefined): RankedState {
+  const s = state ?? {};
+  return {
+    rp: Math.max(0, s.rp ?? 0),
+    bestToPar: typeof s.bestToPar === "number" ? s.bestToPar : null,
+    rounds: s.rounds ?? 0,
+    streak: s.streak ?? 0,
+    bestStreak: s.bestStreak ?? 0,
+    wins: s.wins ?? 0,
+    podiums: s.podiums ?? 0,
+  };
+}
+
+export type RankedResult = {
+  place: number;
+  field: number;
+  toPar: number;
+  rpDelta: number;     // total RP change (placement + streak bonus)
+  base: number;        // placement RP
+  bonus: number;       // streak bonus
+  podium: boolean;     // finished top 3
+  win: boolean;        // finished 1st
+  streak: number;      // streak AFTER this round
+  tierUp: boolean;     // crossed up into a new tier
+  tierDown: boolean;   // dropped a tier
+};
+
+// Apply a finished ranked round (your `place` of `field`, and your `toPar`) to the
+// ladder. RP can drop on a poor finish but never below 0 — Bronze is the floor.
+export function applyRankedRound(state: RankedState | null, place: number, field: number, toPar: number): { state: RankedState; result: RankedResult } {
+  const s = normalizeRanked(state);
+  const podium = place <= 3;
+  const win = place === 1;
+  const streak = podium ? s.streak + 1 : 0;
+  const base = placementRP(place, field);
+  const bonus = podium ? streakBonus(streak) : 0;
+  const rpDelta = base + bonus;
+  const beforeIdx = tierIndex(s.rp);
+  const rp = Math.max(0, s.rp + rpDelta);
+  const afterIdx = tierIndex(rp);
+  const next: RankedState = {
+    rp,
+    bestToPar: s.bestToPar == null ? toPar : Math.min(s.bestToPar, toPar),
+    rounds: s.rounds + 1,
+    streak,
+    bestStreak: Math.max(s.bestStreak, streak),
+    wins: s.wins + (win ? 1 : 0),
+    podiums: s.podiums + (podium ? 1 : 0),
+  };
+  const result: RankedResult = {
+    place, field, toPar, rpDelta, base, bonus, podium, win, streak,
+    tierUp: afterIdx > beforeIdx,
+    tierDown: afterIdx < beforeIdx,
+  };
+  return { state: next, result };
 }

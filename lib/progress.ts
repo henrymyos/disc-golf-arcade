@@ -165,6 +165,10 @@ export function mergeProgress(a: Progress, b: Progress): Progress {
     rp: Math.max(ra.rp ?? 0, rb.rp ?? 0),
     bestToPar: ra.bestToPar == null ? rb.bestToPar : rb.bestToPar == null ? ra.bestToPar : Math.min(ra.bestToPar, rb.bestToPar),
     rounds: Math.max(ra.rounds ?? 0, rb.rounds ?? 0),
+    streak: Math.max(ra.streak ?? 0, rb.streak ?? 0),
+    bestStreak: Math.max(ra.bestStreak ?? 0, rb.bestStreak ?? 0),
+    wins: Math.max(ra.wins ?? 0, rb.wins ?? 0),
+    podiums: Math.max(ra.podiums ?? 0, rb.podiums ?? 0),
   };
 
   // Coins as a loss-free CRDT: reconcile monotonic earned + spent totals (each

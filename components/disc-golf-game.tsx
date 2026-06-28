@@ -25,7 +25,7 @@ import {
   type DiscSkin, type BasketSkin, type AimStyle, type GroundTheme, type Celebration,
 } from "@/lib/discgolf/cosmetics";
 import {
-  weekSeed, rankedCourseKey, roundRP, applyRankedRound, tierFromRP, type RankedState,
+  weekSeed, applyRankedRound, normalizeRanked, tierFromRP, rankedFieldMean, RANKED_FIELD, RANKED_BOARD_KEY, encodeToParScore, decodeToParScore, type RankedState, type RankedResult,
 } from "@/lib/discgolf/ranked";
 import {
   dailyChallenges, weeklyChallenges, roundsThisDay, roundsThisWeek, challengeDone,
@@ -46,6 +46,7 @@ import {
   careerRating, careerCoins as coinsForFinish, careerDiscShop, buyCareerDisc, toggleCareerBag, CAREER_BAG_MAX,
   buyCareerCosmetic, equipCareerLook, DEFAULT_CAREER_LOOK, type CareerLook,
   careerFieldForRound, careerCardRacers, careerLiveStandings, careerHoleLenScale,
+  rankedFieldForRound, rankedCardRacers,
   type Career, type CareerEvent, type EventResult, type CareerSkills, type SkillMods, type FieldPlayer,
 } from "@/lib/discgolf/career";
 
@@ -294,6 +295,8 @@ export function DiscGolfGame() {
   const careerPlayRef = useRef(false); // current round is a played Career event
   const careerEventRef = useRef<CareerEvent | null>(null); // the event being played
   const careerFieldRef = useRef<FieldPlayer[] | null>(null); // the field's per-hole scores (card + live board)
+  const rankedPlayRef = useRef(false); // current round is a ranked round (AI field, placement RP)
+  const rankedFieldRef = useRef<FieldPlayer[] | null>(null); // the ranked AI field's per-hole scores
   const [careerLastResult, setCareerLastResult] = useState<EventResult | null>(null);
   const [careerCoins, setCareerCoins] = useState(0); // account coins paid by the last PLAYED career round (0 when simmed)
   const saveCareer = useCallback((c: Career | null) => {
@@ -558,7 +561,7 @@ export function DiscGolfGame() {
   const [ranked, setRanked] = useState<RankedState | null>(null);
   const rankedRef = useRef<RankedState | null>(null);
   const [rankedOpen, setRankedOpen] = useState(false);
-  const [rankedGain, setRankedGain] = useState<number | null>(null); // RP gained by the round just finished
+  const [rankedResult, setRankedResult] = useState<RankedResult | null>(null); // outcome of the ranked round just finished
 
   // ── Recurring daily + weekly challenges (rotating objectives that pay coins) ──
   const [challengesOpen, setChallengesOpen] = useState(false);
@@ -702,7 +705,7 @@ export function DiscGolfGame() {
       }
       const rk = JSON.parse(localStorage.getItem(RANKED_KEY) || "null");
       if (rk && typeof rk === "object" && typeof rk.rp === "number") {
-        const st: RankedState = { rp: rk.rp, bestToPar: typeof rk.bestToPar === "number" ? rk.bestToPar : null, rounds: typeof rk.rounds === "number" ? rk.rounds : 0 };
+        const st = normalizeRanked(rk); // fills streak/wins/etc. for pre-upgrade saves
         rankedRef.current = st; setRanked(st);
       }
       const tb = JSON.parse(localStorage.getItem(TOURBEST_KEY) || "{}");
@@ -724,7 +727,7 @@ export function DiscGolfGame() {
   // Snapshot / clear the resumable solo round.
   const persistResume = useCallback((g: GameState) => {
     // The Daily is one-and-done: exit it and you start over, so never snapshot it.
-    if (g.mode === "daily" || g.practice || g.party || g.online || g.career || tournamentPlayRef.current || challengePlayRef.current || careerPlayRef.current) return;
+    if (g.mode === "daily" || g.mode === "ranked" || g.practice || g.party || g.online || g.career || tournamentPlayRef.current || challengePlayRef.current || careerPlayRef.current) return;
     const scores = g.scores.slice(0, g.holeIndex + 1).map((n) => n ?? 0);
     try {
       localStorage.setItem(RESUME_KEY, JSON.stringify({ v: 1, mode: g.mode, seed: g.seed, scores }));
@@ -962,7 +965,8 @@ export function DiscGolfGame() {
     challengePlayRef.current = false; // the challenge button re-arms this after calling
     tournamentPlayRef.current = false; // ditto for the tournament launcher
     careerPlayRef.current = false;
-    const seed = seedOverride ?? (m === "daily" ? dailySeed() : m === "ranked" ? weekSeed(Date.now()) : (Math.random() * 1e9) | 0);
+    rankedPlayRef.current = false; // ranked uses its own launcher (startRankedRound)
+    const seed = seedOverride ?? (m === "daily" ? dailySeed() : (Math.random() * 1e9) | 0);
     const roundHoles = buildRound(seed, m);
     const discIndex = validDiscIndex(discIndexRef.current, bagRef.current);
     discIndexRef.current = discIndex;
@@ -988,6 +992,50 @@ export function DiscGolfGame() {
     syncHud();
   }, [muted, musicVolume, syncHud, clearResume]);
 
+  // Play a ranked round: a FRESH course every time, against an AI field whose
+  // strength scales with your tier, with live standings + ghost racers on-course
+  // (placement drives your RP). Its own launcher so it can wire up the field; play
+  // as many as you like.
+  const startRankedRound = useCallback(() => {
+    if (!audioRef.current) {
+      audioRef.current = new AudioEngine();
+      audioRef.current.setMusicVolume(musicVolume);
+    }
+    audioRef.current.resume();
+    audioRef.current.setMuted(muted);
+    audioRef.current.startMusic();
+    challengePlayRef.current = false;
+    tournamentPlayRef.current = false;
+    careerPlayRef.current = false;
+    rankedPlayRef.current = true;
+    modeRef.current = "ranked";
+    const seed = (Math.random() * 1e9) | 0; // a brand-new course each round
+    const roundHoles = buildRound(seed, "ranked");
+    rankedFieldRef.current = rankedFieldForRound(seed, rankedFieldMean(rankedRef.current?.rp ?? 0), RANKED_FIELD, roundHoles);
+    ghostsRef.current = null;
+    const discIndex = validDiscIndex(discIndexRef.current, bagRef.current);
+    discIndexRef.current = discIndex;
+    setDiscIndex(discIndex);
+    stateRef.current = {
+      holeIndex: 0, scores: [], discIndex, roundPaths: [],
+      mode: "ranked", skill: IDENTITY_MODS, seed, roundHoles, ...freshHole(roundHoles[0]),
+    };
+    ghostRef.current = null;
+    setSaved(false);
+    setSaveErr(null);
+    setIsNewBest(false);
+    setNewAchievements([]);
+    setHoleBestNote(null);
+    setPartyView(null);
+    setOnlineView(null);
+    setTournLiveView(null); // clear any prior round's live board until the first hole completes
+    setSettingsOpen(false);
+    setRankedOpen(false);
+    clearResume();
+    setScreen("playing");
+    syncHud();
+  }, [muted, musicVolume, syncHud, clearResume]);
+
   // ── Career handlers ──
   const [careerNotes, setCareerNotes] = useState<string[]>([]);
 
@@ -1004,6 +1052,7 @@ export function DiscGolfGame() {
     challengePlayRef.current = false;
     tournamentPlayRef.current = false;
     careerPlayRef.current = true;
+    rankedPlayRef.current = false;
     careerEventRef.current = ev;
     // Deterministic seed per (career, event) so a replay plays the same course.
     // Tour events carry their own course seed (it also drives the venue + par).
@@ -1152,7 +1201,7 @@ export function DiscGolfGame() {
     audioRef.current.resume();
     audioRef.current.setMuted(muted);
     audioRef.current.startMusic();
-    challengePlayRef.current = false; tournamentPlayRef.current = false; careerPlayRef.current = false;
+    challengePlayRef.current = false; tournamentPlayRef.current = false; careerPlayRef.current = false; rankedPlayRef.current = false;
     const hole = kind === "putt" ? puttHole(0) : targetHole(0);
     stateRef.current = {
       holeIndex: 0, scores: [], discIndex: 0, roundPaths: [],
@@ -1394,11 +1443,12 @@ export function DiscGolfGame() {
   const finishGame = useCallback((scores: number[]) => {
     const g = stateRef.current;
     setCoinReward(0);
-    setRankedGain(null);
+    setRankedResult(null);
     // A played Career event: record the result against the career and pop back
     // to the hub instead of the normal results / leaderboard flow.
     if (g?.career && careerPlayRef.current) {
       careerPlayRef.current = false;
+      rankedPlayRef.current = false;
       setActiveBag(bagRef.current); // career round over — the rack goes back to your account bag
       applyAccountLook(); // and the cosmetics go back to your account look
       const total = scores.reduce((s, n) => s + n, 0);
@@ -1570,17 +1620,21 @@ export function DiscGolfGame() {
     setFinalSeed(g?.seed ?? 0);
     setFinalChallenge(challengePlayRef.current ? challengeRef.current : null);
     setLeaderboard([]);
-    if (!practice) void getArcadeLeaderboard(leaderboardCourse(mode, g?.seed ?? 0)).then(setLeaderboard).catch(() => {});
-    // Ranked round: award lifetime RP and track the best to-par. The score also
-    // lands on this week's shared ranked board via the normal save flow.
-    if (!practice && mode === "ranked") {
+    // Ranked posts to a single global all-time board (handled in saveScore), not a
+    // per-round course board — so skip the per-seed fetch and show the field instead.
+    if (!practice && mode !== "ranked") void getArcadeLeaderboard(leaderboardCourse(mode, g?.seed ?? 0)).then(setLeaderboard).catch(() => {});
+    // Ranked round: place against the AI field → RP (placement + streak bonus), so
+    // you climb or fall the tiers. Your best to-par still posts to the global board.
+    if (!practice && mode === "ranked" && rankedFieldRef.current) {
       const toPar = total - pars.reduce((s, n) => s + n, 0);
-      const next = applyRankedRound(rankedRef.current, toPar);
-      rankedRef.current = next; setRanked(next);
-      try { localStorage.setItem(RANKED_KEY, JSON.stringify(next)); } catch { /* ignore */ }
-      setRankedGain(roundRP(toPar));
+      const field = rankedFieldRef.current;
+      const place = 1 + field.filter((p) => p.total < total).length; // ties favor you
+      const { state, result } = applyRankedRound(rankedRef.current, place, field.length + 1, toPar);
+      rankedRef.current = state; setRanked(state);
+      try { localStorage.setItem(RANKED_KEY, JSON.stringify(state)); } catch { /* ignore */ }
+      setRankedResult(result);
     } else {
-      setRankedGain(null);
+      setRankedResult(null);
     }
     if (!practice) saveProgress(); // sync best/achievements/history to the cloud if signed in
     // Coins for a counting round (more for going low). Career events pay cash,
@@ -1661,6 +1715,7 @@ export function DiscGolfGame() {
     audioRef.current?.stopMusic();
     if (stateRef.current?.online) leaveLobby();
     tournamentPlayRef.current = false;
+    rankedPlayRef.current = false;
     const wasCareer = careerPlayRef.current;
     careerPlayRef.current = false;
     if (wasCareer) { setActiveBag(bagRef.current); applyAccountLook(); } // restore the account bag + cosmetics
@@ -1677,21 +1732,27 @@ export function DiscGolfGame() {
     setSaving(true);
     setSaveErr(null);
     try {
-      const course = leaderboardCourse(finalMode, finalSeed);
-      const res = await submitArcadeScore(profile.name.trim() || "Player", finalTotal, course);
+      // Ranked posts to ONE global all-time board, scored by best to-par (encoded
+      // into the board's stroke range) so it's comparable across the fresh courses.
+      const isRanked = finalMode === "ranked";
+      const course = isRanked ? RANKED_BOARD_KEY : leaderboardCourse(finalMode, finalSeed);
+      const strokes = isRanked ? encodeToParScore(finalTotal - finalPars.reduce((s, n) => s + n, 0)) : finalTotal;
+      const res = await submitArcadeScore(profile.name.trim() || "Player", strokes, course);
       if (!res.ok) {
         setSaveErr(res.error ?? "Save failed");
         return;
       }
       setSaved(true);
-      const lb = await getArcadeLeaderboard(course);
-      setLeaderboard(lb);
+      if (!isRanked) {
+        const lb = await getArcadeLeaderboard(course);
+        setLeaderboard(lb);
+      }
     } catch (e) {
       setSaveErr(e instanceof Error ? e.message : "Save failed");
     } finally {
       setSaving(false);
     }
-  }, [saving, saved, profile.name, finalTotal, finalMode, finalSeed]);
+  }, [saving, saved, profile.name, finalTotal, finalMode, finalSeed, finalPars]);
 
   // Auto-save the round to the leaderboard when the results screen appears
   // (skips practice / pass-&-play / online matches).
@@ -1710,7 +1771,7 @@ export function DiscGolfGame() {
     const over = total - parTotal;
     const nHoles = finalPars.length;
     const isDaily = finalMode === "daily";
-    const courseLabel = isDaily ? "Daily Challenge" : finalMode === "winthrop" ? "Winthrop Lake" : finalMode === "ranked" ? "Ranked · Weekly" : finalMode === "tour" ? tourVenue(finalSeed) : "Glendoveer East";
+    const courseLabel = isDaily ? "Daily Challenge" : finalMode === "winthrop" ? "Winthrop Lake" : finalMode === "ranked" ? "Ranked" : finalMode === "tour" ? tourVenue(finalSeed) : "Glendoveer East";
     const courseName = `${courseLabel} · ${nHoles} holes · par ${parTotal}`;
     const os = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
     const cv = document.createElement("canvas");
@@ -1880,6 +1941,11 @@ export function DiscGolfGame() {
         if (ghostsRef.current?.holeIndex !== g.holeIndex) {
           const racers = careerCardRacers(careerFieldRef.current, g.holeIndex);
           ghostsRef.current = buildRacerGhosts(careerRef.current.seed >>> 0, g.holeIndex, hole, racers, performance.now());
+        }
+      } else if (rankedPlayRef.current && rankedFieldRef.current) {
+        if (ghostsRef.current?.holeIndex !== g.holeIndex) {
+          const racers = rankedCardRacers(rankedFieldRef.current, g.holeIndex);
+          ghostsRef.current = buildRacerGhosts(g.seed >>> 0, g.holeIndex, hole, racers, performance.now());
         }
       } else if (ghostsRef.current) {
         ghostsRef.current = null;
@@ -2079,6 +2145,12 @@ export function DiscGolfGame() {
             const myScores = g.scores.slice(0, g.holeIndex + 1).map((x) => x ?? 0);
             const parThru = g.roundHoles.slice(0, g.holeIndex + 1).reduce((s, h) => s + h.par, 0);
             const rows = careerLiveStandings(careerFieldRef.current, `${careerRef.current.name} (you)`, myScores, g.holeIndex + 1, parThru);
+            setTournLiveView({ rows, thru: g.holeIndex + 1 });
+          } else if (rankedPlayRef.current && rankedFieldRef.current) {
+            // Ranked: live board of you vs the AI field after each hole.
+            const myScores = g.scores.slice(0, g.holeIndex + 1).map((x) => x ?? 0);
+            const parThru = g.roundHoles.slice(0, g.holeIndex + 1).reduce((s, h) => s + h.par, 0);
+            const rows = careerLiveStandings(rankedFieldRef.current, "You", myScores, g.holeIndex + 1, parThru);
             setTournLiveView({ rows, thru: g.holeIndex + 1 });
           } else {
             setTournLiveView(null);
@@ -2356,7 +2428,7 @@ export function DiscGolfGame() {
       }
 
       // Tournament rivals playing the hole alongside you (simulated field).
-      if ((tournamentPlayRef.current || careerPlayRef.current) && ghostsRef.current?.holeIndex === g.holeIndex) {
+      if ((tournamentPlayRef.current || careerPlayRef.current || rankedPlayRef.current) && ghostsRef.current?.holeIndex === g.holeIndex) {
         const gst = ghostsRef.current;
         const elapsed = performance.now() - gst.startAt;
         ctx.textAlign = "center";
@@ -2699,7 +2771,7 @@ export function DiscGolfGame() {
         ctx.lineWidth = 1;
         ctx.strokeRect(ox + camX * s + 0.5, oy + cam * s + 0.5, Math.min(mw, W * s) - 1, Math.min(mh, H * s) - 1);
         // tournament rivals
-        if ((tournamentPlayRef.current || careerPlayRef.current) && ghostsRef.current?.holeIndex === g.holeIndex) {
+        if ((tournamentPlayRef.current || careerPlayRef.current || rankedPlayRef.current) && ghostsRef.current?.holeIndex === g.holeIndex) {
           const gst = ghostsRef.current;
           const elapsed = performance.now() - gst.startAt;
           for (const gh of gst.ghosts) {
@@ -3506,7 +3578,7 @@ export function DiscGolfGame() {
           <RankedPanel
             ranked={ranked}
             playerName={profile.name}
-            onPlay={() => { setRankedOpen(false); startGame("ranked"); }}
+            onPlay={startRankedRound}
             onClose={() => setRankedOpen(false)}
           />
         )}
@@ -3712,7 +3784,7 @@ export function DiscGolfGame() {
                   : finalIsDaily
                     ? `Today's course · ${finalPars.length} holes · par ${finalParTotal}`
                     : finalMode === "ranked"
-                      ? `Ranked · this week · ${finalPars.length} holes · par ${finalParTotal}`
+                      ? `Ranked · ${finalPars.length} holes · par ${finalParTotal}`
                       : finalMode === "tour"
                         ? `${tourVenue(finalSeed)} · ${finalPars.length} holes · par ${finalParTotal}`
                         : `${finalMode === "winthrop" ? "Winthrop Lake" : "Glendoveer East"} · 18 holes · par ${finalParTotal}`}
@@ -3732,9 +3804,29 @@ export function DiscGolfGame() {
                   <p className="text-gray-400 text-xs mt-0.5">Your best: {finalBest} ({overStr(finalBest - finalParTotal)})</p>
                 )}
                 {coinReward > 0 && (
-                  <p className="text-[#f5d24a] text-sm font-bold mt-1">+{coinReward} <Coin />{rankedGain != null ? <span className="text-[#36D7B7] ml-2">+{rankedGain} RP 🏅</span> : null}</p>
+                  <p className="text-[#f5d24a] text-sm font-bold mt-1">+{coinReward} <Coin /></p>
                 )}
               </>)}
+              {finalMode === "ranked" && rankedResult && (() => {
+                const tr = tierFromRP(ranked?.rp ?? 0);
+                const r = rankedResult;
+                return (
+                  <div className="mt-3 bg-[#1a1d23] border border-white/10 rounded-xl px-4 py-3 text-left">
+                    <div className="flex items-center justify-between">
+                      <span className="text-white font-black text-lg">{r.win ? "🏆 1st place!" : r.podium ? `${ordinal(r.place)} — podium!` : `Finished ${ordinal(r.place)} of ${r.field}`}</span>
+                      <span className="font-mono font-bold text-sm" style={{ color: r.rpDelta >= 0 ? "#36D7B7" : "#e08a3b" }}>{r.rpDelta >= 0 ? "+" : ""}{r.rpDelta} RP</span>
+                    </div>
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <span className="text-xl leading-none">{tr.tier.emoji}</span>
+                      <span className="font-bold text-sm" style={{ color: tr.tier.color }}>{tr.tier.name}</span>
+                      <span className="text-gray-400 font-mono text-[11px]">{ranked?.rp ?? 0} RP</span>
+                      {r.tierUp && <span className="text-[#36D7B7] text-[11px] font-bold">▲ Promoted!</span>}
+                      {r.tierDown && <span className="text-[#e08a3b] text-[11px] font-bold">▼ Demoted</span>}
+                    </div>
+                    {r.streak >= 2 && <p className="text-[#f5d24a] text-[11px] font-bold mt-1.5">🔥 {r.streak}-podium streak{r.bonus > 0 ? ` · +${r.bonus} bonus RP` : ""}</p>}
+                  </div>
+                );
+              })()}
               {finalChallenge && (
                 <p className={`text-sm font-bold mt-1.5 ${finalTotal < finalChallenge.score ? "text-[#36D7B7]" : finalTotal === finalChallenge.score ? "text-gray-300" : "text-[#e08a3b]"}`}>
                   ⚔ vs {finalChallenge.name} ({finalChallenge.score}):{" "}
@@ -3874,9 +3966,27 @@ export function DiscGolfGame() {
             )}
             {saveErr && !saved && <p className="text-red-400 text-xs text-center">{saveErr}</p>}
 
+            {finalMode === "ranked" ? (
+              <div className="bg-[#1a1d23] border border-white/5 rounded-2xl overflow-hidden">
+                <p className="text-white font-bold text-sm px-4 py-2.5 border-b border-white/5">🏁 Final standings · you vs the field</p>
+                <ol>
+                  {careerLiveStandings(rankedFieldRef.current ?? [], "You", scorecard, finalPars.length, finalParTotal).slice(0, 10).map((row, i) => (
+                    <li
+                      key={`${row.name}-${row.rank}`}
+                      className={`flex items-center gap-3 px-4 py-2 text-sm ${i !== 0 ? "border-t border-white/5" : ""} ${row.you ? "bg-[#36D7B7]/10" : ""}`}
+                    >
+                      <span className={`font-mono w-6 text-right ${row.rank === 1 ? "text-[#f5d24a]" : "text-gray-400"}`}>{row.rank}</span>
+                      <span className={`flex-1 truncate ${row.you ? "text-[#36D7B7] font-bold" : "text-white"}`}>{row.rank === 1 ? "👑 " : ""}{row.name}</span>
+                      <span className="text-gray-400 font-mono">{overStr(row.toPar)}</span>
+                      <span className="text-white font-mono font-bold w-8 text-right">{row.total}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            ) : (
             <div className="bg-[#1a1d23] border border-white/5 rounded-2xl overflow-hidden">
               <p className="text-white font-bold text-sm px-4 py-2.5 border-b border-white/5">
-                🏆 {finalIsDaily ? "Today's leaderboard" : finalMode === "ranked" ? "This week's ranked board" : finalMode === "tour" ? `${tourVenue(finalSeed)} leaderboard` : `${finalMode === "winthrop" ? "Winthrop Lake" : "Glendoveer East"} leaderboard`}
+                🏆 {finalIsDaily ? "Today's leaderboard" : finalMode === "tour" ? `${tourVenue(finalSeed)} leaderboard` : `${finalMode === "winthrop" ? "Winthrop Lake" : "Glendoveer East"} leaderboard`}
               </p>
               {leaderboard.length === 0 ? (
                 <p className="text-gray-400 text-sm text-center py-6">No scores yet — be the first!</p>
@@ -3899,6 +4009,7 @@ export function DiscGolfGame() {
                 </ol>
               )}
             </div>
+            )}
             </>)}
 
             <div className="flex flex-wrap justify-center gap-2">
@@ -3913,7 +4024,7 @@ export function DiscGolfGame() {
                   🎉 Back to lobby
                 </button>
               ) : (
-                <button type="button" onClick={() => (finalMode === "tour" ? startGame("tour", finalSeed) : startGame())} className={btn}>↻ Play again</button>
+                <button type="button" onClick={() => (finalMode === "ranked" ? startRankedRound() : finalMode === "tour" ? startGame("tour", finalSeed) : startGame())} className={btn}>↻ Play again</button>
               )}
               <button type="button" onClick={shareCard} aria-label="Share card" title="Share card" className="mt-1 flex items-center justify-center bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white text-lg px-3.5 py-3 rounded-lg transition">
                 📤
@@ -5523,28 +5634,33 @@ function ChallengesPanel({ history, owned, coins, today, onClaim, onClose }: {
   );
 }
 
-// Async global ranked ladder. Everyone plays the SAME 18-hole course this week
-// and competes on a shared weekly board; lifetime RP maps to a climbing tier.
+// Ranked ladder. Every round is a FRESH course against a tier-scaled AI field;
+// finishing position drives RP, podium streaks pay a bonus, and lifetime RP climbs
+// a tier. Play as many rounds as you like. The global board is all-time best-to-par
+// (comparable across the fresh courses).
 function RankedPanel({ ranked, playerName, onPlay, onClose }: {
   ranked: RankedState | null;
   playerName: string;
   onPlay: () => void;
   onClose: () => void;
 }) {
-  // Date.now() is fine in a lazy useState initializer (runs once, not in render).
-  const [week] = useState(() => weekSeed(Date.now()));
-  const [par] = useState(() => buildRound(week, "ranked").reduce((s, h) => s + h.par, 0));
   const [rows, setRows] = useState<ArcadeScore[] | null>(null);
   const over = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
   const rp = ranked?.rp ?? 0;
   const t = tierFromRP(rp);
   const pct = t.need ? Math.round((t.into / t.need) * 100) : 100;
   const me = (playerName ?? "").trim().slice(0, 16) || "Anon";
+  const stat = (label: string, value: string | number) => (
+    <div className="flex-1 bg-[#1a1d23] border border-white/5 rounded-lg px-2 py-1.5 text-center">
+      <p className="text-white font-bold text-sm leading-none">{value}</p>
+      <p className="text-gray-500 text-[9px] uppercase tracking-wide mt-1">{label}</p>
+    </div>
+  );
   useEffect(() => {
     let active = true;
-    getArcadeLeaderboard(rankedCourseKey(week), 25).then((r) => { if (active) setRows(r); }).catch(() => { if (active) setRows([]); });
+    getArcadeLeaderboard(RANKED_BOARD_KEY, 25).then((r) => { if (active) setRows(r); }).catch(() => { if (active) setRows([]); });
     return () => { active = false; };
-  }, [week]);
+  }, []);
   return (
     <div className="absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start justify-center rounded-lg">
       <div className="w-full max-w-xs space-y-3 my-auto text-left">
@@ -5568,22 +5684,33 @@ function RankedPanel({ ranked, playerName, onPlay, onClose }: {
           </div>
         </div>
 
+        {/* Stats */}
+        <div className="flex gap-1.5">
+          {stat("Rounds", ranked?.rounds ?? 0)}
+          {stat("Wins", ranked?.wins ?? 0)}
+          {stat("Podiums", ranked?.podiums ?? 0)}
+          {stat("Best To-Par", ranked?.bestToPar != null ? over(ranked.bestToPar) : "—")}
+        </div>
+        {(ranked?.streak ?? 0) >= 2 && (
+          <p className="text-[#f5d24a] text-[11px] font-bold text-center">🔥 On a {ranked!.streak}-podium streak — keep it going for bonus RP!</p>
+        )}
+
         <p className="text-gray-400 text-[11px] leading-snug">
-          One 18-hole course per week — the same for everyone. Post your best on the global board; it resets every Monday. Each round earns RP toward your next tier.
+          A fresh 18-hole course every round, against a field of pros that gets tougher as you climb. Where you FINISH drives your RP — win to surge, blow up to drop. Podium (top&nbsp;3) finishes build a streak. Play as many rounds as you like.
         </p>
 
         <button type="button" onClick={onPlay} className={`${btn} w-full`}>
-          Play this week&apos;s ranked round
+          Play a ranked round
         </button>
 
-        {/* Live weekly board */}
+        {/* All-time best-to-par board */}
         <div>
-          <p className="text-gray-400 text-xs font-semibold mb-1.5">This week · par {par}{ranked?.bestToPar != null ? ` · your best ${over(ranked.bestToPar)}` : ""}</p>
+          <p className="text-gray-400 text-xs font-semibold mb-1.5">🌍 Global · best to-par (all-time)</p>
           <div className="bg-[#1a1d23] border border-white/5 rounded-2xl overflow-hidden">
             {rows === null ? (
               <p className="text-gray-400 text-sm text-center py-6">Loading…</p>
             ) : rows.length === 0 ? (
-              <p className="text-gray-400 text-sm text-center py-6">No scores yet — be the first this week!</p>
+              <p className="text-gray-400 text-sm text-center py-6">No scores yet — be the first!</p>
             ) : (
               <ol>
                 {rows.map((row, i) => {
@@ -5595,8 +5722,7 @@ function RankedPanel({ ranked, playerName, onPlay, onClose }: {
                     >
                       <span className={`font-mono w-6 text-right ${i === 0 ? "text-[#f5d24a]" : "text-gray-400"}`}>{i + 1}</span>
                       <span className={`flex-1 truncate ${mine ? "text-[#36D7B7] font-bold" : "text-white"}`}>{i === 0 ? "👑 " : ""}{row.name}{mine ? " (you)" : ""}</span>
-                      <span className="text-gray-400 font-mono">{over(row.strokes - par)}</span>
-                      <span className="text-white font-mono font-bold w-8 text-right">{row.strokes}</span>
+                      <span className="text-white font-mono font-bold">{over(decodeToParScore(row.strokes))}</span>
                     </li>
                   );
                 })}

@@ -584,11 +584,11 @@ function anonName(seed: number, i: number): string {
 // Per-hole scores for a rating. `diff[i]` (optional) adds the hole's conditions
 // difficulty so windy/uphill/tight holes cost the field more strokes there too;
 // better players (lower perHoleToPar) shrug some of it off.
-function simHoleScores(rating: number, ev: CareerEvent, rng: () => number, diff?: number[]): number[] {
-  const parPerHole = ev.par / ev.holes;
+function simHoleScores(rating: number, par: number, holes: number, rng: () => number, diff?: number[]): number[] {
+  const parPerHole = par / holes;
   const perHoleToPar = (50 - rating) * 0.28 / 18;
   const grit = 1 - (rating - 50) / 140; // skill cushions conditions a little
-  return Array.from({ length: ev.holes }, (_, i) =>
+  return Array.from({ length: holes }, (_, i) =>
     Math.max(1, Math.round(parPerHole + perHoleToPar + (diff ? diff[i] * Math.max(0.45, grit) : 0) + (rng() * 2 - 1) * 0.65)),
   );
 }
@@ -596,13 +596,13 @@ function simHoleScores(rating: number, ev: CareerEvent, rng: () => number, diff?
 // the field (and the ghosts you watch) react to wind/slope/hazards like you do.
 function buildField(c: Career, ev: CareerEvent, diff?: number[]): FieldPlayer[] {
   const field: FieldPlayer[] = c.rivals.map((r) => {
-    const holes = simHoleScores(rivalRating(r), ev, mulberry32((c.seed ^ hashId(ev.id) ^ hashId(r.id)) >>> 0), diff);
+    const holes = simHoleScores(rivalRating(r), ev.par, ev.holes, mulberry32((c.seed ^ hashId(ev.id) ^ hashId(r.id)) >>> 0), diff);
     return { name: r.name, isRival: true, color: r.color, holes, total: holes.reduce((a, b) => a + b, 0) };
   });
   const anonCount = Math.max(0, ev.fieldSize - c.rivals.length);
   const rng = mulberry32((c.seed ^ hashId(ev.id) ^ 0x9e3779b9) >>> 0);
   for (let i = 0; i < anonCount; i++) {
-    const holes = simHoleScores(fieldOpponentRating(ev, rng), ev, rng, diff);
+    const holes = simHoleScores(fieldOpponentRating(ev, rng), ev.par, ev.holes, rng, diff);
     field.push({ name: anonName((c.seed ^ hashId(ev.id)) >>> 0, i), isRival: false, color: "#7a808a", holes, total: holes.reduce((a, b) => a + b, 0) });
   }
   return field;
@@ -622,6 +622,31 @@ export function careerCard(field: FieldPlayer[]): FieldPlayer[] {
 // The card as ghost racers for one hole (shot count = their score on that hole).
 export function careerCardRacers(field: FieldPlayer[], holeIndex: number): GhostRacer[] {
   return careerCard(field).map((p) => ({ name: p.name.split(" ").pop() || p.name, color: p.color, shots: Math.max(1, p.holes[holeIndex] ?? 1) }));
+}
+
+// ── Ranked: an AI field for one ranked round. Unlike a Career event (recurring
+// rivals + an event-tuned field), every opponent is an anonymous pro whose rating
+// centers on `fieldMean` (your tier strength) with a spread, reacting to the
+// played holes' conditions just like you. Seeded by the round so it's stable on a
+// replay/resync but fresh every round. Reuses careerLiveStandings for standings. ──
+export function rankedFieldForRound(seed: number, fieldMean: number, size: number, roundHoles: Hole[]): FieldPlayer[] {
+  const par = roundHoles.reduce((s, h) => s + h.par, 0);
+  const diff = roundHoles.map(holeDifficulty);
+  const rng = mulberry32((seed ^ 0x9e3779b9) >>> 0);
+  const field: FieldPlayer[] = [];
+  for (let i = 0; i < size; i++) {
+    const rating = clamp(fieldMean + (rng() * 2 - 1) * 14, 20, 99); // spread around the tier mean
+    const holes = simHoleScores(rating, par, roundHoles.length, rng, diff);
+    field.push({ name: anonName(seed, i), isRival: false, color: "#7a808a", holes, total: holes.reduce((a, b) => a + b, 0) });
+  }
+  return field;
+}
+// On-course ghost racers for a ranked hole: three mid-pack opponents, so the race
+// alongside you stays close (the career card uses your rivals; ranked has none).
+export function rankedCardRacers(field: FieldPlayer[], holeIndex: number): GhostRacer[] {
+  const sorted = [...field].sort((a, b) => a.total - b.total);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.slice(Math.max(0, mid - 1), mid + 2).map((p) => ({ name: p.name.split(" ").pop() || p.name, color: p.color, shots: Math.max(1, p.holes[holeIndex] ?? 1) }));
 }
 
 // Live standings through `holesPlayed` holes (you + the whole field), sorted,

@@ -91,14 +91,14 @@ describe("mergeProgress", () => {
     expect(mergeProgress(a, b).career).toBe(b.career);
     expect(mergeProgress(b, a).career).toBe(b.career);
   });
-  it("keeps the most ranked progress: highest rp, best to-par, most rounds", () => {
-    const a: Progress = { ...base, ranked: { rp: 500, bestToPar: -2, rounds: 4 } };
-    const b: Progress = { ...base, ranked: { rp: 300, bestToPar: -7, rounds: 6 } };
+  it("keeps the most ranked progress across every field", () => {
+    const a: Progress = { ...base, ranked: { rp: 500, bestToPar: -2, rounds: 4, streak: 3, bestStreak: 3, wins: 2, podiums: 4 } };
+    const b: Progress = { ...base, ranked: { rp: 300, bestToPar: -7, rounds: 6, streak: 0, bestStreak: 5, wins: 1, podiums: 6 } };
     const m = mergeProgress(a, b);
-    expect(m.ranked).toEqual({ rp: 500, bestToPar: -7, rounds: 6 });
+    expect(m.ranked).toEqual({ rp: 500, bestToPar: -7, rounds: 6, streak: 3, bestStreak: 5, wins: 2, podiums: 6 });
   });
   it("takes whichever ranked state exists when only one is present", () => {
-    const only = { rp: 120, bestToPar: 1, rounds: 1 };
+    const only = { rp: 120, bestToPar: 1, rounds: 1, streak: 1, bestStreak: 1, wins: 0, podiums: 1 };
     expect(mergeProgress({ ...base, ranked: only }, base).ranked).toBe(only);
     expect(mergeProgress(base, { ...base, ranked: only }).ranked).toBe(only);
   });
