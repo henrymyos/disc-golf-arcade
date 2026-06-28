@@ -4260,7 +4260,8 @@ function ChallengePanel({ online, onClose, onPassPlay, onCreate, onJoin }: {
           <h2 className="text-white font-black text-xl">👥 Challenge Friends</h2>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
-        <div className="flex-1 overflow-y-auto mt-3 space-y-3">
+        <div className="flex-1 overflow-y-auto mt-3">
+          <div className="min-h-full flex flex-col justify-center space-y-3 pb-2">
 
         {step === "menu" && (
           <>
@@ -4309,6 +4310,7 @@ function ChallengePanel({ online, onClose, onPassPlay, onCreate, onJoin }: {
             Have a code? Join a lobby →
           </button>
         )}
+        </div>
         </div>
       </div>
     </div>
