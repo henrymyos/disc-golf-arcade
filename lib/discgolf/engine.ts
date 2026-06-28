@@ -1719,7 +1719,11 @@ function stepFlight(f: Flight, disc: Disc, fadeSign: number, path: FlightPath, h
 // player per hole; here a few of the favorites are turned into "ghost" discs
 // that play the hole alongside you — fabricated shot-by-shot down the fairway
 // from their simulated score, so the round feels live. Deterministic. ──
-type TournGhost = { idx: number; name: string; color: string; path: Vec[]; shotDur: number; pause: number; delay: number; holedFired: boolean };
+// One shot in a ghost's hole: stand at `from` for `pause` ms, then fly to `to`
+// over `fly` ms. `ctrl` (a quadratic-bezier control point) bends the flight around
+// a tree it would otherwise pass through; null = a straight flight.
+type GhostSeg = { from: Vec; to: Vec; ctrl: Vec | null; pause: number; fly: number; lift: number };
+type TournGhost = { name: string; color: string; segs: GhostSeg[]; delay: number; holedFired: boolean };
 type GhostState = { holeIndex: number; startAt: number; ghosts: TournGhost[] };
 const GHOST_PALETTE = ["#e23b7b", "#5fb0e8", "#b85cd6", "#e2a13b"];
 const N_RIVALS = 4;
@@ -1727,16 +1731,53 @@ const N_RIVALS = 4;
 // a solid throw, so on a short hole they go straight at the basket in one like you
 // would, rather than dribbling down the fairway.
 const GHOST_DRIVE = DRIVE * 0.9;
+// A rival's disc flies at the SAME pace as yours (measured ~0.2 px/ms airborne for
+// a real throw), so flight time scales with distance — a drive takes ~1.2s, a putt
+// a fraction — instead of every shot zipping over in a fixed ~0.6s (which made long
+// shots look unnaturally fast). Floor/ceiling keep putts readable and bombs sane.
+const GHOST_FLIGHT_SPEED = 0.2; // px/ms
+const GHOST_MIN_FLY = 240;      // ms
+const GHOST_MAX_FLY = 1700;     // ms
+
+// If the straight line from `a` to `b` would pass through a tree, return a bezier
+// control point that bows the flight around the worst offender (to the clear side,
+// keeping ~a disc's width of air) — so a rival shapes a shot around the trunk like
+// you would, instead of flying through it. null when the line is already clear.
+function ghostAvoidTree(a: Vec, b: Vec, trees: Tree[]): Vec | null {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const segLen = Math.hypot(dx, dy);
+  if (segLen < 8 || !trees.length) return null;
+  const ux = dx / segLen, uy = dy / segLen; // unit along the line
+  const nx = -uy, ny = ux;                  // unit perpendicular
+  let worst: { t: number; sp: number; clear: number } | null = null;
+  for (const tr of trees) {
+    const rx = tr.x - a.x, ry = tr.y - a.y;
+    const along = rx * ux + ry * uy;                 // distance along the line
+    if (along <= 6 || along >= segLen - 6) continue; // tree sits at a lie, not mid-flight
+    const sp = rx * nx + ry * ny;                    // signed perpendicular offset of the tree
+    const clear = tr.r + DISC_R + 4 - Math.abs(sp);  // >0 ⇒ the straight line clips this tree
+    if (clear <= 0) continue;
+    if (!worst || clear > worst.clear) worst = { t: along / segLen, sp, clear };
+  }
+  if (!worst) return null;
+  const side = worst.sp >= 0 ? -1 : 1;               // curve opposite the trunk
+  // perp offset of B(t) from the chord is 2·t·(1−t)·perp(control); invert for the
+  // offset that clears the tree (with a touch of margin), then clamp the bow.
+  const targetPerp = side * (worst.clear + 4);
+  const denom = Math.max(0.06, 2 * worst.t * (1 - worst.t));
+  const perp = Math.max(-segLen * 0.7, Math.min(segLen * 0.7, targetPerp / denom));
+  return { x: a.x + dx * worst.t + nx * perp, y: a.y + dy * worst.t + ny * perp };
+}
 
 // Generic ghost builder: turn a list of racers (name, color, shot count for THIS
-// hole) into discs that play the hole tee → fairway landings → basket, one node
-// per shot. Shared by tournament play and Career events.
+// hole) into discs that play the hole tee → fairway landings → basket, one shot
+// per node. Shared by tournament play and Career/Ranked events.
 type GhostRacer = { name: string; color: string; shots: number };
 function buildRacerGhosts(seed: number, holeIndex: number, hole: Hole, racers: GhostRacer[], now: number): GhostState {
   const ghosts = racers.map((rc, gi) => {
     const s = Math.max(1, rc.shots);
     const rng = mulberry32((seed ^ (gi * 2654435761) ^ (holeIndex * 40503) ^ 0x77777) >>> 0);
-    const path: Vec[] = [{ x: hole.tee.x, y: hole.tee.y }];
+    const pts: Vec[] = [{ x: hole.tee.x, y: hole.tee.y }];
     // Throws it takes to REACH the green. On a short hole this is 1, so the first
     // throw flies right at the basket like a real drive; any remaining strokes are
     // putts that close in on the cup — instead of evenly dawdling down the fairway.
@@ -1748,7 +1789,7 @@ function buildRacerGhosts(seed: number, holeIndex: number, hole: Hole, racers: G
         const last = s - 1 - reach;    // index of the final putt before holing out
         const spread = hole.fwWidth * 0.16 * (last > 0 ? 1 - putt / (last + 1) : 0.5);
         const ang = rng() * Math.PI * 2;
-        path.push({ x: hole.basket.x + Math.cos(ang) * spread, y: hole.basket.y + Math.sin(ang) * spread });
+        pts.push({ x: hole.basket.x + Math.cos(ang) * spread, y: hole.basket.y + Math.sin(ang) * spread });
       } else {
         // Still advancing down the fairway — reach the green (f→1) on throw #reach.
         const f = k / reach;
@@ -1757,15 +1798,21 @@ function buildRacerGhosts(seed: number, holeIndex: number, hole: Hole, racers: G
         const dx = ahead.x - base.x, dy = ahead.y - base.y;
         const len = Math.hypot(dx, dy) || 1;
         const j = (rng() * 2 - 1) * hole.fwWidth * 0.22; // lateral spread within the corridor
-        path.push({ x: base.x + (-dy / len) * j, y: base.y + (dx / len) * j });
+        pts.push({ x: base.x + (-dy / len) * j, y: base.y + (dx / len) * j });
       }
     }
-    path.push({ x: hole.basket.x, y: hole.basket.y });
-    // Each shot = a couple seconds standing over the disc, then a quick flight,
-    // so the card plays at a believable, unhurried pace.
-    const pause = 1800 + rng() * 700; // ~1.8–2.5s lining up before each throw
-    const flightDur = 540 + rng() * 260; // ~0.5–0.8s in the air
-    return { idx: gi, name: rc.name, color: rc.color, path, shotDur: pause + flightDur, pause, delay: gi * 500 + rng() * 700, holedFired: false };
+    pts.push({ x: hole.basket.x, y: hole.basket.y });
+    // One segment per shot: a beat lining up, then a flight whose length scales with
+    // distance (player pace) and that curves around any tree in the way.
+    const segs: GhostSeg[] = [];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i + 1];
+      const segLen = distBetween(a, b);
+      const fly = Math.max(GHOST_MIN_FLY, Math.min(GHOST_MAX_FLY, segLen / GHOST_FLIGHT_SPEED));
+      const pause = 1500 + rng() * 650; // ~1.5–2.2s lining up before each throw
+      segs.push({ from: a, to: b, ctrl: ghostAvoidTree(a, b, hole.trees), pause, fly, lift: Math.min(14, 4 + segLen * 0.05) });
+    }
+    return { name: rc.name, color: rc.color, segs, delay: gi * 500 + rng() * 700, holedFired: false };
   });
   return { holeIndex, startAt: now, ghosts };
 }
@@ -1788,23 +1835,36 @@ function buildTournGhosts(t: Tournament, def: TournDef, holeIndex: number, hole:
   return buildRacerGhosts((t.seed ^ (roundIdx * 99991)) >>> 0, holeIndex, hole, racers, now);
 }
 
-// Where a ghost is `elapsed` ms into the hole: each shot waits at the lie for
-// `pause` ms, then flies to the next landing spot over the remaining time.
+// Where a ghost is `elapsed` ms into the hole: walk its shots, each of which waits
+// at the lie for `pause` ms then flies to the next spot over `fly` ms — curving
+// along its bezier (around a tree) when one was set, otherwise straight.
 function ghostPosAt(gh: TournGhost, elapsed: number): { x: number; y: number; lift: number; holed: boolean } {
-  const segs = gh.path.length - 1;
-  if (segs <= 0) return { x: gh.path[0].x, y: gh.path[0].y, lift: 0, holed: true };
-  if (elapsed < 0) return { x: gh.path[0].x, y: gh.path[0].y, lift: 0, holed: false };
-  const total = segs * gh.shotDur;
-  if (elapsed >= total) return { x: gh.path[segs].x, y: gh.path[segs].y, lift: 0, holed: true };
-  const seg = Math.floor(elapsed / gh.shotDur);
-  const within = elapsed - seg * gh.shotDur; // ms into this shot
-  const a = gh.path[seg], b = gh.path[seg + 1];
-  if (within < gh.pause) return { x: a.x, y: a.y, lift: 0, holed: false }; // standing over the disc
-  const t = (within - gh.pause) / (gh.shotDur - gh.pause);
-  const e = t * t * (3 - 2 * t);
-  const segLen = Math.hypot(b.x - a.x, b.y - a.y);
-  const lift = Math.sin(e * Math.PI) * Math.min(12, 3 + segLen * 0.06);
-  return { x: a.x + (b.x - a.x) * e, y: a.y + (b.y - a.y) * e, lift, holed: false };
+  const segs = gh.segs;
+  if (segs.length === 0) return { x: 0, y: 0, lift: 0, holed: true };
+  if (elapsed < 0) return { x: segs[0].from.x, y: segs[0].from.y, lift: 0, holed: false };
+  let acc = 0;
+  for (const s of segs) {
+    const dur = s.pause + s.fly;
+    if (elapsed < acc + dur) {
+      const within = elapsed - acc;
+      if (within < s.pause) return { x: s.from.x, y: s.from.y, lift: 0, holed: false }; // standing over the disc
+      const t = (within - s.pause) / s.fly;
+      const e = t * t * (3 - 2 * t);
+      let x: number, y: number;
+      if (s.ctrl) {
+        const u = 1 - e;
+        x = u * u * s.from.x + 2 * u * e * s.ctrl.x + e * e * s.to.x;
+        y = u * u * s.from.y + 2 * u * e * s.ctrl.y + e * e * s.to.y;
+      } else {
+        x = s.from.x + (s.to.x - s.from.x) * e;
+        y = s.from.y + (s.to.y - s.from.y) * e;
+      }
+      return { x, y, lift: Math.sin(e * Math.PI) * s.lift, holed: false };
+    }
+    acc += dur;
+  }
+  const last = segs[segs.length - 1];
+  return { x: last.to.x, y: last.to.y, lift: 0, holed: true };
 }
 
 export {

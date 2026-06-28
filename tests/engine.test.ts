@@ -53,6 +53,7 @@ import {
   tourCharacter,
   generateTourCourse,
   buildTournGhosts,
+  buildRacerGhosts,
   ghostPosAt,
   treesAtLie,
   stepFlight,
@@ -755,22 +756,21 @@ describe("tournament ghosts", () => {
     expect(gs.ghosts).toHaveLength(4);
     expect(gs.holeIndex).toBe(0);
     for (const gh of gs.ghosts) {
-      expect(gh.path.length).toBeGreaterThanOrEqual(2);
-      expect(gh.path[0]).toEqual({ x: hole.tee.x, y: hole.tee.y });
-      expect(gh.path[gh.path.length - 1]).toEqual({ x: hole.basket.x, y: hole.basket.y });
+      expect(gh.segs.length).toBeGreaterThanOrEqual(1);
+      expect(gh.segs[0].from).toEqual({ x: hole.tee.x, y: hole.tee.y });
+      expect(gh.segs[gh.segs.length - 1].to).toEqual({ x: hole.basket.x, y: hole.basket.y });
     }
   });
 
   it("picks distinct in-field rivals", () => {
-    const ids = buildTournGhosts(t, def, 3, hole, 0).ghosts.map((g) => g.idx);
-    expect(new Set(ids).size).toBe(ids.length);
-    ids.forEach((i) => expect(i).toBeGreaterThanOrEqual(0));
-    ids.forEach((i) => expect(i).toBeLessThan(TOURN_NAMES.length));
+    const names = buildTournGhosts(t, def, 3, hole, 0).ghosts.map((g) => g.name);
+    expect(new Set(names).size).toBe(names.length);
+    names.forEach((n) => expect(TOURN_NAMES).toContain(n));
   });
 
   it("is deterministic for the same inputs", () => {
-    const a = buildTournGhosts(t, def, 5, hole, 1).ghosts.map((g) => g.path);
-    const b = buildTournGhosts(t, def, 5, hole, 999).ghosts.map((g) => g.path); // startAt differs, paths shouldn't
+    const a = buildTournGhosts(t, def, 5, hole, 1).ghosts.map((g) => g.segs);
+    const b = buildTournGhosts(t, def, 5, hole, 999).ghosts.map((g) => g.segs); // startAt differs, paths shouldn't
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
   });
 
@@ -782,6 +782,34 @@ describe("tournament ghosts", () => {
     const done = ghostPosAt(gh, 1e9);
     expect(done.holed).toBe(true);
     expect(done).toMatchObject({ x: hole.basket.x, y: hole.basket.y });
+  });
+
+  it("rivals fly at the player's pace (≈0.2 px/ms) — long shots aren't faster", () => {
+    // One 200px shot, no obstacles: flight time should be distance / player speed,
+    // not a fixed duration, so a rival's disc never outruns yours.
+    const open: Hole = { par: 3, worldH: 520, worldW: 320, tee: { x: 160, y: 360 }, basket: { x: 160, y: 160 }, fairway: [{ x: 160, y: 360 }, { x: 160, y: 160 }], fwWidth: 200, trees: [], water: [], hazard: [], elev: 0 } as unknown as Hole;
+    const gh = buildRacerGhosts(7, 0, open, [{ name: "Sky", color: "#fff", shots: 1 }], 0).ghosts[0];
+    const seg = gh.segs[0];
+    const segLen = Math.hypot(seg.to.x - seg.from.x, seg.to.y - seg.from.y);
+    expect(seg.fly).toBeCloseTo(segLen / 0.2, 0); // 200px ⇒ ~1000ms in the air
+    expect(seg.ctrl).toBeNull(); // nothing to curve around
+  });
+
+  it("rivals curve their shot around a tree instead of flying through it", () => {
+    // A tree dead-center on the tee→basket line: the rival's flight must bow around
+    // it and never pass through the trunk.
+    const tree = { x: 160, y: 260, r: 10 };
+    const blocked: Hole = { par: 3, worldH: 520, worldW: 320, tee: { x: 160, y: 360 }, basket: { x: 160, y: 160 }, fairway: [{ x: 160, y: 360 }, { x: 160, y: 160 }], fwWidth: 200, trees: [tree], water: [], hazard: [], elev: 0 } as unknown as Hole;
+    const seg = buildRacerGhosts(7, 0, blocked, [{ name: "Sky", color: "#fff", shots: 1 }], 0).ghosts[0].segs[0];
+    expect(seg.ctrl).not.toBeNull(); // a shaped shot, not a straight line
+    let minD = Infinity;
+    for (let e = 0; e <= 1; e += 0.01) {
+      const u = 1 - e;
+      const x = u * u * seg.from.x + 2 * u * e * seg.ctrl!.x + e * e * seg.to.x;
+      const y = u * u * seg.from.y + 2 * u * e * seg.ctrl!.y + e * e * seg.to.y;
+      minD = Math.min(minD, Math.hypot(x - tree.x, y - tree.y));
+    }
+    expect(minD).toBeGreaterThan(tree.r); // clears the trunk
   });
 });
 
