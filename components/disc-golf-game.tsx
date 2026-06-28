@@ -4254,12 +4254,13 @@ function ChallengePanel({ online, onClose, onPassPlay, onCreate, onJoin }: {
     `flex-1 rounded-md px-2 py-2 text-xs font-bold transition ${active ? "bg-[#4B3DFF] text-white" : "text-gray-400 hover:text-white"}`;
   const input = "w-full bg-[#1a1d23] border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-[#4B3DFF]";
   return (
-    <div className="absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start justify-center rounded-lg">
-      <div className="w-full max-w-xs space-y-3 my-auto text-left">
-        <div className="flex items-center justify-between">
+    <div className="absolute inset-0 z-30 bg-[#0f1117]/95 backdrop-blur-sm rounded-lg flex flex-col">
+      <div className="w-full max-w-xs mx-auto flex flex-col h-full px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] text-left">
+        <div className="flex items-center justify-between shrink-0">
           <h2 className="text-white font-black text-xl">👥 Challenge Friends</h2>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
+        <div className="flex-1 overflow-y-auto mt-3 space-y-3">
 
         {step === "menu" && (
           <>
@@ -4308,6 +4309,7 @@ function ChallengePanel({ online, onClose, onPassPlay, onCreate, onJoin }: {
             Have a code? Join a lobby →
           </button>
         )}
+        </div>
       </div>
     </div>
   );
