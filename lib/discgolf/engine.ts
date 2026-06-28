@@ -965,8 +965,6 @@ class AudioEngine {
   musicGain: GainNode;
   private step = 0;
   private timer: ReturnType<typeof setInterval> | null = null;
-  private nextNoteTime = 0;
-  private crackle: AudioBufferSourceNode | null = null;
 
   constructor() {
     const Ctor = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
@@ -1009,153 +1007,29 @@ class AudioEngine {
     src.start(t);
   }
 
+  private static MELODY = [
+    72, 76, 79, 76, 74, 77, 81, 77,
+    72, 76, 79, 84, 81, 79, 76, 74,
+  ];
+  private static BASS = [48, 0, 55, 0, 53, 0, 50, 0, 48, 0, 55, 0, 53, 0, 50, 0];
   private static midi(n: number) {
     return 440 * Math.pow(2, (n - 69) / 12);
   }
 
-  // ── Lofi background ────────────────────────────────────────────────────────
-  // A slow, swung 16-bar progression of jazzy 7th chords (Am7–Dm7–G7–Cmaj7–
-  // Fmaj7–Em7–Dm7–E7) with soft pads, a walking-ish bass, a gentle kick/hat, a
-  // sparse pentatonic melody that's re-rolled every pass, and a continuous
-  // vinyl-crackle bed. One cycle at ~72 BPM runs ~53s and never repeats note for
-  // note, so it reads as a long lofi mix instead of a 3-second chiptune loop.
-  private static TEMPO = 72;
-  private static PROG: { bass: number; pad: number[] }[] = [
-    { bass: 45, pad: [60, 64, 67, 69] }, // Am7
-    { bass: 38, pad: [60, 65, 69, 72] }, // Dm7
-    { bass: 43, pad: [59, 62, 65, 67] }, // G7
-    { bass: 36, pad: [60, 64, 67, 71] }, // Cmaj7
-    { bass: 41, pad: [60, 64, 65, 69] }, // Fmaj7
-    { bass: 40, pad: [59, 62, 64, 67] }, // Em7
-    { bass: 38, pad: [60, 62, 65, 69] }, // Dm7
-    { bass: 40, pad: [56, 59, 62, 64] }, // E7
-  ];
-  private static PENT = [69, 72, 74, 76, 79, 81]; // A-minor pentatonic, up high
-
-  // A warm, lowpassed voice with a soft attack/release, scheduled at absolute time.
-  private mvoice(freq: number, start: number, dur: number, type: OscillatorType, gain: number, attack: number, cutoff: number) {
-    const osc = this.ctx.createOscillator();
-    const g = this.ctx.createGain();
-    const lp = this.ctx.createBiquadFilter();
-    lp.type = "lowpass";
-    lp.frequency.value = cutoff;
-    osc.type = type;
-    osc.frequency.value = freq;
-    osc.detune.value = (Math.random() * 2 - 1) * 5; // slight drift = analog warmth
-    g.gain.setValueAtTime(0.0001, start);
-    g.gain.exponentialRampToValueAtTime(gain, start + attack);
-    g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
-    osc.connect(lp);
-    lp.connect(g);
-    g.connect(this.musicGain);
-    osc.start(start);
-    osc.stop(start + dur + 0.05);
-  }
-
-  private kick(start: number, gain: number) {
-    const osc = this.ctx.createOscillator();
-    const g = this.ctx.createGain();
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(115, start);
-    osc.frequency.exponentialRampToValueAtTime(45, start + 0.12);
-    g.gain.setValueAtTime(gain, start);
-    g.gain.exponentialRampToValueAtTime(0.0001, start + 0.18);
-    osc.connect(g);
-    g.connect(this.musicGain);
-    osc.start(start);
-    osc.stop(start + 0.2);
-  }
-
-  private hat(start: number, gain: number) {
-    const len = Math.floor(this.ctx.sampleRate * 0.05);
-    const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
-    const d = buf.getChannelData(0);
-    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
-    const src = this.ctx.createBufferSource();
-    src.buffer = buf;
-    const hp = this.ctx.createBiquadFilter();
-    hp.type = "highpass";
-    hp.frequency.value = 7000;
-    const g = this.ctx.createGain();
-    g.gain.value = gain;
-    src.connect(hp);
-    hp.connect(g);
-    g.connect(this.musicGain);
-    src.start(start);
-  }
-
-  // Continuous looping vinyl hiss with occasional pops, under the music bus.
-  private startCrackle() {
-    const len = Math.floor(this.ctx.sampleRate * 2.2);
-    const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
-    const data = buf.getChannelData(0);
-    for (let i = 0; i < len; i++) {
-      data[i] = Math.random() < 0.011 ? (Math.random() * 2 - 1) * 0.55 : (Math.random() * 2 - 1) * 0.02;
-    }
-    const src = this.ctx.createBufferSource();
-    src.buffer = buf;
-    src.loop = true;
-    const hp = this.ctx.createBiquadFilter();
-    hp.type = "highpass";
-    hp.frequency.value = 1100;
-    const g = this.ctx.createGain();
-    g.gain.value = 0.5;
-    src.connect(hp);
-    hp.connect(g);
-    g.connect(this.musicGain);
-    src.start();
-    this.crackle = src;
-  }
-
-  // Schedule one eighth-note step's events at an absolute context time.
-  private scheduleStep(step: number, time: number) {
-    const eighth = 60 / AudioEngine.TEMPO / 2;
-    const cycle = AudioEngine.PROG.length * 16; // eighth-notes per full progression
-    const s = ((step % cycle) + cycle) % cycle;
-    const chord = AudioEngine.PROG[Math.floor(s / 16)];
-    const stepInChord = s % 16; // 16 eighths = 2 bars per chord
-    const stepInBar = s % 8;
-    const isDown = stepInBar % 2 === 0;
-    const t = time + (isDown ? 0 : eighth * 0.34); // swing the upbeats
-
-    if (stepInChord === 0) {
-      const padDur = eighth * 16 * 0.97;
-      for (const n of chord.pad) this.mvoice(AudioEngine.midi(n), time, padDur, "sine", 0.085, 0.7, 1700);
-      this.mvoice(AudioEngine.midi(chord.pad[0] - 12), time, padDur, "triangle", 0.06, 0.9, 1100);
-    }
-    if (stepInBar === 0) this.mvoice(AudioEngine.midi(chord.bass), time, eighth * 3, "triangle", 0.24, 0.02, 700);
-    if (stepInBar === 4) this.mvoice(AudioEngine.midi(chord.bass + 7), time, eighth * 2.5, "triangle", 0.17, 0.02, 700);
-    if (stepInBar === 0 || stepInBar === 4) this.kick(time, 0.2);
-    if (!isDown) this.hat(t, 0.045);
-    if (!isDown && Math.random() < 0.3) {
-      const n = AudioEngine.PENT[Math.floor(Math.random() * AudioEngine.PENT.length)];
-      this.mvoice(AudioEngine.midi(n), t, eighth * (1.4 + Math.random()), "sine", 0.13, 0.03, 2600);
-    }
-  }
-
   startMusic() {
     if (this.timer) return;
-    this.startCrackle();
-    this.nextNoteTime = this.ctx.currentTime + 0.1;
-    const eighth = 60 / AudioEngine.TEMPO / 2;
-    // Look-ahead scheduler: keep ~0.3s of steps queued so timing stays tight even
-    // if the interval fires unevenly.
     this.timer = setInterval(() => {
-      while (this.nextNoteTime < this.ctx.currentTime + 0.3) {
-        this.scheduleStep(this.step, this.nextNoteTime);
-        this.nextNoteTime += eighth;
-        this.step++;
-      }
-    }, 90);
+      const m = AudioEngine.MELODY[this.step % AudioEngine.MELODY.length];
+      const b = AudioEngine.BASS[this.step % AudioEngine.BASS.length];
+      if (m) this.note(AudioEngine.midi(m), 0.18, "square", 0.5, this.musicGain);
+      if (b) this.note(AudioEngine.midi(b), 0.22, "triangle", 0.7, this.musicGain);
+      this.step++;
+    }, 200);
   }
 
   stopMusic() {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
-    if (this.crackle) {
-      try { this.crackle.stop(); } catch { /* already stopped */ }
-      this.crackle = null;
-    }
   }
 
   setMuted(muted: boolean) {
