@@ -25,10 +25,10 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
-/* The app is a fixed-size board (the game root is h-[100dvh] overflow-hidden), so
+/* The app is a fixed-size board (the game root is .app-root, overflow-hidden), so
    the page itself must never scroll or rubber-band. Lock the document and kill
    overscroll so you can't swipe the whole screen up/down or trigger pull-to-
-   refresh. Panels that DO need to scroll are fixed overlays with their own
+   refresh. Panels that DO need to scroll are overlays with their own
    overflow-y-auto, so they still scroll within their own area. */
 html,
 body {
@@ -40,6 +40,24 @@ body {
      background — NOT the body's — so without this it renders pure black. Pin both
      to the app color so the board reaches the very bottom with no black bar. */
   background-color: #0f1117;
+}
+
+/* The game root fills the screen. In a normal browser tab `100dvh` is exactly
+   right — it shrinks to sit above the dynamic toolbar. But in an iOS home-screen
+   PWA, iOS computes 100dvh a touch SHORT of the home-indicator strip, leaving a
+   dead band of background at the very bottom with nothing on it. An installed app
+   has no toolbar to dodge, so there we pin the root to all four screen edges
+   instead: it reaches the true bottom, and the safe-area padding inside still
+   keeps content clear of the home indicator. */
+.app-root {
+  height: 100dvh;
+}
+@media (display-mode: standalone) {
+  .app-root {
+    position: fixed;
+    inset: 0;
+    height: auto;
+  }
 }
 
 /* Inner scroll regions keep their gestures to themselves — a scroll that hits the

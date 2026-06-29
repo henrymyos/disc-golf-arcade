@@ -3360,7 +3360,7 @@ export function DiscGolfGame() {
   const overStr = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
 
   return (
-    <div className="h-[100dvh] w-full bg-[#0f1117] flex flex-col select-none overflow-hidden">
+    <div className="app-root w-full bg-[#0f1117] flex flex-col select-none overflow-hidden">
       {/* Play area — canvas fills the available space, keeping its aspect ratio */}
       <div
         ref={playAreaRef}
