@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
-import { submitArcadeScore, getArcadeLeaderboard } from "@/actions/arcade";
+import { submitArcadeScore, getArcadeLeaderboard, submitMiniScore, getMiniLeaderboard } from "@/actions/arcade";
 import type { ArcadeScore } from "@/lib/arcade-types";
 import { getSupabase } from "@/lib/supabase/browser";
 import {
@@ -501,6 +501,8 @@ export function DiscGolfGame() {
   const [dailyClaim, setDailyClaim] = useState<{ coins: number; streak: number } | null>(null);
   const [coinReward, setCoinReward] = useState(0); // coins earned by the round just finished
   const [miniResult, setMiniResult] = useState<{ kind: "putt" | "target"; makes: number; best: number; points: number; coins: number } | null>(null);
+  const [miniBoard, setMiniBoard] = useState<ArcadeScore[]>([]); // global board for the finished mini (putt / accuracy)
+  const [miniSaving, setMiniSaving] = useState(false);
   // Add coins (or spend, with a negative amount): updates state, storage, cloud.
   const addCoins = useCallback((delta: number) => {
     const next = Math.max(0, Math.round(coinsRef.current + delta));
@@ -1360,6 +1362,28 @@ export function DiscGolfGame() {
     setScreen("playing");
     syncHud();
   }, [muted, musicVolume, syncHud, equipForMini]);
+
+  // When a practice mini ends, post the result to its global board (putts made /
+  // accuracy points) under the profile name, then load that board to show it on
+  // the results card. Re-runs each time a new result appears.
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (!miniResult) { setMiniBoard([]); setMiniSaving(false); return; }
+    let active = true;
+    const kind = miniResult.kind;
+    const score = kind === "putt" ? miniResult.makes : miniResult.points;
+    setMiniBoard([]);
+    setMiniSaving(true);
+    (async () => {
+      try { await submitMiniScore(profileRef.current?.name?.trim() || "Player", score, kind); } catch { /* leave it; still show the board */ }
+      const lb = await getMiniLeaderboard(kind).catch(() => [] as ArcadeScore[]);
+      if (!active) return;
+      setMiniBoard(lb);
+      setMiniSaving(false);
+    })();
+    return () => { active = false; };
+  }, [miniResult]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Hot-seat pass-and-play: 2-4 players take turns playing each hole on one
   // device. Nothing counts toward records — it's bragging rights only.
@@ -4076,8 +4100,8 @@ export function DiscGolfGame() {
       )}
 
       {miniResult && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0f1117]/95 backdrop-blur-sm p-6">
-          <div className="w-full max-w-xs text-center space-y-3">
+        <div className="fixed inset-0 z-50 overflow-y-auto flex items-start sm:items-center justify-center bg-[#0f1117]/95 backdrop-blur-sm px-6 pt-[max(env(safe-area-inset-top),1.5rem)] pb-[max(env(safe-area-inset-bottom),1.5rem)]">
+          <div className="w-full max-w-xs text-center space-y-3 my-auto">
             <p className="text-5xl">{miniResult.kind === "putt" ? "⛳" : "🎯"}</p>
             <h2 className="text-white font-black text-2xl">{miniResult.kind === "putt" ? "Putting Practice" : "Accuracy Practice"}</h2>
             {miniResult.kind === "putt" ? (
@@ -4086,6 +4110,33 @@ export function DiscGolfGame() {
               <p className="text-gray-300">You scored <span className="text-[#f5d24a] font-bold">{miniResult.points}</span> points over 10 throws.</p>
             )}
             <p className="text-[#f5d24a] font-bold text-lg">+{miniResult.coins} <Coin className="!w-4 !h-4" /></p>
+            {/* Global leaderboard for this mini (most putts made / most accuracy points) */}
+            <div className="bg-[#1a1d23] border border-white/5 rounded-2xl overflow-hidden text-left">
+              <p className="text-white font-bold text-sm px-4 py-2.5 border-b border-white/5">
+                🏆 {miniResult.kind === "putt" ? "Putting leaderboard" : "Accuracy leaderboard"}
+              </p>
+              {miniSaving && miniBoard.length === 0 ? (
+                <p className="text-gray-400 text-sm text-center py-6">Loading the board…</p>
+              ) : miniBoard.length === 0 ? (
+                <p className="text-gray-400 text-sm text-center py-6">No scores yet — be the first!</p>
+              ) : (
+                <ol>
+                  {miniBoard.slice(0, 8).map((row, i) => {
+                    const mine = row.name === (profile.name.trim() || "Player");
+                    return (
+                      <li
+                        key={`${row.name}-${row.created_at}`}
+                        className={`flex items-center gap-3 px-4 py-2 text-sm ${i !== 0 ? "border-t border-white/5" : ""} ${mine ? "bg-[#36D7B7]/10" : ""}`}
+                      >
+                        <span className="text-gray-400 font-mono w-6 text-right">{i + 1}</span>
+                        <span className={`flex-1 truncate ${mine ? "text-[#36D7B7] font-bold" : "text-white"}`}>{row.name}</span>
+                        <span className="text-white font-mono font-bold w-16 text-right">{row.strokes}{miniResult.kind === "putt" ? " made" : " pts"}</span>
+                      </li>
+                    );
+                  })}
+                </ol>
+              )}
+            </div>
             <div className="flex flex-col gap-2 pt-1">
               <button type="button" onClick={() => startMini(miniResult.kind)} className={`${btn} w-full`}>↻ Play again</button>
               <button type="button" onClick={() => { audioRef.current?.stopMusic(); setMiniResult(null); }} className="w-full bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white font-bold py-3 rounded-lg transition">🏠 Done</button>
