@@ -7,8 +7,7 @@
 // "daily:<day>:<id>" / "event:<week>:<id>" key so they cloud-sync and can't be
 // double-claimed.
 
-const DAY_MS = 86_400_000;
-const WEEK_MS = 7 * DAY_MS;
+import { centralDayRange, centralWeekRange } from "./time";
 
 // A finished round as stored in history (the fields challenges care about).
 export type EventRound = { mode: string; total: number; date: number; scores?: number[]; pars?: number[] };
@@ -106,15 +105,14 @@ export function weeklyChallenges(week: number): Challenge[] {
   return pick(WEEKLY_POOL, (week ^ 0x9e3779b9) >>> 0, 3);
 }
 
-// Rounds played within the current day / week window (UTC), from history.
+// Rounds played within the current Central day / week window, from history.
+// `date`s are UTC epoch ms; the window bounds come from the Central-time clock.
 export function roundsThisDay(history: EventRound[], day: number): EventRound[] {
-  const start = day * DAY_MS;
-  const end = start + DAY_MS;
+  const { start, end } = centralDayRange(day);
   return history.filter((r) => typeof r.date === "number" && r.date >= start && r.date < end);
 }
 export function roundsThisWeek(history: EventRound[], week: number): EventRound[] {
-  const start = week * WEEK_MS;
-  const end = start + WEEK_MS;
+  const { start, end } = centralWeekRange(week);
   return history.filter((r) => typeof r.date === "number" && r.date >= start && r.date < end);
 }
 

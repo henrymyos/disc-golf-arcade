@@ -2,10 +2,11 @@
 // the Career's cash) earned by playing, claiming the daily reward, and the
 // practice mini-games, and spent in the disc shop. Pure + deterministic. ──
 import type { Mode } from "./engine";
+import { centralDay } from "./time";
 
-const DAY_MS = 86_400_000;
+// The current day number, rolling over at midnight Central (see lib/discgolf/time).
 export function dayNumber(now: number): number {
-  return Math.floor(now / DAY_MS);
+  return centralDay(now);
 }
 
 export type DailyReward = { day: number; streak: number };

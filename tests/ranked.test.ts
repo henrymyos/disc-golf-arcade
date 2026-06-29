@@ -15,10 +15,12 @@ import {
 } from "../lib/discgolf/ranked";
 
 describe("ranked weeks + board key", () => {
-  it("buckets time into 7-day weeks and the board key round-trips to-par", () => {
-    const wk = 7 * 86_400_000;
-    expect(weekSeed(0)).toBe(0);
-    expect(weekSeed(wk)).toBe(1);
+  it("weeks roll over at midnight Central on Sunday, and the board key round-trips to-par", () => {
+    // 2026-06-28 is a Sunday; its Central midnight is 05:00 UTC (summer CDT).
+    const satNight = Date.UTC(2026, 5, 28, 4, 59);  // Sat 23:59 Central
+    const sunMidnight = Date.UTC(2026, 5, 28, 5, 0); // Sun 00:00 Central
+    expect(weekSeed(sunMidnight)).toBe(weekSeed(satNight) + 1);
+    expect(weekSeed(sunMidnight + 3 * 86_400_000)).toBe(weekSeed(sunMidnight)); // same week mid-week
     expect(rankedCourseKey(1)).toBe("ranked-1");
     // best-to-par is encoded into the board's stroke range and decodes back.
     expect(decodeToParScore(encodeToParScore(-12))).toBe(-12);

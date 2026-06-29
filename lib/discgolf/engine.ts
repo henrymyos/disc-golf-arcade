@@ -2,6 +2,7 @@
 // scoring, tournament simulation, and the audio engine. No React — extracted
 // from the game component so it can be unit-tested and reused (e.g. OG images).
 // Imported by components/disc-golf-game.tsx.
+import { centralDay } from "./time";
 
 const W = 320;
 const H = 448;
@@ -1162,9 +1163,10 @@ function mulberry32(seed: number) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
-// The day's seed (UTC) — everyone gets the same daily course.
+// The day's seed — everyone gets the same daily course, rolling over at midnight
+// Central (see lib/discgolf/time).
 function dailySeed() {
-  return Math.floor(Date.now() / 86_400_000);
+  return centralDay(Date.now());
 }
 // Pull a candidate pin back toward the (on-centerline) base until it sits safely
 // inside the fairway ribbon, so a moved pin is always reachable and in-bounds.

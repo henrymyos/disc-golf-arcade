@@ -6,11 +6,12 @@
 // consecutive podium finishes build a streak for bonus RP. A single global
 // best-to-par board (comparable across the fresh courses) is the secondary chase.
 
-const WEEK_MS = 7 * 86_400_000;
+import { centralWeek } from "./time";
 
-// The week bucket (UTC). Kept for the weekly-reset board key shape + back-compat.
+// The week bucket — rolls over at midnight Central on Sunday (see lib/discgolf/time).
+// Kept for the weekly board-key shape + back-compat.
 export function weekSeed(now: number): number {
-  return Math.floor(now / WEEK_MS);
+  return centralWeek(now);
 }
 
 // Leaderboard key for a ranked week (mirrors leaderboardCourse's `daily-N`).

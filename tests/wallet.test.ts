@@ -2,10 +2,13 @@ import { describe, it, expect } from "vitest";
 import { dayNumber, dailyCoins, claimDailyReward, dailyAvailable, coinsForRound } from "../lib/discgolf/wallet";
 
 describe("daily reward", () => {
-  it("dayNumber buckets time into UTC days", () => {
-    expect(dayNumber(0)).toBe(0);
-    expect(dayNumber(86_400_000)).toBe(1);
-    expect(dayNumber(86_400_000 * 5 + 1)).toBe(5);
+  it("dayNumber rolls over at midnight Central, not UTC", () => {
+    // 2026-06-28 00:00 Central = 05:00 UTC (summer CDT). The day flips there.
+    const justBefore = Date.UTC(2026, 5, 28, 4, 59);
+    const atMidnight = Date.UTC(2026, 5, 28, 5, 0);
+    expect(dayNumber(atMidnight)).toBe(dayNumber(justBefore) + 1);
+    // a timestamp later the same Central day stays in the same bucket
+    expect(dayNumber(atMidnight + 12 * 3_600_000)).toBe(dayNumber(atMidnight));
   });
   it("first claim starts a 1-day streak", () => {
     const r = claimDailyReward(null, 100);
