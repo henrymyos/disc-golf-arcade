@@ -5819,6 +5819,11 @@ function CoursesPanel({ courses, tourCourses, bests, tourBests, onClose, onPlay 
   onPlay: (m: Mode, seed?: number) => void;
 }) {
   const [tab, setTab] = useState<"championship" | "tour">("championship");
+  const scrollRef = useRef<HTMLDivElement>(null); // the tab list's scroll region
+  // Both tabs share one scroll container, so without this a long Pro Tour scroll
+  // would carry over to the short Championship list and leave it scrolled out of
+  // view (blank). Jump back to the top whenever the tab changes.
+  useEffect(() => { scrollRef.current?.scrollTo(0, 0); }, [tab]);
   const over = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
   const seg = (active: boolean) =>
     `flex-1 rounded-md px-2 py-2 text-xs font-bold transition ${active ? "bg-[#4B3DFF] text-white" : "text-gray-400 hover:text-white"}`;
@@ -5870,7 +5875,7 @@ function CoursesPanel({ courses, tourCourses, bests, tourBests, onClose, onPlay 
           <button type="button" onClick={() => setTab("tour")} className={seg(tab === "tour")}>🏆 Pro Tour</button>
         </div>
         <p className="text-gray-500 text-[11px] mt-2 shrink-0">Easiest first. <span className="text-[#e0923b]">★</span> = difficulty (5 = very hard). Gold <span className="text-[#f5d24a]">★</span> below are your best: even par · −9 · −18.</p>
-        <div className="flex-1 overflow-y-auto mt-2 space-y-2.5 pr-0.5 -mr-0.5">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto mt-2 space-y-2.5 pr-0.5 -mr-0.5">
           {list.map(({ c }) => card({ c }))}
         </div>
         <button type="button" onClick={onClose} className={`${btn} w-full shrink-0 mt-3`}>Done</button>
