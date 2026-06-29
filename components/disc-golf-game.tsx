@@ -4538,7 +4538,7 @@ function LobbyPanel({ lobby, players, hostLeft, error, courses, onPickCourse, on
   const courseLabel = lobby.isHost ? lobby.courseLabel : host?.courseLabel ?? lobby.courseLabel;
   return (
     <div className="absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start justify-center rounded-lg">
-      <div className="w-full max-w-xs space-y-4 my-auto text-left">
+      <div className="w-full max-w-xs space-y-6 my-auto text-left">
         <div className="flex items-center justify-between">
           <h2 className="text-white font-black text-xl">Lobby</h2>
           <button type="button" onClick={onLeave} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
@@ -4546,19 +4546,26 @@ function LobbyPanel({ lobby, players, hostLeft, error, courses, onPickCourse, on
         <div className="rounded-xl bg-[#1a1d23] border border-white/10 p-4 text-center">
           <p className="text-gray-500 text-[10px] uppercase tracking-[0.2em]">Join code</p>
           <p className="text-[#36D7B7] font-black text-4xl tracking-[0.25em] mt-1">{lobby.code}</p>
+        </div>
+        <div>
+          <p className="text-gray-400 text-xs font-semibold mb-1.5">Course</p>
           {lobby.isHost ? (
-            <select
-              value={lobby.courseKey}
-              onChange={(e) => { const c = courses.find((x) => challengeKey(x) === e.target.value); if (c) onPickCourse(c); }}
-              className="mt-3 w-full bg-[#0f1117] border border-white/10 rounded-lg px-2 py-2 text-white text-xs font-semibold focus:outline-none focus:border-[#4B3DFF]"
-              aria-label="Choose course"
-            >
-              {courses.map((c) => (
-                <option key={challengeKey(c)} value={challengeKey(c)}>{c.name}</option>
-              ))}
-            </select>
+            <div className="relative">
+              <select
+                value={lobby.courseKey}
+                onChange={(e) => { const c = courses.find((x) => challengeKey(x) === e.target.value); if (c) onPickCourse(c); }}
+                className="appearance-none w-full bg-[#1a1d23] border border-white/10 rounded-lg pl-3 pr-9 py-2.5 text-white text-sm font-semibold focus:outline-none focus:border-[#4B3DFF] hover:border-white/25 transition"
+                style={{ colorScheme: "dark" }}
+                aria-label="Choose course"
+              >
+                {courses.map((c) => (
+                  <option key={challengeKey(c)} value={challengeKey(c)}>{c.name}</option>
+                ))}
+              </select>
+              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-xs">▾</span>
+            </div>
           ) : (
-            <p className="text-gray-500 text-[11px] mt-2">{courseLabel}</p>
+            <div className="w-full bg-[#1a1d23] border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm font-semibold">{courseLabel}</div>
           )}
         </div>
         <div>
