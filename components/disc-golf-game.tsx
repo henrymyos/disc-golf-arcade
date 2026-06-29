@@ -1091,6 +1091,32 @@ export function DiscGolfGame() {
     syncHud();
   }, [muted, musicVolume, syncHud, clearResume]);
 
+  // Start the next unplayed round of a tournament. Tournaments are played straight
+  // through — there's no save-and-continue; you finish the event in one sitting or
+  // abandon it (see the abandon-on-leave effect below).
+  const playTournamentRound = useCallback((t: Tournament) => {
+    const def = tournDef(t.id);
+    if (!def) return;
+    const rd = def.rounds[t.myTotals.length];
+    if (!rd) return;
+    setTournamentOpen(false);
+    // Tour rounds play their fixed venue seed; Glendoveer/Winthrop get a per-round
+    // seed so each round's pins/wind differ.
+    const seed = rd.seed ?? ((t.seed + t.myTotals.length * 1013904223) | 0);
+    startGame(rd.mode, seed);
+    tournamentPlayRef.current = true;
+  }, [startGame]);
+
+  // Leaving a tournament before it's finished abandons it: the moment we're back on
+  // the title with an unfinished event in hand (Home from the results, quitting a
+  // round, or a reload that restored one), drop it. So you either play the whole
+  // tournament through or forfeit — never resume a half-finished one.
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (screen === "title" && tournament && !tournament.finished) saveTournament(null);
+  }, [screen, tournament, saveTournament]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
   // Play a ranked round: a FRESH course every time, against an AI field whose
   // strength scales with your tier, with live standings + ghost racers on-course
   // (placement drives your RP). Its own launcher so it can wire up the field; play
@@ -3764,20 +3790,15 @@ export function DiscGolfGame() {
             tournaments={TOURNAMENTS}
             active={tournament}
             bests={tournBests}
-            onStart={(def) => saveTournament({ id: def.id, seed: def.seed, round: 0, myTotals: [], fieldTotals: [], madeCut: true, finished: false })}
-            onAbandon={() => saveTournament(null)}
-            onPlayRound={(t) => {
-              const def = tournDef(t.id);
-              if (!def) return;
-              const rd = def.rounds[t.myTotals.length];
-              if (!rd) return;
-              setTournamentOpen(false);
-              // Tour rounds play their fixed venue seed; Glendoveer/Winthrop get a
-              // per-round seed so each round's pins/wind differ.
-              const seed = rd.seed ?? ((t.seed + t.myTotals.length * 1013904223) | 0);
-              startGame(rd.mode, seed);
-              tournamentPlayRef.current = true;
+            onStart={(def) => {
+              // Starting a tournament drops you straight into round 1 — you play the
+              // whole event through in one sitting (no save-and-continue).
+              const t: Tournament = { id: def.id, seed: def.seed, round: 0, myTotals: [], fieldTotals: [], madeCut: true, finished: false };
+              saveTournament(t);
+              playTournamentRound(t);
             }}
+            onAbandon={() => saveTournament(null)}
+            onPlayRound={playTournamentRound}
             onClose={() => setTournamentOpen(false)}
           />
         )}
@@ -4298,9 +4319,17 @@ export function DiscGolfGame() {
               {finalPracticeHole != null ? (
                 <button type="button" onClick={() => startPractice(finalMode, finalPracticeHole - 1, finalSeed)} className={btn}>↻ Retry hole</button>
               ) : finalTournament ? (
-                <button type="button" onClick={() => { audioRef.current?.stopMusic(); setScreen("title"); setTournamentOpen(true); }} className={btn}>
-                  🏟 Standings
-                </button>
+                tournament && !tournament.finished ? (
+                  // More rounds to go — continue straight into the next one (the only
+                  // way forward; leaving now would forfeit the event).
+                  <button type="button" onClick={() => { const t = tournamentRef.current; if (t) playTournamentRound(t); }} className={btn}>
+                    ▶ Play round {tournament.myTotals.length + 1} of {tournDef(tournament.id)?.rounds.length ?? tournament.myTotals.length + 1}
+                  </button>
+                ) : (
+                  <button type="button" onClick={() => { audioRef.current?.stopMusic(); setScreen("title"); setTournamentOpen(true); }} className={btn}>
+                    🏟 Standings
+                  </button>
+                )
               ) : finalOnline ? (
                 <button type="button" onClick={() => { audioRef.current?.stopMusic(); setScreen("title"); }} className={btn}>
                   🎉 Back to lobby
