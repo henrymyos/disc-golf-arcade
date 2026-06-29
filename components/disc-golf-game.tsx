@@ -1049,6 +1049,18 @@ export function DiscGolfGame() {
     g.ghostTrees = treesAtLie(hole, g.rest.x, g.rest.y);
   }, []);
 
+  // Auto-caddie for the practice minis (putting / accuracy): equip the disc the
+  // station's distance calls for and reflect it everywhere — the game state the
+  // throw reads (g.discIndex / discIndexRef) AND the React state the UI shows, so
+  // the disc on screen always matches the one that flies. (equipForLie bails out
+  // during minis; this is its mini-specific counterpart, run from a fresh tee.)
+  const equipForMini = useCallback((g: GameState, hole: Hole) => {
+    const i = autoDiscIndex(distBetween(g.rest, hole.basket), activeBagRef.current, elevAt(hole, g.rest.y), windAlong(hole, g.rest));
+    g.discIndex = i;
+    discIndexRef.current = i;
+    setDiscIndex(i);
+  }, []);
+
   const startGame = useCallback((mode?: Mode, seedOverride?: number) => {
     // "tour" only exists inside Career events — never fall back to it for a
     // plain title-screen round (default to Glendoveer instead).
@@ -1335,14 +1347,14 @@ export function DiscGolfGame() {
       ...freshHole(hole),
     };
     if (stateRef.current) stateRef.current.phase = "aim"; // skip the fly-over intro
-    setDiscIndex(0);
+    if (stateRef.current) equipForMini(stateRef.current, hole); // right disc for the opening distance
     ghostRef.current = null;
     careerFieldRef.current = null;
     setMiniResult(null);
     setPartyView(null); setOnlineView(null); setSettingsOpen(false);
     setScreen("playing");
     syncHud();
-  }, [muted, musicVolume, syncHud]);
+  }, [muted, musicVolume, syncHud, equipForMini]);
 
   // Hot-seat pass-and-play: 2-4 players take turns playing each hole on one
   // device. Nothing counts toward records — it's bragging rights only.
@@ -2204,7 +2216,7 @@ export function DiscGolfGame() {
               spawnBurst(hole.basket.x, hole.basket.y, ["#36D7B7", "#f5d24a", "#ffffff"], 50, 2.4, 0.05, 40);
               m.makes += 1; m.best = puttFeet(m.station); m.station += 1;
               const nh = puttHole(m.station); g.roundHoles[0] = nh;
-              Object.assign(g, freshHole(nh)); g.mini = m; g.phase = "aim"; g.discIndex = 0;
+              Object.assign(g, freshHole(nh)); g.mini = m; g.phase = "aim"; equipForMini(g, nh);
               syncHud();
             } else {
               audioRef.current?.sfx("tree"); shake(2);
@@ -2220,7 +2232,7 @@ export function DiscGolfGame() {
             else { audioRef.current?.sfx("tree"); shake(2); }
             m.lastPts = pts;
             if (m.attempts >= m.total) endMini(Math.round(m.points / 2));
-            else { const nh = targetHole(m.station + 1); m.station += 1; g.roundHoles[0] = nh; Object.assign(g, freshHole(nh)); g.mini = m; g.phase = "aim"; g.discIndex = 0; syncHud(); }
+            else { const nh = targetHole(m.station + 1); m.station += 1; g.roundHoles[0] = nh; Object.assign(g, freshHole(nh)); g.mini = m; g.phase = "aim"; equipForMini(g, nh); syncHud(); }
           }
         } else if (res.status === "hole") {
           g.phase = "holed";
@@ -3243,7 +3255,7 @@ export function DiscGolfGame() {
     }
     rafRef.current = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [syncHud, persistResume, addCoins, equipForLie]);
+  }, [syncHud, persistResume, addCoins, equipForLie, equipForMini]);
 
   useEffect(() => {
     return () => {
