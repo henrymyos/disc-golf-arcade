@@ -241,19 +241,24 @@ function freshHole(hole: Hole) {
 // ── Practice mini-games: flat, wide-open single-target "holes" that reuse the
 // throw engine. Putting = sink a putt to advance to a longer one (miss ends the
 // run). Target = land near the bullseye for points over a fixed set of throws. ──
+// The tee sits well up from the bottom edge (world H=448) so the whole pull-back
+// (MAX_DRAG=95px, dragged straight DOWN below the disc) stays on-screen — you can
+// see exactly where you're dragging to. The target moves up by the same amount, so
+// throw distances are unchanged; only the framing shifts.
+const MINI_TEE_Y = 340; // leaves 108px of visible board below the tee (> MAX_DRAG)
 function puttFeet(station: number): number { return 15 + station * 5; }
 function puttHole(station: number): Hole {
   const distPx = 40 + station * 13;
-  const tee: Vec = { x: 160, y: 420 };
-  const basket: Vec = { x: 160, y: Math.max(36, 420 - distPx) };
+  const tee: Vec = { x: 160, y: MINI_TEE_Y };
+  const basket: Vec = { x: 160, y: Math.max(36, MINI_TEE_Y - distPx) };
   return { par: 1, worldH: H, tee, basket, fairway: [tee, basket], fwWidth: 640, trees: [], water: [], hazard: [], elev: 0 };
 }
 function targetRadiusPx(station: number): number { return Math.max(13, 34 - station * 2.4); }
 function targetHole(station: number): Hole {
   const distPx = 80 + station * 16;
   const side = (Math.random() * 2 - 1) * Math.min(90, 30 + station * 8);
-  const tee: Vec = { x: 160, y: 420 };
-  const basket: Vec = { x: Math.max(44, Math.min(276, 160 + side)), y: Math.max(58, 420 - distPx) };
+  const tee: Vec = { x: 160, y: MINI_TEE_Y };
+  const basket: Vec = { x: Math.max(44, Math.min(276, 160 + side)), y: Math.max(58, MINI_TEE_Y - distPx) };
   return { par: 1, worldH: H, tee, basket, fairway: [tee, basket], fwWidth: 640, trees: [], water: [], hazard: [], elev: 0 };
 }
 
