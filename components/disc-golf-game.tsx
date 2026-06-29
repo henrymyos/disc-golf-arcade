@@ -3579,13 +3579,13 @@ export function DiscGolfGame() {
 
               {/* Online & Compete page */}
               {hub === "online" && (
-                <div className={`w-full flex flex-col gap-2 ${menuTopMargin}`}>
+                <div className={`w-full flex flex-col gap-3 ${menuTopMargin}`}>
                   <button type="button" onClick={() => setHub("home")} className={`${titleCardSm} !flex-none self-start px-3`}>‹ Back</button>
-                  <button type="button" onClick={() => setHub("challenge")} className={titleCard}>
-                    Challenge Friends
+                  <button type="button" onClick={() => setHub("challenge")} className={hubCard}>
+                    <span className="font-black text-lg">Challenge Friends</span>
                   </button>
-                  <button type="button" onClick={() => setRankedOpen(true)} className={titleCard}>
-                    Ranked · {tierFromRP(ranked?.rp ?? 0).tier.emoji} {tierFromRP(ranked?.rp ?? 0).tier.name}
+                  <button type="button" onClick={() => setRankedOpen(true)} className={hubCard}>
+                    <span className="font-black text-lg">Ranked · {tierFromRP(ranked?.rp ?? 0).tier.emoji} {tierFromRP(ranked?.rp ?? 0).tier.name}</span>
                   </button>
                 </div>
               )}
