@@ -309,7 +309,6 @@ export function DiscGolfGame() {
   }, []);
 
   // ── Online Friendly Challenge lobby (Supabase Realtime) ──
-  const [challengeOpen, setChallengeOpen] = useState(false);
   const [lobby, setLobby] = useState<{ code: string; isHost: boolean; mode: Mode } | null>(null);
   const [lobbyPlayers, setLobbyPlayers] = useState<LobbyPlayer[]>([]);
   const [hostLeft, setHostLeft] = useState(false); // joiner's host dropped before the round started
@@ -628,7 +627,7 @@ export function DiscGolfGame() {
   /* eslint-enable react-hooks/set-state-in-effect */
 
   // Title-screen navigation: a small hub so the menu isn't a wall of buttons.
-  const [hub, setHub] = useState<"home" | "solo" | "online">("home");
+  const [hub, setHub] = useState<"home" | "solo" | "online" | "challenge">("home");
   // How many challenge rewards (daily + weekly) are ready to claim (badged).
   const claimableEvents = (() => {
     const hist = history as EventRound[];
@@ -1296,7 +1295,7 @@ export function DiscGolfGame() {
     setHoleBestNote(null);
     setPartyView(null);
     setOnlineView(null);
-    setChallengeOpen(false);
+    setHub("home");
     setScreen("playing");
     syncHud();
   }, [muted, musicVolume, syncHud]);
@@ -3324,12 +3323,25 @@ export function DiscGolfGame() {
               {hub === "online" && (
                 <div className={`w-full flex flex-col gap-2 ${menuTopMargin}`}>
                   <button type="button" onClick={() => setHub("home")} className={`${titleCardSm} !flex-none self-start px-3`}>‹ Back</button>
-                  <button type="button" onClick={() => setChallengeOpen(true)} className={titleCard}>
+                  <button type="button" onClick={() => setHub("challenge")} className={titleCard}>
                     Challenge Friends
                   </button>
                   <button type="button" onClick={() => setRankedOpen(true)} className={titleCard}>
                     Ranked · {tierFromRP(ranked?.rp ?? 0).tier.emoji} {tierFromRP(ranked?.rp ?? 0).tier.name}
                   </button>
+                </div>
+              )}
+
+              {/* Challenge Friends — an inline page so the logo/profile stay above */}
+              {hub === "challenge" && (
+                <div className={`w-full ${menuTopMargin}`}>
+                  <ChallengePanel
+                    online={!!supa}
+                    onBack={() => setHub("online")}
+                    onPassPlay={() => setPartyOpen(true)}
+                    onCreate={(m, name) => createLobby(m, name)}
+                    onJoin={(code, name) => joinLobby(code, name)}
+                  />
                 </div>
               )}
             </div>
@@ -3446,16 +3458,6 @@ export function DiscGolfGame() {
           />
         )}
 
-        {/* Challenge Friends menu (online lobbies disabled if Supabase isn't set up) */}
-        {challengeOpen && !lobby && (
-          <ChallengePanel
-            online={!!supa}
-            onClose={() => setChallengeOpen(false)}
-            onPassPlay={() => { setChallengeOpen(false); setPartyOpen(true); }}
-            onCreate={(m, name) => createLobby(m, name)}
-            onJoin={(code, name) => joinLobby(code, name)}
-          />
-        )}
 
         {/* Lobby (shown on the title screen until the host starts) */}
         {screen === "title" && lobby && (
@@ -4239,9 +4241,9 @@ function TutorialPanel({ onClose }: { onClose: () => void }) {
 
 // Challenge Friends entry point: choose hot-seat Pass & Play or an online
 // Friendly Challenge, then Create a lobby or Join one with a code.
-function ChallengePanel({ online, onClose, onPassPlay, onCreate, onJoin }: {
+function ChallengePanel({ online, onBack, onPassPlay, onCreate, onJoin }: {
   online: boolean;
-  onClose: () => void;
+  onBack: () => void;
   onPassPlay: () => void;
   onCreate: (m: Mode, name: string) => void;
   onJoin: (code: string, name: string) => void;
@@ -4253,66 +4255,52 @@ function ChallengePanel({ online, onClose, onPassPlay, onCreate, onJoin }: {
   const seg = (active: boolean) =>
     `flex-1 rounded-md px-2 py-2 text-xs font-bold transition ${active ? "bg-[#4B3DFF] text-white" : "text-gray-400 hover:text-white"}`;
   const input = "w-full bg-[#1a1d23] border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-[#4B3DFF]";
+  // Renders inline inside the title column (same hub styling as Single Player /
+  // Online), so the logo and profile stay visible above and the screen is blank
+  // below the buttons. ‹ Back steps out to the Online hub (or up a sub-step).
   return (
-    <div className="absolute inset-0 z-30 bg-[#0f1117]/95 backdrop-blur-sm rounded-lg flex flex-col">
-      <div className="w-full max-w-xs mx-auto flex flex-col h-full px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] text-left">
-        <div className="flex items-center justify-between shrink-0">
-          <h2 className="text-white font-black text-xl">👥 Challenge Friends</h2>
-          <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
-        </div>
-        <div className="flex-1 overflow-y-auto mt-3">
-          <div className="min-h-full flex flex-col justify-center space-y-3 pb-2">
+    <div className="w-full flex flex-col gap-2">
+      <button type="button" onClick={step === "menu" ? onBack : () => setStep("menu")} className={`${titleCardSm} !flex-none self-start px-3`}>‹ Back</button>
 
-        {step === "menu" && (
-          <>
-            <button type="button" onClick={onPassPlay}
-              className="w-full text-left rounded-xl border border-[#36D7B7]/55 bg-[#1a1d23] hover:border-[#36D7B7] hover:bg-[#20262f] active:scale-[0.99] px-4 py-3 transition">
-              <span className="block text-white font-bold text-sm">Pass &amp; Play</span>
-              <span className="block text-gray-500 text-[11px] mt-0.5">2–4 players take turns on one device.</span>
-            </button>
-            <button type="button" onClick={() => online && setStep("create")} disabled={!online}
-              className={`w-full text-left rounded-xl border px-4 py-3 transition ${online ? "border-[#36D7B7]/55 bg-[#1a1d23] hover:border-[#36D7B7] hover:bg-[#20262f] active:scale-[0.99]" : "border-white/5 bg-white/[0.02] opacity-50"}`}>
-              <span className="block text-white font-bold text-sm">Friendly Challenge</span>
-              <span className="block text-gray-500 text-[11px] mt-0.5">
-                {online ? "Play the same round online — everyone on their own phone." : "Online play needs Supabase configured."}
-              </span>
-            </button>
-          </>
-        )}
-
-        {step === "create" && (
-          <>
-            <p className="text-gray-400 text-xs">Pick a course and create a lobby — share the code so friends can join.</p>
-            <div className="flex gap-1 bg-[#1a1d23] border border-white/10 rounded-lg p-1">
-              <button type="button" onClick={() => setCourse("course")} className={seg(course === "course")}>Glendoveer</button>
-              <button type="button" onClick={() => setCourse("winthrop")} className={seg(course === "winthrop")}>Winthrop</button>
-              <button type="button" onClick={() => setCourse("daily")} className={seg(course === "daily")}>Daily</button>
-            </div>
-            <input type="text" value={name} maxLength={12} onChange={(e) => setName(e.target.value)} placeholder="Your name" className={input} />
-            <button type="button" onClick={() => onCreate(course, name)} className={`${btn} w-full`}>Create lobby</button>
-            <button type="button" onClick={() => setStep("menu")} className="w-full text-gray-500 hover:text-gray-300 text-xs py-1 transition">← Back</button>
-          </>
-        )}
-
-        {step === "join" && (
-          <>
-            <p className="text-gray-400 text-xs">Enter the 4-character code your friend shared.</p>
-            <input type="text" value={code} maxLength={4} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="CODE" className={`${input} tracking-[0.3em] text-center font-mono uppercase`} />
-            <input type="text" value={name} maxLength={12} onChange={(e) => setName(e.target.value)} placeholder="Your name" className={input} />
-            <button type="button" onClick={() => code.trim().length === 4 && onJoin(code, name)} disabled={code.trim().length !== 4} className={`${btn} w-full disabled:opacity-50`}>Join lobby</button>
-            <button type="button" onClick={() => setStep("menu")} className="w-full text-gray-500 hover:text-gray-300 text-xs py-1 transition">← Back</button>
-          </>
-        )}
-
-        {online && step === "menu" && (
-          <button type="button" onClick={() => setStep("join")}
-            className="w-full text-center text-[#36D7B7] hover:text-[#2bc4a6] text-sm font-semibold py-1 transition">
-            Have a code? Join a lobby →
+      {step === "menu" && (
+        <>
+          <button type="button" onClick={onPassPlay} className={titleCard}>Pass &amp; Play</button>
+          <button type="button" onClick={() => online && setStep("create")} disabled={!online}
+            className={online ? titleCard : "w-full rounded-xl border border-white/10 bg-white/[0.02] text-gray-500 font-bold py-3 transition"}>
+            Friendly Challenge
           </button>
-        )}
+          {online ? (
+            <button type="button" onClick={() => setStep("join")}
+              className="text-[#36D7B7] hover:text-[#2bc4a6] text-sm font-semibold py-1 transition">
+              Have a code? Join a lobby →
+            </button>
+          ) : (
+            <p className="text-gray-500 text-[11px]">Online play needs Supabase configured.</p>
+          )}
+        </>
+      )}
+
+      {step === "create" && (
+        <div className="space-y-3 text-left mt-1">
+          <p className="text-gray-400 text-xs">Pick a course and create a lobby — share the code so friends can join.</p>
+          <div className="flex gap-1 bg-[#1a1d23] border border-white/10 rounded-lg p-1">
+            <button type="button" onClick={() => setCourse("course")} className={seg(course === "course")}>Glendoveer</button>
+            <button type="button" onClick={() => setCourse("winthrop")} className={seg(course === "winthrop")}>Winthrop</button>
+            <button type="button" onClick={() => setCourse("daily")} className={seg(course === "daily")}>Daily</button>
+          </div>
+          <input type="text" value={name} maxLength={12} onChange={(e) => setName(e.target.value)} placeholder="Your name" className={input} />
+          <button type="button" onClick={() => onCreate(course, name)} className={`${btn} w-full`}>Create lobby</button>
         </div>
+      )}
+
+      {step === "join" && (
+        <div className="space-y-3 text-left mt-1">
+          <p className="text-gray-400 text-xs">Enter the 4-character code your friend shared.</p>
+          <input type="text" value={code} maxLength={4} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="CODE" className={`${input} tracking-[0.3em] text-center font-mono uppercase`} />
+          <input type="text" value={name} maxLength={12} onChange={(e) => setName(e.target.value)} placeholder="Your name" className={input} />
+          <button type="button" onClick={() => code.trim().length === 4 && onJoin(code, name)} disabled={code.trim().length !== 4} className={`${btn} w-full disabled:opacity-50`}>Join lobby</button>
         </div>
-      </div>
+      )}
     </div>
   );
 }
