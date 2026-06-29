@@ -3560,19 +3560,19 @@ export function DiscGolfGame() {
 
               {/* Single Player page */}
               {hub === "solo" && (
-                <div className={`w-full flex flex-col gap-2 ${menuTopMargin}`}>
+                <div className={`w-full flex flex-col gap-3 ${menuTopMargin}`}>
                   <button type="button" onClick={() => setHub("home")} className={`${titleCardSm} !flex-none self-start px-3`}>‹ Back</button>
-                  <button type="button" onClick={() => startGame("daily")} className={titleCard}>
-                    Daily Challenge
+                  <button type="button" onClick={() => startGame("daily")} className={hubCard}>
+                    <span className="font-black text-lg">Daily Challenge</span>
                   </button>
-                  <button type="button" onClick={() => setCoursesOpen(true)} className={titleCard}>
-                    Challenge the Arcade
+                  <button type="button" onClick={() => setCoursesOpen(true)} className={hubCard}>
+                    <span className="font-black text-lg">Challenge the Arcade</span>
                   </button>
-                  <button type="button" onClick={() => { setCareerLastResult(null); setCareerNotes([]); setCareerOpen(true); }} className={titleCard}>
-                    Career{career && !career.retired ? " · Continue" : ""}
+                  <button type="button" onClick={() => { setCareerLastResult(null); setCareerNotes([]); setCareerOpen(true); }} className={hubCard}>
+                    <span className="font-black text-lg">Career{career && !career.retired ? " · Continue" : ""}</span>
                   </button>
-                  <button type="button" onClick={() => setTournamentOpen(true)} className={titleCard}>
-                    Tournaments{tournament && !tournament.finished ? ` · ${tournDef(tournament.id)?.name ?? ""} R${tournament.myTotals.length + 1}` : ""}
+                  <button type="button" onClick={() => setTournamentOpen(true)} className={hubCard}>
+                    <span className="font-black text-lg">Tournaments{tournament && !tournament.finished ? ` · ${tournDef(tournament.id)?.name ?? ""} R${tournament.myTotals.length + 1}` : ""}</span>
                   </button>
                 </div>
               )}
