@@ -93,7 +93,7 @@ function readResume(): ResumeSnap | null {
 // ── Online Friendly Challenge: ephemeral lobbies over Supabase Realtime
 // (broadcast + presence, no database). A short shareable code names the
 // channel; everyone with the code plays the same seed and scores sync live. ──
-type LobbyPlayer = { id: string; name: string; host: boolean; mode?: Mode };
+type LobbyPlayer = { id: string; name: string; host: boolean; mode?: Mode; courseLabel?: string };
 type OnlineScore = { name: string; scores: number[]; total: number; thru: number };
 // 4-char codes, omitting easily-confused characters (0/O, 1/I, etc.).
 function makeLobbyCode(): string {
@@ -294,6 +294,12 @@ const TOUR_COURSE_INFOS: CourseInfo[] = TOUR_COURSES.map((c) => {
   const blurb = `${c.emoji} ${intro}. ${n3} par-3s, ${n4} par-4s and ${n5} par-5s for a par of ${c.par}; ${feats.join(", ")}.`;
   return { mode: "tour" as Mode, name: c.name, holes: c.holes, par: c.par, seed: c.seed, blurb };
 });
+// Courses you can host in a Challenge Friends lobby: the two fixed venues plus
+// every pro-tour course you've been given. The rotating Daily is intentionally
+// excluded — it isn't a fixed, re-pickable venue, and a lobby needs a course the
+// host can choose by name and broadcast to everyone.
+const CHALLENGE_COURSES: CourseInfo[] = [...FIXED_COURSES, ...TOUR_COURSE_INFOS];
+const challengeKey = (c: CourseInfo) => (c.seed != null ? `tour-${c.seed}` : c.mode);
 
 export function DiscGolfGame() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -372,7 +378,7 @@ export function DiscGolfGame() {
   }, []);
 
   // ── Online Friendly Challenge lobby (Supabase Realtime) ──
-  const [lobby, setLobby] = useState<{ code: string; isHost: boolean; mode: Mode } | null>(null);
+  const [lobby, setLobby] = useState<{ code: string; isHost: boolean; mode: Mode; seed?: number; courseKey: string; courseLabel: string } | null>(null);
   const [lobbyPlayers, setLobbyPlayers] = useState<LobbyPlayer[]>([]);
   const [hostLeft, setHostLeft] = useState(false); // joiner's host dropped before the round started
   const sawHostRef = useRef(false); // we've seen the host present (so a drop is real, not a join flash)
@@ -381,7 +387,7 @@ export function DiscGolfGame() {
   const [onlineScores, setOnlineScores] = useState<Record<string, OnlineScore>>({});
   const [onlineView, setOnlineView] = useState<{ hole: number; par: number; myId: string } | null>(null);
   const [finalOnline, setFinalOnline] = useState(false);
-  const onlineRef = useRef<{ channel: RealtimeChannel; code: string; myId: string; myName: string; isHost: boolean; mode: Mode } | null>(null);
+  const onlineRef = useRef<{ channel: RealtimeChannel; code: string; myId: string; myName: string; isHost: boolean; mode: Mode; seed?: number } | null>(null);
   const onlineScoresRef = useRef<Record<string, OnlineScore>>({});
   // Friends' recorded throws (per player id), replayed as ghost discs on the hole.
   const onlineGhostsRef = useRef<Record<string, OnlineGhost>>({});
@@ -1393,7 +1399,7 @@ export function DiscGolfGame() {
 
   // Join a Realtime channel for a lobby code: presence drives the roster,
   // broadcast carries the start signal and live scores.
-  const connectLobby = useCallback((code: string, myName: string, isHost: boolean, m: Mode) => {
+  const connectLobby = useCallback((code: string, myName: string, isHost: boolean, m: Mode, seed?: number, courseLabel?: string) => {
     if (!supa) return false;
     const myId = makeClientId();
     const channel = supa.channel(`dga-lobby-${code}`, {
@@ -1464,7 +1470,7 @@ export function DiscGolfGame() {
       })
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
-          void channel.track({ id: myId, name: myName, host: isHost, mode: m });
+          void channel.track({ id: myId, name: myName, host: isHost, mode: m, courseLabel });
           // Ask whoever's already here whether a round is in progress.
           void channel.send({ type: "broadcast", event: "hello", payload: { id: myId } });
           // Joiner: if no host shows up shortly, the code was wrong or the game is
@@ -1479,27 +1485,43 @@ export function DiscGolfGame() {
           }
         }
       });
-    onlineRef.current = { channel, code, myId, myName, isHost, mode: m };
+    onlineRef.current = { channel, code, myId, myName, isHost, mode: m, seed };
     return true;
   }, [supa, beginOnlineRound]);
 
-  const createLobby = useCallback((m: Mode, name: string) => {
+  const createLobby = useCallback((name: string) => {
     const code = makeLobbyCode();
-    if (!connectLobby(code, name.trim() || "Host", true, m)) return;
-    setLobbyPlayers([{ id: "self", name: name.trim() || "Host", host: true, mode: m }]);
-    setLobby({ code, isHost: true, mode: m });
+    const c = CHALLENGE_COURSES[0]; // default to Glendoveer; host re-picks in the lobby
+    const who = name.trim() || "Host";
+    if (!connectLobby(code, who, true, c.mode, c.seed, c.name)) return;
+    setLobbyPlayers([{ id: "self", name: who, host: true, mode: c.mode, courseLabel: c.name }]);
+    setLobby({ code, isHost: true, mode: c.mode, seed: c.seed, courseKey: challengeKey(c), courseLabel: c.name });
   }, [connectLobby]);
 
   const joinLobby = useCallback((code: string, name: string) => {
     const c = code.trim().toUpperCase();
     if (!connectLobby(c, name.trim() || "Player", false, "winthrop")) return;
-    setLobby({ code: c, isHost: false, mode: "winthrop" });
+    setLobby({ code: c, isHost: false, mode: "winthrop", courseKey: "winthrop", courseLabel: "Winthrop Lake" });
   }, [connectLobby]);
+
+  // Host picks a course from the lobby dropdown: update our ref + presence (so
+  // joiners see the new course name) and the lobby state (so our dropdown reflects
+  // it). The actual seed/mode ride out in the "start" broadcast at round start.
+  const pickCourse = useCallback((c: CourseInfo) => {
+    const o = onlineRef.current;
+    if (!o || !o.isHost) return;
+    o.mode = c.mode;
+    o.seed = c.seed;
+    void o.channel.track({ id: o.myId, name: o.myName, host: true, mode: c.mode, courseLabel: c.name });
+    setLobby((lb) => (lb ? { ...lb, mode: c.mode, seed: c.seed, courseKey: challengeKey(c), courseLabel: c.name } : lb));
+  }, []);
 
   const startOnlineHost = useCallback(() => {
     const o = onlineRef.current;
     if (!o) return;
-    const seed = (Math.random() * 1e9) | 0;
+    // Tour venues carry a fixed seed (that's what makes them that course); the two
+    // fixed venues get a fresh random seed each game for varied pin placements.
+    const seed = o.seed ?? ((Math.random() * 1e9) | 0);
     void o.channel.send({ type: "broadcast", event: "start", payload: { seed, mode: o.mode } });
     beginOnlineRound(seed, o.mode);
   }, [beginOnlineRound]);
@@ -3541,7 +3563,7 @@ export function DiscGolfGame() {
                   <ChallengePanel
                     online={!!supa}
                     onBack={() => setHub("online")}
-                    onCreate={(m, name) => createLobby(m, name)}
+                    onCreate={() => createLobby(profile.name)}
                     onJoin={(code, name) => joinLobby(code, name)}
                   />
                 </div>
@@ -3689,6 +3711,8 @@ export function DiscGolfGame() {
             players={lobbyPlayers}
             hostLeft={hostLeft}
             error={lobbyError}
+            courses={CHALLENGE_COURSES}
+            onPickCourse={pickCourse}
             onStart={startOnlineHost}
             onLeave={leaveLobby}
           />
@@ -4459,15 +4483,12 @@ function TutorialPanel({ onClose }: { onClose: () => void }) {
 function ChallengePanel({ online, onBack, onCreate, onJoin }: {
   online: boolean;
   onBack: () => void;
-  onCreate: (m: Mode, name: string) => void;
+  onCreate: () => void;
   onJoin: (code: string, name: string) => void;
 }) {
-  const [step, setStep] = useState<"menu" | "create" | "join">("menu");
-  const [course, setCourse] = useState<Mode>("winthrop");
+  const [step, setStep] = useState<"menu" | "join">("menu");
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
-  const seg = (active: boolean) =>
-    `flex-1 rounded-md px-2 py-2 text-xs font-bold transition ${active ? "bg-[#4B3DFF] text-white" : "text-gray-400 hover:text-white"}`;
   const input = "w-full bg-[#1a1d23] border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-[#4B3DFF]";
   // Renders inline inside the title column (same hub styling as Single Player /
   // Online), so the logo and profile stay visible above and the screen is blank
@@ -4478,25 +4499,12 @@ function ChallengePanel({ online, onBack, onCreate, onJoin }: {
 
       {step === "menu" && (online ? (
         <>
-          <button type="button" onClick={() => setStep("create")} className={titleCard}>Create Game</button>
+          <button type="button" onClick={onCreate} className={titleCard}>Create Game</button>
           <button type="button" onClick={() => setStep("join")} className={titleCard}>Join Game</button>
         </>
       ) : (
         <p className="text-gray-400 text-xs px-1">Online play isn&apos;t set up for this build, so Challenge Friends is unavailable.</p>
       ))}
-
-      {step === "create" && (
-        <div className="space-y-3 text-left mt-1">
-          <p className="text-gray-400 text-xs">Pick a course and create a game — share the 4-character code so friends can join.</p>
-          <div className="flex gap-1 bg-[#1a1d23] border border-white/10 rounded-lg p-1">
-            <button type="button" onClick={() => setCourse("course")} className={seg(course === "course")}>Glendoveer</button>
-            <button type="button" onClick={() => setCourse("winthrop")} className={seg(course === "winthrop")}>Winthrop</button>
-            <button type="button" onClick={() => setCourse("daily")} className={seg(course === "daily")}>Daily</button>
-          </div>
-          <input type="text" value={name} maxLength={12} onChange={(e) => setName(e.target.value)} placeholder="Your name" className={input} />
-          <button type="button" onClick={() => onCreate(course, name)} className={`${btn} w-full`}>Create Game</button>
-        </div>
-      )}
 
       {step === "join" && (
         <div className="space-y-3 text-left mt-1">
@@ -4514,17 +4522,20 @@ function ChallengePanel({ online, onBack, onCreate, onJoin }: {
 
 // Lobby waiting room: shows the code, live roster (Realtime presence), and a
 // Start button for the host. Friends join with the code from another device.
-function LobbyPanel({ lobby, players, hostLeft, error, onStart, onLeave }: {
-  lobby: { code: string; isHost: boolean; mode: Mode };
+function LobbyPanel({ lobby, players, hostLeft, error, courses, onPickCourse, onStart, onLeave }: {
+  lobby: { code: string; isHost: boolean; mode: Mode; courseKey: string; courseLabel: string };
   players: LobbyPlayer[];
   hostLeft: boolean;
   error: string | null;
+  courses: CourseInfo[];
+  onPickCourse: (c: CourseInfo) => void;
   onStart: () => void;
   onLeave: () => void;
 }) {
   const host = players.find((p) => p.host);
-  const courseMode = host?.mode ?? lobby.mode;
-  const courseLabel = courseMode === "course" ? "Glendoveer East" : courseMode === "winthrop" ? "Winthrop Lake" : "Daily course";
+  // Host steers the course via the dropdown (lobby.courseLabel); joiners just read
+  // whatever the host is currently broadcasting through presence.
+  const courseLabel = lobby.isHost ? lobby.courseLabel : host?.courseLabel ?? lobby.courseLabel;
   return (
     <div className="absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start justify-center rounded-lg">
       <div className="w-full max-w-xs space-y-4 my-auto text-left">
@@ -4535,7 +4546,20 @@ function LobbyPanel({ lobby, players, hostLeft, error, onStart, onLeave }: {
         <div className="rounded-xl bg-[#1a1d23] border border-white/10 p-4 text-center">
           <p className="text-gray-500 text-[10px] uppercase tracking-[0.2em]">Join code</p>
           <p className="text-[#36D7B7] font-black text-4xl tracking-[0.25em] mt-1">{lobby.code}</p>
-          <p className="text-gray-500 text-[11px] mt-2">{courseLabel}</p>
+          {lobby.isHost ? (
+            <select
+              value={lobby.courseKey}
+              onChange={(e) => { const c = courses.find((x) => challengeKey(x) === e.target.value); if (c) onPickCourse(c); }}
+              className="mt-3 w-full bg-[#0f1117] border border-white/10 rounded-lg px-2 py-2 text-white text-xs font-semibold focus:outline-none focus:border-[#4B3DFF]"
+              aria-label="Choose course"
+            >
+              {courses.map((c) => (
+                <option key={challengeKey(c)} value={challengeKey(c)}>{c.name}</option>
+              ))}
+            </select>
+          ) : (
+            <p className="text-gray-500 text-[11px] mt-2">{courseLabel}</p>
+          )}
         </div>
         <div>
           <p className="text-gray-400 text-xs font-semibold mb-1.5">Players ({players.length})</p>
