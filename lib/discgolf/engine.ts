@@ -948,10 +948,11 @@ function validDiscIndex(idx: number, bag: string[]): number {
 // Most the flight path may bend over a single throw (~46°) — keeps fade
 // noticeable without ever curving back toward the thrower.
 const MAX_FADE_TURN = 0.8;
-// How far an anhyzer banks to the turn-over side before it holds (~29°). Kept
-// below MAX_FADE_TURN so it never pins against that cap — that would freeze the
-// disc on the anny line and rob it of the finishing fade as it drops in.
-const ANNY_LEAN = 0.5;
+// How far an anhyzer banks to the turn-over side before it holds (~41°). It
+// turns over hard and early (the big initial right turn), but stops just shy of
+// MAX_FADE_TURN so it never pins against that cap — pinning would freeze the disc
+// on the anny line and rob it of the gentle fade as it drops in.
+const ANNY_LEAN = 0.72;
 
 // Aim straight at the basket from a given lie.
 function aimAt(from: Vec, basket: Vec): number {
@@ -1645,17 +1646,17 @@ function stepFlight(f: Flight, disc: Disc, fadeSign: number, path: FlightPath, h
       // it comes out of the turn and fades the other way as it drops in to land.
       const annyLean = -fadeSign * f.fadeTurn;
       if (f.vh > 0) {
-        // Bank over to the anhyzer side, but only up to ANNY_LEAN — if it pinned
-        // against the fade-turn cap it would freeze on the anny line and never get
-        // the finishing fade (the disc would just hold the bank the whole way).
+        // Bank over hard and early (the big initial right turn), up to ANNY_LEAN —
+        // stopping just shy of the fade-turn cap so it never pins there and freezes
+        // on the anny line (which would hold the bank the whole way down).
         a = annyLean < ANNY_LEAN ? -fadeSign * (disc.fade + disc.turn + 0.004) : 0;
       } else {
-        // Dropping in: hold the anny line near the apex, then fade hard back the
-        // other way as it descends — a late finishing fade, not a held bank. Ramp
-        // by how fast it's dropping (~0 at the apex → 1 landing), so the fade is
-        // barely there up top and bites hardest right before it lands.
+        // Dropping in: come out of the turn and settle into a gentle fade — close
+        // to a straight shot's finish, easing off the anny line rather than hooking
+        // hard back. A mild ramp keeps it soft near the apex, a touch firmer as it
+        // drops in to land.
         const drop = Math.min(1, -f.vh / 2);
-        a = fadeSign * (disc.fade + disc.sFade + 0.004) * (0.12 + drop * drop * 2.6);
+        a = fadeSign * (disc.sFade + 0.0035) * (0.7 + drop * drop * 1.9);
       }
     }
     const cos = Math.cos(a);
