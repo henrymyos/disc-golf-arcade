@@ -28,6 +28,7 @@ import {
   weekSeed, applyRankedRound, normalizeRanked, tierFromRP, rankedFieldMean, RANKED_FIELD, RANKED_BOARD_KEY, encodeToParScore, decodeToParScore, type RankedState, type RankedResult,
 } from "@/lib/discgolf/ranked";
 import { centralWeekFromDay } from "@/lib/discgolf/time";
+import { isLegacyHost, transferUrl, readTransferToken, clearTransferToken, CANONICAL_HOST } from "@/lib/discgolf/transfer";
 import {
   dailyChallenges, weeklyChallenges, roundsThisDay, roundsThisWeek, challengeDone,
   dailyClaimKey, eventClaimKey, type Challenge, type EventRound,
@@ -842,6 +843,24 @@ export function DiscGolfGame() {
     });
     return () => { active = false; sub.subscription.unsubscribe(); };
   }, [supa, loadLocal, pushCloud]);
+
+  // Progress carried over from the old `*.vercel.app` link arrives as a URL token
+  // (see lib/discgolf/transfer). Merge it loss-free into this domain's progress —
+  // same merge the cloud sign-in uses — then strip the token and confirm.
+  const [transferred, setTransferred] = useState(false);
+  const [legacyHost, setLegacyHost] = useState(false); // on the old vercel.app link → offer to move progress
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    setLegacyHost(isLegacyHost());
+    const incoming = readTransferToken();
+    if (!incoming) return;
+    clearTransferToken();
+    applyProgress(mergeProgress(readLocalProgress(), incoming));
+    loadLocal();
+    void pushCloud(); // if also signed in, push the union to the cloud
+    setTransferred(true);
+  }, [loadLocal, pushCloud]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const signIn = useCallback(async () => {
     if (!supa) return;
@@ -3290,6 +3309,30 @@ export function DiscGolfGame() {
                 >
                   ↻ Resume {resumeBanner.mode === "course" ? "Glendoveer" : resumeBanner.mode === "winthrop" ? "Winthrop Lake" : resumeBanner.mode === "tour" ? tourVenue(resumeBanner.seed) : resumeBanner.mode === "ranked" ? "Ranked" : "round"} · hole {resumeBanner.scores.length + 1}
                 </button>
+              )}
+
+              {/* On the old vercel.app link with progress to move: one click ships it
+                  to the canonical domain (localStorage can't cross origins on its own). */}
+              {legacyHost && (coins > 0 || owned.length > 0 || history.length > 0 || career != null || ranked != null) && (
+                <div className="w-full rounded-xl border border-[#f5d24a]/50 bg-[#f5d24a]/10 px-3 py-3 mt-4 text-left">
+                  <p className="text-[#f5d24a] font-bold text-sm">You&apos;re on the old link</p>
+                  <p className="text-gray-300 text-xs mt-0.5">This site moved to {CANONICAL_HOST}. Bring your scores, coins, discs, and rank along.</p>
+                  <button
+                    type="button"
+                    onClick={() => { window.location.href = transferUrl(); }}
+                    className="mt-2 w-full rounded-lg bg-[#f5d24a] hover:bg-[#ecc63a] text-[#1a1d23] font-bold py-2 transition text-sm"
+                  >
+                    Move my progress to {CANONICAL_HOST} →
+                  </button>
+                </div>
+              )}
+
+              {/* Confirmation after a transfer is merged in on the new domain. */}
+              {transferred && (
+                <div className="w-full rounded-xl border border-[#36D7B7]/50 bg-[#36D7B7]/10 px-3 py-3 mt-4 text-center">
+                  <p className="text-[#36D7B7] font-bold text-sm">✓ Progress moved over</p>
+                  <p className="text-gray-300 text-xs mt-0.5">Your scores, coins, discs, and rank came with you.</p>
+                </div>
               )}
 
               {/* Hub: three category cards keep the menu uncluttered */}
