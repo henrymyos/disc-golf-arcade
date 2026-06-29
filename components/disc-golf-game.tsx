@@ -326,8 +326,11 @@ export function DiscGolfGame() {
   // First load shows a "landing" front door (Play offline / Log in). An effect
   // skips it for returning visitors (and when auth isn't even configured). The
   // static initial value keeps SSR/CSR markup identical — the flag is read in an
-  // effect, never during render.
+  // effect, never during render. Until that effect resolves which door to open,
+  // `entryResolved` stays false and we paint a neutral splash (logo only) instead
+  // of the landing buttons, so returning players never flash past the login page.
   const [screen, setScreen] = useState<Screen>("landing");
+  const [entryResolved, setEntryResolved] = useState(false);
   const [muted, setMuted] = useState(false);
   const [discIndex, setDiscIndex] = useState(DEFAULT_DISC_INDEX); // Buzzz (core mid) by default
   const [throwStyle, setThrowStyle] = useState<"BH" | "FH">("BH");
@@ -825,7 +828,11 @@ export function DiscGolfGame() {
   useEffect(() => {
     let skip = !supa;
     try { if (localStorage.getItem(ENTRY_KEY)) skip = true; } catch { /* ignore */ }
+    // Returning visitors (or builds without auth) open straight to the title;
+    // only genuine newcomers see the landing choice. Marking the entry resolved
+    // swaps the splash out for whichever door we picked.
     if (skip) setScreen((s) => (s === "landing" ? "title" : s));
+    setEntryResolved(true);
   }, [supa]);
   /* eslint-enable react-hooks/set-state-in-effect */
   const [user, setUser] = useState<{ email: string } | null>(null);
@@ -3333,7 +3340,33 @@ export function DiscGolfGame() {
           style={{ imageRendering: "pixelated", touchAction: "none" }}
         />
 
-        {screen === "landing" && (
+        {/* Boot splash: shown until the entry effect decides landing vs. title, so
+            returning players never see the login front door flash by. Matches the
+            landing/title gradient + logo, so it reads as the app loading. */}
+        {!entryResolved && (
+          <div className="absolute inset-0 rounded-lg bg-gradient-to-b from-[#1c2233] via-[#141926] to-[#0f1117]">
+            <div
+              className="min-h-full flex items-center justify-center px-5"
+              style={{ paddingTop: "max(env(safe-area-inset-top), 0.75rem)", paddingBottom: "max(env(safe-area-inset-bottom), 0.75rem)" }}
+            >
+              <div className="flex flex-col items-center text-center animate-pulse">
+                <svg width="56" height="56" viewBox="0 0 32 32" aria-hidden className="drop-shadow">
+                  <g stroke="#2a7d70" strokeWidth="2" strokeLinecap="round">
+                    <line x1="2" y1="12.5" x2="8" y2="12.5" /><line x1="1" y1="18" x2="7" y2="18" />
+                  </g>
+                  <ellipse cx="18.5" cy="16.5" rx="11" ry="5" fill="#1f9e8c" />
+                  <ellipse cx="18.5" cy="14.8" rx="11" ry="5" fill="#36D7B7" />
+                  <ellipse cx="18.5" cy="14" rx="6.5" ry="2.4" fill="#5fe6d2" />
+                </svg>
+                <h1 className="text-white font-black text-[28px] leading-tight tracking-tight mt-3">
+                  Disc Golf <span className="text-[#36D7B7]">Arcade</span>
+                </h1>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {entryResolved && screen === "landing" && (
           <div className="absolute inset-0 overflow-y-auto rounded-lg bg-gradient-to-b from-[#1c2233] via-[#141926] to-[#0f1117]">
             <div
               className="min-h-full flex items-center justify-center px-5"
