@@ -4,6 +4,7 @@ import {
   skillMods,
   momentumAfter,
   careerRating,
+  careerYear,
   seasonSchedule,
   genField,
   placeInField,
@@ -855,5 +856,44 @@ describe("retire + seasonComplete", () => {
     expect(seasonComplete(c)).toBe(false);
     for (const ev of seasonSchedule(c)) c = recordResult(c, ev, 40, false).career;
     expect(seasonComplete(c)).toBe(true);
+  });
+});
+
+describe("pro tour — real current pros", () => {
+  // normalizeCareer is what swaps the fictional amateur rivals for the real tour.
+  const toPro = (seed: number, age = 22) => normalizeCareer({ ...newCareer("Me", seed), stage: "pro", age });
+
+  it("your first pro season is 2026, then +1 each season", () => {
+    expect(careerYear(toPro(1, 22))).toBe(2026);
+    expect(careerYear(toPro(1, 25))).toBe(2029);
+    expect(careerYear({ ...newCareer("Kid", 1) })).toBe(2026); // amateurs read as the present day
+  });
+
+  it("your pro rivals are real current pros — Gannon Buhr & co.", () => {
+    const c = toPro(7);
+    expect(c.rivals.map((r) => r.name)).toContain("Gannon Buhr");
+    expect(c.rivals.every((r) => r.id.startsWith("pro"))).toBe(true);
+  });
+
+  it("names the field with real tour pros beyond your six rivals", () => {
+    const c = toPro(7);
+    const ev = seasonSchedule(c).find((e) => e.importance === "major")!;
+    const names = careerFieldHoles(c, ev).map((p) => p.name);
+    expect(names).toContain("Gannon Buhr");    // a marquee rival
+    expect(names).toContain("Ezra Aderhold");  // a named, non-rival field pro
+    expect(careerFieldHoles(c, ev).filter((p) => p.isRival).length).toBe(c.rivals.length);
+  });
+
+  it("simulates each year — young stars rise, veterans fade", () => {
+    const rating = (name: string, age: number) =>
+      careerRating(toPro(3, age).rivals.find((r) => r.name === name)!.skills);
+    expect(rating("Gannon Buhr", 30)).toBeGreaterThan(rating("Gannon Buhr", 22)); // age 20 → 28: climbs
+    expect(rating("Paul McBeth", 30)).toBeLessThan(rating("Paul McBeth", 22));    // age 36 → 44: declines
+  });
+
+  it("amateurs still face fictional peers, not pros", () => {
+    const hs = normalizeCareer({ ...newCareer("Frosh", 9) }); // starts in high school
+    expect(hs.rivals.some((r) => r.id.startsWith("pro"))).toBe(false);
+    expect(hs.rivals.map((r) => r.name)).not.toContain("Gannon Buhr");
   });
 });

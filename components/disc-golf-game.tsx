@@ -47,7 +47,7 @@ import {
   availableSponsors, signSponsor, unsignSponsor, sponsorBrandLock, trainingPointCost, buyTrainingPoint, spendSkillPoint, trainBonusFor, fmtCash, SPONSOR_CAP,
   careerRating, careerCoins as coinsForFinish, careerDiscShop, buyCareerDisc, toggleCareerBag, CAREER_BAG_MAX,
   buyCareerCosmetic, equipCareerLook, DEFAULT_CAREER_LOOK, type CareerLook,
-  careerFieldForRound, careerCardRacers, careerLiveStandings, careerHoleLenScale,
+  careerFieldForRound, careerCardRacers, careerLiveStandings, careerHoleLenScale, careerYear,
   rankedFieldForRound, rankedCardRacers,
   type Career, type CareerEvent, type EventResult, type CareerSkills, type SkillMods, type FieldPlayer,
 } from "@/lib/discgolf/career";
@@ -5009,7 +5009,7 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
       <div className="shrink-0 flex items-center justify-between">
         <div className="min-w-0">
           <h2 className="text-white font-black text-lg leading-tight truncate">{career.name}</h2>
-          <p className="text-gray-400 text-[11px]">{STAGE_LABEL[career.stage]} · Age {career.age} · Season {career.season + 1}</p>
+          <p className="text-gray-400 text-[11px]">{STAGE_LABEL[career.stage]}{career.stage === "pro" ? ` · ${careerYear(career)} season` : ""} · Age {career.age} · Season {career.season + 1}</p>
           <p className="text-[11px] mt-0.5">
             {career.stage === "pro" && career.worldRank
               ? <span className="text-[#f5d24a] font-bold">World #{career.worldRank}</span>

@@ -368,6 +368,10 @@ export function normalizeCareer(c: Career): Career {
     for (let s = 0; s < c.season; s++) rivals = rivals.map((r) => growRival(r, 11 + s));
   }
   rivals = rivals.map((r) => ({ ...r, skills: withStamina(r.skills), potential: withStamina(r.potential), pdgaRating: r.pdgaRating ?? pdgaFromInternal(rivalRating({ ...r, skills: withStamina(r.skills) })), roundRatings: r.roundRatings ?? [] }));
+  // The pro tour is the real touring field. Migrate any pre-existing pro save (its
+  // fictional rivals become real pros) and refresh the lineup for the season on
+  // every load — carrying the head-to-head record once it's already the pro tour.
+  if (c.stage === "pro") rivals = proRivals(careerYear(c), isProRivals(rivals) ? rivals : undefined);
   const discs = c.discs?.length ? c.discs : [...CAREER_CORE_DISCS];
   return {
     ...c, skills, potential, skillFrac, cash: c.cash ?? 0,
@@ -592,18 +596,118 @@ function simHoleScores(rating: number, par: number, holes: number, rng: () => nu
     Math.max(1, Math.round(parPerHole + perHoleToPar + (diff ? diff[i] * Math.max(0.45, grit) : 0) + (rng() * 2 - 1) * 0.65)),
   );
 }
+// ── The pro tour is real. Your first pro season is 2026, and the field is the
+// actual current touring pros at their present-day form. Each season after is a
+// light simulation of how they'll progress: young guns climb toward a peak around
+// 27, prime players hold, and veterans gently decline — so the order reshuffles
+// year over year while the names stay real. ──
+export const CAREER_FIRST_PRO_YEAR = 2026;
+const PRO_TURN_AGE = 22; // college → pro lands at age 22 (see advanceSeason)
+
+type ProEntry = { name: string; rating: number; age: number }; // rating = 2026 internal skill; age = age in 2026
+// Top of the men's tour, ordered roughly by 2026 form. The first N_PRO_MARQUEE
+// become your recurring rivals (the discs you race + a head-to-head record); the
+// rest fill out the field with real names down the leaderboard.
+const PRO_ROSTER: ProEntry[] = [
+  { name: "Gannon Buhr", rating: 90, age: 20 },
+  { name: "Niklas Anttila", rating: 88, age: 21 },
+  { name: "Isaac Robinson", rating: 88, age: 25 },
+  { name: "Calvin Heimburg", rating: 88, age: 28 },
+  { name: "Eagle McMahon", rating: 87, age: 28 },
+  { name: "Paul McBeth", rating: 87, age: 36 },
+  { name: "Ezra Aderhold", rating: 87, age: 26 },
+  { name: "Anthony Barela", rating: 86, age: 28 },
+  { name: "Gavin Babcock", rating: 86, age: 22 },
+  { name: "Kyle Klein", rating: 86, age: 27 },
+  { name: "Cole Redalen", rating: 85, age: 22 },
+  { name: "Ricky Wysocki", rating: 85, age: 33 },
+  { name: "Chris Dickerson", rating: 85, age: 34 },
+  { name: "Corey Ellis", rating: 84, age: 28 },
+  { name: "Aaron Gossage", rating: 84, age: 31 },
+  { name: "Adam Hammes", rating: 84, age: 29 },
+  { name: "Simon Lizotte", rating: 84, age: 33 },
+  { name: "Linus Carlsson", rating: 83, age: 27 },
+  { name: "Andrew Presnell", rating: 83, age: 30 },
+  { name: "Emerson Keith", rating: 83, age: 28 },
+  { name: "Kevin Jones", rating: 82, age: 33 },
+  { name: "Alden Harris", rating: 82, age: 24 },
+  { name: "Garrett Gurthie", rating: 81, age: 38 },
+  { name: "Mason Ford", rating: 81, age: 23 },
+];
+const N_PRO_MARQUEE = 6; // the first N_PRO_MARQUEE pros become your recurring rivals
+const PRO_FIELD_COLOR = "#8a93a6"; // named (non-rival) tour pros in the field
+
+// The calendar year of a career: 2026 the season you turn pro, then +1 each season
+// (ages map 1:1 to seasons, and the pro tour begins at PRO_TURN_AGE).
+export function careerYear(c: Career): number {
+  return CAREER_FIRST_PRO_YEAR + Math.max(0, c.age - PRO_TURN_AGE);
+}
+
+// A pro's age-trajectory: a rating offset relative to a peak around 27, used to
+// simulate how each name rises and falls over the seasons.
+function proAgeCurve(age: number): number {
+  if (age <= 27) return -(27 - age) * 0.7;     // still climbing toward a peak
+  if (age <= 31) return 0;                       // prime plateau
+  if (age <= 36) return -(age - 31) * 0.55;      // gentle decline
+  return -(36 - 31) * 0.55 - (age - 36) * 1.1;   // steeper late-career slide
+}
+// A pro's simulated rating in a given year: their 2026 base shifted by how far
+// their age-trajectory has moved, plus a hair of deterministic year-to-year
+// variance so the order reshuffles a little each season.
+function proRatingInYear(p: ProEntry, year: number): number {
+  const ageThen = p.age + (year - CAREER_FIRST_PRO_YEAR);
+  const drift = proAgeCurve(ageThen) - proAgeCurve(p.age);
+  const noise = (hashId(`${p.name}#${year}`) / 0x100000000) * 3.2 - 1.6;
+  return clamp(p.rating + drift + noise, 55, 96);
+}
+// Your marquee rivals on the pro tour — real pros, rated for `year`, carrying the
+// head-to-head record forward from the prior pro season (matched by id).
+function proRivals(year: number, prior?: Rival[]): Rival[] {
+  return PRO_ROSTER.slice(0, N_PRO_MARQUEE).map((p, i) => {
+    const id = `pro${i}`;
+    const r = clamp(Math.round(proRatingInYear(p, year)), 40, 99);
+    const skills: CareerSkills = { power: r, control: r, putt: r, stamina: 92 };
+    const prev = prior?.find((x) => x.id === id);
+    return {
+      id, name: p.name, color: RIVAL_PALETTE[i % RIVAL_PALETTE.length],
+      skills, potential: { power: 99, control: 99, putt: 99, stamina: 99 },
+      titles: prev?.titles ?? 0, beat: prev?.beat ?? 0, lost: prev?.lost ?? 0,
+      pdgaRating: pdgaFromInternal(r), roundRatings: prev?.roundRatings ?? [],
+    };
+  });
+}
+// The rest of the tour (beyond your rivals), named + rated for `year` and sorted
+// strongest-first, used to name the field down the leaderboard.
+function proFieldFill(year: number): { name: string; rating: number }[] {
+  return PRO_ROSTER.slice(N_PRO_MARQUEE)
+    .map((p) => ({ name: p.name, rating: proRatingInYear(p, year) }))
+    .sort((a, b) => b.rating - a.rating);
+}
+// Are these rivals the real pro tour (vs. the fictional peers you grew up with)?
+function isProRivals(rivals: Rival[]): boolean {
+  return rivals.length > 0 && rivals[0].id.startsWith("pro");
+}
+
 // `diff` (optional) carries per-hole conditions difficulty for a PLAYED round, so
 // the field (and the ghosts you watch) react to wind/slope/hazards like you do.
 function buildField(c: Career, ev: CareerEvent, diff?: number[]): FieldPlayer[] {
+  // On the pro tour the field plays a touch better at the marquee events — the
+  // same bump the anonymous field already gets in fieldOpponentRating.
+  const proLift = c.stage === "pro" ? (ev.importance === "championship" ? 5 : ev.importance === "major" ? 3 : 0) : 0;
   const field: FieldPlayer[] = c.rivals.map((r) => {
-    const holes = simHoleScores(rivalRating(r), ev.par, ev.holes, mulberry32((c.seed ^ hashId(ev.id) ^ hashId(r.id)) >>> 0), diff);
+    const holes = simHoleScores(rivalRating(r) + proLift, ev.par, ev.holes, mulberry32((c.seed ^ hashId(ev.id) ^ hashId(r.id)) >>> 0), diff);
     return { name: r.name, isRival: true, color: r.color, holes, total: holes.reduce((a, b) => a + b, 0) };
   });
   const anonCount = Math.max(0, ev.fieldSize - c.rivals.length);
   const rng = mulberry32((c.seed ^ hashId(ev.id) ^ 0x9e3779b9) >>> 0);
+  // Pro events name the top of the field with real tour pros (beyond your
+  // rivals); the deep field stays anonymous.
+  const named = c.stage === "pro" ? proFieldFill(careerYear(c)) : null;
   for (let i = 0; i < anonCount; i++) {
-    const holes = simHoleScores(fieldOpponentRating(ev, rng), ev.par, ev.holes, rng, diff);
-    field.push({ name: anonName((c.seed ^ hashId(ev.id)) >>> 0, i), isRival: false, color: "#7a808a", holes, total: holes.reduce((a, b) => a + b, 0) });
+    const pro = named && i < named.length ? named[i] : null;
+    const rating = pro ? pro.rating + proLift : fieldOpponentRating(ev, rng);
+    const holes = simHoleScores(rating, ev.par, ev.holes, rng, diff);
+    field.push({ name: pro ? pro.name : anonName((c.seed ^ hashId(ev.id)) >>> 0, i), isRival: false, color: pro ? PRO_FIELD_COLOR : "#7a808a", holes, total: holes.reduce((a, b) => a + b, 0) });
   }
   return field;
 }
@@ -881,7 +985,10 @@ export function advanceSeason(c: Career, alloc: Partial<CareerSkills>): { career
   }
 
   // Rivals age + improve alongside you; sponsors pay out; coaches add training.
-  const rivals = c.rivals.map((r) => growRival(r, age));
+  // On the pro tour your rivals ARE the real tour — simulated for the new season
+  // (and carrying your head-to-head record once you're already pro).
+  let rivals = c.rivals.map((r) => growRival(r, age));
+  if (stage === "pro") rivals = proRivals(CAREER_FIRST_PRO_YEAR + Math.max(0, age - PRO_TURN_AGE), c.stage === "pro" ? c.rivals : undefined);
   const stipend = c.sponsors.reduce((s, sp) => s + sp.stipend, 0);
   const coachPts = c.sponsors.filter((sp) => sp.coach).length;
 
