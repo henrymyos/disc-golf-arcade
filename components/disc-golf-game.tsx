@@ -27,6 +27,7 @@ import {
 import {
   weekSeed, applyRankedRound, normalizeRanked, tierFromRP, rankedFieldMean, RANKED_FIELD, RANKED_BOARD_KEY, encodeToParScore, decodeToParScore, type RankedState, type RankedResult,
 } from "@/lib/discgolf/ranked";
+import { centralWeekFromDay } from "@/lib/discgolf/time";
 import {
   dailyChallenges, weeklyChallenges, roundsThisDay, roundsThisWeek, challengeDone,
   dailyClaimKey, eventClaimKey, type Challenge, type EventRound,
@@ -313,6 +314,8 @@ export function DiscGolfGame() {
   const [lobbyPlayers, setLobbyPlayers] = useState<LobbyPlayer[]>([]);
   const [hostLeft, setHostLeft] = useState(false); // joiner's host dropped before the round started
   const sawHostRef = useRef(false); // we've seen the host present (so a drop is real, not a join flash)
+  const [lobbyError, setLobbyError] = useState<string | null>(null); // joiner: bad/dead code → no game found
+  const lobbyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [onlineScores, setOnlineScores] = useState<Record<string, OnlineScore>>({});
   const [onlineView, setOnlineView] = useState<{ hole: number; par: number; myId: string } | null>(null);
   const [finalOnline, setFinalOnline] = useState(false);
@@ -631,7 +634,7 @@ export function DiscGolfGame() {
   // How many challenge rewards (daily + weekly) are ready to claim (badged).
   const claimableEvents = (() => {
     const hist = history as EventRound[];
-    const wk = weekSeed(today * 86_400_000); // `today` is a day number → land in this week
+    const wk = centralWeekFromDay(today); // the Central week that contains today
     const dayRows = roundsThisDay(hist, today);
     const weekRows = roundsThisWeek(hist, wk);
     const dailyN = dailyChallenges(today).filter((c) => challengeDone(c, dayRows) && !owned.includes(dailyClaimKey(today, c.id))).length;
@@ -1266,6 +1269,8 @@ export function DiscGolfGame() {
     // everyone, including peers already playing/finished this seed.
     if (onlineStartedRef.current?.seed === seed) return;
     onlineStartedRef.current = { seed, mode: m };
+    if (lobbyTimerRef.current) { clearTimeout(lobbyTimerRef.current); lobbyTimerRef.current = null; }
+    setLobbyError(null);
     modeRef.current = m;
     if (!audioRef.current) {
       audioRef.current = new AudioEngine();
@@ -1318,7 +1323,11 @@ export function DiscGolfGame() {
         // we've actually seen the host, so a join-time sync flash doesn't trip it.
         if (!isHost && !onlineStartedRef.current) {
           const hasHost = players.some((p) => p.host);
-          if (hasHost) sawHostRef.current = true;
+          if (hasHost) {
+            sawHostRef.current = true;
+            if (lobbyTimerRef.current) { clearTimeout(lobbyTimerRef.current); lobbyTimerRef.current = null; }
+            setLobbyError(null);
+          }
           setHostLeft(sawHostRef.current && !hasHost);
         }
       })
@@ -1350,6 +1359,16 @@ export function DiscGolfGame() {
           void channel.track({ id: myId, name: myName, host: isHost, mode: m });
           // Ask whoever's already here whether a round is in progress.
           void channel.send({ type: "broadcast", event: "hello", payload: { id: myId } });
+          // Joiner: if no host shows up shortly, the code was wrong or the game is
+          // gone — surface that instead of leaving them on "Connecting…" forever.
+          if (!isHost) {
+            if (lobbyTimerRef.current) clearTimeout(lobbyTimerRef.current);
+            lobbyTimerRef.current = setTimeout(() => {
+              if (!onlineStartedRef.current && !sawHostRef.current) {
+                setLobbyError("No game found with that code. Double-check it and try again.");
+              }
+            }, 9000);
+          }
         }
       });
     onlineRef.current = { channel, code, myId, myName, isHost, mode: m };
@@ -1384,6 +1403,8 @@ export function DiscGolfGame() {
     onlineScoresRef.current = {};
     onlineStartedRef.current = null;
     sawHostRef.current = false;
+    if (lobbyTimerRef.current) { clearTimeout(lobbyTimerRef.current); lobbyTimerRef.current = null; }
+    setLobbyError(null);
     setHostLeft(false);
     setLobby(null);
     setLobbyPlayers([]);
@@ -3338,7 +3359,6 @@ export function DiscGolfGame() {
                   <ChallengePanel
                     online={!!supa}
                     onBack={() => setHub("online")}
-                    onPassPlay={() => setPartyOpen(true)}
                     onCreate={(m, name) => createLobby(m, name)}
                     onJoin={(code, name) => joinLobby(code, name)}
                   />
@@ -3465,6 +3485,7 @@ export function DiscGolfGame() {
             lobby={lobby}
             players={lobbyPlayers}
             hostLeft={hostLeft}
+            error={lobbyError}
             onStart={startOnlineHost}
             onLeave={leaveLobby}
           />
@@ -4241,10 +4262,9 @@ function TutorialPanel({ onClose }: { onClose: () => void }) {
 
 // Challenge Friends entry point: choose hot-seat Pass & Play or an online
 // Friendly Challenge, then Create a lobby or Join one with a code.
-function ChallengePanel({ online, onBack, onPassPlay, onCreate, onJoin }: {
+function ChallengePanel({ online, onBack, onCreate, onJoin }: {
   online: boolean;
   onBack: () => void;
-  onPassPlay: () => void;
   onCreate: (m: Mode, name: string) => void;
   onJoin: (code: string, name: string) => void;
 }) {
@@ -4262,43 +4282,36 @@ function ChallengePanel({ online, onBack, onPassPlay, onCreate, onJoin }: {
     <div className="w-full flex flex-col gap-2">
       <button type="button" onClick={step === "menu" ? onBack : () => setStep("menu")} className={`${titleCardSm} !flex-none self-start px-3`}>‹ Back</button>
 
-      {step === "menu" && (
+      {step === "menu" && (online ? (
         <>
-          <button type="button" onClick={onPassPlay} className={titleCard}>Pass &amp; Play</button>
-          <button type="button" onClick={() => online && setStep("create")} disabled={!online}
-            className={online ? titleCard : "w-full rounded-xl border border-white/10 bg-white/[0.02] text-gray-500 font-bold py-3 transition"}>
-            Friendly Challenge
-          </button>
-          {online ? (
-            <button type="button" onClick={() => setStep("join")}
-              className="text-[#36D7B7] hover:text-[#2bc4a6] text-sm font-semibold py-1 transition">
-              Have a code? Join a lobby →
-            </button>
-          ) : (
-            <p className="text-gray-500 text-[11px]">Online play needs Supabase configured.</p>
-          )}
+          <button type="button" onClick={() => setStep("create")} className={titleCard}>Create Game</button>
+          <button type="button" onClick={() => setStep("join")} className={titleCard}>Join Game</button>
         </>
-      )}
+      ) : (
+        <p className="text-gray-400 text-xs px-1">Online play isn&apos;t set up for this build, so Challenge Friends is unavailable.</p>
+      ))}
 
       {step === "create" && (
         <div className="space-y-3 text-left mt-1">
-          <p className="text-gray-400 text-xs">Pick a course and create a lobby — share the code so friends can join.</p>
+          <p className="text-gray-400 text-xs">Pick a course and create a game — share the 4-character code so friends can join.</p>
           <div className="flex gap-1 bg-[#1a1d23] border border-white/10 rounded-lg p-1">
             <button type="button" onClick={() => setCourse("course")} className={seg(course === "course")}>Glendoveer</button>
             <button type="button" onClick={() => setCourse("winthrop")} className={seg(course === "winthrop")}>Winthrop</button>
             <button type="button" onClick={() => setCourse("daily")} className={seg(course === "daily")}>Daily</button>
           </div>
           <input type="text" value={name} maxLength={12} onChange={(e) => setName(e.target.value)} placeholder="Your name" className={input} />
-          <button type="button" onClick={() => onCreate(course, name)} className={`${btn} w-full`}>Create lobby</button>
+          <button type="button" onClick={() => onCreate(course, name)} className={`${btn} w-full`}>Create Game</button>
         </div>
       )}
 
       {step === "join" && (
         <div className="space-y-3 text-left mt-1">
-          <p className="text-gray-400 text-xs">Enter the 4-character code your friend shared.</p>
-          <input type="text" value={code} maxLength={4} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="CODE" className={`${input} tracking-[0.3em] text-center font-mono uppercase`} />
+          <p className="text-gray-400 text-xs">Enter the 4-character game code your friend shared.</p>
+          <input type="text" inputMode="text" autoCapitalize="characters" autoComplete="off" value={code} maxLength={4}
+            onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4))}
+            placeholder="CODE" className={`${input} tracking-[0.3em] text-center font-mono uppercase`} />
           <input type="text" value={name} maxLength={12} onChange={(e) => setName(e.target.value)} placeholder="Your name" className={input} />
-          <button type="button" onClick={() => code.trim().length === 4 && onJoin(code, name)} disabled={code.trim().length !== 4} className={`${btn} w-full disabled:opacity-50`}>Join lobby</button>
+          <button type="button" onClick={() => code.trim().length === 4 && onJoin(code, name)} disabled={code.trim().length !== 4} className={`${btn} w-full disabled:opacity-50`}>Join Game</button>
         </div>
       )}
     </div>
@@ -4307,10 +4320,11 @@ function ChallengePanel({ online, onBack, onPassPlay, onCreate, onJoin }: {
 
 // Lobby waiting room: shows the code, live roster (Realtime presence), and a
 // Start button for the host. Friends join with the code from another device.
-function LobbyPanel({ lobby, players, hostLeft, onStart, onLeave }: {
+function LobbyPanel({ lobby, players, hostLeft, error, onStart, onLeave }: {
   lobby: { code: string; isHost: boolean; mode: Mode };
   players: LobbyPlayer[];
   hostLeft: boolean;
+  error: string | null;
   onStart: () => void;
   onLeave: () => void;
 }) {
@@ -4341,7 +4355,12 @@ function LobbyPanel({ lobby, players, hostLeft, onStart, onLeave }: {
             {players.length === 0 && <p className="text-gray-500 text-xs">Connecting…</p>}
           </div>
         </div>
-        {lobby.isHost ? (
+        {error ? (
+          <div className="space-y-2 text-center py-1">
+            <p className="text-[#e2843b] text-sm font-semibold">{error}</p>
+            <button type="button" onClick={onLeave} className={`${btn} w-full`}>Back</button>
+          </div>
+        ) : lobby.isHost ? (
           <>
             <button type="button" onClick={onStart} className={`${btn} w-full`}>Start round</button>
             {players.length < 2 && <p className="text-gray-500 text-[11px] text-center">Waiting for friends to join — you can start anytime.</p>}
