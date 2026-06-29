@@ -5,6 +5,7 @@ import {
   momentumAfter,
   careerRating,
   careerYear,
+  PDGA_MAX,
   seasonSchedule,
   genField,
   placeInField,
@@ -559,7 +560,7 @@ describe("PDGA rating", () => {
     let hot = c;
     for (let i = 0; i < 8; i++) hot = recordResult(hot, { ...ev, id: `h${i}` }, ev.par - 12, false).career;
     expect(hot.pdgaRating).toBeGreaterThan(start);
-    expect(hot.pdgaRating).toBeLessThanOrEqual(1085);
+    expect(hot.pdgaRating).toBeLessThanOrEqual(PDGA_MAX);
     expect(hot.roundRatings.length).toBeGreaterThan(0);
 
     let cold = c;
@@ -573,6 +574,20 @@ describe("PDGA rating", () => {
     const after = recordResult(c, ev, ev.par - 14, false).career;
     expect(after.pdgaRating - c.pdgaRating).toBeLessThan(120); // smoothed, not a jump to ~1050
     expect(after.pdgaRating).toBeGreaterThan(c.pdgaRating);
+  });
+  it("hard-caps every rating at 1070 — yours and every opponent's", () => {
+    expect(PDGA_MAX).toBe(1070);
+    // Hammer absurd, course-record rounds for many events: you can't break 1070.
+    let c = newCareer("Phenom", 202);
+    for (let s = 0; s < 6; s++) {
+      for (const ev of seasonSchedule(c)) c = recordResult(c, ev, Math.round(ev.par * 0.5) - 30, false).career;
+      c = advanceSeason(c, {}).career;
+    }
+    expect(c.pdgaRating).toBeLessThanOrEqual(1070);
+    // Every rival's rating is capped too — nobody on tour climbs past 1070.
+    expect(c.rivals.every((r) => r.pdgaRating <= 1070)).toBe(true);
+    expect(c.rivals.every((r) => r.roundRatings.every((rr) => rr <= 1070))).toBe(true);
+    expect(c.roundRatings.every((rr) => rr <= 1070)).toBe(true);
   });
 });
 

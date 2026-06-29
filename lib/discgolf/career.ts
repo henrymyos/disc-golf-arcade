@@ -286,31 +286,34 @@ function generateRivals(seed: number): Rival[] {
   });
 }
 
-// ── PDGA rating (real-world scale ≈ 700–1050). An internal 0–100 skill maps to
+// ── PDGA rating (real-world scale ≈ 700–1070). An internal 0–100 skill maps to
 // a player rating; each rated round produces a round rating from your score, and
 // the player rating is a recency-weighted average of recent rounds — so it
 // climbs slowly as you post better tournament rounds, like the real thing. ──
 const RATED_WINDOW = 16; // rounds kept in the rating window
+// A HARD ceiling on every rating — yours and every opponent's alike. Nobody, no
+// matter how hot they run, climbs past this number.
+export const PDGA_MAX = 1070;
 // Internal skill (0–100) → PDGA rating, via anchor points tuned so a typical
 // career hits the real milestones: ~800 starting high school (internal ~28),
-// ~900 starting college (~64), ~1000 turning pro (~81), elite peaks ~1050.
-const PDGA_ANCHORS: [number, number][] = [[0, 700], [28, 800], [48, 900], [70, 1000], [88, 1050], [105, 1075]];
+// ~900 starting college (~64), ~1000 turning pro (~81), capped at the elite ceiling.
+const PDGA_ANCHORS: [number, number][] = [[0, 700], [28, 800], [48, 900], [70, 1000], [88, 1050], [105, PDGA_MAX]];
 function pdgaFromInternal(internal: number): number {
   const x = Math.max(0, internal);
   for (let i = 1; i < PDGA_ANCHORS.length; i++) {
     const [x1, y1] = PDGA_ANCHORS[i];
     if (x <= x1) {
       const [x0, y0] = PDGA_ANCHORS[i - 1];
-      return Math.round(y0 + (y1 - y0) * (x - x0) / (x1 - x0));
+      return Math.min(PDGA_MAX, Math.round(y0 + (y1 - y0) * (x - x0) / (x1 - x0)));
     }
   }
-  return PDGA_ANCHORS[PDGA_ANCHORS.length - 1][1];
+  return Math.min(PDGA_MAX, PDGA_ANCHORS[PDGA_ANCHORS.length - 1][1]);
 }
 // A single round's rating from how far under/over par you went (course "SSA" is
 // implicit — every event is calibrated the same way).
 function roundRating(toPar: number, holes: number): number {
   const effective = 50 - toPar / (0.28 * (holes / 18));
-  return Math.max(650, Math.min(1085, pdgaFromInternal(effective)));
+  return Math.max(650, Math.min(PDGA_MAX, pdgaFromInternal(effective)));
 }
 // Recency-weighted average of recent rounds (most-recent quarter double-weighted,
 // PDGA-style); blended toward the skill estimate while you have few rounds.
@@ -322,7 +325,7 @@ function computePdga(rounds: number[], skillEstimate: number): number {
   rounds.forEach((r, i) => { const weight = i >= n - recent ? 2 : 1; sum += r * weight; w += weight; });
   let avg = sum / w;
   if (n < 6) avg = (avg * n + skillEstimate * (6 - n)) / 6; // smooth the early career
-  return Math.round(avg);
+  return Math.min(PDGA_MAX, Math.round(avg));
 }
 
 export function newCareer(name: string, seed: number): Career {
