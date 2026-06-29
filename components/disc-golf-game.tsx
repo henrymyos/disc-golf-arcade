@@ -106,6 +106,68 @@ function makeClientId(): string {
   return `${(Math.random() * 1e9) | 0}-${(Math.random() * 1e9) | 0}`;
 }
 
+// ── Online ghosts: replay friends' real throws ──────────────────────────────
+// Each player broadcasts the recorded flight path of every shot on the hole they
+// just played; peers store them and animate a small "ghost" disc tracing that
+// exact curve — live when you're on the same hole, or replayed from the start
+// when you arrive at a hole they've already played.
+type GhostShots = { shots: Vec[][]; arrivals: number[] }; // arrivals: when each shot reached us (perf clock)
+type OnlineGhost = { name: string; color: string; holes: Record<number, GhostShots> };
+const GHOST_COLORS = ["#e23b7b", "#5fb0e8", "#b85cd6", "#e2a13b", "#36D7B7", "#f5d24a"];
+function ghostColorFor(id: string): string {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (Math.imul(h, 31) + id.charCodeAt(i)) >>> 0;
+  return GHOST_COLORS[h % GHOST_COLORS.length];
+}
+// Trim a recorded flight polyline to at most `max` points (keeping the ends) so
+// it's cheap to broadcast while preserving the shot's shape. Coords are rounded.
+function thinPath(path: Vec[], max = 24): Vec[] {
+  if (!Array.isArray(path) || path.length === 0) return [];
+  if (path.length <= max) return path.map((p) => ({ x: Math.round(p.x), y: Math.round(p.y) }));
+  const out: Vec[] = [];
+  const step = (path.length - 1) / (max - 1);
+  for (let i = 0; i < max; i++) { const p = path[Math.round(i * step)]; out.push({ x: Math.round(p.x), y: Math.round(p.y) }); }
+  return out;
+}
+function sendThrows(o: { channel: RealtimeChannel; myId: string; myName: string }, holeIndex: number, shotPaths: Vec[][]) {
+  void o.channel.send({ type: "broadcast", event: "throw", payload: { id: o.myId, name: o.myName, hole: holeIndex, paths: shotPaths.map((p) => thinPath(p)) } });
+}
+const GHOST_PAUSE = 1300;   // ms a ghost stands over the disc before each throw
+const GHOST_PACE = 0.22;    // px/ms flight speed (matches the AI-rival ghosts)
+// Where a friend's ghost is right now, given their shots, when each shot reached
+// us, and when we started this hole. Each shot starts after the previous one ends
+// OR when it arrived (whichever is later) — so a hole they already finished plays
+// straight through from your arrival, while a shot thrown live shows up as it
+// lands. Returns null before their first throw and after their last (then hidden).
+function onlineGhostPos(gs: GhostShots, holeEnteredAt: number, now: number): { x: number; y: number; lift: number } | null {
+  const { shots, arrivals } = gs;
+  if (!shots.length) return null;
+  let prevEnd = holeEnteredAt;
+  for (let i = 0; i < shots.length; i++) {
+    const path = shots[i];
+    if (!path || path.length === 0) continue;
+    const start = Math.max(prevEnd, arrivals[i] ?? holeEnteredAt);
+    let len = 0;
+    for (let k = 1; k < path.length; k++) len += Math.hypot(path[k].x - path[k - 1].x, path[k].y - path[k - 1].y);
+    const fly = Math.max(240, Math.min(1700, len / GHOST_PACE));
+    const flyStart = start + GHOST_PAUSE;
+    const end = flyStart + fly;
+    if (now < flyStart) return { x: path[0].x, y: path[0].y, lift: 0 }; // lining up at the lie
+    if (now < end) {
+      const t = (now - flyStart) / fly;
+      const fi = t * (path.length - 1);
+      const i0 = Math.floor(fi), i1 = Math.min(path.length - 1, i0 + 1), fr = fi - i0;
+      return {
+        x: path[i0].x + (path[i1].x - path[i0].x) * fr,
+        y: path[i0].y + (path[i1].y - path[i0].y) * fr,
+        lift: Math.sin(t * Math.PI) * Math.min(16, 4 + len * 0.045),
+      };
+    }
+    prevEnd = end;
+  }
+  return null; // every known shot played out → stop drawing
+}
+
 // "intro" plays a short basket → tee fly-over before you take the tee shot.
 type Phase = "intro" | "aim" | "fly" | "holed";
 type Screen = "landing" | "title" | "playing" | "holeComplete" | "gameComplete";
@@ -322,6 +384,10 @@ export function DiscGolfGame() {
   const [finalOnline, setFinalOnline] = useState(false);
   const onlineRef = useRef<{ channel: RealtimeChannel; code: string; myId: string; myName: string; isHost: boolean; mode: Mode } | null>(null);
   const onlineScoresRef = useRef<Record<string, OnlineScore>>({});
+  // Friends' recorded throws (per player id), replayed as ghost discs on the hole.
+  const onlineGhostsRef = useRef<Record<string, OnlineGhost>>({});
+  const onlineGhostHoleRef = useRef<number>(-1); // hole the ghost replay clock is keyed to
+  const onlineGhostStartRef = useRef<number>(0); // perf time you arrived on that hole
   // The round the host has launched, kept so the host can answer a late joiner's
   // "hello" by re-sending the start signal. Also the idempotency key: a peer
   // ignores a "start" for a seed it has already begun (so a resend aimed at the
@@ -1305,6 +1371,8 @@ export function DiscGolfGame() {
     discIndexRef.current = discIndex;
     setDiscIndex(discIndex);
     onlineScoresRef.current = { [o.myId]: { name: o.myName, scores: [], total: 0, thru: 0 } };
+    onlineGhostsRef.current = {}; // fresh round → clear any prior ghosts
+    onlineGhostHoleRef.current = -1;
     setOnlineScores(onlineScoresRef.current);
     stateRef.current = {
       holeIndex: 0, scores: [], discIndex, roundPaths: [],
@@ -1373,6 +1441,28 @@ export function DiscGolfGame() {
         onlineScoresRef.current = { ...onlineScoresRef.current, [p.id]: { name, scores, total, thru: scores.length } };
         setOnlineScores(onlineScoresRef.current);
       })
+      .on("broadcast", { event: "throw" }, ({ payload }) => {
+        // A peer's recorded flight paths for a hole. Store them per player/hole so
+        // we can replay their ghost. Sanitize: cap shots/points and coerce to nums.
+        const p = payload as { id?: unknown; name?: unknown; hole?: unknown; paths?: unknown };
+        if (typeof p.id !== "string" || typeof p.hole !== "number" || !Array.isArray(p.paths)) return;
+        if (p.id === onlineRef.current?.myId) return; // never ghost yourself
+        const paths: Vec[][] = p.paths.slice(0, 8).map((pa) =>
+          (Array.isArray(pa) ? pa : []).slice(0, 30)
+            .map((pt) => ({ x: Number((pt as Vec)?.x), y: Number((pt as Vec)?.y) }))
+            .filter((pt) => Number.isFinite(pt.x) && Number.isFinite(pt.y)),
+        ).filter((pa) => pa.length > 0);
+        if (!paths.length) return;
+        const name = typeof p.name === "string" ? p.name.slice(0, 24) : "Player";
+        const store = onlineGhostsRef.current;
+        const gd = store[p.id] ?? { name, color: ghostColorFor(p.id), holes: {} };
+        gd.name = name;
+        const cur = gd.holes[p.hole] ?? { shots: [], arrivals: [] };
+        for (let i = cur.shots.length; i < paths.length; i++) cur.arrivals[i] = performance.now();
+        cur.shots = paths;
+        gd.holes[p.hole] = cur;
+        store[p.id] = gd;
+      })
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
           void channel.track({ id: myId, name: myName, host: isHost, mode: m });
@@ -1420,6 +1510,8 @@ export function DiscGolfGame() {
     if (o) void supa?.removeChannel(o.channel);
     onlineRef.current = null;
     onlineScoresRef.current = {};
+    onlineGhostsRef.current = {};
+    onlineGhostHoleRef.current = -1;
     onlineStartedRef.current = null;
     sawHostRef.current = false;
     if (lobbyTimerRef.current) { clearTimeout(lobbyTimerRef.current); lobbyTimerRef.current = null; }
@@ -2086,6 +2178,7 @@ export function DiscGolfGame() {
           g.trailBuf.push({ x: hole.basket.x, y: hole.basket.y });
           g.shotPaths.push(g.trailBuf);
           g.trailBuf = [];
+          if (g.online && onlineRef.current) sendThrows(onlineRef.current, g.holeIndex, g.shotPaths);
           audioRef.current?.sfx("basket");
           vibrate([15, 30, 15]);
           rattleRef.current = performance.now();
@@ -2124,6 +2217,7 @@ export function DiscGolfGame() {
           g.rest = { x: lie.x, y: lie.y };
           g.shotPaths.push(g.trailBuf); // the curve out to where it crossed OB
           g.trailBuf = [];
+          if (g.online && onlineRef.current) sendThrows(onlineRef.current, g.holeIndex, g.shotPaths);
           g.angle = aimAt(g.rest, hole.basket);
           g.phase = "aim";
           equipForLie(); // re-club for the new lie
@@ -2150,6 +2244,7 @@ export function DiscGolfGame() {
           }
           g.shotPaths.push(g.trailBuf);
           g.trailBuf = [];
+          if (g.online && onlineRef.current) sendThrows(onlineRef.current, g.holeIndex, g.shotPaths);
           g.angle = aimAt(g.rest, hole.basket); // auto-aim at the basket
           g.phase = "aim";
           equipForLie(); // re-club for the new lie
@@ -2501,6 +2596,51 @@ export function DiscGolfGame() {
           ctx.fillText(gh.name, sx + 0.4, dy - 5.6);
           ctx.fillStyle = gh.color;
           ctx.fillText(gh.name, sx, dy - 6);
+        }
+        ctx.globalAlpha = 1;
+        ctx.textAlign = "left";
+      }
+
+      // Friends' ghosts: replay each peer's recorded throws on this hole. The
+      // replay clock resets whenever you arrive on a new hole, so a hole a friend
+      // has already played re-throws from the start when you get there; throws
+      // made live (while you're both here) animate as they land.
+      if (g.online) {
+        if (onlineGhostHoleRef.current !== g.holeIndex) {
+          onlineGhostHoleRef.current = g.holeIndex;
+          onlineGhostStartRef.current = performance.now();
+        }
+        const now = performance.now();
+        const myId = onlineRef.current?.myId;
+        ctx.textAlign = "center";
+        for (const id in onlineGhostsRef.current) {
+          if (id === myId) continue;
+          const gd = onlineGhostsRef.current[id];
+          const gs = gd.holes[g.holeIndex];
+          if (!gs) continue;
+          const pos = onlineGhostPos(gs, onlineGhostStartRef.current, now);
+          if (!pos) continue;
+          const sx = pos.x;
+          const sy = pos.y - cam;
+          const dy = sy - pos.lift;
+          ctx.globalAlpha = 0.45; // shadow
+          ctx.fillStyle = "rgba(0,0,0,0.35)";
+          ctx.beginPath();
+          ctx.ellipse(sx, sy, 2.2, 1.3, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.globalAlpha = 0.9; // disc
+          ctx.fillStyle = gd.color;
+          ctx.beginPath();
+          ctx.arc(sx, dy, 2.3, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = "rgba(255,255,255,0.85)";
+          ctx.fillRect(Math.round(sx) - 0.5, Math.round(dy) - 0.5, 1, 1);
+          ctx.globalAlpha = 0.85; // name tag
+          ctx.font = "5px ui-monospace, monospace";
+          ctx.fillStyle = "rgba(0,0,0,0.65)";
+          ctx.fillText(gd.name, sx + 0.4, dy - 5.6);
+          ctx.fillStyle = gd.color;
+          ctx.fillText(gd.name, sx, dy - 6);
         }
         ctx.globalAlpha = 1;
         ctx.textAlign = "left";
