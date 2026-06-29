@@ -3571,12 +3571,20 @@ export function DiscGolfGame() {
 
               {/* Practice page — skills + grind any hole, logo/profile stay above */}
               {hub === "practice" && (
-                <div className={`w-full flex flex-col gap-2 ${menuTopMargin}`}>
+                <div className={`w-full flex flex-col gap-3 ${menuTopMargin}`}>
                   <button type="button" onClick={() => setHub("home")} className={`${titleCardSm} !flex-none self-start px-3`}>‹ Back</button>
-                  <button type="button" onClick={() => setTutorialOpen(true)} className={titleCard}>How to Play</button>
-                  <button type="button" onClick={() => startMini("putt")} className={titleCard}>Putting</button>
-                  <button type="button" onClick={() => startMini("target")} className={titleCard}>Accuracy</button>
-                  <button type="button" onClick={() => setHub("holePractice")} className={titleCard}>Hole Practice</button>
+                  <button type="button" onClick={() => setTutorialOpen(true)} className={hubCard}>
+                    <span className="font-black text-lg">How to Play</span>
+                  </button>
+                  <button type="button" onClick={() => startMini("putt")} className={hubCard}>
+                    <span className="font-black text-lg">Putting</span>
+                  </button>
+                  <button type="button" onClick={() => startMini("target")} className={hubCard}>
+                    <span className="font-black text-lg">Accuracy</span>
+                  </button>
+                  <button type="button" onClick={() => setHub("holePractice")} className={hubCard}>
+                    <span className="font-black text-lg">Hole Practice</span>
+                  </button>
                 </div>
               )}
 
