@@ -2893,7 +2893,7 @@ export function DiscGolfGame() {
           const trace = (ang: number) => {
             const f: Flight = { x: g.disc.x, y: g.disc.y, vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed, h: 0, vh: power * aimDisc.arc, fadeTurn: 0 };
             const out: { x: number; y: number }[] = [{ x: f.x, y: f.y }];
-            for (let i = 0; i < 360; i++) { const r = stepFlight(f, aimDisc, sign, path, hole, releaseRef.current, { catchR: eCatchR, windMul: g.skill.windMul, ghostTrees: g.ghostTrees }); out.push({ x: f.x, y: f.y }); if (r.status !== "fly") break; }
+            for (let i = 0; i < 360; i++) { const r = stepFlight(f, aimDisc, sign, path, hole, releaseRef.current, { catchR: eCatchR, windMul: g.skill.windMul, ghostTrees: g.ghostTrees, preview: true }); out.push({ x: f.x, y: f.y }); if (r.status !== "fly") break; }
             return out;
           };
           // Trace the centre flight first so the cone can match its drawn length.

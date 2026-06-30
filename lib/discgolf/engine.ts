@@ -1631,7 +1631,7 @@ function treesAtLie(hole: Hole, x: number, y: number): Tree[] {
 // `catchR` widens/narrows the basket catch radius (putting skill). `ghostTrees`
 // lists trees to ignore for collision (you're throwing through one you're stuck
 // behind). All default to neutral, so non-career / open-lie play is unchanged.
-function stepFlight(f: Flight, disc: Disc, fadeSign: number, path: FlightPath, hole: Hole, release: Release = "flat", opts: { catchR?: number; windMul?: number; ghostTrees?: Tree[] } = {}): { status: StepStatus; treeHit: boolean } {
+function stepFlight(f: Flight, disc: Disc, fadeSign: number, path: FlightPath, hole: Hole, release: Release = "flat", opts: { catchR?: number; windMul?: number; ghostTrees?: Tree[]; preview?: boolean } = {}): { status: StepStatus; treeHit: boolean } {
   const catchR = opts.catchR ?? CATCH_R;
   const windMul = opts.windMul ?? 1;
   f.x += f.vx;
@@ -1743,9 +1743,14 @@ function stepFlight(f: Flight, disc: Disc, fadeSign: number, path: FlightPath, h
       if (Math.hypot(f.x - hole.basket.x, f.y - hole.basket.y) < effCatchR) return { status: "hole", treeHit };
       // Off every fairway ribbon, or in water, is out of bounds — except on
       // hazard-rough holes, where off-ribbon is a playable +1 (handled at rest).
-      if (!hole.roughIsHazard && offRibbons(hole, f.x, f.y)) return { status: "ob", treeHit };
-      for (const wt of hole.water) if (inRect(wt, f.x, f.y)) return { status: "ob", treeHit };
-      for (const ob of hole.obZones ?? []) if (inRect(ob, f.x, f.y)) return { status: "ob", treeHit };
+      // The aim preview (opts.preview) skips these terminations and rolls the
+      // disc to a natural stop, so the drawn line's length never leaks whether
+      // the throw ends in water/OB — the disc just looks like it landed clean.
+      if (!opts.preview) {
+        if (!hole.roughIsHazard && offRibbons(hole, f.x, f.y)) return { status: "ob", treeHit };
+        for (const wt of hole.water) if (inRect(wt, f.x, f.y)) return { status: "ob", treeHit };
+        for (const ob of hole.obZones ?? []) if (inRect(ob, f.x, f.y)) return { status: "ob", treeHit };
+      }
     }
     // Hazards (sand) don't stop the disc — they only cost a stroke if it comes
     // to rest in one, handled where "stop" is processed.
