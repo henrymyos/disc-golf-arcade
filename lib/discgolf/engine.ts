@@ -1456,28 +1456,16 @@ function dailyHolePool(lenScale = 1): Hole[] {
 // (full length) and the early-Career "academy" events (shortened via lenScale).
 function generateDailyMix(rng: () => number, lenScale = 1): Hole[] {
   const pool = dailyHolePool(lenScale);
-  // Disc golf is par-3-driven, so every daily GUARANTEES a handful of par 3s
-  // (3 or 4) instead of leaving the count to chance — the rest are the longer
-  // holes. Sample each group separately, then shuffle the playing order so the
-  // par 3s aren't all bunched at the front.
-  const par3 = pool.map((_, i) => i).filter((i) => pool[i].par === 3);
-  const rest = pool.map((_, i) => i).filter((i) => pool[i].par !== 3);
-  // partial Fisher–Yates → k distinct indices from `arr` (mutates the local copy).
-  const sample = (arr: number[], k: number) => {
-    const m = Math.min(k, arr.length);
-    for (let i = 0; i < m; i++) {
-      const j = i + Math.floor(rng() * (arr.length - i));
-      [arr[i], arr[j]] = [arr[j], arr[i]];
-    }
-    return arr.slice(0, m);
-  };
-  const want3 = Math.min(par3.length, 3 + Math.floor(rng() * 2)); // 3 or 4 par 3s
-  const chosen = [...sample(par3, want3), ...sample(rest, 9 - want3)];
-  for (let i = chosen.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1));
-    [chosen[i], chosen[j]] = [chosen[j], chosen[i]];
+  // Sample 9 distinct holes uniformly from the pool. The pool is now par-3-heavy
+  // (see tourPars), so a daily naturally carries more par 3s on average without
+  // forcing a fixed count — the mix still varies day to day.
+  const idx = pool.map((_, i) => i);
+  const n = Math.min(9, idx.length);
+  for (let i = 0; i < n; i++) {
+    const j = i + Math.floor(rng() * (idx.length - i)); // partial Fisher–Yates → 9 distinct
+    [idx[i], idx[j]] = [idx[j], idx[i]];
   }
-  return chosen.map((i) => {
+  return idx.slice(0, n).map((i) => {
     const { wind, windMag } = seededWind(rng);
     return { ...pool[i], wind, windMag };
   });

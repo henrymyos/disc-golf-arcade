@@ -176,12 +176,17 @@ describe("buildRound determinism", () => {
   it("daily generates a 9-hole course", () => {
     expect(buildRound(999, "daily")).toHaveLength(9);
   });
-  it("every daily guarantees 3–4 par 3s", () => {
-    for (let seed = 1; seed <= 80; seed++) {
+  it("the par-3-heavy pool gives dailies more par 3s on average, but doesn't force a count", () => {
+    let p3 = 0;
+    const counts = new Set<number>();
+    const runs = 200;
+    for (let seed = 1; seed <= runs; seed++) {
       const c3 = buildRound(seed * 31 + 5, "daily").filter((h) => h.par === 3).length;
-      expect(c3, `daily seed ${seed}`).toBeGreaterThanOrEqual(3);
-      expect(c3, `daily seed ${seed}`).toBeLessThanOrEqual(4);
+      p3 += c3;
+      counts.add(c3);
     }
+    expect(p3 / runs).toBeGreaterThan(4); // par-3-heavy pool lifts the average (was ~2.9)
+    expect(counts.size).toBeGreaterThan(2); // still varies day to day — not a fixed quota
   });
   it("tour generates an 18-hole pro course, deterministic and pin-fair", () => {
     const a = buildRound(4242, "tour");
