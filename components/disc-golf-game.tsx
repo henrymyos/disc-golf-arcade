@@ -25,7 +25,7 @@ import {
   type DiscSkin, type BasketSkin, type AimStyle, type GroundTheme, type Celebration,
 } from "@/lib/discgolf/cosmetics";
 import {
-  weekSeed, applyRankedRound, applyPlacementRound, normalizeRanked, tierFromRP, rankedFieldMean, RANKED_FIELD, PLACEMENT_ROUNDS, PLACEMENT_MIN_RATING, PLACEMENT_MAX_RATING, RANKED_BOARD_KEY, encodeToParScore, decodeToParScore, type RankedState, type RankedResult, type PlacementResult,
+  weekSeed, applyRankedRound, applyPlacementRound, normalizeRanked, tierFromRP, rankedFieldMean, RANKED_FIELD, PLACEMENT_ROUNDS, PLACEMENT_MIN_RATING, PLACEMENT_MAX_RATING, RANKED_BOARD_KEY, encodeToParScore, TIERS, type RankedState, type RankedResult, type PlacementResult,
 } from "@/lib/discgolf/ranked";
 import { centralWeekFromDay } from "@/lib/discgolf/time";
 import { isLegacyHost, transferUrl, readTransferToken, clearTransferToken, CANONICAL_HOST } from "@/lib/discgolf/transfer";
@@ -3951,7 +3951,6 @@ export function DiscGolfGame() {
         {rankedOpen && (
           <RankedPanel
             ranked={ranked}
-            playerName={profile.name}
             onPlay={startRankedRound}
             onClose={() => setRankedOpen(false)}
           />
@@ -6125,33 +6124,18 @@ function ChallengesPanel({ history, owned, coins, today, onClaim, onClose }: {
 
 // Ranked ladder. Every round is a FRESH course against a tier-scaled AI field;
 // finishing position drives RP, podium streaks pay a bonus, and lifetime RP climbs
-// a tier. Play as many rounds as you like. The global board is all-time best-to-par
-// (comparable across the fresh courses).
-function RankedPanel({ ranked, playerName, onPlay, onClose }: {
+// a tier. Play as many rounds as you like.
+function RankedPanel({ ranked, onPlay, onClose }: {
   ranked: RankedState | null;
-  playerName: string;
   onPlay: () => void;
   onClose: () => void;
 }) {
-  const [rows, setRows] = useState<ArcadeScore[] | null>(null);
-  const over = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
+  const [showRanks, setShowRanks] = useState(false); // toggles the full rank ladder
   const rp = ranked?.rp ?? 0;
   const t = tierFromRP(rp);
   const pct = t.need ? Math.round((t.into / t.need) * 100) : 100;
-  const me = (playerName ?? "").trim().slice(0, 16) || "Anon";
   const placed = ranked?.placed ?? false;
   const placeDone = ranked?.placeEstimates?.length ?? 0; // placement rounds banked so far
-  const stat = (label: string, value: string | number) => (
-    <div className="flex-1 bg-[#1a1d23] border border-white/5 rounded-lg px-2 py-1.5 text-center">
-      <p className="text-white font-bold text-sm leading-none">{value}</p>
-      <p className="text-gray-500 text-[9px] uppercase tracking-wide mt-1">{label}</p>
-    </div>
-  );
-  useEffect(() => {
-    let active = true;
-    getArcadeLeaderboard(RANKED_BOARD_KEY, 25).then((r) => { if (active) setRows(r); }).catch(() => { if (active) setRows([]); });
-    return () => { active = false; };
-  }, []);
   return (
     <div className="absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start justify-center rounded-lg">
       <div className="w-full max-w-xs space-y-3 my-auto text-left">
@@ -6176,11 +6160,21 @@ function RankedPanel({ ranked, playerName, onPlay, onClose }: {
         <div className="flex items-center gap-3 bg-[#1a1d23] border border-white/10 rounded-xl px-3 py-3">
           <span className="text-4xl leading-none shrink-0">{placed ? t.tier.emoji : placeDone > 0 ? t.tier.emoji : "❔"}</span>
           <div className="min-w-0 flex-1">
-            <div className="flex items-baseline justify-between">
+            <div className="flex items-baseline justify-between gap-2">
               <span className="font-bold text-base" style={{ color: placed || placeDone > 0 ? t.tier.color : "#9aa0aa" }}>
                 {placed ? t.tier.name : placeDone > 0 ? `${t.tier.name} (projected)` : "Unranked"}
               </span>
-              <span className="text-gray-400 font-mono text-[11px]">{placed ? `${rp} RP` : ""}</span>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <span className="text-gray-400 font-mono text-[11px]">{placed ? `${rp} RP` : ""}</span>
+                <button
+                  type="button"
+                  onClick={() => setShowRanks((v) => !v)}
+                  aria-label="Show all ranks"
+                  className={`w-4 h-4 rounded-full border text-[10px] leading-none flex items-center justify-center transition ${showRanks ? "border-white/60 text-white" : "border-white/30 text-gray-300 hover:border-white/60 hover:text-white"}`}
+                >
+                  ?
+                </button>
+              </div>
             </div>
             {placed ? (
               <>
@@ -6195,13 +6189,23 @@ function RankedPanel({ ranked, playerName, onPlay, onClose }: {
           </div>
         </div>
 
-        {/* Stats */}
-        <div className="flex gap-1.5">
-          {stat("Rounds", ranked?.rounds ?? 0)}
-          {stat("Wins", ranked?.wins ?? 0)}
-          {stat("Podiums", ranked?.podiums ?? 0)}
-          {stat("Best To-Par", ranked?.bestToPar != null ? over(ranked.bestToPar) : "—")}
-        </div>
+        {/* All ranks, low → high (toggled by the ? button) */}
+        {showRanks && (
+          <div className="bg-[#1a1d23] border border-white/10 rounded-xl overflow-hidden">
+            <p className="text-gray-400 text-[11px] font-semibold px-3 py-2 border-b border-white/5">Ranks · low to high</p>
+            {TIERS.map((tier, i) => {
+              const current = placed && tier.key === t.tier.key;
+              return (
+                <div key={tier.key} className={`flex items-center gap-2.5 px-3 py-2 ${i ? "border-t border-white/5" : ""} ${current ? "bg-white/5" : ""}`}>
+                  <span className="text-xl leading-none shrink-0">{tier.emoji}</span>
+                  <span className="font-bold text-sm flex-1" style={{ color: tier.color }}>{tier.name}{current ? " · you" : ""}</span>
+                  <span className="text-gray-500 font-mono text-[10px]">{tier.min === 0 ? "0 RP" : `${tier.min.toLocaleString()}+ RP`}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         {(ranked?.streak ?? 0) >= 2 && (
           <p className="text-[#f5d24a] text-[11px] font-bold text-center">🔥 On a {ranked!.streak}-podium streak — keep it going for bonus RP!</p>
         )}
@@ -6213,34 +6217,6 @@ function RankedPanel({ ranked, playerName, onPlay, onClose }: {
         <button type="button" onClick={onPlay} className={`${btn} w-full`}>
           {placed ? "Play a ranked round" : `Play placement round ${placeDone + 1} of ${PLACEMENT_ROUNDS}`}
         </button>
-
-        {/* All-time best-to-par board */}
-        <div>
-          <p className="text-gray-400 text-xs font-semibold mb-1.5">🌍 Global · best to-par (all-time)</p>
-          <div className="bg-[#1a1d23] border border-white/5 rounded-2xl overflow-hidden">
-            {rows === null ? (
-              <p className="text-gray-400 text-sm text-center py-6">Loading…</p>
-            ) : rows.length === 0 ? (
-              <p className="text-gray-400 text-sm text-center py-6">No scores yet — be the first!</p>
-            ) : (
-              <ol>
-                {rows.map((row, i) => {
-                  const mine = row.name === me;
-                  return (
-                    <li
-                      key={`${row.name}-${row.created_at}`}
-                      className={`flex items-center gap-3 px-4 py-2 text-sm ${i !== 0 ? "border-t border-white/5" : ""} ${mine ? "bg-[#36D7B7]/15" : ""}`}
-                    >
-                      <span className={`font-mono w-6 text-right ${i === 0 ? "text-[#f5d24a]" : "text-gray-400"}`}>{i + 1}</span>
-                      <span className={`flex-1 truncate ${mine ? "text-[#36D7B7] font-bold" : "text-white"}`}>{i === 0 ? "👑 " : ""}{row.name}{mine ? " (you)" : ""}</span>
-                      <span className="text-white font-mono font-bold">{over(decodeToParScore(row.strokes))}</span>
-                    </li>
-                  );
-                })}
-              </ol>
-            )}
-          </div>
-        </div>
 
         <button type="button" onClick={onClose} className={`${btn} w-full`}>Done</button>
       </div>
