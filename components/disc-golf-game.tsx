@@ -6281,17 +6281,7 @@ function RankedPanel({ ranked, onPlay, onClose }: {
               <span className="font-bold text-base" style={{ color: placed || placeDone > 0 ? t.tier.color : "#9aa0aa" }}>
                 {placed ? t.tier.name : placeDone > 0 ? `${t.tier.name} (projected)` : "Unranked"}
               </span>
-              <div className="flex items-center gap-1.5 shrink-0">
-                <span className="text-gray-400 font-mono text-[11px]">{placed ? `${rp} RP` : ""}</span>
-                <button
-                  type="button"
-                  onClick={() => setShowRanks((v) => !v)}
-                  aria-label="Show all ranks"
-                  className={`w-4 h-4 rounded-full border text-[10px] leading-none flex items-center justify-center transition ${showRanks ? "border-white/60 text-white" : "border-white/30 text-gray-300 hover:border-white/60 hover:text-white"}`}
-                >
-                  ?
-                </button>
-              </div>
+              <span className="text-gray-400 font-mono text-[11px] shrink-0">{placed ? `${rp} RP` : ""}</span>
             </div>
             {placed ? (
               <>
@@ -6306,22 +6296,32 @@ function RankedPanel({ ranked, onPlay, onClose }: {
           </div>
         </div>
 
-        {/* All ranks, low → high (toggled by the ? button) */}
-        {showRanks && (
-          <div className="bg-[#1a1d23] border border-white/10 rounded-xl overflow-hidden">
-            <p className="text-gray-400 text-[11px] font-semibold px-3 py-2 border-b border-white/5">Ranks · low to high</p>
-            {TIERS.map((tier, i) => {
-              const current = placed && tier.key === t.tier.key;
-              return (
-                <div key={tier.key} className={`flex items-center gap-2.5 px-3 py-2 ${i ? "border-t border-white/5" : ""} ${current ? "bg-white/5" : ""}`}>
-                  <span className="text-xl leading-none shrink-0">{tier.emoji}</span>
-                  <span className="font-bold text-sm flex-1" style={{ color: tier.color }}>{tier.name}{current ? " · you" : ""}</span>
-                  <span className="text-gray-500 font-mono text-[10px]">{tier.min === 0 ? "0 RP" : `${tier.min.toLocaleString()}+ RP`}</span>
-                </div>
-              );
-            })}
-          </div>
-        )}
+        {/* All divisions — a clear open/close dropdown (arrow flips when open) */}
+        <div>
+          <button
+            type="button"
+            onClick={() => setShowRanks((v) => !v)}
+            aria-expanded={showRanks}
+            className="w-full flex items-center gap-2 bg-[#1a1d23] border border-white/10 hover:border-white/25 rounded-xl px-3 py-2.5 text-left transition-colors"
+          >
+            <span className="flex-1 text-white text-sm font-semibold">All divisions <span className="text-gray-500 font-normal">· low to high</span></span>
+            <span className={`text-gray-400 text-xs leading-none transition-transform ${showRanks ? "rotate-180" : ""}`}>▾</span>
+          </button>
+          {showRanks && (
+            <div className="mt-1.5 bg-[#1a1d23] border border-white/10 rounded-xl overflow-hidden">
+              {TIERS.map((tier, i) => {
+                const current = placed && tier.key === t.tier.key;
+                return (
+                  <div key={tier.key} className={`flex items-center gap-2.5 px-3 py-2 ${i ? "border-t border-white/5" : ""} ${current ? "bg-white/5" : ""}`}>
+                    <span className="text-xl leading-none shrink-0">{tier.emoji}</span>
+                    <span className="font-bold text-sm flex-1" style={{ color: tier.color }}>{tier.name}{current ? " · you" : ""}</span>
+                    <span className="text-gray-500 font-mono text-[10px]">{tier.min === 0 ? "0 RP" : `${tier.min.toLocaleString()}+ RP`}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
         {(ranked?.streak ?? 0) >= 2 && (
           <p className="text-[#f5d24a] text-[11px] font-bold text-center">🔥 On a {ranked!.streak}-podium streak — keep it going for bonus RP!</p>
