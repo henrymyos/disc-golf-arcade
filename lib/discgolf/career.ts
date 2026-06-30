@@ -212,23 +212,27 @@ const RIVAL_PALETTE = ["#e23b7b", "#5fb0e8", "#b85cd6", "#e2a13b", "#36D7B7", "#
 // MANUFACTURER deal (Innova / Discraft): the marquee late-game contract that pays a
 // fortune but locks your bag to that brand's discs only.
 const SPONSOR_CAP = SPONSOR_SLOTS.length;
+// Real companies (ids stay stable so existing saves keep their deals). Disc-slot
+// support deals are non-exclusive disc brands/retailers; only the two giants
+// (Innova / Discraft) sign you to an EXCLUSIVE manufacturer deal that locks your bag.
 const SPONSOR_POOL: Sponsor[] = [
-  // ── Disc slot — local shops → manufacturer deals ──
-  { id: "localdisc", name: "Hometown Disc Shop", slot: "disc", tier: 1, signing: 200, stipend: 150, coach: false, reqRating: 30, reqStage: "highschool" },
-  { id: "apexdiscs", name: "Apex Discs", slot: "disc", tier: 2, signing: 4000, stipend: 3000, coach: true, reqRating: 58, reqStage: "college" },
-  { id: "summitdiscs", name: "Summit Discs", slot: "disc", tier: 3, signing: 30000, stipend: 22000, coach: true, reqRating: 72, reqStage: "pro" },
+  // ── Disc slot — disc brands/retailers → exclusive manufacturer deals ──
+  { id: "localdisc", name: "Infinite Discs", slot: "disc", tier: 1, signing: 200, stipend: 150, coach: false, reqRating: 30, reqStage: "highschool" },
+  { id: "apexdiscs", name: "Dynamic Discs", slot: "disc", tier: 2, signing: 4000, stipend: 3000, coach: true, reqRating: 58, reqStage: "college" },
+  { id: "summitdiscs", name: "Discmania", slot: "disc", tier: 3, signing: 30000, stipend: 22000, coach: true, reqRating: 72, reqStage: "pro" },
   // Manufacturer deals — only a genuine top-tour pro lands one. Huge money + their
-  // full disc lineup, but you carry ONLY their plastic from then on.
+  // full disc lineup, but you carry ONLY their plastic from then on. (These are the
+  // only two brands whose discs exist in the catalog, so the bag lock works.)
   { id: "innova", name: "Innova", slot: "disc", tier: 5, signing: 220000, stipend: 140000, coach: true, reqRating: 82, reqStage: "pro", brand: "Innova" },
   { id: "discraft", name: "Discraft", slot: "disc", tier: 5, signing: 220000, stipend: 140000, coach: true, reqRating: 82, reqStage: "pro", brand: "Discraft" },
-  // ── Gear slot — apparel, bags, athletic ──
-  { id: "campusgear", name: "Campus Gear Co.", slot: "gear", tier: 1, signing: 500, stipend: 400, coach: true, reqRating: 38, reqStage: "highschool" },
-  { id: "voltathletic", name: "Volt Athletic", slot: "gear", tier: 3, signing: 15000, stipend: 12000, coach: false, reqRating: 66, reqStage: "pro" },
-  { id: "global", name: "Global Sportswear", slot: "gear", tier: 4, signing: 90000, stipend: 60000, coach: true, reqRating: 80, reqStage: "pro" },
-  // ── General slot — food, energy, lifestyle ──
-  { id: "fairwayfoods", name: "Fairway Foods", slot: "general", tier: 2, signing: 1500, stipend: 1200, coach: false, reqRating: 50, reqStage: "college" },
-  { id: "surgeenergy", name: "Surge Energy", slot: "general", tier: 3, signing: 18000, stipend: 14000, coach: false, reqRating: 68, reqStage: "pro" },
-  { id: "skylinebank", name: "Skyline Bank", slot: "general", tier: 4, signing: 80000, stipend: 55000, coach: true, reqRating: 80, reqStage: "pro" },
+  // ── Gear slot — disc golf equipment: belts, bags, carts ──
+  { id: "campusgear", name: "Grip6", slot: "gear", tier: 1, signing: 500, stipend: 400, coach: true, reqRating: 38, reqStage: "highschool" },
+  { id: "voltathletic", name: "GripEQ", slot: "gear", tier: 3, signing: 15000, stipend: 12000, coach: false, reqRating: 66, reqStage: "pro" },
+  { id: "global", name: "ZÜCA", slot: "gear", tier: 4, signing: 90000, stipend: 60000, coach: true, reqRating: 80, reqStage: "pro" },
+  // ── General slot — nutrition, energy, apparel ──
+  { id: "fairwayfoods", name: "1st Phorm", slot: "general", tier: 2, signing: 1500, stipend: 1200, coach: false, reqRating: 50, reqStage: "college" },
+  { id: "surgeenergy", name: "Red Bull", slot: "general", tier: 3, signing: 18000, stipend: 14000, coach: false, reqRating: 68, reqStage: "pro" },
+  { id: "skylinebank", name: "Nike", slot: "general", tier: 4, signing: 80000, stipend: 55000, coach: true, reqRating: 80, reqStage: "pro" },
 ];
 
 // ── Career disc collection. Career mode runs its OWN disc progression, totally
