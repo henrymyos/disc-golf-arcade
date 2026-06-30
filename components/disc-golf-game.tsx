@@ -42,7 +42,7 @@ import type {
 import { parseChallenge } from "@/lib/discgolf/challenge";
 import {
   newCareer, normalizeCareer, skillMods, momentumAfter, seasonSchedule, simEvent, recordResult, advanceSeason, retire,
-  placeLabel, STAGE_LABEL, SKILL_KEYS, SKILL_LABEL, SKILL_DESC, IDENTITY_MODS,
+  placeLabel, STAGE_LABEL, SKILL_KEYS, SKILL_LABEL, IDENTITY_MODS,
   seasonEnergy, eventEnergyCost, canEnterEvent,
   availableSponsors, signSponsor, unsignSponsor, sponsorBrandLock, trainingPointCost, buyTrainingPoint, spendSkillPoint, trainBonusFor, fmtCash, SPONSOR_CAP, SPONSOR_SLOTS, SPONSOR_SLOT_LABEL,
   careerRating, careerCoins as coinsForFinish, careerDiscShop, buyCareerDisc, toggleCareerBag, CAREER_BAG_MAX,
@@ -5128,8 +5128,8 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
   const effectFor = (k: keyof CareerSkills): string => {
     if (k === "power") return `${Math.round(mods.speedMul * 100)}% dist`; // 100% at 99
     if (k === "control") return `cone ±${((mods.aimSpread * 180) / Math.PI).toFixed(0)}°`; // 0° at 99
-    if (k === "putt") return `basket ${Math.round((mods.catchR / CATCH_R) * 100)}%`; // 100% at 99
-    return `${seasonEnergy(career.skills.stamina)} ⚡/season`; // stamina → season energy pool
+    if (k === "putt") return `catch ${Math.round((mods.catchR / CATCH_R) * 100)}%`; // 100% at 99
+    return `${seasonEnergy(career.skills.stamina)} ⚡/yr`; // stamina → season energy pool
   };
 
   // Retired legacy screen.
@@ -5210,7 +5210,7 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
       <div className="bg-[#1a1d23] border border-white/5 rounded-xl p-3 space-y-2">
         <div className="flex items-center justify-between">
           <p className="text-gray-400 text-xs font-bold uppercase tracking-wide">Skills · Overall {overall}</p>
-          <p className="text-[11px] text-gray-400">Points to spend <span className={career.trainPts > 0 ? "text-[#36D7B7] font-bold" : "text-gray-500"}>{career.trainPts}</span>{added > 0 ? <span className="text-gray-500"> · +{added} this season</span> : null}</p>
+          <p className="text-[11px] text-gray-400">Points to spend <span className={career.trainPts > 0 ? "text-[#36D7B7] font-bold" : "text-gray-500"}>{career.trainPts}</span>{added > 0 ? <span className="text-gray-500"> · +{added}</span> : null}</p>
         </div>
         {SKILL_KEYS.map((k) => {
           const val = career.skills[k];
@@ -5223,6 +5223,7 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
                 <div className="absolute inset-y-0 left-0 bg-[#36D7B7] rounded transition-all" style={{ width: `${Math.min(100, val)}%` }} />
               </div>
               <span className="w-7 text-right text-[11px] font-mono text-white">{val}</span>
+              <span className="w-[4.25rem] text-right text-[10px] font-mono text-[#36D7B7] shrink-0">{effectFor(k)}</span>
               <div className="flex gap-0.5 shrink-0">
                 <button type="button" onClick={() => onAllocateSkill(k, -1)} disabled={!canRemove} className="w-5 h-5 rounded bg-white/10 text-white text-xs leading-none disabled:opacity-30">−</button>
                 <button type="button" onClick={() => onAllocateSkill(k, 1)} disabled={!canAdd} className="w-5 h-5 rounded bg-white/10 text-white text-xs leading-none disabled:opacity-30">+</button>
@@ -5230,19 +5231,9 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
             </div>
           );
         })}
-        {/* What each skill does + its current in-play effect */}
-        <div className="space-y-0.5 pt-1.5 border-t border-white/5">
-          {SKILL_KEYS.map((k) => (
-            <div key={k} className="flex items-baseline justify-between gap-2 text-[9px] leading-tight">
-              <span className="text-gray-500 truncate"><span className="text-gray-300 font-semibold">{SKILL_LABEL[k]}</span> — {SKILL_DESC[k]}</span>
-              <span className="text-[#36D7B7] font-mono shrink-0">{effectFor(k)}</span>
-            </div>
-          ))}
-        </div>
-        <div className="flex items-center justify-between gap-2 pt-1">
-          <p className="text-gray-500 text-[10px] flex-1 leading-snug"><span className="text-gray-300">1 point = +1 skill</span> (max 99), <span className="text-gray-300">applied instantly</span>. <span className="text-gray-300">Power/Control/Putting</span> drive your scores + Overall; <span className="text-gray-300">Stamina</span> sets your <span className="text-[#f5d24a]">season energy</span> (more events/year). You <span className="text-gray-300">earn points by finishing events well</span> — play well to reach 90 overall, dominate to push toward 99. Skills slip a little after 35.</p>
+        <div className="flex justify-end pt-1.5 border-t border-white/5">
           <button type="button" onClick={onBuyTrain} disabled={career.cash < trainCost}
-            className="shrink-0 rounded bg-[#36D7B7]/15 border border-[#36D7B7]/40 text-[#36D7B7] text-[11px] font-bold px-2 py-1 disabled:opacity-30 disabled:border-white/10 disabled:text-gray-500">
+            className="rounded bg-[#36D7B7]/15 border border-[#36D7B7]/40 text-[#36D7B7] text-[11px] font-bold px-2 py-1 disabled:opacity-30 disabled:border-white/10 disabled:text-gray-500">
             +1 pt · {fmtCash(trainCost)}
           </button>
         </div>
