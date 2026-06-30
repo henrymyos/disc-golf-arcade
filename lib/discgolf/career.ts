@@ -591,9 +591,11 @@ function anonName(seed: number, i: number): string {
 // Per-hole scores for a rating. `diff[i]` (optional) adds the hole's conditions
 // difficulty so windy/uphill/tight holes cost the field more strokes there too;
 // better players (lower perHoleToPar) shrug some of it off.
-function simHoleScores(rating: number, par: number, holes: number, rng: () => number, diff?: number[]): number[] {
+function simHoleScores(rating: number, par: number, holes: number, rng: () => number, diff?: number[], edgeToPar = 0): number[] {
   const parPerHole = par / holes;
-  const perHoleToPar = (50 - rating) * 0.28 / 18;
+  // `edgeToPar` sharpens the whole field by that many strokes over the round,
+  // spread evenly across the holes (ranked uses it to keep the AI competitive).
+  const perHoleToPar = (50 - rating) * 0.28 / 18 - edgeToPar / holes;
   const grit = 1 - (rating - 50) / 140; // skill cushions conditions a little
   return Array.from({ length: holes }, (_, i) =>
     Math.max(1, Math.round(parPerHole + perHoleToPar + (diff ? diff[i] * Math.max(0.45, grit) : 0) + (rng() * 2 - 1) * 0.65)),
@@ -736,6 +738,10 @@ export function careerCardRacers(field: FieldPlayer[], holeIndex: number): Ghost
 // centers on `fieldMean` (your tier strength) with a spread, reacting to the
 // played holes' conditions just like you. Seeded by the round so it's stable on a
 // replay/resync but fresh every round. Reuses careerLiveStandings for standings. ──
+// The ranked field plays this many strokes better over the round than its raw tier
+// rating would shoot — a flat sharpening so the AI stays a real contest instead of
+// being run away from by a few strokes every round.
+export const RANKED_EDGE = 10;
 export function rankedFieldForRound(seed: number, fieldMean: number, size: number, roundHoles: Hole[]): FieldPlayer[] {
   const par = roundHoles.reduce((s, h) => s + h.par, 0);
   const diff = roundHoles.map(holeDifficulty);
@@ -743,7 +749,7 @@ export function rankedFieldForRound(seed: number, fieldMean: number, size: numbe
   const field: FieldPlayer[] = [];
   for (let i = 0; i < size; i++) {
     const rating = clamp(fieldMean + (rng() * 2 - 1) * 14, 20, 99); // spread around the tier mean
-    const holes = simHoleScores(rating, par, roundHoles.length, rng, diff);
+    const holes = simHoleScores(rating, par, roundHoles.length, rng, diff, RANKED_EDGE);
     field.push({ name: anonName(seed, i), isRival: false, color: "#7a808a", holes, total: holes.reduce((a, b) => a + b, 0) });
   }
   return field;

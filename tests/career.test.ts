@@ -48,7 +48,7 @@ import {
   type Career,
   type CareerSkills,
 } from "../lib/discgolf/career";
-import { careerFieldForRound } from "../lib/discgolf/career";
+import { careerFieldForRound, rankedFieldForRound, RANKED_EDGE } from "../lib/discgolf/career";
 import { CATCH_R, buildRound, discByKey } from "../lib/discgolf/engine";
 
 describe("newCareer", () => {
@@ -910,5 +910,18 @@ describe("pro tour — real current pros", () => {
     const hs = normalizeCareer({ ...newCareer("Frosh", 9) }); // starts in high school
     expect(hs.rivals.some((r) => r.id.startsWith("pro"))).toBe(false);
     expect(hs.rivals.map((r) => r.name)).not.toContain("Gannon Buhr");
+  });
+});
+
+describe("ranked field — sharpened to stay competitive", () => {
+  it("the RANKED_EDGE makes the AI field play several strokes better than its raw rating would", () => {
+    const holes = buildRound(20240630, "ranked");
+    const par = holes.reduce((s, h) => s + h.par, 0);
+    const field = rankedFieldForRound(777, 60, 24, holes); // mid-tier mean (~60)
+    const meanTotal = field.reduce((s, p) => s + p.total, 0) / field.length;
+    // A raw 60-rated field shoots only ~3 under par; the +10 edge drops the whole
+    // field well under, so it's a real contest instead of a runaway win.
+    expect(par - meanTotal).toBeGreaterThan(6);
+    expect(RANKED_EDGE).toBe(10);
   });
 });
