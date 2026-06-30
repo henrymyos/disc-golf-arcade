@@ -109,3 +109,36 @@ describe("mergeProgress", () => {
     expect(mergeProgress(base, { ...base, career: only }).career).toBe(only);
   });
 });
+
+describe("mergeProgress — career slots", () => {
+  const car = (season: number) => ({ season, results: [], careerPoints: 0 }) as unknown as NonNullable<Progress["career"]>;
+
+  it("merges each slot independently — two devices each holding different slots both survive", () => {
+    const s0 = car(3), s1 = car(5);
+    const a: Progress = { ...base, careers: [s0, null, null] };
+    const b: Progress = { ...base, careers: [null, s1, null] };
+    const m = mergeProgress(a, b);
+    expect(m.careers).toEqual([s0, s1, null]);
+    expect(m.career).toBe(s0); // legacy field mirrors slot 0
+  });
+
+  it("keeps the further-along save when both hold the same slot", () => {
+    const early = car(2), late = car(9);
+    const a: Progress = { ...base, careers: [early, null, null] };
+    const b: Progress = { ...base, careers: [late, null, null] };
+    expect(mergeProgress(a, b).careers?.[0]).toBe(late);
+  });
+
+  it("migrates a legacy single career (no careers array) into slot 0 and merges it", () => {
+    const legacy = car(4), slot0Cloud = car(7);
+    const a: Progress = { ...base, career: legacy };               // pre-slots local save
+    const b: Progress = { ...base, careers: [slot0Cloud, null, null] };
+    const m = mergeProgress(a, b);
+    expect(m.careers?.[0]).toBe(slot0Cloud); // further-along of legacy(4) vs cloud(7)
+    expect(m.careers).toHaveLength(3);
+  });
+
+  it("always yields exactly CAREER_SLOTS slots", () => {
+    expect(mergeProgress(base, base).careers).toEqual([null, null, null]);
+  });
+});

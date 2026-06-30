@@ -12,7 +12,9 @@ export const HOLEBEST_KEY = "discgolf.holebest.glendoveer18";
 export const SETTINGS_KEY = "discgolf.settings.v1";
 export const ACH_KEY = "discgolf.achievements.v1";
 export const HIST_KEY = "discgolf.history.v1";
-export const CAREER_KEY = "discgolf.career.v1";
+export const CAREER_KEY = "discgolf.career.v1"; // legacy single career — mirrored to slot 0
+export const CAREERS_KEY = "discgolf.careers.v1"; // up to 3 career save slots
+export const CAREER_SLOTS = 3;
 export const COINS_KEY = "discgolf.coins.v1";
 export const DAILY_KEY = "discgolf.dailyreward.v1";
 export const OWNED_KEY = "discgolf.owned.v1"; // unlocked discs + cosmetics
@@ -33,7 +35,8 @@ export type Progress = {
   achievements: string[];
   history: HistoryRow[];
   settings: Record<string, unknown> | null;
-  career: Career | null;
+  career: Career | null;             // legacy: mirrors slot 0 (kept for back-compat)
+  careers?: (Career | null)[];       // up to CAREER_SLOTS career save slots
   coins: number;
   daily: DailyReward | null;
   owned: string[];
@@ -46,6 +49,14 @@ export type Progress = {
   coinsSpent?: number;  // monotonic lifetime spent
   updatedAt?: number;   // last local change time (ms), for newer-wins merges
 };
+
+// Normalize any progress to a fixed-length array of career slots. Older progress
+// (local or cloud) only has the single `career` field — treat it as slot 0 so a
+// pre-slots save is never lost when migrating to the 3-slot model.
+export function careersOf(p: Pick<Progress, "career" | "careers">): (Career | null)[] {
+  const arr = p.careers ?? (p.career ? [p.career] : []);
+  return Array.from({ length: CAREER_SLOTS }, (_, i) => arr[i] ?? null);
+}
 
 // Of two career saves, keep the one further along (more seasons, then events).
 function moreAdvancedCareer(a: Career | null, b: Career | null): Career | null {
@@ -74,7 +85,12 @@ export function readLocalProgress(): Progress {
   const achievements = parse<string[]>(localStorage.getItem(ACH_KEY), []);
   const history = parse<HistoryRow[]>(localStorage.getItem(HIST_KEY), []);
   const settings = parse<Record<string, unknown> | null>(localStorage.getItem(SETTINGS_KEY), null);
-  const career = parse<Career | null>(localStorage.getItem(CAREER_KEY), null);
+  // Career slots: prefer the 3-slot array; fall back to (and migrate) the legacy
+  // single career into slot 0 so older saves carry over without loss.
+  const careersRaw = parse<(Career | null)[] | null>(localStorage.getItem(CAREERS_KEY), null);
+  const legacyCareer = parse<Career | null>(localStorage.getItem(CAREER_KEY), null);
+  const careers = careersOf({ careers: careersRaw ?? undefined, career: legacyCareer });
+  const career = careers[0];
   const coinsRaw = localStorage.getItem(COINS_KEY);
   const coins = coinsRaw != null && Number.isFinite(Number(coinsRaw)) ? Number(coinsRaw) : 0;
   const daily = parse<DailyReward | null>(localStorage.getItem(DAILY_KEY), null);
@@ -91,7 +107,7 @@ export function readLocalProgress(): Progress {
   const coinsSpent = csRaw != null && Number.isFinite(Number(csRaw)) ? Number(csRaw) : undefined;
   const uaRaw = localStorage.getItem(UPDATEDAT_KEY);
   const updatedAt = uaRaw != null && Number.isFinite(Number(uaRaw)) ? Number(uaRaw) : undefined;
-  return { best, winthropBest, holeBest, achievements, history, settings, career, coins, daily, owned, profile, ranked, bag, bagSeen, levelRewarded, coinsEarned, coinsSpent, updatedAt };
+  return { best, winthropBest, holeBest, achievements, history, settings, career, careers, coins, daily, owned, profile, ranked, bag, bagSeen, levelRewarded, coinsEarned, coinsSpent, updatedAt };
 }
 
 // Wipe this device's saved progress (device SETTINGS are kept). Used on sign-out
@@ -99,7 +115,7 @@ export function readLocalProgress(): Progress {
 // account's data lives in the cloud, which logging back in restores.
 export function clearLocalProgress() {
   if (typeof localStorage === "undefined") return;
-  for (const k of [BEST_KEY, WBEST_KEY, HOLEBEST_KEY, ACH_KEY, HIST_KEY, CAREER_KEY, COINS_KEY, DAILY_KEY, OWNED_KEY, PROFILE_KEY, RANKED_KEY, BAG_KEY, BAGSEEN_KEY, LEVELREWARD_KEY, COINSEARNED_KEY, COINSSPENT_KEY, UPDATEDAT_KEY]) {
+  for (const k of [BEST_KEY, WBEST_KEY, HOLEBEST_KEY, ACH_KEY, HIST_KEY, CAREER_KEY, CAREERS_KEY, COINS_KEY, DAILY_KEY, OWNED_KEY, PROFILE_KEY, RANKED_KEY, BAG_KEY, BAGSEEN_KEY, LEVELREWARD_KEY, COINSEARNED_KEY, COINSSPENT_KEY, UPDATEDAT_KEY]) {
     try { localStorage.removeItem(k); } catch { /* ignore */ }
   }
 }
@@ -113,7 +129,10 @@ export function applyProgress(p: Progress) {
     localStorage.setItem(ACH_KEY, JSON.stringify(p.achievements ?? []));
     localStorage.setItem(HIST_KEY, JSON.stringify((p.history ?? []).slice(-100)));
     if (p.settings) localStorage.setItem(SETTINGS_KEY, JSON.stringify(p.settings));
-    if (p.career) localStorage.setItem(CAREER_KEY, JSON.stringify(p.career));
+    const careers = careersOf(p);
+    localStorage.setItem(CAREERS_KEY, JSON.stringify(careers));
+    if (careers[0]) localStorage.setItem(CAREER_KEY, JSON.stringify(careers[0])); // legacy mirror
+    else localStorage.removeItem(CAREER_KEY);
     localStorage.setItem(COINS_KEY, String(Math.max(0, Math.round(p.coins ?? 0))));
     if (p.daily) localStorage.setItem(DAILY_KEY, JSON.stringify(p.daily));
     localStorage.setItem(OWNED_KEY, JSON.stringify(p.owned ?? []));
@@ -193,6 +212,10 @@ export function mergeProgress(a: Progress, b: Progress): Progress {
   const older = newer === a ? b : a;
   const updatedAt = Math.max(ua, ub);
 
+  // Career slots merged per-slot (each keeps the further-along of the two saves).
+  const ca = careersOf(a), cb = careersOf(b);
+  const careers = ca.map((_, i) => moreAdvancedCareer(ca[i], cb[i]));
+
   return {
     best: minDefined(a.best, b.best),
     winthropBest: minDefined(a.winthropBest, b.winthropBest),
@@ -200,7 +223,10 @@ export function mergeProgress(a: Progress, b: Progress): Progress {
     achievements,
     history: history.slice(-100),
     settings: newer.settings ?? older.settings,
-    career: moreAdvancedCareer(a.career ?? null, b.career ?? null),
+    // Merge each career slot independently (keeping the further-along save per
+    // slot), so two devices each holding different slots both survive.
+    career: careers[0],
+    careers,
     coins,
     coinsEarned,
     coinsSpent,

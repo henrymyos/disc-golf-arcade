@@ -6,7 +6,7 @@ import { submitArcadeScore, getArcadeLeaderboard, submitMiniScore, getMiniLeader
 import type { ArcadeScore } from "@/lib/arcade-types";
 import { getSupabase } from "@/lib/supabase/browser";
 import {
-  BEST_KEY, WBEST_KEY, HOLEBEST_KEY, SETTINGS_KEY, ACH_KEY, HIST_KEY, CAREER_KEY, COINS_KEY, DAILY_KEY, OWNED_KEY, PROFILE_KEY, RANKED_KEY, BAG_KEY, BAGSEEN_KEY, LEVELREWARD_KEY, COINSEARNED_KEY, COINSSPENT_KEY, UPDATEDAT_KEY,
+  BEST_KEY, WBEST_KEY, HOLEBEST_KEY, SETTINGS_KEY, ACH_KEY, HIST_KEY, CAREER_KEY, CAREERS_KEY, CAREER_SLOTS, COINS_KEY, DAILY_KEY, OWNED_KEY, PROFILE_KEY, RANKED_KEY, BAG_KEY, BAGSEEN_KEY, LEVELREWARD_KEY, COINSEARNED_KEY, COINSSPENT_KEY, UPDATEDAT_KEY,
   readLocalProgress, applyProgress, mergeProgress, clearLocalProgress, type Progress,
 } from "@/lib/progress";
 import {
@@ -366,6 +366,14 @@ export function DiscGolfGame() {
 
   // ── Career mode (persisted locally + synced to the cloud when signed in) ──
   const [careerOpen, setCareerOpen] = useState(false);
+  // Up to CAREER_SLOTS independent career saves. `careerSlot` is the open one
+  // (null = the slot picker is showing); `career` mirrors that slot for the hub.
+  const [careers, setCareers] = useState<(Career | null)[]>(() => Array(CAREER_SLOTS).fill(null));
+  const careersRef = useRef<(Career | null)[]>(careers);
+  useEffect(() => { careersRef.current = careers; }, [careers]);
+  const [careerSlot, setCareerSlot] = useState<number | null>(null);
+  const careerSlotRef = useRef<number | null>(null);
+  useEffect(() => { careerSlotRef.current = careerSlot; }, [careerSlot]);
   const [career, setCareer] = useState<Career | null>(null);
   const careerRef = useRef<Career | null>(null);
   useEffect(() => { careerRef.current = career; }, [career]);
@@ -377,13 +385,40 @@ export function DiscGolfGame() {
   const rankedPlaceSpanRef = useRef<[number, number]>([PLACEMENT_MIN_RATING, PLACEMENT_MAX_RATING]); // rating band of the current placement field (for the estimate)
   const [careerLastResult, setCareerLastResult] = useState<EventResult | null>(null);
   const [careerCoins, setCareerCoins] = useState(0); // account coins paid by the last PLAYED career round (0 when simmed)
+  // Write the active career into its slot and persist all slots. A null `c` clears
+  // the open slot (abandon). The whole array is saved under CAREERS_KEY; the cloud
+  // sync reads it from there (see saveProgress → readLocalProgress).
   const saveCareer = useCallback((c: Career | null) => {
     setCareer(c);
     careerRef.current = c;
-    try {
-      if (c) localStorage.setItem(CAREER_KEY, JSON.stringify(c));
-      else localStorage.removeItem(CAREER_KEY);
-    } catch { /* ignore */ }
+    const slot = careerSlotRef.current;
+    if (slot == null) return; // no slot open — nothing to persist
+    const next = careersRef.current.slice();
+    next[slot] = c;
+    careersRef.current = next;
+    setCareers(next);
+    try { localStorage.setItem(CAREERS_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+  }, []);
+  // Open a save slot into the hub (an empty slot shows the "Begin career" form).
+  const openCareerSlot = useCallback((slot: number) => {
+    const c = careersRef.current[slot] ?? null;
+    careerSlotRef.current = slot; careerRef.current = c;
+    setCareerSlot(slot); setCareer(c);
+    setCareerLastResult(null); setCareerNotes([]);
+  }, []);
+  // Leave the open career → back to the slot picker (the career itself is untouched).
+  const leaveCareer = useCallback(() => {
+    careerSlotRef.current = null; careerRef.current = null;
+    setCareerSlot(null); setCareer(null);
+    setCareerLastResult(null); setCareerNotes([]);
+  }, []);
+  // Delete a save from the picker (or via Abandon in the hub).
+  const deleteCareerSlot = useCallback((slot: number) => {
+    const next = careersRef.current.slice();
+    next[slot] = null;
+    careersRef.current = next;
+    setCareers(next);
+    try { localStorage.setItem(CAREERS_KEY, JSON.stringify(next)); } catch { /* ignore */ }
   }, []);
 
   // ── Online Friendly Challenge lobby (Supabase Realtime) ──
@@ -760,8 +795,15 @@ export function DiscGolfGame() {
       const tourn = JSON.parse(localStorage.getItem(TOURN_KEY) || "null");
       if (tourn && typeof tourn.id === "string" && tournDef(tourn.id) && Array.isArray(tourn.myTotals)) setTournament(tourn);
       setResumeRound(readResume());
-      const car = JSON.parse(localStorage.getItem(CAREER_KEY) || "null");
-      if (car && car.v === 1 && car.skills) { const nc = normalizeCareer(car); setCareer(nc); careerRef.current = nc; }
+      // Load all career save slots (migrating a legacy single career into slot 0).
+      const slotsRaw = JSON.parse(localStorage.getItem(CAREERS_KEY) || "null");
+      const legacyCar = JSON.parse(localStorage.getItem(CAREER_KEY) || "null");
+      const rawSlots: unknown[] = Array.isArray(slotsRaw) ? slotsRaw : (legacyCar ? [legacyCar] : []);
+      const loadedCareers = Array.from({ length: CAREER_SLOTS }, (_, i) => {
+        const c = rawSlots[i] as Career | null;
+        return c && c.v === 1 && c.skills ? normalizeCareer(c) : null;
+      });
+      careersRef.current = loadedCareers; setCareers(loadedCareers);
       const coinRaw = localStorage.getItem(COINS_KEY);
       const co = coinRaw != null && Number.isFinite(Number(coinRaw)) ? Number(coinRaw) : 0;
       coinsRef.current = co; setCoins(co);
@@ -1029,7 +1071,13 @@ export function DiscGolfGame() {
 
   // Sync the career save to the cloud whenever it changes (debounced; no-op
   // when signed out). localStorage is already written by saveCareer.
-  useEffect(() => { if (career) saveProgress(); }, [career, saveProgress]);
+  // Sync to the cloud whenever any career slot changes (skip the initial hydration
+  // so we don't push an empty array before the saved slots have loaded).
+  const careersHydrated = useRef(false);
+  useEffect(() => {
+    if (!careersHydrated.current) { careersHydrated.current = true; return; }
+    saveProgress();
+  }, [careers, saveProgress]);
   // Sync coins + daily-reward + owned items + profile + ranked to the cloud on change.
   useEffect(() => { saveProgress(); }, [coins, daily, owned, profile, ranked, bag, bagSeen, levelRewarded, saveProgress]);
 
@@ -3593,7 +3641,7 @@ export function DiscGolfGame() {
 
               {/* On the old vercel.app link with progress to move: one click ships it
                   to the canonical domain (localStorage can't cross origins on its own). */}
-              {legacyHost && (coins > 0 || owned.length > 0 || history.length > 0 || career != null || ranked != null) && (
+              {legacyHost && (coins > 0 || owned.length > 0 || history.length > 0 || careers.some(Boolean) || ranked != null) && (
                 <div className="w-full rounded-xl border border-[#f5d24a]/50 bg-[#f5d24a]/10 px-3 py-3 mt-4 text-left">
                   <p className="text-[#f5d24a] font-bold text-sm">You&apos;re on the old link</p>
                   <p className="text-gray-300 text-xs mt-0.5">This site moved to {CANONICAL_HOST}. Bring your scores, coins, discs, and rank along.</p>
@@ -3654,8 +3702,8 @@ export function DiscGolfGame() {
                   <button type="button" onClick={() => setCoursesOpen(true)} className={hubCard}>
                     <span className="font-black text-lg">Challenge the Arcade</span>
                   </button>
-                  <button type="button" onClick={() => { setCareerLastResult(null); setCareerNotes([]); setCareerOpen(true); }} className={hubCard}>
-                    <span className="font-black text-lg">Career{career && !career.retired ? " · Continue" : ""}</span>
+                  <button type="button" onClick={() => { setCareerLastResult(null); setCareerNotes([]); leaveCareer(); setCareerOpen(true); }} className={hubCard}>
+                    <span className="font-black text-lg">Career{careers.filter(Boolean).length > 0 ? ` · ${careers.filter(Boolean).length} saved` : ""}</span>
                   </button>
                   <button type="button" onClick={() => setTournamentOpen(true)} className={hubCard}>
                     <span className="font-black text-lg">Tournaments{tournament && !tournament.finished ? ` · ${tournDef(tournament.id)?.name ?? ""} R${tournament.myTotals.length + 1}` : ""}</span>
@@ -3876,20 +3924,30 @@ export function DiscGolfGame() {
           </div>
         )}
 
-        {careerOpen && (
+        {careerOpen && careerSlot == null && (
+          <CareerSlots
+            careers={careers}
+            onPick={openCareerSlot}
+            onDelete={deleteCareerSlot}
+            onBack={() => setCareerOpen(false)}
+          />
+        )}
+
+        {careerOpen && careerSlot != null && (
           <CareerPanel
+            key={careerSlot}
             career={career}
             lastResult={careerLastResult}
             lastCoins={careerCoins}
             notes={careerNotes}
-            onClose={() => { setCareerOpen(false); setCareerNotes([]); }}
+            onClose={leaveCareer}
             onStart={startNewCareer}
             onPlay={(ev) => { const c = careerRef.current; if (c) startCareerEvent(c, ev); }}
             onSim={simCareerEvent}
             onAllocateSkill={(k, d) => { const c = careerRef.current; if (c) saveCareer(spendSkillPoint(c, k, d)); }}
             onAdvance={() => advanceCareerSeason({})}
             onRetire={() => { const c = careerRef.current; if (c) saveCareer(retire(c)); }}
-            onAbandon={() => { saveCareer(null); setCareerLastResult(null); setCareerNotes([]); }}
+            onAbandon={() => { saveCareer(null); leaveCareer(); }}
             onSign={(id) => { const c = careerRef.current; if (c) saveCareer(signSponsor(c, id)); }}
             onUnsign={(id) => { const c = careerRef.current; if (c) saveCareer(unsignSponsor(c, id)); }}
             onBuyTrain={() => { const c = careerRef.current; if (c) saveCareer(buyTrainingPoint(c)); }}
@@ -5036,6 +5094,50 @@ const CAREER_STYLE_CATS: { slot: keyof CareerLook; prefix: string; label: string
   { slot: "celebration", prefix: COSMETIC_PREFIX.celebration, label: "Win pop", items: CELEBRATIONS.map((i) => ({ key: i.key, name: i.name, price: i.price, color: i.colors[0] ?? "#888" })) },
   { slot: "trail", prefix: "trail", label: "Trail", items: TRAILS.filter((i) => i.key !== "none").map((i) => ({ key: i.key, name: i.name, price: i.price, color: i.colors[0] ?? "#888" })) },
 ];
+// The career save-slot picker: up to CAREER_SLOTS independent careers. Pick a slot
+// to open it (an empty slot starts a new career there), delete one to free its slot,
+// or go back to Single Player.
+function CareerSlots({ careers, onPick, onDelete, onBack }: {
+  careers: (Career | null)[];
+  onPick: (slot: number) => void;
+  onDelete: (slot: number) => void;
+  onBack: () => void;
+}) {
+  const [confirmDel, setConfirmDel] = useState<number | null>(null);
+  const wrap = "absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start justify-center rounded-lg";
+  return (
+    <div className={wrap}><div className="w-full max-w-sm space-y-3 my-auto text-left">
+      <div className="flex items-center justify-between">
+        <h2 className="text-white font-black text-xl">🌟 Career</h2>
+        <button type="button" onClick={onBack} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
+      </div>
+      <p className="text-gray-400 text-sm">Pick a save slot. Each career is its own journey — keep up to {careers.length} going at once and switch between them anytime.</p>
+      {careers.map((c, slot) => (
+        <div key={slot} className="bg-[#1a1d23] border border-white/5 rounded-xl p-3">
+          {c ? (
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => onPick(slot)} className="flex-1 min-w-0 text-left">
+                <p className="text-white font-bold truncate">{c.name}{c.retired ? <span className="text-gray-500 font-normal"> · Retired</span> : null}</p>
+                <p className="text-gray-400 text-[11px]">{STAGE_LABEL[c.stage]} · Age {c.age} · Overall {Math.round(careerRating(c.skills))}{c.stage === "pro" && c.worldRank ? ` · World #${c.worldRank}` : ` · PDGA ${c.pdgaRating}`}</p>
+              </button>
+              {confirmDel === slot ? (
+                <span className="shrink-0 text-[11px] text-gray-400">Delete? <button type="button" onClick={() => { onDelete(slot); setConfirmDel(null); }} className="text-[#e2453b] font-bold">Yes</button> · <button type="button" onClick={() => setConfirmDel(null)} className="text-gray-300">No</button></span>
+              ) : (
+                <button type="button" onClick={() => setConfirmDel(slot)} title="Delete this career" className="shrink-0 text-gray-600 hover:text-[#e2453b] text-base leading-none">🗑</button>
+              )}
+            </div>
+          ) : (
+            <button type="button" onClick={() => onPick(slot)} className="w-full text-left flex items-center gap-2 text-gray-400 hover:text-white transition">
+              <span className="text-xl leading-none text-[#36D7B7]">＋</span>
+              <span className="text-sm font-semibold">Empty slot — start a career</span>
+            </button>
+          )}
+        </div>
+      ))}
+      <button type="button" onClick={onBack} className="w-full text-gray-500 hover:text-gray-300 text-xs py-1.5 transition">‹ Back to Single Player</button>
+    </div></div>
+  );
+}
 function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, onPlay, onSim, onAllocateSkill, onAdvance, onRetire, onAbandon, onSign, onUnsign, onBuyTrain, onBuyDisc, onToggleBag, onBuyCosmetic, onEquipLook, dismissNotes }: {
   career: Career | null;
   lastResult: EventResult | null;
