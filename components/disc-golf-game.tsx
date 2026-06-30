@@ -6357,7 +6357,18 @@ function LeaderboardPanel({ onClose }: { onClose: () => void }) {
   });
   const [pick, setPick] = useState<Board>(boards[0]);
   const [rows, setRows] = useState<ArcadeScore[] | null>(null);
+  const [open, setOpen] = useState(false);
+  const ddRef = useRef<HTMLDivElement | null>(null);
   const over = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
+  // Close the custom dropdown on an outside tap or Escape.
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => { if (ddRef.current && !ddRef.current.contains(e.target as Node)) setOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("pointerdown", onDown); document.removeEventListener("keydown", onKey); };
+  }, [open]);
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     let active = true;
@@ -6373,19 +6384,42 @@ function LeaderboardPanel({ onClose }: { onClose: () => void }) {
           <h2 className="text-white font-black text-xl">🏆 Leaderboards</h2>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
-        <div className="relative">
-          <select
-            value={pick.courseKey}
-            onChange={(e) => { const b = boards.find((x) => x.courseKey === e.target.value); if (b) setPick(b); }}
-            className="appearance-none w-full bg-[#1a1d23] border border-white/10 rounded-lg pl-3 pr-9 py-2.5 text-white text-sm font-semibold focus:outline-none focus:border-[#4B3DFF] hover:border-white/25 transition"
-            style={{ colorScheme: "dark" }}
-            aria-label="Choose a leaderboard"
+        {/* Custom dropdown — styled to match the app instead of a bare OS <select>. */}
+        <div className="relative" ref={ddRef}>
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            aria-haspopup="listbox"
+            aria-expanded={open}
+            className="w-full flex items-center gap-2 bg-gradient-to-b from-[#22262e] to-[#16191f] border border-white/10 hover:border-[#36D7B7]/50 rounded-xl px-3 py-2.5 text-left transition-colors"
           >
-            {boards.map((b) => (
-              <option key={b.courseKey} value={b.courseKey}>{b.label}</option>
-            ))}
-          </select>
-          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-xs">▾</span>
+            <span className="text-[#f5d24a] text-sm leading-none">🏆</span>
+            <span className="flex-1 min-w-0 truncate text-white text-sm font-bold">{pick.label}</span>
+            <span className={`text-[#36D7B7] text-xs leading-none transition-transform ${open ? "rotate-180" : ""}`}>▾</span>
+          </button>
+          {open && (
+            <div role="listbox" className="absolute left-0 right-0 z-30 mt-1.5 max-h-64 overflow-y-auto rounded-xl border border-white/10 bg-[#13161c] py-1 shadow-xl shadow-black/50">
+              {boards.map((b, i) => {
+                const active = b.courseKey === pick.courseKey;
+                const firstTour = b.courseKey.startsWith("tour-") && !boards[i - 1]?.courseKey.startsWith("tour-");
+                return (
+                  <div key={b.courseKey}>
+                    {firstTour && <p className="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-[0.15em] text-gray-500">Pro Tour</p>}
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={active}
+                      onClick={() => { setPick(b); setOpen(false); }}
+                      className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${active ? "bg-[#36D7B7]/10 font-bold text-[#36D7B7]" : "text-gray-300 hover:bg-white/5 hover:text-white"}`}
+                    >
+                      <span className="min-w-0 flex-1 truncate">{b.label}</span>
+                      {active && <span className="text-[#36D7B7] text-xs leading-none">✓</span>}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
         <p className="text-gray-500 text-[11px]">
           {pick.daily ? "Today's course · par " : "All-time · par "}{pick.par}
