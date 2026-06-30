@@ -199,7 +199,9 @@ describe("seasonSchedule", () => {
       expect(e.venue).toBeTruthy();
       expect(e.seed).toBeTypeOf("number");
       expect(e.holes).toBe(18);
-      expect(e.par).toBeGreaterThanOrEqual(62); // a real generated par, not the placeholder pattern
+      // A real generated par in the disc-golf band (59–68), not the par-70 placeholder.
+      expect(e.par).toBeGreaterThanOrEqual(59);
+      expect(e.par).toBeLessThanOrEqual(68);
     });
   });
 });
@@ -914,14 +916,18 @@ describe("pro tour — real current pros", () => {
 });
 
 describe("ranked field — sharpened to stay competitive", () => {
-  it("the RANKED_EDGE makes the AI field play several strokes better than its raw rating would", () => {
-    const holes = buildRound(20240630, "ranked");
-    const par = holes.reduce((s, h) => s + h.par, 0);
-    const field = rankedFieldForRound(777, 60, 24, holes); // mid-tier mean (~60)
-    const meanTotal = field.reduce((s, p) => s + p.total, 0) / field.length;
-    // A raw 60-rated field shoots only ~3 under par; the +10 edge drops the whole
-    // field well under, so it's a real contest instead of a runaway win.
-    expect(par - meanTotal).toBeGreaterThan(6);
+  it("the RANKED_EDGE makes the AI field play clearly under par at a mid tier", () => {
+    let fieldToPar = 0;
+    const runs = 20;
+    for (let s = 1; s <= runs; s++) {
+      const holes = buildRound(s * 101 + 7, "ranked");
+      const par = holes.reduce((a, h) => a + h.par, 0);
+      const field = rankedFieldForRound(s * 17 + 3, 60, 24, holes); // mid-tier mean (~60)
+      fieldToPar += field.reduce((a, p) => a + p.total, 0) / field.length - par;
+    }
+    // A raw 60-rated field would hover near par on these courses; the +10 edge
+    // drops the whole field several strokes under, keeping ranked a real contest.
+    expect(fieldToPar / runs).toBeLessThan(-3);
     expect(RANKED_EDGE).toBe(10);
   });
 });

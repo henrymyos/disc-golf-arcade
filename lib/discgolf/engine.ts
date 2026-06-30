@@ -1313,8 +1313,19 @@ function genDailyHole(rng: () => number, opts: GenOpts = {}): Hole {
 // Career schedule can show a course's par without building all its geometry.
 function tourPars(seed: number): number[] {
   const rng = mulberry32((seed ^ 0x6f4e3d2c) >>> 0);
-  const bag = [3, 3, 4, 4, 4, 4, 4, 5]; // pro mix → par ~68–71 over 18
-  return Array.from({ length: 18 }, () => bag[Math.floor(rng() * bag.length)]);
+  // Real disc-golf courses are par-3-heavy. Lean on par 3s, with a moderate run
+  // of par 4s and at most a couple of par 5s — so an 18-hole course totals about
+  // par 59–67 (par = 54 + fours + 2·fives). Counts vary by seed for variety, then
+  // the holes are shuffled so the 3s/4s/5s aren't clustered.
+  const fives = Math.floor(rng() * 3); // 0–2 par 5s
+  const fours = 5 + Math.floor(rng() * 5); // 5–9 par 4s
+  const threes = 18 - fives - fours; // the remaining 7–13 holes are par 3s
+  const pars = [...Array(threes).fill(3), ...Array(fours).fill(4), ...Array(fives).fill(5)];
+  for (let i = pars.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [pars[i], pars[j]] = [pars[j], pars[i]];
+  }
+  return pars;
 }
 // ── Venue character: every generated tour course has a personality (wooded,
 // water-laden, links-windy, sandy, technical, or classic parkland) that biases
@@ -1445,13 +1456,28 @@ function dailyHolePool(lenScale = 1): Hole[] {
 // (full length) and the early-Career "academy" events (shortened via lenScale).
 function generateDailyMix(rng: () => number, lenScale = 1): Hole[] {
   const pool = dailyHolePool(lenScale);
-  const idx = pool.map((_, i) => i);
-  const n = Math.min(9, idx.length);
-  for (let i = 0; i < n; i++) {
-    const j = i + Math.floor(rng() * (idx.length - i)); // partial Fisher–Yates → 9 distinct
-    [idx[i], idx[j]] = [idx[j], idx[i]];
+  // Disc golf is par-3-driven, so every daily GUARANTEES a handful of par 3s
+  // (3 or 4) instead of leaving the count to chance — the rest are the longer
+  // holes. Sample each group separately, then shuffle the playing order so the
+  // par 3s aren't all bunched at the front.
+  const par3 = pool.map((_, i) => i).filter((i) => pool[i].par === 3);
+  const rest = pool.map((_, i) => i).filter((i) => pool[i].par !== 3);
+  // partial Fisher–Yates → k distinct indices from `arr` (mutates the local copy).
+  const sample = (arr: number[], k: number) => {
+    const m = Math.min(k, arr.length);
+    for (let i = 0; i < m; i++) {
+      const j = i + Math.floor(rng() * (arr.length - i));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr.slice(0, m);
+  };
+  const want3 = Math.min(par3.length, 3 + Math.floor(rng() * 2)); // 3 or 4 par 3s
+  const chosen = [...sample(par3, want3), ...sample(rest, 9 - want3)];
+  for (let i = chosen.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [chosen[i], chosen[j]] = [chosen[j], chosen[i]];
   }
-  return idx.slice(0, n).map((i) => {
+  return chosen.map((i) => {
     const { wind, windMag } = seededWind(rng);
     return { ...pool[i], wind, windMag };
   });

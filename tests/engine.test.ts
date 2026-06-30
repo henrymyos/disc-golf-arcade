@@ -176,6 +176,13 @@ describe("buildRound determinism", () => {
   it("daily generates a 9-hole course", () => {
     expect(buildRound(999, "daily")).toHaveLength(9);
   });
+  it("every daily guarantees 3–4 par 3s", () => {
+    for (let seed = 1; seed <= 80; seed++) {
+      const c3 = buildRound(seed * 31 + 5, "daily").filter((h) => h.par === 3).length;
+      expect(c3, `daily seed ${seed}`).toBeGreaterThanOrEqual(3);
+      expect(c3, `daily seed ${seed}`).toBeLessThanOrEqual(4);
+    }
+  });
   it("tour generates an 18-hole pro course, deterministic and pin-fair", () => {
     const a = buildRound(4242, "tour");
     expect(a).toHaveLength(18);
@@ -189,13 +196,17 @@ describe("buildRound determinism", () => {
 });
 
 describe("tour course pars", () => {
-  it("tourPars gives 18 pro pars (3–5) summing to a realistic total", () => {
-    const pars = tourPars(777);
-    expect(pars).toHaveLength(18);
-    pars.forEach((p) => expect([3, 4, 5]).toContain(p));
-    const sum = pars.reduce((a, b) => a + b, 0);
-    expect(sum).toBeGreaterThanOrEqual(62);
-    expect(sum).toBeLessThanOrEqual(75);
+  it("tourPars gives 18 par-3-heavy pars totaling par 59–68", () => {
+    for (const seed of [777, 4242, 31337, 1, 99, 2024, 555, 800001, 6, 70007]) {
+      const pars = tourPars(seed);
+      expect(pars).toHaveLength(18);
+      pars.forEach((p) => expect([3, 4, 5]).toContain(p));
+      const sum = pars.reduce((a, b) => a + b, 0);
+      expect(sum).toBeGreaterThanOrEqual(59); // disc-golf courses stay in the 59–68 band
+      expect(sum).toBeLessThanOrEqual(68);
+      expect(pars.filter((p) => p === 3).length).toBeGreaterThanOrEqual(6); // par-3-heavy
+      expect(pars.filter((p) => p === 5).length).toBeLessThanOrEqual(2); // at most a couple par 5s
+    }
   });
   it("a built tour course's hole pars match tourPars(seed)", () => {
     const seed = 31337;
