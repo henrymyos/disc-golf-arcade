@@ -6306,6 +6306,33 @@ function RankedPanel({ ranked, onPlay, onClose }: {
           </div>
         )}
 
+        {/* Division Info — a clear open/close dropdown (arrow flips when open) */}
+        <div>
+          <button
+            type="button"
+            onClick={() => setShowRanks((v) => !v)}
+            aria-expanded={showRanks}
+            className="w-full flex items-center gap-2 bg-[#1a1d23] border border-white/10 hover:border-white/25 rounded-xl px-3 py-2.5 text-left transition-colors"
+          >
+            <span className="flex-1 text-white text-sm font-semibold">Division Info</span>
+            <span className={`text-gray-400 text-xs leading-none transition-transform ${showRanks ? "rotate-180" : ""}`}>▾</span>
+          </button>
+          {showRanks && (
+            <div className="mt-1.5 bg-[#1a1d23] border border-white/10 rounded-xl overflow-hidden">
+              {TIERS.map((tier, i) => {
+                const current = placed && tier.key === t.tier.key;
+                return (
+                  <div key={tier.key} className={`flex items-center gap-2.5 px-3 py-2 ${i ? "border-t border-white/5" : ""} ${current ? "bg-white/5" : ""}`}>
+                    <span className="text-xl leading-none shrink-0">{tier.emoji}</span>
+                    <span className="font-bold text-sm flex-1" style={{ color: tier.color }}>{tier.name}{current ? " · you" : ""}{earned.has(tier.key) ? " 🏅" : ""}</span>
+                    <span className="text-gray-500 font-mono text-[10px]">{tier.min === 0 ? "0 RP" : `${tier.min.toLocaleString()}+ RP`}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
         {/* Tier card */}
         <div className="flex items-center gap-3 bg-[#1a1d23] border border-white/10 rounded-xl px-3 py-3">
           <span className="text-4xl leading-none shrink-0">{placed ? t.tier.emoji : placeDone > 0 ? t.tier.emoji : "❔"}</span>
@@ -6347,33 +6374,6 @@ function RankedPanel({ ranked, onPlay, onClose }: {
             )}
           </div>
         )}
-
-        {/* All divisions — a clear open/close dropdown (arrow flips when open) */}
-        <div>
-          <button
-            type="button"
-            onClick={() => setShowRanks((v) => !v)}
-            aria-expanded={showRanks}
-            className="w-full flex items-center gap-2 bg-[#1a1d23] border border-white/10 hover:border-white/25 rounded-xl px-3 py-2.5 text-left transition-colors"
-          >
-            <span className="flex-1 text-white text-sm font-semibold">All divisions <span className="text-gray-500 font-normal">· low to high</span></span>
-            <span className={`text-gray-400 text-xs leading-none transition-transform ${showRanks ? "rotate-180" : ""}`}>▾</span>
-          </button>
-          {showRanks && (
-            <div className="mt-1.5 bg-[#1a1d23] border border-white/10 rounded-xl overflow-hidden">
-              {TIERS.map((tier, i) => {
-                const current = placed && tier.key === t.tier.key;
-                return (
-                  <div key={tier.key} className={`flex items-center gap-2.5 px-3 py-2 ${i ? "border-t border-white/5" : ""} ${current ? "bg-white/5" : ""}`}>
-                    <span className="text-xl leading-none shrink-0">{tier.emoji}</span>
-                    <span className="font-bold text-sm flex-1" style={{ color: tier.color }}>{tier.name}{current ? " · you" : ""}{earned.has(tier.key) ? " 🏅" : ""}</span>
-                    <span className="text-gray-500 font-mono text-[10px]">{tier.min === 0 ? "0 RP" : `${tier.min.toLocaleString()}+ RP`}</span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
 
         {/* Division badges — only the ones you've earned by finishing a season there */}
         {earned.size > 0 && (
