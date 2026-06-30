@@ -6364,27 +6364,24 @@ function RankedPanel({ ranked, onPlay, onClose }: {
           )}
         </div>
 
-        {/* Division badges — earn one for each division you finish a season in */}
-        <div className="bg-[#1a1d23] border border-white/10 rounded-xl px-3 py-2.5">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-gray-400 text-[11px] font-semibold">🏅 Division badges</p>
-            <p className="text-gray-500 text-[10px]">{earned.size}/{TIERS.length}</p>
-          </div>
-          <div className="flex items-center justify-between gap-1">
-            {TIERS.map((tier) => {
-              const has = earned.has(tier.key);
-              return (
+        {/* Division badges — only the ones you've earned by finishing a season there */}
+        {earned.size > 0 && (
+          <div className="bg-[#1a1d23] border border-white/10 rounded-xl px-3 py-2.5">
+            <p className="text-gray-400 text-[11px] font-semibold mb-2">🏅 Division badges</p>
+            <div className="flex items-center flex-wrap gap-2">
+              {TIERS.filter((tier) => earned.has(tier.key)).map((tier) => (
                 <span
                   key={tier.key}
-                  title={`${tier.name} — ${has ? "earned" : "finish a season here to earn"}`}
-                  className={`text-2xl leading-none ${has ? "" : "grayscale opacity-25"}`}
+                  title={`${tier.name} — earned`}
+                  className="inline-flex items-center gap-1 rounded-full bg-white/5 px-2 py-1 text-[12px] font-bold"
+                  style={{ color: tier.color }}
                 >
-                  {tier.emoji}
+                  <span className="text-base leading-none">{tier.emoji}</span> {tier.name}
                 </span>
-              );
-            })}
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Past seasons — a trophy log of where you finished and what it paid */}
         {history.length > 0 && (
