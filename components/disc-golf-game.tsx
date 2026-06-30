@@ -5006,7 +5006,6 @@ function TournamentPanel({ tournaments, active, bests, onStart, onAbandon, onPla
             );
           })}
         </div>
-        <button type="button" onClick={onClose} className={`${btn} w-full shrink-0 mt-3`}>Done</button>
       </div>
     </div>
   );
@@ -5650,7 +5649,6 @@ function ProfilePanel({ profile, coins, owned, unlocked, roundsPlayed, bestScore
           </div>
         )}
 
-        <button type="button" onClick={onClose} className={`${btn} w-full`}>Done</button>
       </div>
 
       {/* Badge detail — how it's earned (and the coin bounty), tapped from the grid */}
@@ -5790,7 +5788,6 @@ function BagPanel({ bag, unlocked, owned, level, onAdd, onRemove, onMove, onShop
             </>
           )}
         </div>
-        <button type="button" onClick={onClose} className={`${btn} w-full shrink-0 mt-3`}>Done</button>
       </div>
     </div>
   );
@@ -5948,7 +5945,6 @@ function ShopPanel({ coins, unlocked, owned, level, profile, onBuy, onEquip, onC
           {CELEBRATIONS.map((c) => cosmeticRow(c, COSMETIC_PREFIX.celebration, profile.celebration || DEFAULT_CELEBRATION, "celebration", celebrationSwatch(c)))}
         </>}
 
-        <button type="button" onClick={onClose} className={`${btn} w-full`}>Done</button>
       </div>
     </div>
   );
@@ -6034,7 +6030,6 @@ function CoursesPanel({ courses, tourCourses, bests, tourBests, onClose, onPlay 
         <div ref={scrollRef} className="flex-1 overflow-y-auto mt-2 space-y-2.5 pr-0.5 -mr-0.5">
           {list.map(({ c }) => card({ c }))}
         </div>
-        <button type="button" onClick={onClose} className={`${btn} w-full shrink-0 mt-3`}>Done</button>
       </div>
     </div>
   );
@@ -6107,7 +6102,6 @@ function ChallengesPanel({ history, owned, coins, today, onClaim, onClose }: {
         <p className="text-gray-400 text-[10px] font-semibold uppercase tracking-wide pt-0.5">Weekly · resets Monday</p>
         {weeklyChallenges(week).map((c) => row(c, weekRows, eventClaimKey(week, c.id)))}
 
-        <button type="button" onClick={onClose} className={`${btn} w-full !mt-2.5`}>Done</button>
       </div>
     </div>
   );
@@ -6209,7 +6203,6 @@ function RankedPanel({ ranked, onPlay, onClose }: {
           {placed ? "Play a ranked round" : `Play placement round ${placeDone + 1} of ${PLACEMENT_ROUNDS}`}
         </button>
 
-        <button type="button" onClick={onClose} className={`${btn} w-full`}>Done</button>
       </div>
     </div>
   );
@@ -6277,7 +6270,6 @@ function LeaderboardPanel({ onClose }: { onClose: () => void }) {
             </ol>
           )}
         </div>
-        <button type="button" onClick={onClose} className={`${btn} w-full`}>Done</button>
       </div>
     </div>
   );
@@ -6364,7 +6356,6 @@ function StatsPanel({ onClose }: { onClose: () => void }) {
             )}
           </>
         )}
-        <button type="button" onClick={onClose} className={`${btn} w-full`}>Done</button>
       </div>
     </div>
   );
@@ -6506,7 +6497,6 @@ function SettingsPanel(props: {
           />
         </div>
 
-        <button type="button" onClick={onClose} className={`${btn} w-full`}>Done</button>
       </div>
     </div>
   );
