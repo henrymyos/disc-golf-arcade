@@ -38,8 +38,12 @@ export const RANKED_FIELD = 24;
 // level immediately rather than farming a soft tier. A projected rank shows after
 // round 1 and refines (running average) until it locks in. ──
 export const PLACEMENT_ROUNDS = 3;
-export const PLACEMENT_MIN_RATING = 40; // bottom of the calibration field's rating span
+export const PLACEMENT_MIN_RATING = 40; // bottom of the round-1 calibration field's rating span
 export const PLACEMENT_MAX_RATING = 90; // top of it — beat ~everyone here ⇒ Master
+// Placement bots play this many strokes better than their rating implies, so a
+// rank has to be earned: you must out-play the division you're tested against,
+// not merely keep pace with it. Higher ⇒ harder to climb (esp. to Master).
+export const PLACEMENT_EDGE = 7;
 
 export type Tier = { key: string; name: string; emoji: string; color: string; min: number };
 
@@ -214,10 +218,15 @@ export type PlacementResult = {
 // beating nearly everyone ≈ Master. Fold the estimate into the running average and
 // lock in a starting rank once PLACEMENT_ROUNDS are in. Streak stays dormant until
 // you're ranked; wins/podiums and best-to-par still count.
-export function applyPlacementRound(state: RankedState | null, place: number, field: number, toPar: number): { state: RankedState; result: PlacementResult } {
+// `lo`/`hi` are the rating span of the field you actually played: the full ladder
+// [40, 90] on round 1, then your projected division's band (tier mean ±14) on the
+// rounds after — so where you finish maps back onto that band. Because the bots
+// carry PLACEMENT_EDGE, you out-finish fewer of them than your raw rating would,
+// which is exactly what makes a high rank harder to reach.
+export function applyPlacementRound(state: RankedState | null, place: number, field: number, toPar: number, lo = PLACEMENT_MIN_RATING, hi = PLACEMENT_MAX_RATING): { state: RankedState; result: PlacementResult } {
   const s = normalizeRanked(state);
   const frac = field <= 1 ? 1 : (field - place) / (field - 1); // 1 = beat everyone → 0 = last
-  const estRating = PLACEMENT_MIN_RATING + frac * (PLACEMENT_MAX_RATING - PLACEMENT_MIN_RATING);
+  const estRating = lo + frac * (hi - lo);
   const estimate = rpFromRating(estRating);
   const placeEstimates = [...s.placeEstimates, estimate].slice(0, PLACEMENT_ROUNDS);
   const projectedRp = Math.round(placeEstimates.reduce((a, b) => a + b, 0) / placeEstimates.length);

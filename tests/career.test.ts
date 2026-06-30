@@ -959,6 +959,16 @@ describe("ranked placement field — calibrates you to your level", () => {
     expect(["platinum", "diamond", "master"]).toContain(probe(N - 1).tier.key); // top of the field
     expect(["bronze", "silver", "gold"]).toContain(probe(0).tier.key); // bottom of the field
   });
+
+  it("the bots carry the difficulty edge — a strong band plays well under par", () => {
+    const holes = buildRound(909090, "ranked");
+    const par = holes.reduce((s, h) => s + h.par, 0);
+    // A high band (Diamond/Master ratings) sharpened by PLACEMENT_EDGE shoots
+    // clearly under par — so out-finishing it (and ranking up) takes real play.
+    const field = rankedPlacementField(55, 24, holes, 82, 92);
+    const mean = field.reduce((s, p) => s + p.total, 0) / field.length;
+    expect(mean).toBeLessThan(par - 6);
+  });
 });
 
 describe("ranked field — sharpened to stay competitive", () => {

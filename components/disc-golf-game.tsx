@@ -25,7 +25,7 @@ import {
   type DiscSkin, type BasketSkin, type AimStyle, type GroundTheme, type Celebration,
 } from "@/lib/discgolf/cosmetics";
 import {
-  weekSeed, applyRankedRound, applyPlacementRound, normalizeRanked, tierFromRP, rankedFieldMean, RANKED_FIELD, PLACEMENT_ROUNDS, RANKED_BOARD_KEY, encodeToParScore, decodeToParScore, type RankedState, type RankedResult, type PlacementResult,
+  weekSeed, applyRankedRound, applyPlacementRound, normalizeRanked, tierFromRP, rankedFieldMean, RANKED_FIELD, PLACEMENT_ROUNDS, PLACEMENT_MIN_RATING, PLACEMENT_MAX_RATING, RANKED_BOARD_KEY, encodeToParScore, decodeToParScore, type RankedState, type RankedResult, type PlacementResult,
 } from "@/lib/discgolf/ranked";
 import { centralWeekFromDay } from "@/lib/discgolf/time";
 import { isLegacyHost, transferUrl, readTransferToken, clearTransferToken, CANONICAL_HOST } from "@/lib/discgolf/transfer";
@@ -374,6 +374,7 @@ export function DiscGolfGame() {
   const careerFieldRef = useRef<FieldPlayer[] | null>(null); // the field's per-hole scores (card + live board)
   const rankedPlayRef = useRef(false); // current round is a ranked round (AI field, placement RP)
   const rankedFieldRef = useRef<FieldPlayer[] | null>(null); // the ranked AI field's per-hole scores
+  const rankedPlaceSpanRef = useRef<[number, number]>([PLACEMENT_MIN_RATING, PLACEMENT_MAX_RATING]); // rating band of the current placement field (for the estimate)
   const [careerLastResult, setCareerLastResult] = useState<EventResult | null>(null);
   const [careerCoins, setCareerCoins] = useState(0); // account coins paid by the last PLAYED career round (0 when simmed)
   const saveCareer = useCallback((c: Career | null) => {
@@ -1155,11 +1156,20 @@ export function DiscGolfGame() {
     modeRef.current = "ranked";
     const seed = (Math.random() * 1e9) | 0; // a brand-new course each round
     const roundHoles = buildRound(seed, "ranked");
-    // Your first rounds are placement: a wide calibration field that reads your
-    // true level. After you're placed, the field scales to your tier as usual.
-    rankedFieldRef.current = (rankedRef.current?.placed ?? false)
-      ? rankedFieldForRound(seed, rankedFieldMean(rankedRef.current?.rp ?? 0), RANKED_FIELD, roundHoles)
-      : rankedPlacementField(seed, RANKED_FIELD, roundHoles);
+    // Your first rounds are placement. Round 1 reads you against the whole ladder;
+    // each later placement round is played against your PROJECTED division (its
+    // tier mean ±14), so you face bots at your level. After you're placed, the
+    // field scales to your tier as usual.
+    const rk = rankedRef.current;
+    if (rk?.placed) {
+      rankedFieldRef.current = rankedFieldForRound(seed, rankedFieldMean(rk.rp), RANKED_FIELD, roundHoles);
+    } else {
+      const done = rk?.placeEstimates?.length ?? 0;
+      const mean = rankedFieldMean(rk?.rp ?? 0); // current projection's tier mean
+      const span: [number, number] = done === 0 ? [PLACEMENT_MIN_RATING, PLACEMENT_MAX_RATING] : [mean - 14, mean + 14];
+      rankedPlaceSpanRef.current = span;
+      rankedFieldRef.current = rankedPlacementField(seed, RANKED_FIELD, roundHoles, span[0], span[1]);
+    }
     ghostsRef.current = null;
     const discIndex = validDiscIndex(discIndexRef.current, bagRef.current);
     discIndexRef.current = discIndex;
@@ -1861,8 +1871,9 @@ export function DiscGolfGame() {
       const place = 1 + field.filter((p) => p.total < total).length; // ties favor you
       // Placement rounds calibrate your starting rank; after that it's normal RP.
       const inPlacement = !(rankedRef.current?.placed ?? false);
+      const [spanLo, spanHi] = rankedPlaceSpanRef.current;
       const { state, result } = inPlacement
-        ? applyPlacementRound(rankedRef.current, place, field.length + 1, toPar)
+        ? applyPlacementRound(rankedRef.current, place, field.length + 1, toPar, spanLo, spanHi)
         : applyRankedRound(rankedRef.current, place, field.length + 1, toPar);
       rankedRef.current = state; setRanked(state);
       try { localStorage.setItem(RANKED_KEY, JSON.stringify(state)); } catch { /* ignore */ }

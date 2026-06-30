@@ -8,6 +8,7 @@ import {
   applyPlacementRound,
   rpFromRating,
   PLACEMENT_ROUNDS,
+  PLACEMENT_EDGE,
   normalizeRanked,
   rankedFieldMean,
   tierFromRP,
@@ -124,10 +125,23 @@ describe("placement (calibration rounds)", () => {
   });
 
   it("reads your level from where you finish in the wide calibration field", () => {
-    // Field of 25 (24 opponents + you), evenly spread Bronze→Master.
+    // Round 1: field of 25 (24 opponents + you), evenly spread Bronze→Master.
     expect(applyPlacementRound(EMPTY_RANKED, 1, 25, -10).result.tier.key).toBe("master"); // beat everyone
     expect(applyPlacementRound(EMPTY_RANKED, 13, 25, 0).result.tier.key).toBe("gold");     // dead middle
     expect(applyPlacementRound(EMPTY_RANKED, 25, 25, 12).result.tier.key).toBe("bronze");  // finished last
+  });
+
+  it("later rounds test you within your projected division's band (tier mean ±14)", () => {
+    // Projected Diamond → field spans ~[66, 94]. Holding mid keeps Diamond; a win
+    // pushes toward Master; a poor round slips toward Gold/Platinum.
+    const lo = 66, hi = 94;
+    expect(applyPlacementRound(EMPTY_RANKED, 13, 25, 0, lo, hi).result.tier.key).toBe("diamond"); // mid → ~80
+    expect(["diamond", "master"]).toContain(applyPlacementRound(EMPTY_RANKED, 1, 25, -8, lo, hi).result.tier.key);
+    expect(["gold", "platinum"]).toContain(applyPlacementRound(EMPTY_RANKED, 25, 25, 6, lo, hi).result.tier.key);
+  });
+
+  it("placement bots carry a 7-stroke difficulty edge", () => {
+    expect(PLACEMENT_EDGE).toBe(7);
   });
 
   it("projects a rank after round 1, adjusts to how you play, and locks in after PLACEMENT_ROUNDS", () => {
