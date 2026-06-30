@@ -5113,7 +5113,7 @@ function CareerSlots({ careers, onPick, onDelete, onBack }: {
       </div>
       <p className="text-gray-400 text-sm">Pick a save slot. Each career is its own journey — keep up to {careers.length} going at once and switch between them anytime.</p>
       {careers.map((c, slot) => (
-        <div key={slot} className="bg-[#1a1d23] border border-white/5 rounded-xl p-3">
+        <div key={slot} className="bg-[#1a1d23] hover:bg-[#252932] active:bg-[#2d323c] border border-white/5 hover:border-white/15 rounded-xl p-3 transition-colors">
           {c ? (
             <div className="flex items-center gap-2">
               <button type="button" onClick={() => onPick(slot)} className="flex-1 min-w-0 text-left">
@@ -5123,7 +5123,7 @@ function CareerSlots({ careers, onPick, onDelete, onBack }: {
               {confirmDel === slot ? (
                 <span className="shrink-0 text-[11px] text-gray-400">Delete? <button type="button" onClick={() => { onDelete(slot); setConfirmDel(null); }} className="text-[#e2453b] font-bold">Yes</button> · <button type="button" onClick={() => setConfirmDel(null)} className="text-gray-300">No</button></span>
               ) : (
-                <button type="button" onClick={() => setConfirmDel(slot)} title="Delete this career" className="shrink-0 text-gray-600 hover:text-[#e2453b] text-base leading-none">🗑</button>
+                <button type="button" onClick={() => setConfirmDel(slot)} title="Delete this career" className="shrink-0 w-7 h-7 flex items-center justify-center rounded-md border border-[#e2453b]/60 bg-[#e2453b]/15 hover:bg-[#e2453b]/30 text-sm leading-none transition-colors">🗑</button>
               )}
             </div>
           ) : (
