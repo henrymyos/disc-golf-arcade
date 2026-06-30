@@ -3749,7 +3749,7 @@ export function DiscGolfGame() {
                     online={!!supa}
                     onBack={() => setHub("online")}
                     onCreate={() => createLobby(profile.name)}
-                    onJoin={(code, name) => joinLobby(code, name)}
+                    onJoin={(code) => joinLobby(code, profile.name)}
                   />
                 </div>
               )}
@@ -4803,10 +4803,9 @@ function ChallengePanel({ online, onBack, onCreate, onJoin }: {
   online: boolean;
   onBack: () => void;
   onCreate: () => void;
-  onJoin: (code: string, name: string) => void;
+  onJoin: (code: string) => void;
 }) {
   const [step, setStep] = useState<"menu" | "join">("menu");
-  const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const input = "w-full bg-[#1a1d23] border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-[#4B3DFF]";
   // Renders inline inside the title column (same hub styling as Single Player /
@@ -4831,8 +4830,7 @@ function ChallengePanel({ online, onBack, onCreate, onJoin }: {
           <input type="text" inputMode="text" autoCapitalize="characters" autoComplete="off" value={code} maxLength={4}
             onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4))}
             placeholder="CODE" className={`${input} tracking-[0.3em] text-center font-mono uppercase`} />
-          <input type="text" value={name} maxLength={12} onChange={(e) => setName(e.target.value)} placeholder="Your name" className={input} />
-          <button type="button" onClick={() => code.trim().length === 4 && onJoin(code, name)} disabled={code.trim().length !== 4} className={`${btn} w-full disabled:opacity-50`}>Join Game</button>
+          <button type="button" onClick={() => code.trim().length === 4 && onJoin(code)} disabled={code.trim().length !== 4} className={`${btn} w-full disabled:opacity-50`}>Join Game</button>
         </div>
       )}
     </div>
