@@ -48,7 +48,8 @@ import {
   type Career,
   type CareerSkills,
 } from "../lib/discgolf/career";
-import { careerFieldForRound, rankedFieldForRound, RANKED_EDGE } from "../lib/discgolf/career";
+import { careerFieldForRound, rankedFieldForRound, rankedPlacementField, RANKED_EDGE } from "../lib/discgolf/career";
+import { applyPlacementRound, EMPTY_RANKED } from "../lib/discgolf/ranked";
 import { CATCH_R, buildRound, discByKey } from "../lib/discgolf/engine";
 
 describe("newCareer", () => {
@@ -937,6 +938,26 @@ describe("pro tour — real current pros", () => {
     const hs = normalizeCareer({ ...newCareer("Frosh", 9) }); // starts in high school
     expect(hs.rivals.some((r) => r.id.startsWith("pro"))).toBe(false);
     expect(hs.rivals.map((r) => r.name)).not.toContain("Gannon Buhr");
+  });
+});
+
+describe("ranked placement field — calibrates you to your level", () => {
+  it("finishing higher in the wide field projects a higher rank", () => {
+    const holes = buildRound(13371337, "ranked");
+    const field = rankedPlacementField(424242, 24, holes);
+    const N = field.length;
+    // The field is graded by index (member i ≈ rating 40 + i/(N-1)·50). Use a graded
+    // member as a stand-in "player": their finish among the others should project
+    // back toward their own level.
+    const probe = (i: number) => {
+      const me = field[i].total;
+      const others = field.filter((_, j) => j !== i);
+      const place = 1 + others.filter((p) => p.total < me).length;
+      return applyPlacementRound(EMPTY_RANKED, place, others.length + 1, 0).result;
+    };
+    expect(probe(2).projectedRp).toBeLessThan(probe(N - 3).projectedRp); // weak < strong
+    expect(["platinum", "diamond", "master"]).toContain(probe(N - 1).tier.key); // top of the field
+    expect(["bronze", "silver", "gold"]).toContain(probe(0).tier.key); // bottom of the field
   });
 });
 

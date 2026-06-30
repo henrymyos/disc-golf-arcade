@@ -31,6 +31,16 @@ export function decodeToParScore(stored: number): number { return stored - RANKE
 // How many AI opponents fill a ranked round (you make it a field of N+1).
 export const RANKED_FIELD = 24;
 
+// ── Placement. Your first PLACEMENT_ROUNDS ranked rounds are calibration rounds:
+// instead of grinding up from Bronze, you play a wide field that spans the whole
+// ladder (ratings ~40–90, see rankedPlacementField), and where you FINISH maps
+// straight back to a starting rank. So a strong player is placed near their true
+// level immediately rather than farming a soft tier. A projected rank shows after
+// round 1 and refines (running average) until it locks in. ──
+export const PLACEMENT_ROUNDS = 3;
+export const PLACEMENT_MIN_RATING = 40; // bottom of the calibration field's rating span
+export const PLACEMENT_MAX_RATING = 90; // top of it — beat ~everyone here ⇒ Master
+
 export type Tier = { key: string; name: string; emoji: string; color: string; min: number };
 
 // Climbing tiers, each gated by a lifetime-RP threshold.
@@ -94,9 +104,11 @@ export type RankedState = {
   bestStreak: number;    // longest podium streak reached
   wins: number;          // 1st-place finishes
   podiums: number;       // top-3 finishes
+  placed: boolean;       // true once placement (the calibration rounds) is complete
+  placeEstimates: number[]; // per-placement-round RP estimates → the projected rank
 };
 
-export const EMPTY_RANKED: RankedState = { rp: 0, bestToPar: null, rounds: 0, streak: 0, bestStreak: 0, wins: 0, podiums: 0 };
+export const EMPTY_RANKED: RankedState = { rp: 0, bestToPar: null, rounds: 0, streak: 0, bestStreak: 0, wins: 0, podiums: 0, placed: false, placeEstimates: [] };
 
 // Fill in any fields a legacy/partial saved state is missing (older saves only had
 // rp/bestToPar/rounds), so the ladder keeps working across the upgrade.
@@ -110,6 +122,10 @@ export function normalizeRanked(state: Partial<RankedState> | null | undefined):
     bestStreak: s.bestStreak ?? 0,
     wins: s.wins ?? 0,
     podiums: s.podiums ?? 0,
+    // A save without the `placed` flag predates placement — re-run it so existing
+    // players also get calibrated to their true rank (their stats are kept).
+    placed: typeof s.placed === "boolean" ? s.placed : false,
+    placeEstimates: Array.isArray(s.placeEstimates) ? s.placeEstimates.slice(0, PLACEMENT_ROUNDS) : [],
   };
 }
 
@@ -148,11 +164,83 @@ export function applyRankedRound(state: RankedState | null, place: number, field
     bestStreak: Math.max(s.bestStreak, streak),
     wins: s.wins + (win ? 1 : 0),
     podiums: s.podiums + (podium ? 1 : 0),
+    placed: s.placed, // already past placement when this runs
+    placeEstimates: s.placeEstimates,
   };
   const result: RankedResult = {
     place, field, toPar, rpDelta, base, bonus, podium, win, streak,
     tierUp: afterIdx > beforeIdx,
     tierDown: afterIdx < beforeIdx,
+  };
+  return { state: next, result };
+}
+
+// Map an estimated internal skill rating (~40–90) to lifetime RP, anchored so a
+// tier's mean rating lands mid-tier. Inverse-ish of rankedFieldMean — it turns a
+// placement finish into a starting rank. Extends linearly past either end.
+const RP_ANCHORS: [number, number][] = [
+  [42, 200],  // Bronze mean → mid-Bronze
+  [54, 700],  // Silver
+  [64, 1500], // Gold
+  [72, 2750], // Platinum
+  [80, 4500], // Diamond
+  [88, 6500], // Master
+];
+export function rpFromRating(rating: number): number {
+  const a = RP_ANCHORS;
+  const lerp = (r0: number, p0: number, r1: number, p1: number) => p0 + ((rating - r0) / (r1 - r0)) * (p1 - p0);
+  if (rating <= a[0][0]) return Math.max(0, Math.round(lerp(a[0][0], a[0][1], a[1][0], a[1][1])));
+  for (let i = 1; i < a.length; i++) if (rating <= a[i][0]) return Math.round(lerp(a[i - 1][0], a[i - 1][1], a[i][0], a[i][1]));
+  const n = a.length;
+  return Math.round(lerp(a[n - 2][0], a[n - 2][1], a[n - 1][0], a[n - 1][1]));
+}
+
+export type PlacementResult = {
+  placement: true;     // discriminates this from a normal RankedResult
+  round: number;       // which placement round this was (1..PLACEMENT_ROUNDS)
+  rounds: number;      // PLACEMENT_ROUNDS (total)
+  remaining: number;   // placement rounds left after this one
+  placed: boolean;     // true once placement completed on this round
+  place: number;
+  field: number;
+  toPar: number;
+  projectedRp: number; // running-average RP estimate → the projected rank
+  tier: Tier;          // the tier projectedRp falls in
+};
+
+// A placement (calibration) round. Read your level from where you finished in the
+// wide calibration field — your finishing fraction maps straight back onto the
+// field's rating span (PLACEMENT_*_RATING), so beating the weak third ≈ Bronze and
+// beating nearly everyone ≈ Master. Fold the estimate into the running average and
+// lock in a starting rank once PLACEMENT_ROUNDS are in. Streak stays dormant until
+// you're ranked; wins/podiums and best-to-par still count.
+export function applyPlacementRound(state: RankedState | null, place: number, field: number, toPar: number): { state: RankedState; result: PlacementResult } {
+  const s = normalizeRanked(state);
+  const frac = field <= 1 ? 1 : (field - place) / (field - 1); // 1 = beat everyone → 0 = last
+  const estRating = PLACEMENT_MIN_RATING + frac * (PLACEMENT_MAX_RATING - PLACEMENT_MIN_RATING);
+  const estimate = rpFromRating(estRating);
+  const placeEstimates = [...s.placeEstimates, estimate].slice(0, PLACEMENT_ROUNDS);
+  const projectedRp = Math.round(placeEstimates.reduce((a, b) => a + b, 0) / placeEstimates.length);
+  const placed = placeEstimates.length >= PLACEMENT_ROUNDS;
+  const next: RankedState = {
+    ...s,
+    rp: projectedRp,
+    placed,
+    placeEstimates,
+    rounds: s.rounds + 1,
+    bestToPar: s.bestToPar == null ? toPar : Math.min(s.bestToPar, toPar),
+    wins: s.wins + (place === 1 ? 1 : 0),
+    podiums: s.podiums + (place <= 3 ? 1 : 0),
+  };
+  const result: PlacementResult = {
+    placement: true,
+    round: placeEstimates.length,
+    rounds: PLACEMENT_ROUNDS,
+    remaining: PLACEMENT_ROUNDS - placeEstimates.length,
+    placed,
+    place, field, toPar,
+    projectedRp,
+    tier: tierFromRP(projectedRp).tier,
   };
   return { state: next, result };
 }

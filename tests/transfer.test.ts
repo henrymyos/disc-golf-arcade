@@ -13,7 +13,7 @@ describe("progress transfer token", () => {
       ...base,
       best: 54, winthropBest: 60, achievements: ["ace", "eagle"], coins: 1234,
       owned: ["destroyer", "trail:flame", "avatar:🦅"], history: [{ mode: "ranked", total: 49, date: 1719500000000, scores: [3, 2, 4], pars: [3, 3, 4] }],
-      ranked: { rp: 820, bestToPar: -6, rounds: 12, streak: 2, bestStreak: 4, wins: 3, podiums: 7 },
+      ranked: { rp: 820, bestToPar: -6, rounds: 12, streak: 2, bestStreak: 4, wins: 3, podiums: 7, placed: true, placeEstimates: [] },
       profile: { name: "Ærö 🥏" }, coinsEarned: 2000, coinsSpent: 766,
     };
     const back = decodeProgress(encodeProgress(p));

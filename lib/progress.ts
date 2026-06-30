@@ -169,6 +169,10 @@ export function mergeProgress(a: Progress, b: Progress): Progress {
     bestStreak: Math.max(ra.bestStreak ?? 0, rb.bestStreak ?? 0),
     wins: Math.max(ra.wins ?? 0, rb.wins ?? 0),
     podiums: Math.max(ra.podiums ?? 0, rb.podiums ?? 0),
+    // Placement: once placed on either device, stay placed; otherwise keep the
+    // further-along placement progress (more calibration rounds banked).
+    placed: !!(ra.placed || rb.placed),
+    placeEstimates: (ra.placeEstimates?.length ?? 0) >= (rb.placeEstimates?.length ?? 0) ? (ra.placeEstimates ?? []) : (rb.placeEstimates ?? []),
   };
 
   // Coins as a loss-free CRDT: reconcile monotonic earned + spent totals (each

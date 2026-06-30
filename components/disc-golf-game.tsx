@@ -25,7 +25,7 @@ import {
   type DiscSkin, type BasketSkin, type AimStyle, type GroundTheme, type Celebration,
 } from "@/lib/discgolf/cosmetics";
 import {
-  weekSeed, applyRankedRound, normalizeRanked, tierFromRP, rankedFieldMean, RANKED_FIELD, RANKED_BOARD_KEY, encodeToParScore, decodeToParScore, type RankedState, type RankedResult,
+  weekSeed, applyRankedRound, applyPlacementRound, normalizeRanked, tierFromRP, rankedFieldMean, RANKED_FIELD, PLACEMENT_ROUNDS, RANKED_BOARD_KEY, encodeToParScore, decodeToParScore, type RankedState, type RankedResult, type PlacementResult,
 } from "@/lib/discgolf/ranked";
 import { centralWeekFromDay } from "@/lib/discgolf/time";
 import { isLegacyHost, transferUrl, readTransferToken, clearTransferToken, CANONICAL_HOST } from "@/lib/discgolf/transfer";
@@ -48,7 +48,7 @@ import {
   careerRating, careerCoins as coinsForFinish, careerDiscShop, buyCareerDisc, toggleCareerBag, CAREER_BAG_MAX,
   buyCareerCosmetic, equipCareerLook, DEFAULT_CAREER_LOOK, type CareerLook,
   careerFieldForRound, careerCardRacers, careerLiveStandings, careerHoleLenScale, careerYear,
-  rankedFieldForRound, rankedCardRacers,
+  rankedFieldForRound, rankedPlacementField, rankedCardRacers,
   type Career, type CareerEvent, type EventResult, type CareerSkills, type SkillMods, type FieldPlayer,
 } from "@/lib/discgolf/career";
 
@@ -645,7 +645,7 @@ export function DiscGolfGame() {
   const [ranked, setRanked] = useState<RankedState | null>(null);
   const rankedRef = useRef<RankedState | null>(null);
   const [rankedOpen, setRankedOpen] = useState(false);
-  const [rankedResult, setRankedResult] = useState<RankedResult | null>(null); // outcome of the ranked round just finished
+  const [rankedResult, setRankedResult] = useState<RankedResult | PlacementResult | null>(null); // outcome of the ranked round just finished (placement or ranked)
 
   // ── Recurring daily + weekly challenges (rotating objectives that pay coins) ──
   const [challengesOpen, setChallengesOpen] = useState(false);
@@ -1155,7 +1155,11 @@ export function DiscGolfGame() {
     modeRef.current = "ranked";
     const seed = (Math.random() * 1e9) | 0; // a brand-new course each round
     const roundHoles = buildRound(seed, "ranked");
-    rankedFieldRef.current = rankedFieldForRound(seed, rankedFieldMean(rankedRef.current?.rp ?? 0), RANKED_FIELD, roundHoles);
+    // Your first rounds are placement: a wide calibration field that reads your
+    // true level. After you're placed, the field scales to your tier as usual.
+    rankedFieldRef.current = (rankedRef.current?.placed ?? false)
+      ? rankedFieldForRound(seed, rankedFieldMean(rankedRef.current?.rp ?? 0), RANKED_FIELD, roundHoles)
+      : rankedPlacementField(seed, RANKED_FIELD, roundHoles);
     ghostsRef.current = null;
     const discIndex = validDiscIndex(discIndexRef.current, bagRef.current);
     discIndexRef.current = discIndex;
@@ -1855,7 +1859,11 @@ export function DiscGolfGame() {
       const toPar = total - pars.reduce((s, n) => s + n, 0);
       const field = rankedFieldRef.current;
       const place = 1 + field.filter((p) => p.total < total).length; // ties favor you
-      const { state, result } = applyRankedRound(rankedRef.current, place, field.length + 1, toPar);
+      // Placement rounds calibrate your starting rank; after that it's normal RP.
+      const inPlacement = !(rankedRef.current?.placed ?? false);
+      const { state, result } = inPlacement
+        ? applyPlacementRound(rankedRef.current, place, field.length + 1, toPar)
+        : applyRankedRound(rankedRef.current, place, field.length + 1, toPar);
       rankedRef.current = state; setRanked(state);
       try { localStorage.setItem(RANKED_KEY, JSON.stringify(state)); } catch { /* ignore */ }
       setRankedResult(result);
@@ -3652,7 +3660,9 @@ export function DiscGolfGame() {
                     <span className="font-black text-lg">Challenge Friends</span>
                   </button>
                   <button type="button" onClick={() => setRankedOpen(true)} className={hubCard}>
-                    <span className="font-black text-lg">Ranked · {tierFromRP(ranked?.rp ?? 0).tier.emoji} {tierFromRP(ranked?.rp ?? 0).tier.name}</span>
+                    <span className="font-black text-lg">Ranked · {ranked?.placed
+                      ? `${tierFromRP(ranked.rp).tier.emoji} ${tierFromRP(ranked.rp).tier.name}`
+                      : `Placement ${ranked?.placeEstimates?.length ?? 0}/${PLACEMENT_ROUNDS}`}</span>
                   </button>
                 </div>
               )}
@@ -4179,8 +4189,28 @@ export function DiscGolfGame() {
                 )}
               </>)}
               {finalMode === "ranked" && rankedResult && (() => {
-                const tr = tierFromRP(ranked?.rp ?? 0);
                 const r = rankedResult;
+                // Placement round: show the projected (or final) rank, not an RP delta.
+                if ("placement" in r) {
+                  return (
+                    <div className="mt-3 bg-[#1a1d23] border border-white/10 rounded-xl px-4 py-3 text-left">
+                      <div className="flex items-center justify-between">
+                        <span className="text-white font-black text-lg">{r.placed ? "🏅 Placement complete!" : `Placement ${r.round}/${r.rounds}`}</span>
+                        <span className="font-mono font-bold text-sm text-gray-300">{ordinal(r.place)} of {r.field}</span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <span className="text-xl leading-none">{r.tier.emoji}</span>
+                        <span className="font-bold text-sm" style={{ color: r.tier.color }}>{r.placed ? "" : "Projected: "}{r.tier.name}</span>
+                      </div>
+                      <p className="text-gray-400 text-[11px] mt-1.5">
+                        {r.placed
+                          ? `You've been placed in ${r.tier.name}. Ranked rounds from here move your RP up or down.`
+                          : `${r.remaining} placement round${r.remaining === 1 ? "" : "s"} to go — your projected rank adjusts as you play.`}
+                      </p>
+                    </div>
+                  );
+                }
+                const tr = tierFromRP(ranked?.rp ?? 0);
                 return (
                   <div className="mt-3 bg-[#1a1d23] border border-white/10 rounded-xl px-4 py-3 text-left">
                     <div className="flex items-center justify-between">
@@ -6098,6 +6128,8 @@ function RankedPanel({ ranked, playerName, onPlay, onClose }: {
   const t = tierFromRP(rp);
   const pct = t.need ? Math.round((t.into / t.need) * 100) : 100;
   const me = (playerName ?? "").trim().slice(0, 16) || "Anon";
+  const placed = ranked?.placed ?? false;
+  const placeDone = ranked?.placeEstimates?.length ?? 0; // placement rounds banked so far
   const stat = (label: string, value: string | number) => (
     <div className="flex-1 bg-[#1a1d23] border border-white/5 rounded-lg px-2 py-1.5 text-center">
       <p className="text-white font-bold text-sm leading-none">{value}</p>
@@ -6117,18 +6149,38 @@ function RankedPanel({ ranked, playerName, onPlay, onClose }: {
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
 
+        {/* Placement banner — shown until you've finished your calibration rounds */}
+        {!placed && (
+          <div className="bg-[#36D7B7]/10 border border-[#36D7B7]/30 rounded-xl px-3 py-2.5">
+            <p className="text-[#36D7B7] font-bold text-sm">🎯 Placement · {placeDone}/{PLACEMENT_ROUNDS} rounds</p>
+            <p className="text-gray-300 text-[11px] mt-0.5 leading-snug">
+              {placeDone === 0
+                ? `Play ${PLACEMENT_ROUNDS} calibration rounds against a full-range field to find your rank. A projected rank shows after round 1.`
+                : `Your projected rank is below — it keeps adjusting to how you play until placement is done.`}
+            </p>
+          </div>
+        )}
+
         {/* Tier card */}
         <div className="flex items-center gap-3 bg-[#1a1d23] border border-white/10 rounded-xl px-3 py-3">
-          <span className="text-4xl leading-none shrink-0">{t.tier.emoji}</span>
+          <span className="text-4xl leading-none shrink-0">{placed ? t.tier.emoji : placeDone > 0 ? t.tier.emoji : "❔"}</span>
           <div className="min-w-0 flex-1">
             <div className="flex items-baseline justify-between">
-              <span className="font-bold text-base" style={{ color: t.tier.color }}>{t.tier.name}</span>
-              <span className="text-gray-400 font-mono text-[11px]">{rp} RP</span>
+              <span className="font-bold text-base" style={{ color: placed || placeDone > 0 ? t.tier.color : "#9aa0aa" }}>
+                {placed ? t.tier.name : placeDone > 0 ? `${t.tier.name} (projected)` : "Unranked"}
+              </span>
+              <span className="text-gray-400 font-mono text-[11px]">{placed ? `${rp} RP` : ""}</span>
             </div>
-            <div className="mt-1.5 h-1.5 bg-white/10 rounded overflow-hidden">
-              <div className="h-full rounded" style={{ width: `${pct}%`, background: t.tier.color }} />
-            </div>
-            <p className="text-gray-500 text-[10px] mt-1">{t.next ? `${t.need - t.into} RP to ${t.next.name}` : "Top tier reached 👑"}</p>
+            {placed ? (
+              <>
+                <div className="mt-1.5 h-1.5 bg-white/10 rounded overflow-hidden">
+                  <div className="h-full rounded" style={{ width: `${pct}%`, background: t.tier.color }} />
+                </div>
+                <p className="text-gray-500 text-[10px] mt-1">{t.next ? `${t.need - t.into} RP to ${t.next.name}` : "Top tier reached 👑"}</p>
+              </>
+            ) : (
+              <p className="text-gray-500 text-[10px] mt-1">{placeDone > 0 ? `${PLACEMENT_ROUNDS - placeDone} placement round${PLACEMENT_ROUNDS - placeDone === 1 ? "" : "s"} left` : "Finish placement to lock in a rank"}</p>
+            )}
           </div>
         </div>
 
@@ -6148,7 +6200,7 @@ function RankedPanel({ ranked, playerName, onPlay, onClose }: {
         </p>
 
         <button type="button" onClick={onPlay} className={`${btn} w-full`}>
-          Play a ranked round
+          {placed ? "Play a ranked round" : `Play placement round ${placeDone + 1} of ${PLACEMENT_ROUNDS}`}
         </button>
 
         {/* All-time best-to-par board */}

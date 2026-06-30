@@ -4,6 +4,7 @@
 // as real rounds (your skills change how the disc flies — see skillMods). All
 // logic here is pure + deterministic so it's testable and resumes cleanly. ──
 import { mulberry32, CATCH_R, TOTAL_PAR, WINTHROP_PAR, tourPars, tourCharacter, tourVenue, discByKey, type Mode, type Hole, type TournLiveRow, type GhostRacer } from "./engine";
+import { PLACEMENT_MIN_RATING, PLACEMENT_MAX_RATING } from "./ranked";
 
 export type CareerSkills = { power: number; control: number; putt: number; stamina: number };
 export const SKILL_KEYS: (keyof CareerSkills)[] = ["power", "control", "putt", "stamina"];
@@ -781,6 +782,26 @@ export function rankedFieldForRound(seed: number, fieldMean: number, size: numbe
   for (let i = 0; i < size; i++) {
     const rating = clamp(fieldMean + (rng() * 2 - 1) * 14, 20, 99); // spread around the tier mean
     const holes = simHoleScores(rating, par, roundHoles.length, rng, diff, RANKED_EDGE);
+    field.push({ name: anonName(seed, i), isRival: false, color: "#7a808a", holes, total: holes.reduce((a, b) => a + b, 0) });
+  }
+  return field;
+}
+// The placement (calibration) field for one of your first ranked rounds: a wide
+// field spread EVENLY across the whole ladder (PLACEMENT_MIN_RATING → MAX), so
+// where you finish reveals your true level immediately. Unlike the normal ranked
+// field it carries NO skill edge — it plays at its honest rating, so a finishing
+// fraction maps cleanly back onto the rating span (see applyPlacementRound).
+export function rankedPlacementField(seed: number, size: number, roundHoles: Hole[]): FieldPlayer[] {
+  const par = roundHoles.reduce((s, h) => s + h.par, 0);
+  const diff = roundHoles.map(holeDifficulty);
+  const rng = mulberry32((seed ^ 0x5bd1e995) >>> 0);
+  const field: FieldPlayer[] = [];
+  for (let i = 0; i < size; i++) {
+    const t = size <= 1 ? 0.5 : i / (size - 1); // 0..1 across the field
+    // Evenly graded across the calibration band, with a hair of jitter so it isn't
+    // a perfect staircase.
+    const rating = clamp(PLACEMENT_MIN_RATING + t * (PLACEMENT_MAX_RATING - PLACEMENT_MIN_RATING) + (rng() * 2 - 1) * 2, 20, 99);
+    const holes = simHoleScores(rating, par, roundHoles.length, rng, diff);
     field.push({ name: anonName(seed, i), isRival: false, color: "#7a808a", holes, total: holes.reduce((a, b) => a + b, 0) });
   }
   return field;
