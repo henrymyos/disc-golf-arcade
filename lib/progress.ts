@@ -4,7 +4,7 @@
 
 import type { Career } from "./discgolf/career";
 import type { DailyReward } from "./discgolf/wallet";
-import type { RankedState } from "./discgolf/ranked";
+import { SEASON_HISTORY_MAX, type RankedState, type SeasonRecord } from "./discgolf/ranked";
 
 export const BEST_KEY = "discgolf.best.glendoveer18";
 export const WBEST_KEY = "discgolf.best.winthrop18";
@@ -179,25 +179,38 @@ export function mergeProgress(a: Progress, b: Progress): Progress {
 
   // Ranked ladder: keep the most progress — highest lifetime RP, best (lowest)
   // to-par, and most rounds — so nothing is lost across devices. Ranked runs in
-  // monthly seasons, so a NEWER season wins outright (last season's data is stale);
-  // within the same season we field-wise merge as before.
+  // monthly seasons, so a NEWER season wins the live ladder outright (last season's
+  // data is stale); within the same season we field-wise merge as before. Past-
+  // season history is always UNIONED so no device ever loses an earned badge.
   const ra = a.ranked ?? null, rb = b.ranked ?? null;
-  const sa = ra?.season ?? 0, sb = rb?.season ?? 0;
-  const ranked: RankedState | null = !ra ? rb : !rb ? ra : sa !== sb ? (sa > sb ? ra : rb) : {
-    rp: Math.max(ra.rp ?? 0, rb.rp ?? 0),
-    bestToPar: ra.bestToPar == null ? rb.bestToPar : rb.bestToPar == null ? ra.bestToPar : Math.min(ra.bestToPar, rb.bestToPar),
-    rounds: Math.max(ra.rounds ?? 0, rb.rounds ?? 0),
-    streak: Math.max(ra.streak ?? 0, rb.streak ?? 0),
-    bestStreak: Math.max(ra.bestStreak ?? 0, rb.bestStreak ?? 0),
-    wins: Math.max(ra.wins ?? 0, rb.wins ?? 0),
-    podiums: Math.max(ra.podiums ?? 0, rb.podiums ?? 0),
-    // Placement: once placed on either device, stay placed; otherwise keep the
-    // further-along placement progress (more calibration rounds banked).
-    placed: !!(ra.placed || rb.placed),
-    placeEstimates: (ra.placeEstimates?.length ?? 0) >= (rb.placeEstimates?.length ?? 0) ? (ra.placeEstimates ?? []) : (rb.placeEstimates ?? []),
-    season: sa,
-    lastSeasonRp: ra.lastSeasonRp ?? rb.lastSeasonRp ?? null,
-  };
+  let ranked: RankedState | null;
+  if (!ra) ranked = rb;
+  else if (!rb) ranked = ra;
+  else {
+    // Union finished-season records, deduped by month, newest first.
+    const histMap = new Map<number, SeasonRecord>();
+    for (const h of [...(rb.history ?? []), ...(ra.history ?? [])]) if (h && typeof h.season === "number") histMap.set(h.season, h);
+    const history = [...histMap.values()].sort((x, y) => y.season - x.season).slice(0, SEASON_HISTORY_MAX);
+    const sa = ra.season ?? 0, sb = rb.season ?? 0;
+    ranked = sa !== sb
+      ? { ...(sa > sb ? ra : rb), history } // newer live ladder wins, but keep all history
+      : {
+          rp: Math.max(ra.rp ?? 0, rb.rp ?? 0),
+          bestToPar: ra.bestToPar == null ? rb.bestToPar : rb.bestToPar == null ? ra.bestToPar : Math.min(ra.bestToPar, rb.bestToPar),
+          rounds: Math.max(ra.rounds ?? 0, rb.rounds ?? 0),
+          streak: Math.max(ra.streak ?? 0, rb.streak ?? 0),
+          bestStreak: Math.max(ra.bestStreak ?? 0, rb.bestStreak ?? 0),
+          wins: Math.max(ra.wins ?? 0, rb.wins ?? 0),
+          podiums: Math.max(ra.podiums ?? 0, rb.podiums ?? 0),
+          // Placement: once placed on either device, stay placed; otherwise keep the
+          // further-along placement progress (more calibration rounds banked).
+          placed: !!(ra.placed || rb.placed),
+          placeEstimates: (ra.placeEstimates?.length ?? 0) >= (rb.placeEstimates?.length ?? 0) ? (ra.placeEstimates ?? []) : (rb.placeEstimates ?? []),
+          season: sa,
+          lastSeasonRp: ra.lastSeasonRp ?? rb.lastSeasonRp ?? null,
+          history,
+        };
+  }
 
   // Coins as a loss-free CRDT: reconcile monotonic earned + spent totals (each
   // max-merged) and derive balance = earned − spent. This neither restores spent

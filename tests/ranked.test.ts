@@ -9,6 +9,9 @@ import {
   ROUND_WEIGHT_FLOOR,
   ROUND_WEIGHT_HALFLIFE,
   rolloverSeason,
+  seasonRewardCoins,
+  earnedDivisions,
+  SEASON_HISTORY_MAX,
   applyRankedRound,
   applyPlacementRound,
   rpFromRating,
@@ -21,6 +24,7 @@ import {
   EMPTY_RANKED,
   encodeToParScore,
   decodeToParScore,
+  type RankedState,
 } from "../lib/discgolf/ranked";
 
 describe("ranked weeks + board key", () => {
@@ -79,7 +83,7 @@ describe("applyRankedRound", () => {
     expect(r3.state.bestStreak).toBe(2); // best is remembered
   });
   it("RP never falls below 0 — Bronze is the floor", () => {
-    const low = applyRankedRound({ rp: 10, bestToPar: 0, rounds: 1, streak: 0, bestStreak: 0, wins: 0, podiums: 0, placed: true, placeEstimates: [], season: 1, lastSeasonRp: null }, 5, 5, 18);
+    const low = applyRankedRound({ rp: 10, bestToPar: 0, rounds: 1, streak: 0, bestStreak: 0, wins: 0, podiums: 0, placed: true, placeEstimates: [], season: 1, lastSeasonRp: null, history: [] }, 5, 5, 18);
     expect(low.state.rp).toBe(0);
   });
   it("flags promotion when a result crosses a tier threshold", () => {
@@ -97,8 +101,8 @@ describe("field strength + migration", () => {
   it("normalizeRanked fills missing fields on a pre-upgrade save", () => {
     const legacy = normalizeRanked({ rp: 500, bestToPar: -2, rounds: 4 });
     // A pre-placement save normalizes with placed:false so it gets re-calibrated.
-    expect(legacy).toEqual({ rp: 500, bestToPar: -2, rounds: 4, streak: 0, bestStreak: 0, wins: 0, podiums: 0, placed: false, placeEstimates: [], season: 0, lastSeasonRp: null });
-    expect(EMPTY_RANKED).toEqual({ rp: 0, bestToPar: null, rounds: 0, streak: 0, bestStreak: 0, wins: 0, podiums: 0, placed: false, placeEstimates: [], season: 0, lastSeasonRp: null });
+    expect(legacy).toEqual({ rp: 500, bestToPar: -2, rounds: 4, streak: 0, bestStreak: 0, wins: 0, podiums: 0, placed: false, placeEstimates: [], season: 0, lastSeasonRp: null, history: [] });
+    expect(EMPTY_RANKED).toEqual({ rp: 0, bestToPar: null, rounds: 0, streak: 0, bestStreak: 0, wins: 0, podiums: 0, placed: false, placeEstimates: [], season: 0, lastSeasonRp: null, history: [] });
   });
 });
 
@@ -128,13 +132,15 @@ describe("round-weight decay (settling-in K-factor)", () => {
 });
 
 describe("monthly seasons (rolloverSeason)", () => {
-  it("is a no-op within the same season", () => {
+  it("is a no-op within the same season, and pays nothing", () => {
     const mid = { ...EMPTY_RANKED, season: 5, rp: 1500, placed: true, rounds: 10 };
-    expect(rolloverSeason(mid, 5)).toEqual(mid);
+    const { state, reward } = rolloverSeason(mid, 5);
+    expect(state).toEqual(mid);
+    expect(reward).toBeNull();
   });
   it("resets all rankings on a new month but remembers last season's finish", () => {
     const ended = { ...EMPTY_RANKED, season: 5, rp: 2750, placed: true, rounds: 12, wins: 4, podiums: 8, streak: 3, bestStreak: 5 };
-    const next = rolloverSeason(ended, 6);
+    const { state: next } = rolloverSeason(ended, 6);
     expect(next.season).toBe(6);
     expect(next.rp).toBe(0);            // ladder resets
     expect(next.placed).toBe(false);    // placement must be redone
@@ -143,14 +149,42 @@ describe("monthly seasons (rolloverSeason)", () => {
     expect(next.streak).toBe(0);
     expect(next.lastSeasonRp).toBe(2750); // …but where you finished is carried forward
   });
-  it("keeps the older memory when the season ended mid-placement", () => {
-    // Rolled over before getting placed: don't overwrite the real prior with a half-baked one.
+  it("pays a division badge + gold when a real season ends, logged newest-first", () => {
+    const ended = { ...EMPTY_RANKED, season: 5, rp: 2750, placed: true, rounds: 12 }; // 2750 RP = Platinum
+    const { state: next, reward } = rolloverSeason(ended, 6);
+    expect(reward).toEqual({ season: 5, rp: 2750, tierKey: "platinum", coins: seasonRewardCoins("platinum") });
+    expect(next.history[0]).toEqual(reward);        // freshly logged at the front
+    expect(earnedDivisions(next.history).has("platinum")).toBe(true);
+  });
+  it("does NOT pay out (or log) when the season ended mid-placement", () => {
     const unplaced = { ...EMPTY_RANKED, season: 5, rp: 800, placed: false, rounds: 1, lastSeasonRp: 1200 };
-    expect(rolloverSeason(unplaced, 6).lastSeasonRp).toBe(1200);
+    const { state: next, reward } = rolloverSeason(unplaced, 6);
+    expect(reward).toBeNull();
+    expect(next.history).toEqual([]);
+    expect(next.lastSeasonRp).toBe(1200); // keeps the older real prior, not the half-baked one
+  });
+  it("accumulates history across seasons, capped and newest-first", () => {
+    let s: RankedState = { ...EMPTY_RANKED, season: 1, rp: 1000, placed: true, rounds: 5 };
+    for (let m = 2; m <= SEASON_HISTORY_MAX + 4; m++) {
+      s = { ...rolloverSeason(s, m).state, rp: 1000, placed: true, rounds: 5 };
+    }
+    expect(s.history.length).toBe(SEASON_HISTORY_MAX);        // capped
+    expect(s.history[0].season).toBeGreaterThan(s.history[1].season); // newest first
   });
   it("normalizes a null/legacy state into a fresh season", () => {
-    const next = rolloverSeason(null, 7);
+    const { state: next, reward } = rolloverSeason(null, 7);
     expect(next).toEqual({ ...EMPTY_RANKED, season: 7, lastSeasonRp: null });
+    expect(reward).toBeNull();
+  });
+});
+
+describe("season payout scales with the division reached", () => {
+  it("higher divisions pay strictly more gold", () => {
+    const order = TIERS.map((t) => seasonRewardCoins(t.key));
+    for (let i = 1; i < order.length; i++) expect(order[i]).toBeGreaterThan(order[i - 1]);
+  });
+  it("an unknown division key pays nothing", () => {
+    expect(seasonRewardCoins("nope")).toBe(0);
   });
 });
 

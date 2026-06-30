@@ -86,6 +86,37 @@ export function rankedFieldMean(rp: number): number {
   return base + within;
 }
 
+// ── Season payouts. Finishing a season in a division earns that division's BADGE
+// (logged in the history below) and a gold bonus that scales with how high you
+// climbed — Bronze pays a little, Master pays the most. ──
+export const SEASON_REWARD_COINS: Record<string, number> = {
+  bronze: 100,
+  silver: 200,
+  gold: 350,
+  platinum: 500,
+  diamond: 750,
+  master: 1000,
+};
+export function seasonRewardCoins(tierKey: string): number {
+  return SEASON_REWARD_COINS[tierKey] ?? 0;
+}
+
+// A finished season's record — the division you ended in, your final RP, and the
+// gold it paid. Kept newest-first as a trophy log; the set of distinct divisions
+// in it is your earned badge collection.
+export type SeasonRecord = {
+  season: number;  // the month bucket (centralMonth) that ended
+  rp: number;      // final RP that season
+  tierKey: string; // the division finished in (a Tier.key)
+  coins: number;   // gold awarded for that finish
+};
+export const SEASON_HISTORY_MAX = 12; // past seasons remembered (most-recent first)
+
+// The set of division keys you've ever finished a season in — drives the badges.
+export function earnedDivisions(history: SeasonRecord[] | null | undefined): Set<string> {
+  return new Set((history ?? []).map((h) => h.tierKey));
+}
+
 // RP for finishing `place` in a ranked card of `field` (a card is 5 — you + 4).
 // Symmetric around the middle place: the top half GAINS (1st the most), the exact
 // middle is neutral, the bottom half LOSES (last the most). For a 5-card that's
@@ -130,9 +161,10 @@ export type RankedState = {
   placeEstimates: number[]; // per-placement-round RP estimates → the projected rank
   season: number;        // the month bucket (centralMonth) this state belongs to
   lastSeasonRp: number | null; // your final RP last season — a placement prior + display
+  history: SeasonRecord[]; // finished seasons, newest first — trophy log + badges
 };
 
-export const EMPTY_RANKED: RankedState = { rp: 0, bestToPar: null, rounds: 0, streak: 0, bestStreak: 0, wins: 0, podiums: 0, placed: false, placeEstimates: [], season: 0, lastSeasonRp: null };
+export const EMPTY_RANKED: RankedState = { rp: 0, bestToPar: null, rounds: 0, streak: 0, bestStreak: 0, wins: 0, podiums: 0, placed: false, placeEstimates: [], season: 0, lastSeasonRp: null, history: [] };
 
 // Fill in any fields a legacy/partial saved state is missing (older saves only had
 // rp/bestToPar/rounds), so the ladder keeps working across the upgrade.
@@ -152,20 +184,35 @@ export function normalizeRanked(state: Partial<RankedState> | null | undefined):
     placeEstimates: Array.isArray(s.placeEstimates) ? s.placeEstimates.slice(0, PLACEMENT_ROUNDS) : [],
     season: s.season ?? 0,
     lastSeasonRp: typeof s.lastSeasonRp === "number" ? s.lastSeasonRp : null,
+    history: Array.isArray(s.history)
+      ? s.history.filter((h): h is SeasonRecord => !!h && typeof h === "object" && typeof h.season === "number").slice(0, SEASON_HISTORY_MAX)
+      : [],
   };
 }
 
 // Ranked runs in monthly seasons. When the calendar month rolls over, all rankings
 // reset — you redo placement from scratch — but your final RP carries forward as
 // `lastSeasonRp`: a memory that nudges the new placement toward where you ended,
-// and shows where you landed. No-op if the state is already this season.
-export function rolloverSeason(state: RankedState | null | undefined, month: number): RankedState {
+// and shows where you landed. If a real season just ended (you were placed and
+// played), it also pays out: a division badge logged in `history` and a gold
+// `reward` for the caller to credit. No-op (reward null) if already this season.
+export function rolloverSeason(state: RankedState | null | undefined, month: number): { state: RankedState; reward: SeasonRecord | null } {
   const s = normalizeRanked(state);
-  if (s.season === month) return s;
+  if (s.season === month) return { state: s, reward: null };
+  let reward: SeasonRecord | null = null;
+  let history = s.history;
+  if (s.placed && s.rounds > 0) {
+    const tier = tierFromRP(s.rp).tier;
+    reward = { season: s.season, rp: s.rp, tierKey: tier.key, coins: seasonRewardCoins(tier.key) };
+    history = [reward, ...s.history].slice(0, SEASON_HISTORY_MAX);
+  }
   // Carry forward the most recent real finish: this season's RP if you actually
   // got placed and played, else whatever memory you already had.
   const carried = s.placed && s.rounds > 0 ? s.rp : s.lastSeasonRp;
-  return { ...EMPTY_RANKED, season: month, lastSeasonRp: carried ?? null };
+  return {
+    state: { ...EMPTY_RANKED, season: month, lastSeasonRp: carried ?? null, history },
+    reward,
+  };
 }
 
 export type RankedResult = {
@@ -209,6 +256,7 @@ export function applyRankedRound(state: RankedState | null, place: number, field
     placeEstimates: s.placeEstimates,
     season: s.season,
     lastSeasonRp: s.lastSeasonRp,
+    history: s.history,
   };
   const result: RankedResult = {
     place, field, toPar, rpDelta, base, bonus, weight, podium, win, streak,

@@ -92,14 +92,15 @@ describe("mergeProgress", () => {
     expect(mergeProgress(b, a).career).toBe(b.career);
   });
   it("keeps the most ranked progress across every field", () => {
-    const a: Progress = { ...base, ranked: { rp: 500, bestToPar: -2, rounds: 4, streak: 3, bestStreak: 3, wins: 2, podiums: 4, placed: false, placeEstimates: [200], season: 7, lastSeasonRp: 100 } };
-    const b: Progress = { ...base, ranked: { rp: 300, bestToPar: -7, rounds: 6, streak: 0, bestStreak: 5, wins: 1, podiums: 6, placed: false, placeEstimates: [700, 1500], season: 7, lastSeasonRp: null } };
+    const a: Progress = { ...base, ranked: { rp: 500, bestToPar: -2, rounds: 4, streak: 3, bestStreak: 3, wins: 2, podiums: 4, placed: false, placeEstimates: [200], season: 7, lastSeasonRp: 100, history: [{ season: 6, rp: 1500, tierKey: "gold", coins: 350 }] } };
+    const b: Progress = { ...base, ranked: { rp: 300, bestToPar: -7, rounds: 6, streak: 0, bestStreak: 5, wins: 1, podiums: 6, placed: false, placeEstimates: [700, 1500], season: 7, lastSeasonRp: null, history: [{ season: 5, rp: 700, tierKey: "silver", coins: 200 }] } };
     const m = mergeProgress(a, b);
     // Same season, so merge field-by-field; not placed on either, so keep the further-along progress (b's 2 estimates).
-    expect(m.ranked).toEqual({ rp: 500, bestToPar: -7, rounds: 6, streak: 3, bestStreak: 5, wins: 2, podiums: 6, placed: false, placeEstimates: [700, 1500], season: 7, lastSeasonRp: 100 });
+    // History is unioned across devices (newest first) so no earned badge is lost.
+    expect(m.ranked).toEqual({ rp: 500, bestToPar: -7, rounds: 6, streak: 3, bestStreak: 5, wins: 2, podiums: 6, placed: false, placeEstimates: [700, 1500], season: 7, lastSeasonRp: 100, history: [{ season: 6, rp: 1500, tierKey: "gold", coins: 350 }, { season: 5, rp: 700, tierKey: "silver", coins: 200 }] });
   });
   it("takes whichever ranked state exists when only one is present", () => {
-    const only = { rp: 120, bestToPar: 1, rounds: 1, streak: 1, bestStreak: 1, wins: 0, podiums: 1, placed: true, placeEstimates: [], season: 678, lastSeasonRp: null };
+    const only = { rp: 120, bestToPar: 1, rounds: 1, streak: 1, bestStreak: 1, wins: 0, podiums: 1, placed: true, placeEstimates: [], season: 678, lastSeasonRp: null, history: [] };
     expect(mergeProgress({ ...base, ranked: only }, base).ranked).toBe(only);
     expect(mergeProgress(base, { ...base, ranked: only }).ranked).toBe(only);
   });

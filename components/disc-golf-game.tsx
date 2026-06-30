@@ -25,7 +25,7 @@ import {
   type DiscSkin, type BasketSkin, type AimStyle, type GroundTheme, type Celebration,
 } from "@/lib/discgolf/cosmetics";
 import {
-  weekSeed, applyRankedRound, applyPlacementRound, rolloverSeason, tierFromRP, rankedFieldMean, RANKED_FIELD, PLACEMENT_ROUNDS, PLACEMENT_MIN_RATING, PLACEMENT_MAX_RATING, RANKED_BOARD_KEY, encodeToParScore, TIERS, type RankedState, type RankedResult, type PlacementResult,
+  weekSeed, applyRankedRound, applyPlacementRound, rolloverSeason, tierFromRP, rankedFieldMean, RANKED_FIELD, PLACEMENT_ROUNDS, PLACEMENT_MIN_RATING, PLACEMENT_MAX_RATING, RANKED_BOARD_KEY, encodeToParScore, TIERS, seasonRewardCoins, earnedDivisions, type RankedState, type RankedResult, type PlacementResult, type SeasonRecord,
 } from "@/lib/discgolf/ranked";
 import { centralWeekFromDay, centralMonth, centralMonthLabel } from "@/lib/discgolf/time";
 import { isLegacyHost, transferUrl, readTransferToken, clearTransferToken, CANONICAL_HOST } from "@/lib/discgolf/transfer";
@@ -682,6 +682,7 @@ export function DiscGolfGame() {
   const rankedRef = useRef<RankedState | null>(null);
   const [rankedOpen, setRankedOpen] = useState(false);
   const [rankedResult, setRankedResult] = useState<RankedResult | PlacementResult | null>(null); // outcome of the ranked round just finished (placement or ranked)
+  const [seasonReward, setSeasonReward] = useState<SeasonRecord | null>(null); // last season's payout, shown as a one-time card
 
   // ── Recurring daily + weekly challenges (rotating objectives that pay coins) ──
   const [challengesOpen, setChallengesOpen] = useState(false);
@@ -834,9 +835,11 @@ export function DiscGolfGame() {
       // Roll Ranked into the current monthly season — resets the ladder + redoes
       // placement when the month turns over, remembering last season's finish.
       const rankedMonth = centralMonth(Date.now());
-      const st = rolloverSeason(rk && typeof rk === "object" ? rk : null, rankedMonth);
+      const { state: st, reward: seasonReward } = rolloverSeason(rk && typeof rk === "object" ? rk : null, rankedMonth);
       rankedRef.current = st; setRanked(st);
       if (!rk || rk.season !== rankedMonth) { try { localStorage.setItem(RANKED_KEY, JSON.stringify(st)); } catch { /* ignore */ } }
+      // A season just ended → pay out the gold and show the season-end card.
+      if (seasonReward) { addCoins(seasonReward.coins); setSeasonReward(seasonReward); }
       const tb = JSON.parse(localStorage.getItem(TOURBEST_KEY) || "{}");
       if (tb && typeof tb === "object") setTourBests(tb);
       const tnb = JSON.parse(localStorage.getItem(TOURNBEST_KEY) || "{}");
@@ -1209,9 +1212,10 @@ export function DiscGolfGame() {
     {
       const month = centralMonth(Date.now());
       if ((rankedRef.current?.season ?? 0) !== month) {
-        const rolled = rolloverSeason(rankedRef.current, month);
+        const { state: rolled, reward } = rolloverSeason(rankedRef.current, month);
         rankedRef.current = rolled; setRanked(rolled);
         try { localStorage.setItem(RANKED_KEY, JSON.stringify(rolled)); } catch { /* ignore */ }
+        if (reward) { addCoins(reward.coins); setSeasonReward(reward); }
       }
     }
     const seed = (Math.random() * 1e9) | 0; // a brand-new course each round
@@ -3936,6 +3940,22 @@ export function DiscGolfGame() {
           </div>
         )}
 
+        {seasonReward && (() => {
+          const tier = TIERS.find((t) => t.key === seasonReward.tierKey) ?? TIERS[0];
+          return (
+            <div className="absolute inset-0 z-40 flex items-center justify-center bg-[#0f1117]/85 backdrop-blur-sm rounded-lg px-6" onClick={() => setSeasonReward(null)}>
+              <div className="text-center">
+                <p className="text-gray-400 text-[11px] font-semibold uppercase tracking-wider">{centralMonthLabel(seasonReward.season)} · season complete</p>
+                <p className="text-7xl my-2 leading-none">{tier.emoji}</p>
+                <p className="font-black text-2xl" style={{ color: tier.color }}>Finished {tier.name}</p>
+                <p className="text-[#f5d24a] font-black text-3xl mt-3">+{seasonReward.coins} <Coin className="!w-6 !h-6 align-[-2px]" /></p>
+                <p className="text-gray-300 text-sm mt-2">Season reward · earned the {tier.name} badge 🏅</p>
+                <button type="button" onClick={() => setSeasonReward(null)} className={`${btn} mt-4`}>Claim</button>
+              </div>
+            </div>
+          );
+        })()}
+
         {careerOpen && careerSlot == null && (
           <CareerSlots
             careers={careers}
@@ -6239,6 +6259,8 @@ function RankedPanel({ ranked, onPlay, onClose }: {
   const season = ranked?.season ?? 0;
   const lastSeasonRp = ranked?.lastSeasonRp ?? null;
   const lastTier = lastSeasonRp != null ? tierFromRP(lastSeasonRp).tier : null; // last season's finish
+  const history = ranked?.history ?? []; // finished seasons, newest first
+  const earned = earnedDivisions(history); // division keys you hold a badge in
   return (
     <div className="absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start justify-center rounded-lg">
       <div className="w-full max-w-xs space-y-3 my-auto text-left">
@@ -6296,6 +6318,25 @@ function RankedPanel({ ranked, onPlay, onClose }: {
           </div>
         </div>
 
+        {/* Season-end reward preview — the gold + badge your division pays out */}
+        {(placed || placeDone > 0) && (
+          <div className="bg-[#1a1d23] border border-white/10 rounded-xl px-3 py-2.5 space-y-1">
+            <p className="text-gray-400 text-[11px] font-semibold">🏆 Season-end reward</p>
+            <p className="text-[13px] leading-snug">
+              <span className="text-gray-300">Finish </span>
+              <span className="font-bold" style={{ color: t.tier.color }}>{t.tier.emoji} {t.tier.name}</span>
+              <span className="text-gray-300"> → </span>
+              <span className="text-[#f5d24a] font-bold">+{seasonRewardCoins(t.tier.key)} gold</span>
+              <span className="text-gray-300"> &amp; its badge</span>
+            </p>
+            {t.next && (
+              <p className="text-[11px] text-gray-500 leading-snug">
+                Reach <span style={{ color: t.next.color }}>{t.next.emoji} {t.next.name}</span> → <span className="text-[#f5d24a]">+{seasonRewardCoins(t.next.key)} gold</span>
+              </p>
+            )}
+          </div>
+        )}
+
         {/* All divisions — a clear open/close dropdown (arrow flips when open) */}
         <div>
           <button
@@ -6314,7 +6355,7 @@ function RankedPanel({ ranked, onPlay, onClose }: {
                 return (
                   <div key={tier.key} className={`flex items-center gap-2.5 px-3 py-2 ${i ? "border-t border-white/5" : ""} ${current ? "bg-white/5" : ""}`}>
                     <span className="text-xl leading-none shrink-0">{tier.emoji}</span>
-                    <span className="font-bold text-sm flex-1" style={{ color: tier.color }}>{tier.name}{current ? " · you" : ""}</span>
+                    <span className="font-bold text-sm flex-1" style={{ color: tier.color }}>{tier.name}{current ? " · you" : ""}{earned.has(tier.key) ? " 🏅" : ""}</span>
                     <span className="text-gray-500 font-mono text-[10px]">{tier.min === 0 ? "0 RP" : `${tier.min.toLocaleString()}+ RP`}</span>
                   </div>
                 );
@@ -6322,6 +6363,48 @@ function RankedPanel({ ranked, onPlay, onClose }: {
             </div>
           )}
         </div>
+
+        {/* Division badges — earn one for each division you finish a season in */}
+        <div className="bg-[#1a1d23] border border-white/10 rounded-xl px-3 py-2.5">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-gray-400 text-[11px] font-semibold">🏅 Division badges</p>
+            <p className="text-gray-500 text-[10px]">{earned.size}/{TIERS.length}</p>
+          </div>
+          <div className="flex items-center justify-between gap-1">
+            {TIERS.map((tier) => {
+              const has = earned.has(tier.key);
+              return (
+                <span
+                  key={tier.key}
+                  title={`${tier.name} — ${has ? "earned" : "finish a season here to earn"}`}
+                  className={`text-2xl leading-none ${has ? "" : "grayscale opacity-25"}`}
+                >
+                  {tier.emoji}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Past seasons — a trophy log of where you finished and what it paid */}
+        {history.length > 0 && (
+          <div className="bg-[#1a1d23] border border-white/10 rounded-xl overflow-hidden">
+            <p className="text-gray-400 text-[11px] font-semibold px-3 py-2 border-b border-white/5">📜 Past seasons</p>
+            {history.map((h, i) => {
+              const ht = TIERS.find((x) => x.key === h.tierKey) ?? TIERS[0];
+              return (
+                <div key={h.season} className={`flex items-center gap-2.5 px-3 py-2 ${i ? "border-t border-white/5" : ""}`}>
+                  <span className="text-lg leading-none shrink-0">{ht.emoji}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[12px] font-bold leading-tight" style={{ color: ht.color }}>{ht.name}</p>
+                    <p className="text-gray-500 text-[10px] leading-tight">{centralMonthLabel(h.season)} · {h.rp} RP</p>
+                  </div>
+                  <span className="text-[#f5d24a] font-mono text-[10px] shrink-0">+{h.coins}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {(ranked?.streak ?? 0) >= 2 && (
           <p className="text-[#f5d24a] text-[11px] font-bold text-center">🔥 On a {ranked!.streak}-podium streak — keep it going for bonus RP!</p>
