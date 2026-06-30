@@ -6246,9 +6246,14 @@ function RankedPanel({ ranked, onPlay, onClose }: {
           <div>
             <h2 className="text-white font-black text-xl leading-none">🏅 Ranked</h2>
             {season > 0 && (
-              <p className="text-gray-500 text-[11px] mt-1">
-                Season · {centralMonthLabel(season)}{lastTier ? <> · last <span style={{ color: lastTier.color }}>{lastTier.emoji} {lastTier.name}</span></> : ""}
-              </p>
+              <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+                <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-bold text-gray-200">
+                  📅 {centralMonthLabel(season)} season
+                </span>
+                {lastTier && (
+                  <span className="text-gray-500 text-[11px]">last <span style={{ color: lastTier.color }}>{lastTier.emoji} {lastTier.name}</span></span>
+                )}
+              </div>
             )}
           </div>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
