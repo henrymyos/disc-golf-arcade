@@ -8,6 +8,8 @@ import {
   courseStarDifficulty,
   tournDifficulty,
   tournStarDifficulty,
+  tournDivision,
+  tournRoundPlayHoles,
   earnedAchievements,
   achievementReward,
   buildRound,
@@ -677,6 +679,32 @@ describe("course difficulty (1–5 stars)", () => {
       expect(tournStarDifficulty(d)).toBeGreaterThanOrEqual(1);
       expect(tournStarDifficulty(d)).toBeLessThanOrEqual(5);
     }
+  });
+});
+
+describe("tournament division scaling (Bronze → Master)", () => {
+  const DIV_ORDER = ["bronze", "silver", "gold", "platinum", "diamond", "master"];
+  const byDiff = [...TOURNAMENTS].sort((a, b) => tournDifficulty(a) - tournDifficulty(b));
+
+  it("the easiest event fields a Bronze division and the hardest a Master one", () => {
+    expect(tournDivision(byDiff[0]).key).toBe("bronze");
+    expect(tournDivision(byDiff[byDiff.length - 1]).key).toBe("master");
+  });
+
+  it("division climbs monotonically with difficulty and spans the whole ladder", () => {
+    const idx = byDiff.map((d) => DIV_ORDER.indexOf(tournDivision(d).key));
+    expect(idx.every((i) => i >= 0)).toBe(true);                 // every event resolves to a known division
+    for (let i = 1; i < idx.length; i++) expect(idx[i]).toBeGreaterThanOrEqual(idx[i - 1]);
+    expect(new Set(idx).size).toBe(DIV_ORDER.length);            // Bronze through Master all represented
+  });
+
+  it("a higher-division field shoots lower on identical holes", () => {
+    const bronze = byDiff[0], master = byDiff[byDiff.length - 1];
+    // Score both fields on the SAME layout so only the division handicap differs —
+    // the Master field, being stronger, posts a markedly lower field mean.
+    const holes = tournRoundPlayHoles(bronze.seed, 0, bronze.rounds[0]);
+    const mean = (seed: number) => { const f = tournFieldRound(seed, 0, holes); return f.reduce((a, b) => a + b, 0) / f.length; };
+    expect(mean(master.seed)).toBeLessThan(mean(bronze.seed) - 6); // a clear, multi-stroke gap, not noise
   });
 });
 

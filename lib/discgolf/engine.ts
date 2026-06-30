@@ -3,6 +3,7 @@
 // from the game component so it can be unit-tested and reused (e.g. OG images).
 // Imported by components/disc-golf-game.tsx.
 import { centralDay } from "./time";
+import { TIERS, type Tier } from "./ranked";
 
 const W = 320;
 const H = 448;
@@ -552,8 +553,11 @@ function tournFieldHoles(seed: number, round: number, holes: Hole[]): number[][]
   // higher winning total), on an easy one it goes deep. Centered on a mid course
   // (~3.5) so difficulty shifts the field a few strokes/round either way.
   const diffAdj = (courseDifficulty(holes) - 3.5) * 0.1;
+  // Division skill: the whole field is handicapped to its event's ranked division
+  // (Bronze fields play loose, Master fields shoot near-pro). − strokes ⇒ stronger.
+  const divAdj = tournDivisionStrokesForSeed(seed) / 18;
   return skills.map((sk) => {
-    const perHole = sk / 2.5 / 18 + diffAdj;
+    const perHole = sk / 2.5 / 18 + diffAdj + divAdj;
     return holes.map((h) => {
       let d = Math.round(perHole + holeConditions(h) + (rng() * 2 - 1) * 0.85);
       if (rng() < 0.04) d -= 1; // the odd bomb
@@ -1421,6 +1425,35 @@ function buildTournaments(): TournDef[] {
   return list;
 }
 const TOURNAMENTS: TournDef[] = buildTournaments();
+
+// ── Division scaling: every tournament fields bots at one of the ranked divisions
+// (Bronze → Master), set by how hard the event is. The roster is laid out across
+// the divisions by difficulty RANK — the easiest event is Bronze, the hardest is
+// Master, spread evenly between — so climbing the tournaments tab is a climb up the
+// divisions. The field then plays to that division's strength (see tournFieldHoles).
+const DIVISION_FIELD_STROKES = [6, 3.5, 1.5, -1, -3.5, -6]; // per-round handicap by division; + = weaker field
+const TOURN_DIVISION_INDEX: Map<string, number> = (() => {
+  const sorted = [...TOURNAMENTS].sort((a, b) => tournDifficulty(a) - tournDifficulty(b));
+  const last = Math.max(1, sorted.length - 1);
+  const m = new Map<string, number>();
+  sorted.forEach((d, i) => m.set(d.id, Math.round((i / last) * (TIERS.length - 1))));
+  return m;
+})();
+const TOURN_DIVISION_BY_SEED: Map<number, number> = new Map(TOURNAMENTS.map((d) => [d.seed >>> 0, TOURN_DIVISION_INDEX.get(d.id) ?? 0]));
+function tournDivisionIndex(def: TournDef): number {
+  return TOURN_DIVISION_INDEX.get(def.id) ?? 0;
+}
+// The ranked division (Bronze → Master) a tournament's AI field plays at.
+function tournDivision(def: TournDef): Tier {
+  return TIERS[tournDivisionIndex(def)] ?? TIERS[0];
+}
+// Per-round stroke handicap for the field of the event with this seed (0 if the
+// seed isn't a real tournament — e.g. a synthetic test seed).
+function tournDivisionStrokesForSeed(seed: number): number {
+  const idx = TOURN_DIVISION_BY_SEED.get(seed >>> 0);
+  return idx == null ? 0 : DIVISION_FIELD_STROKES[idx];
+}
+
 // Every REAL hole in the app's playable courses — Glendoveer East, Winthrop Lake,
 // and the eight pro-tour venues (the exact set shown on "Play Courses"). This is
 // the pool the Daily Challenge AND the early-Career events draw from, so they
@@ -1964,6 +1997,7 @@ export {
   courseStarDifficulty,
   tournDifficulty,
   tournStarDifficulty,
+  tournDivision,
   STRAIGHT_SPEED_MUL,
   releaseSpeedMul,
   FAIRWAY_BASE,
