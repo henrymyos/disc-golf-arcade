@@ -4,6 +4,11 @@ import {
   rankedCourseKey,
   placementRP,
   streakBonus,
+  roundWeight,
+  ROUND_WEIGHT_PEAK,
+  ROUND_WEIGHT_FLOOR,
+  ROUND_WEIGHT_HALFLIFE,
+  rolloverSeason,
   applyRankedRound,
   applyPlacementRound,
   rpFromRating,
@@ -74,7 +79,7 @@ describe("applyRankedRound", () => {
     expect(r3.state.bestStreak).toBe(2); // best is remembered
   });
   it("RP never falls below 0 — Bronze is the floor", () => {
-    const low = applyRankedRound({ rp: 10, bestToPar: 0, rounds: 1, streak: 0, bestStreak: 0, wins: 0, podiums: 0, placed: true, placeEstimates: [] }, 5, 5, 18);
+    const low = applyRankedRound({ rp: 10, bestToPar: 0, rounds: 1, streak: 0, bestStreak: 0, wins: 0, podiums: 0, placed: true, placeEstimates: [], season: 1, lastSeasonRp: null }, 5, 5, 18);
     expect(low.state.rp).toBe(0);
   });
   it("flags promotion when a result crosses a tier threshold", () => {
@@ -92,8 +97,78 @@ describe("field strength + migration", () => {
   it("normalizeRanked fills missing fields on a pre-upgrade save", () => {
     const legacy = normalizeRanked({ rp: 500, bestToPar: -2, rounds: 4 });
     // A pre-placement save normalizes with placed:false so it gets re-calibrated.
-    expect(legacy).toEqual({ rp: 500, bestToPar: -2, rounds: 4, streak: 0, bestStreak: 0, wins: 0, podiums: 0, placed: false, placeEstimates: [] });
-    expect(EMPTY_RANKED).toEqual({ rp: 0, bestToPar: null, rounds: 0, streak: 0, bestStreak: 0, wins: 0, podiums: 0, placed: false, placeEstimates: [] });
+    expect(legacy).toEqual({ rp: 500, bestToPar: -2, rounds: 4, streak: 0, bestStreak: 0, wins: 0, podiums: 0, placed: false, placeEstimates: [], season: 0, lastSeasonRp: null });
+    expect(EMPTY_RANKED).toEqual({ rp: 0, bestToPar: null, rounds: 0, streak: 0, bestStreak: 0, wins: 0, podiums: 0, placed: false, placeEstimates: [], season: 0, lastSeasonRp: null });
+  });
+});
+
+describe("round-weight decay (settling-in K-factor)", () => {
+  it("the first post-placement round counts ~2×, halving its boost every half-life toward 1×", () => {
+    // While placing and on the first ranked round, weight sits at the peak.
+    expect(roundWeight(0)).toBe(ROUND_WEIGHT_PEAK);
+    expect(roundWeight(PLACEMENT_ROUNDS)).toBe(ROUND_WEIGHT_PEAK);
+    // One half-life of post-placement rounds in → halfway between peak and floor.
+    expect(roundWeight(PLACEMENT_ROUNDS + ROUND_WEIGHT_HALFLIFE)).toBeCloseTo((ROUND_WEIGHT_PEAK + ROUND_WEIGHT_FLOOR) / 2, 6);
+    // Far out, it eases back to the established 1× balance.
+    expect(roundWeight(PLACEMENT_ROUNDS + 1000)).toBeCloseTo(ROUND_WEIGHT_FLOOR, 1);
+  });
+  it("never increases as rounds accumulate", () => {
+    for (let r = 0; r < 40; r++) expect(roundWeight(r + 1)).toBeLessThanOrEqual(roundWeight(r));
+  });
+  it("applyRankedRound scales RP by the round weight and reports it", () => {
+    // Just past placement: a 1st-place 50-RP win swings ~2× → +100.
+    const fresh = applyRankedRound({ ...EMPTY_RANKED, rp: 1500, placed: true, rounds: PLACEMENT_ROUNDS }, 1, 5, -8);
+    expect(fresh.result.weight).toBe(ROUND_WEIGHT_PEAK);
+    expect(fresh.result.rpDelta).toBe(100);
+    // Hundreds of rounds in: the same win is back to its face value of +50.
+    const settled = applyRankedRound({ ...EMPTY_RANKED, rp: 1500, placed: true, rounds: PLACEMENT_ROUNDS + 1000 }, 1, 5, -8);
+    expect(settled.result.weight).toBeCloseTo(ROUND_WEIGHT_FLOOR, 1);
+    expect(settled.result.rpDelta).toBe(50);
+  });
+});
+
+describe("monthly seasons (rolloverSeason)", () => {
+  it("is a no-op within the same season", () => {
+    const mid = { ...EMPTY_RANKED, season: 5, rp: 1500, placed: true, rounds: 10 };
+    expect(rolloverSeason(mid, 5)).toEqual(mid);
+  });
+  it("resets all rankings on a new month but remembers last season's finish", () => {
+    const ended = { ...EMPTY_RANKED, season: 5, rp: 2750, placed: true, rounds: 12, wins: 4, podiums: 8, streak: 3, bestStreak: 5 };
+    const next = rolloverSeason(ended, 6);
+    expect(next.season).toBe(6);
+    expect(next.rp).toBe(0);            // ladder resets
+    expect(next.placed).toBe(false);    // placement must be redone
+    expect(next.rounds).toBe(0);
+    expect(next.wins).toBe(0);          // stats reset for the new season
+    expect(next.streak).toBe(0);
+    expect(next.lastSeasonRp).toBe(2750); // …but where you finished is carried forward
+  });
+  it("keeps the older memory when the season ended mid-placement", () => {
+    // Rolled over before getting placed: don't overwrite the real prior with a half-baked one.
+    const unplaced = { ...EMPTY_RANKED, season: 5, rp: 800, placed: false, rounds: 1, lastSeasonRp: 1200 };
+    expect(rolloverSeason(unplaced, 6).lastSeasonRp).toBe(1200);
+  });
+  it("normalizes a null/legacy state into a fresh season", () => {
+    const next = rolloverSeason(null, 7);
+    expect(next).toEqual({ ...EMPTY_RANKED, season: 7, lastSeasonRp: null });
+  });
+});
+
+describe("placement carries last season as a fading prior", () => {
+  it("pulls the projection toward last season's RP without overriding this season's play", () => {
+    const withPrior = applyPlacementRound({ ...EMPTY_RANKED, season: 6, lastSeasonRp: 1500 }, 3, 5, 4).result.projectedRp;
+    const noPrior = applyPlacementRound({ ...EMPTY_RANKED, season: 6, lastSeasonRp: null }, 3, 5, 4).result.projectedRp;
+    expect(withPrior).toBeLessThan(noPrior);   // a 1500 prior tugs a higher estimate down
+    expect(withPrior).toBeGreaterThan(1500);   // but a strong round still moves you off it
+  });
+  it("fades as more placement rounds land — by the third round it barely matters", () => {
+    const low = { ...EMPTY_RANKED, season: 6, lastSeasonRp: 200 }; // a stale low prior
+    const r1 = applyPlacementRound(low, 1, 5, -10);        // 1st of 5 → a high estimate
+    const r2 = applyPlacementRound(r1.state, 1, 5, -10);
+    const r3 = applyPlacementRound(r2.state, 1, 5, -10);
+    expect(r2.result.projectedRp).toBeGreaterThan(r1.result.projectedRp);
+    expect(r3.result.projectedRp).toBeGreaterThan(r2.result.projectedRp);
+    expect(r3.result.placed).toBe(true);
   });
 });
 

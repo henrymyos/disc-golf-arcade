@@ -78,3 +78,17 @@ export function centralWeekRange(week: number): { start: number; end: number } {
   const sunday = FIRST_SUNDAY_DAY + week * 7;
   return { start: centralDayRange(sunday).start, end: centralDayRange(sunday + 7).start };
 }
+
+// Index of the Central calendar month containing `now` (flips at midnight Central
+// on the 1st). Monotonic — y·12 + m — so consecutive months differ by exactly 1.
+// Used to give Ranked a fresh season each month.
+export function centralMonth(now: number): number {
+  const { y, m } = centralYMD(now);
+  return y * 12 + m;
+}
+
+// A human label for a Central month index, e.g. "June 2026".
+export function centralMonthLabel(month: number): string {
+  const y = Math.floor(month / 12), m = ((month % 12) + 12) % 12;
+  return new Date(Date.UTC(y, m, 1)).toLocaleString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+}

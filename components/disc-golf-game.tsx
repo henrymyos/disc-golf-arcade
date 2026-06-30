@@ -25,9 +25,9 @@ import {
   type DiscSkin, type BasketSkin, type AimStyle, type GroundTheme, type Celebration,
 } from "@/lib/discgolf/cosmetics";
 import {
-  weekSeed, applyRankedRound, applyPlacementRound, normalizeRanked, tierFromRP, rankedFieldMean, RANKED_FIELD, PLACEMENT_ROUNDS, PLACEMENT_MIN_RATING, PLACEMENT_MAX_RATING, RANKED_BOARD_KEY, encodeToParScore, TIERS, type RankedState, type RankedResult, type PlacementResult,
+  weekSeed, applyRankedRound, applyPlacementRound, rolloverSeason, tierFromRP, rankedFieldMean, RANKED_FIELD, PLACEMENT_ROUNDS, PLACEMENT_MIN_RATING, PLACEMENT_MAX_RATING, RANKED_BOARD_KEY, encodeToParScore, TIERS, type RankedState, type RankedResult, type PlacementResult,
 } from "@/lib/discgolf/ranked";
-import { centralWeekFromDay } from "@/lib/discgolf/time";
+import { centralWeekFromDay, centralMonth, centralMonthLabel } from "@/lib/discgolf/time";
 import { isLegacyHost, transferUrl, readTransferToken, clearTransferToken, CANONICAL_HOST } from "@/lib/discgolf/transfer";
 import {
   dailyChallenges, weeklyChallenges, roundsThisDay, roundsThisWeek, challengeDone,
@@ -831,10 +831,12 @@ export function DiscGolfGame() {
         });
       }
       const rk = JSON.parse(localStorage.getItem(RANKED_KEY) || "null");
-      if (rk && typeof rk === "object" && typeof rk.rp === "number") {
-        const st = normalizeRanked(rk); // fills streak/wins/etc. for pre-upgrade saves
-        rankedRef.current = st; setRanked(st);
-      }
+      // Roll Ranked into the current monthly season — resets the ladder + redoes
+      // placement when the month turns over, remembering last season's finish.
+      const rankedMonth = centralMonth(Date.now());
+      const st = rolloverSeason(rk && typeof rk === "object" ? rk : null, rankedMonth);
+      rankedRef.current = st; setRanked(st);
+      if (!rk || rk.season !== rankedMonth) { try { localStorage.setItem(RANKED_KEY, JSON.stringify(st)); } catch { /* ignore */ } }
       const tb = JSON.parse(localStorage.getItem(TOURBEST_KEY) || "{}");
       if (tb && typeof tb === "object") setTourBests(tb);
       const tnb = JSON.parse(localStorage.getItem(TOURNBEST_KEY) || "{}");
@@ -1202,6 +1204,16 @@ export function DiscGolfGame() {
     careerPlayRef.current = false;
     rankedPlayRef.current = true;
     modeRef.current = "ranked";
+    // Catch a month rollover that happened since load (e.g. the app stayed open
+    // across midnight on the 1st) so this round counts in the right season.
+    {
+      const month = centralMonth(Date.now());
+      if ((rankedRef.current?.season ?? 0) !== month) {
+        const rolled = rolloverSeason(rankedRef.current, month);
+        rankedRef.current = rolled; setRanked(rolled);
+        try { localStorage.setItem(RANKED_KEY, JSON.stringify(rolled)); } catch { /* ignore */ }
+      }
+    }
     const seed = (Math.random() * 1e9) | 0; // a brand-new course each round
     const roundHoles = buildRound(seed, "ranked");
     // Your first rounds are placement. Round 1 reads you against the whole ladder;
@@ -4293,6 +4305,7 @@ export function DiscGolfGame() {
                       {r.tierDown && <span className="text-[#e08a3b] text-[11px] font-bold">▼ Demoted</span>}
                     </div>
                     {r.streak >= 2 && <p className="text-[#f5d24a] text-[11px] font-bold mt-1.5">🔥 {r.streak}-podium streak{r.bonus > 0 ? ` · +${r.bonus} bonus RP` : ""}</p>}
+                    {r.weight > 1.05 && <p className="text-[#6cb6ff] text-[11px] font-bold mt-1.5">⚡ Settling in · ×{r.weight.toFixed(1)} RP (early rounds count more)</p>}
                   </div>
                 );
               })()}
@@ -6223,11 +6236,21 @@ function RankedPanel({ ranked, onPlay, onClose }: {
   const pct = t.need ? Math.round((t.into / t.need) * 100) : 100;
   const placed = ranked?.placed ?? false;
   const placeDone = ranked?.placeEstimates?.length ?? 0; // placement rounds banked so far
+  const season = ranked?.season ?? 0;
+  const lastSeasonRp = ranked?.lastSeasonRp ?? null;
+  const lastTier = lastSeasonRp != null ? tierFromRP(lastSeasonRp).tier : null; // last season's finish
   return (
     <div className="absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start justify-center rounded-lg">
       <div className="w-full max-w-xs space-y-3 my-auto text-left">
-        <div className="flex items-center justify-between">
-          <h2 className="text-white font-black text-xl">🏅 Ranked</h2>
+        <div className="flex items-start justify-between">
+          <div>
+            <h2 className="text-white font-black text-xl leading-none">🏅 Ranked</h2>
+            {season > 0 && (
+              <p className="text-gray-500 text-[11px] mt-1">
+                Season · {centralMonthLabel(season)}{lastTier ? <> · last <span style={{ color: lastTier.color }}>{lastTier.emoji} {lastTier.name}</span></> : ""}
+              </p>
+            )}
+          </div>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
 
@@ -6237,7 +6260,9 @@ function RankedPanel({ ranked, onPlay, onClose }: {
             <p className="text-[#36D7B7] font-bold text-sm">🎯 Placement · {placeDone}/{PLACEMENT_ROUNDS} rounds</p>
             <p className="text-gray-300 text-[11px] mt-0.5 leading-snug">
               {placeDone === 0
-                ? `Play ${PLACEMENT_ROUNDS} calibration rounds against a full-range field to find your rank. A projected rank shows after round 1.`
+                ? lastTier
+                  ? `New season! Replay your ${PLACEMENT_ROUNDS} placement rounds. You finished ${lastTier.name} last season — that gives your placement a head start.`
+                  : `Play ${PLACEMENT_ROUNDS} calibration rounds against a full-range field to find your rank. A projected rank shows after round 1.`
                 : `Your projected rank is below — it keeps adjusting to how you play until placement is done.`}
             </p>
           </div>

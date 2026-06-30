@@ -178,9 +178,12 @@ export function mergeProgress(a: Progress, b: Progress): Progress {
   const daily = !da ? db : !db ? da : da.day !== db.day ? (da.day > db.day ? da : db) : (da.streak >= db.streak ? da : db);
 
   // Ranked ladder: keep the most progress — highest lifetime RP, best (lowest)
-  // to-par, and most rounds — so nothing is lost across devices.
+  // to-par, and most rounds — so nothing is lost across devices. Ranked runs in
+  // monthly seasons, so a NEWER season wins outright (last season's data is stale);
+  // within the same season we field-wise merge as before.
   const ra = a.ranked ?? null, rb = b.ranked ?? null;
-  const ranked: RankedState | null = !ra ? rb : !rb ? ra : {
+  const sa = ra?.season ?? 0, sb = rb?.season ?? 0;
+  const ranked: RankedState | null = !ra ? rb : !rb ? ra : sa !== sb ? (sa > sb ? ra : rb) : {
     rp: Math.max(ra.rp ?? 0, rb.rp ?? 0),
     bestToPar: ra.bestToPar == null ? rb.bestToPar : rb.bestToPar == null ? ra.bestToPar : Math.min(ra.bestToPar, rb.bestToPar),
     rounds: Math.max(ra.rounds ?? 0, rb.rounds ?? 0),
@@ -192,6 +195,8 @@ export function mergeProgress(a: Progress, b: Progress): Progress {
     // further-along placement progress (more calibration rounds banked).
     placed: !!(ra.placed || rb.placed),
     placeEstimates: (ra.placeEstimates?.length ?? 0) >= (rb.placeEstimates?.length ?? 0) ? (ra.placeEstimates ?? []) : (rb.placeEstimates ?? []),
+    season: sa,
+    lastSeasonRp: ra.lastSeasonRp ?? rb.lastSeasonRp ?? null,
   };
 
   // Coins as a loss-free CRDT: reconcile monotonic earned + spent totals (each

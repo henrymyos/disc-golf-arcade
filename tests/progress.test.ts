@@ -92,14 +92,14 @@ describe("mergeProgress", () => {
     expect(mergeProgress(b, a).career).toBe(b.career);
   });
   it("keeps the most ranked progress across every field", () => {
-    const a: Progress = { ...base, ranked: { rp: 500, bestToPar: -2, rounds: 4, streak: 3, bestStreak: 3, wins: 2, podiums: 4, placed: false, placeEstimates: [200] } };
-    const b: Progress = { ...base, ranked: { rp: 300, bestToPar: -7, rounds: 6, streak: 0, bestStreak: 5, wins: 1, podiums: 6, placed: false, placeEstimates: [700, 1500] } };
+    const a: Progress = { ...base, ranked: { rp: 500, bestToPar: -2, rounds: 4, streak: 3, bestStreak: 3, wins: 2, podiums: 4, placed: false, placeEstimates: [200], season: 7, lastSeasonRp: 100 } };
+    const b: Progress = { ...base, ranked: { rp: 300, bestToPar: -7, rounds: 6, streak: 0, bestStreak: 5, wins: 1, podiums: 6, placed: false, placeEstimates: [700, 1500], season: 7, lastSeasonRp: null } };
     const m = mergeProgress(a, b);
-    // Placement: not placed on either, so keep the further-along progress (b's 2 estimates).
-    expect(m.ranked).toEqual({ rp: 500, bestToPar: -7, rounds: 6, streak: 3, bestStreak: 5, wins: 2, podiums: 6, placed: false, placeEstimates: [700, 1500] });
+    // Same season, so merge field-by-field; not placed on either, so keep the further-along progress (b's 2 estimates).
+    expect(m.ranked).toEqual({ rp: 500, bestToPar: -7, rounds: 6, streak: 3, bestStreak: 5, wins: 2, podiums: 6, placed: false, placeEstimates: [700, 1500], season: 7, lastSeasonRp: 100 });
   });
   it("takes whichever ranked state exists when only one is present", () => {
-    const only = { rp: 120, bestToPar: 1, rounds: 1, streak: 1, bestStreak: 1, wins: 0, podiums: 1, placed: true, placeEstimates: [] };
+    const only = { rp: 120, bestToPar: 1, rounds: 1, streak: 1, bestStreak: 1, wins: 0, podiums: 1, placed: true, placeEstimates: [], season: 678, lastSeasonRp: null };
     expect(mergeProgress({ ...base, ranked: only }, base).ranked).toBe(only);
     expect(mergeProgress(base, { ...base, ranked: only }).ranked).toBe(only);
   });

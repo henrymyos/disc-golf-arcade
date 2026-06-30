@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { centralDay, centralWeek, centralWeekFromDay, centralDayRange, centralWeekRange } from "../lib/discgolf/time";
+import { centralDay, centralWeek, centralWeekFromDay, centralDayRange, centralWeekRange, centralMonth, centralMonthLabel } from "../lib/discgolf/time";
 
 const H = 3_600_000;
 
@@ -49,5 +49,26 @@ describe("central-time day/week boundaries", () => {
     const fallDay = centralDay(Date.UTC(2026, 10, 1, 18, 0)); // 2026-11-01, clocks fall 2am→1am
     const fr = centralDayRange(fallDay);
     expect(fr.end - fr.start).toBe(25 * H);
+  });
+});
+
+describe("central-time month buckets (ranked seasons)", () => {
+  it("the month index flips at midnight Central on the 1st and is monotonic by 1", () => {
+    const juneEnd = Date.UTC(2026, 6, 1, 4, 59);  // 2026-06-30 23:59 Central (still June)
+    const julyStart = Date.UTC(2026, 6, 1, 5, 0);  // 2026-07-01 00:00 Central (now July)
+    expect(centralMonth(julyStart)).toBe(centralMonth(juneEnd) + 1);
+    // Same month mid-month → same bucket.
+    expect(centralMonth(Date.UTC(2026, 6, 15, 12, 0))).toBe(centralMonth(julyStart));
+  });
+
+  it("December → January crosses the year and stays monotonic", () => {
+    const decEnd = Date.UTC(2026, 11, 31, 18, 0);  // late December Central
+    const janStart = Date.UTC(2027, 0, 2, 18, 0);  // early January Central
+    expect(centralMonth(janStart)).toBe(centralMonth(decEnd) + 1);
+  });
+
+  it("labels a month index in a stable, year-qualified form", () => {
+    expect(centralMonthLabel(centralMonth(Date.UTC(2026, 6, 15, 12, 0)))).toBe("July 2026");
+    expect(centralMonthLabel(centralMonth(Date.UTC(2027, 0, 15, 12, 0)))).toBe("January 2027");
   });
 });

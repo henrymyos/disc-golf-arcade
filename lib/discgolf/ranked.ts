@@ -105,6 +105,19 @@ export function streakBonus(streak: number): number {
   return Math.min(50, Math.max(0, streak - 1) * 10);
 }
 
+// Each ranked round counts MORE while you're still settling into your real rank,
+// then less as you rack up rounds — a chess-style K-factor decay. Your first
+// post-placement round swings RP ~2×; the boost over the steady floor halves
+// every ROUND_WEIGHT_HALFLIFE rounds, easing back to 1× (the established balance).
+// `rounds` resets each season, so every new season re-opens the fast window.
+export const ROUND_WEIGHT_PEAK = 2;
+export const ROUND_WEIGHT_FLOOR = 1;
+export const ROUND_WEIGHT_HALFLIFE = 8;
+export function roundWeight(rounds: number): number {
+  const settled = Math.max(0, rounds - PLACEMENT_ROUNDS); // post-placement rounds played
+  return ROUND_WEIGHT_FLOOR + (ROUND_WEIGHT_PEAK - ROUND_WEIGHT_FLOOR) * (ROUND_WEIGHT_HALFLIFE / (ROUND_WEIGHT_HALFLIFE + settled));
+}
+
 export type RankedState = {
   rp: number;            // lifetime rank points — rises with strong finishes, falls with weak ones (floored at 0)
   bestToPar: number | null; // best (lowest) to-par on any ranked round
@@ -115,9 +128,11 @@ export type RankedState = {
   podiums: number;       // top-2 finishes
   placed: boolean;       // true once placement (the calibration rounds) is complete
   placeEstimates: number[]; // per-placement-round RP estimates → the projected rank
+  season: number;        // the month bucket (centralMonth) this state belongs to
+  lastSeasonRp: number | null; // your final RP last season — a placement prior + display
 };
 
-export const EMPTY_RANKED: RankedState = { rp: 0, bestToPar: null, rounds: 0, streak: 0, bestStreak: 0, wins: 0, podiums: 0, placed: false, placeEstimates: [] };
+export const EMPTY_RANKED: RankedState = { rp: 0, bestToPar: null, rounds: 0, streak: 0, bestStreak: 0, wins: 0, podiums: 0, placed: false, placeEstimates: [], season: 0, lastSeasonRp: null };
 
 // Fill in any fields a legacy/partial saved state is missing (older saves only had
 // rp/bestToPar/rounds), so the ladder keeps working across the upgrade.
@@ -135,16 +150,32 @@ export function normalizeRanked(state: Partial<RankedState> | null | undefined):
     // players also get calibrated to their true rank (their stats are kept).
     placed: typeof s.placed === "boolean" ? s.placed : false,
     placeEstimates: Array.isArray(s.placeEstimates) ? s.placeEstimates.slice(0, PLACEMENT_ROUNDS) : [],
+    season: s.season ?? 0,
+    lastSeasonRp: typeof s.lastSeasonRp === "number" ? s.lastSeasonRp : null,
   };
+}
+
+// Ranked runs in monthly seasons. When the calendar month rolls over, all rankings
+// reset — you redo placement from scratch — but your final RP carries forward as
+// `lastSeasonRp`: a memory that nudges the new placement toward where you ended,
+// and shows where you landed. No-op if the state is already this season.
+export function rolloverSeason(state: RankedState | null | undefined, month: number): RankedState {
+  const s = normalizeRanked(state);
+  if (s.season === month) return s;
+  // Carry forward the most recent real finish: this season's RP if you actually
+  // got placed and played, else whatever memory you already had.
+  const carried = s.placed && s.rounds > 0 ? s.rp : s.lastSeasonRp;
+  return { ...EMPTY_RANKED, season: month, lastSeasonRp: carried ?? null };
 }
 
 export type RankedResult = {
   place: number;
   field: number;
   toPar: number;
-  rpDelta: number;     // total RP change (placement + streak bonus)
+  rpDelta: number;     // total RP change ((placement + streak bonus) × round weight)
   base: number;        // placement RP
   bonus: number;       // streak bonus
+  weight: number;      // early-round multiplier applied to this round (≥ 1)
   podium: boolean;     // finished top 2 (gained RP)
   win: boolean;        // finished 1st
   streak: number;      // streak AFTER this round
@@ -161,7 +192,8 @@ export function applyRankedRound(state: RankedState | null, place: number, field
   const streak = podium ? s.streak + 1 : 0;
   const base = placementRP(place, field);
   const bonus = podium ? streakBonus(streak) : 0;
-  const rpDelta = base + bonus;
+  const weight = roundWeight(s.rounds); // early rounds move RP more (you're still settling)
+  const rpDelta = Math.round((base + bonus) * weight);
   const beforeIdx = tierIndex(s.rp);
   const rp = Math.max(0, s.rp + rpDelta);
   const afterIdx = tierIndex(rp);
@@ -175,9 +207,11 @@ export function applyRankedRound(state: RankedState | null, place: number, field
     podiums: s.podiums + (podium ? 1 : 0),
     placed: s.placed, // already past placement when this runs
     placeEstimates: s.placeEstimates,
+    season: s.season,
+    lastSeasonRp: s.lastSeasonRp,
   };
   const result: RankedResult = {
-    place, field, toPar, rpDelta, base, bonus, podium, win, streak,
+    place, field, toPar, rpDelta, base, bonus, weight, podium, win, streak,
     tierUp: afterIdx > beforeIdx,
     tierDown: afterIdx < beforeIdx,
   };
@@ -234,7 +268,12 @@ export function applyPlacementRound(state: RankedState | null, place: number, fi
   const estRating = lo + frac * (hi - lo);
   const estimate = rpFromRating(estRating);
   const placeEstimates = [...s.placeEstimates, estimate].slice(0, PLACEMENT_ROUNDS);
-  const projectedRp = Math.round(placeEstimates.reduce((a, b) => a + b, 0) / placeEstimates.length);
+  // Last season's finish (if any) is remembered as a prior — one weighted vote that
+  // nudges your new placement toward where you ended, without overriding how you
+  // play this season. It fades automatically as more placement estimates come in.
+  const priorN = s.lastSeasonRp != null ? 1 : 0;
+  const priorSum = s.lastSeasonRp ?? 0;
+  const projectedRp = Math.round((priorSum + placeEstimates.reduce((a, b) => a + b, 0)) / (priorN + placeEstimates.length));
   const placed = placeEstimates.length >= PLACEMENT_ROUNDS;
   const next: RankedState = {
     ...s,
