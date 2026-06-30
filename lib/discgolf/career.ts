@@ -225,8 +225,8 @@ const SPONSOR_POOL: Sponsor[] = [
   // only two brands whose discs exist in the catalog, so the bag lock works.)
   { id: "innova", name: "Innova", slot: "disc", tier: 5, signing: 220000, stipend: 140000, coach: true, reqRating: 82, reqStage: "pro", brand: "Innova" },
   { id: "discraft", name: "Discraft", slot: "disc", tier: 5, signing: 220000, stipend: 140000, coach: true, reqRating: 82, reqStage: "pro", brand: "Discraft" },
-  // ── Gear slot — disc golf equipment: belts, bags, carts ──
-  { id: "campusgear", name: "Grip6", slot: "gear", tier: 1, signing: 500, stipend: 400, coach: true, reqRating: 38, reqStage: "highschool" },
+  // ── Gear slot — disc golf equipment: gloves, bags, carts ──
+  { id: "campusgear", name: "Friction Gloves", slot: "gear", tier: 1, signing: 500, stipend: 400, coach: true, reqRating: 38, reqStage: "highschool" },
   { id: "voltathletic", name: "GripEQ", slot: "gear", tier: 3, signing: 15000, stipend: 12000, coach: false, reqRating: 66, reqStage: "pro" },
   { id: "global", name: "ZÜCA", slot: "gear", tier: 4, signing: 90000, stipend: 60000, coach: true, reqRating: 80, reqStage: "pro" },
   // ── General slot — nutrition, energy, apparel ──
