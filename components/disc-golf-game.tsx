@@ -6313,21 +6313,21 @@ function RankedPanel({ ranked, onPlay, onClose }: {
 // Browse the global (Supabase) leaderboard for any course from the title
 // screen. Daily uses today's seed; Glendoveer & Winthrop are all-time.
 function LeaderboardPanel({ onClose }: { onClose: () => void }) {
-  type Board = { key: "course" | "winthrop" | "daily"; label: string; courseKey: string; par: number };
+  // Daily first, then the two fixed venues, then every pro-tour course on the app.
+  type Board = { label: string; courseKey: string; par: number; daily?: boolean };
   const [boards] = useState<Board[]>(() => {
     const dSeed = dailySeed();
     const dPar = buildRound(dSeed, "daily").reduce((s, h) => s + h.par, 0);
     return [
-      { key: "course", label: "Glendoveer", courseKey: "glendoveer", par: TOTAL_PAR },
-      { key: "winthrop", label: "Winthrop", courseKey: "winthrop", par: WINTHROP_PAR },
-      { key: "daily", label: "Daily", courseKey: `daily-${dSeed}`, par: dPar },
+      { label: "Daily Challenge", courseKey: `daily-${dSeed}`, par: dPar, daily: true },
+      { label: "Glendoveer East", courseKey: "glendoveer", par: TOTAL_PAR },
+      { label: "Winthrop Lake", courseKey: "winthrop", par: WINTHROP_PAR },
+      ...TOUR_COURSE_INFOS.map((c) => ({ label: c.name, courseKey: `tour-${c.seed}`, par: c.par })),
     ];
   });
   const [pick, setPick] = useState<Board>(boards[0]);
   const [rows, setRows] = useState<ArcadeScore[] | null>(null);
   const over = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
-  const seg = (active: boolean) =>
-    `flex-1 rounded-md px-2 py-2 text-xs font-bold transition ${active ? "bg-[#4B3DFF] text-white" : "text-gray-400 hover:text-white"}`;
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     let active = true;
@@ -6343,13 +6343,22 @@ function LeaderboardPanel({ onClose }: { onClose: () => void }) {
           <h2 className="text-white font-black text-xl">🏆 Leaderboards</h2>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
-        <div className="flex gap-1 bg-[#1a1d23] border border-white/10 rounded-lg p-1">
-          {boards.map((b) => (
-            <button key={b.key} type="button" onClick={() => setPick(b)} className={seg(pick.key === b.key)}>{b.label}</button>
-          ))}
+        <div className="relative">
+          <select
+            value={pick.courseKey}
+            onChange={(e) => { const b = boards.find((x) => x.courseKey === e.target.value); if (b) setPick(b); }}
+            className="appearance-none w-full bg-[#1a1d23] border border-white/10 rounded-lg pl-3 pr-9 py-2.5 text-white text-sm font-semibold focus:outline-none focus:border-[#4B3DFF] hover:border-white/25 transition"
+            style={{ colorScheme: "dark" }}
+            aria-label="Choose a leaderboard"
+          >
+            {boards.map((b) => (
+              <option key={b.courseKey} value={b.courseKey}>{b.label}</option>
+            ))}
+          </select>
+          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-xs">▾</span>
         </div>
         <p className="text-gray-500 text-[11px]">
-          {pick.key === "daily" ? "Today's course · par " : "All-time · par "}{pick.par}
+          {pick.daily ? "Today's course · par " : "All-time · par "}{pick.par}
         </p>
         <div className="bg-[#1a1d23] border border-white/5 rounded-2xl overflow-hidden">
           {rows === null ? (
