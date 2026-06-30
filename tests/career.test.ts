@@ -450,6 +450,24 @@ describe("economy + sponsors", () => {
     for (const o of availableSponsors(s)) s = signSponsor(s, o.id);
     expect(s.sponsors.length).toBeLessThanOrEqual(SPONSOR_CAP);
   });
+  it("offers no sponsor at the very start of a career", () => {
+    expect(availableSponsors(newCareer("Rook", 5))).toEqual([]); // earn your first by raising your rating
+  });
+  it("holds one deal per category slot; a higher-tier offer in that slot swaps it", () => {
+    let c: Career = { ...newCareer("HS", 9), stage: "college", age: 18, skills: { power: 60, control: 60, putt: 60, stamina: 50 } };
+    c = signSponsor(c, "localdisc"); // Disc slot, tier 1
+    expect(c.sponsors.find((s) => s.slot === "disc")!.id).toBe("localdisc");
+    const ids = availableSponsors(c).map((s) => s.id);
+    expect(ids).toContain("apexdiscs"); // tier 2 in the Disc slot → worth swapping up
+    expect(ids).not.toContain("localdisc"); // a downgrade isn't re-offered
+    const up = signSponsor(c, "apexdiscs");
+    expect(up.sponsors.filter((s) => s.slot === "disc")).toHaveLength(1); // still one Disc deal
+    expect(up.sponsors.find((s) => s.slot === "disc")!.id).toBe("apexdiscs");
+    expect(up.sponsors.map((s) => s.id)).not.toContain("localdisc"); // swapped out
+    const withGear = signSponsor(up, "campusgear"); // a different category fills independently
+    expect(withGear.sponsors).toHaveLength(2);
+    expect(withGear.sponsors.map((s) => s.slot).sort()).toEqual(["disc", "gear"]);
+  });
   it("sponsor stipends + coaches pay out and add training at season's end", () => {
     let c: Career = { ...newCareer("Pro", 13), stage: "pro", age: 25, cash: 100000, skills: { power: 85, control: 85, putt: 85, stamina: 85 } };
     const coach = availableSponsors(c).find((o) => o.coach)!;
@@ -543,12 +561,19 @@ describe("manufacturer sponsorships (brand-exclusive deals)", () => {
     expect(toggleCareerBag({ ...dropped, bag: dropped.bag.slice(0, 1) }, "buzzz").bag).toContain("buzzz"); // off-brand allowed again
   });
 
-  it("a manufacturer deal takes one of your 3 slots", () => {
+  it("a manufacturer deal swaps the Disc slot, even with every slot full", () => {
     let c = elitePro();
-    for (const id of ["global", "summitdiscs", "voltathletic"]) c = signSponsor(c, id);
+    // Fill all three slots: Disc (summitdiscs), Gear (global), General (skylinebank).
+    for (const id of ["summitdiscs", "global", "skylinebank"]) c = signSponsor(c, id);
     expect(c.sponsors).toHaveLength(SPONSOR_CAP);
-    expect(availableSponsors(c).map((s) => s.id)).not.toContain("innova"); // no slot for the first deal
-    expect(signSponsor(c, "innova")).toBe(c); // and signing is a no-op
+    // Offers still show with full slots — Innova is offered and swaps the Disc deal.
+    expect(availableSponsors(c).map((s) => s.id)).toContain("innova");
+    const inn = signSponsor(c, "innova");
+    expect(inn.sponsors).toHaveLength(SPONSOR_CAP); // swapped, not added
+    expect(sponsorBrandLock(inn)).toBe("Innova");
+    expect(inn.sponsors.find((s) => s.slot === "disc")!.id).toBe("innova"); // replaced summitdiscs
+    expect(inn.sponsors.map((s) => s.id)).not.toContain("summitdiscs");
+    expect(inn.sponsors.map((s) => s.id)).toEqual(expect.arrayContaining(["global", "skylinebank"])); // other slots untouched
   });
 });
 

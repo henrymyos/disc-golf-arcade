@@ -140,9 +140,16 @@ export type Rival = {
 
 // ── Sponsorships + economy: prize money (pro), sponsor signing bonuses and
 // per-season stipends, and cash you spend on extra training. ──
+// Three sponsor slots — one per category. You can fill each independently, or sign
+// a better offer in that category to SWAP out who reps you (see signSponsor).
+export const SPONSOR_SLOTS = ["disc", "gear", "general"] as const;
+export type SponsorSlot = (typeof SPONSOR_SLOTS)[number];
+export const SPONSOR_SLOT_LABEL: Record<SponsorSlot, string> = { disc: "Disc", gear: "Gear", general: "General" };
+
 export type Sponsor = {
   id: string;
   name: string;
+  slot: SponsorSlot; // which of the three category slots this deal occupies
   tier: number; // 1 local … 4 global … 5 manufacturer (marquee, exclusive)
   signing: number; // one-time cash on signing
   stipend: number; // cash per season
@@ -198,22 +205,30 @@ const RIVAL_NAMES = [
 ];
 const RIVAL_PALETTE = ["#e23b7b", "#5fb0e8", "#b85cd6", "#e2a13b", "#36D7B7", "#f5d24a"];
 
-// Sponsors unlock by reputation (rating + stage). Sign up to 3 — one of which can
-// be a MANUFACTURER deal (Innova / Discraft): the marquee late-game contract that
-// pays a fortune but locks your bag to that brand's discs only (see signSponsor).
-const SPONSOR_CAP = 3;
+// Sponsors unlock by reputation (rating + stage) — you start with NO offer and earn
+// your first as your rating climbs. There are three category slots (Disc / Gear /
+// General); you hold at most one deal per slot, and signing a better offer in a slot
+// SWAPS out the current one (see signSponsor). The Disc slot can also hold a
+// MANUFACTURER deal (Innova / Discraft): the marquee late-game contract that pays a
+// fortune but locks your bag to that brand's discs only.
+const SPONSOR_CAP = SPONSOR_SLOTS.length;
 const SPONSOR_POOL: Sponsor[] = [
-  { id: "localdisc", name: "Hometown Disc Shop", tier: 1, signing: 200, stipend: 150, coach: false, reqRating: 0, reqStage: "highschool" },
-  { id: "campusgear", name: "Campus Gear Co.", tier: 1, signing: 500, stipend: 400, coach: true, reqRating: 38, reqStage: "highschool" },
-  { id: "fairwayfoods", name: "Fairway Foods", tier: 2, signing: 1500, stipend: 1200, coach: false, reqRating: 50, reqStage: "college" },
-  { id: "apexdiscs", name: "Apex Discs", tier: 2, signing: 4000, stipend: 3000, coach: true, reqRating: 58, reqStage: "college" },
-  { id: "voltathletic", name: "Volt Athletic", tier: 3, signing: 15000, stipend: 12000, coach: false, reqRating: 66, reqStage: "pro" },
-  { id: "summitdiscs", name: "Summit Discs", tier: 3, signing: 30000, stipend: 22000, coach: true, reqRating: 72, reqStage: "pro" },
-  { id: "global", name: "Global Sportswear", tier: 4, signing: 90000, stipend: 60000, coach: true, reqRating: 80, reqStage: "pro" },
+  // ── Disc slot — local shops → manufacturer deals ──
+  { id: "localdisc", name: "Hometown Disc Shop", slot: "disc", tier: 1, signing: 200, stipend: 150, coach: false, reqRating: 30, reqStage: "highschool" },
+  { id: "apexdiscs", name: "Apex Discs", slot: "disc", tier: 2, signing: 4000, stipend: 3000, coach: true, reqRating: 58, reqStage: "college" },
+  { id: "summitdiscs", name: "Summit Discs", slot: "disc", tier: 3, signing: 30000, stipend: 22000, coach: true, reqRating: 72, reqStage: "pro" },
   // Manufacturer deals — only a genuine top-tour pro lands one. Huge money + their
   // full disc lineup, but you carry ONLY their plastic from then on.
-  { id: "innova", name: "Innova", tier: 5, signing: 220000, stipend: 140000, coach: true, reqRating: 82, reqStage: "pro", brand: "Innova" },
-  { id: "discraft", name: "Discraft", tier: 5, signing: 220000, stipend: 140000, coach: true, reqRating: 82, reqStage: "pro", brand: "Discraft" },
+  { id: "innova", name: "Innova", slot: "disc", tier: 5, signing: 220000, stipend: 140000, coach: true, reqRating: 82, reqStage: "pro", brand: "Innova" },
+  { id: "discraft", name: "Discraft", slot: "disc", tier: 5, signing: 220000, stipend: 140000, coach: true, reqRating: 82, reqStage: "pro", brand: "Discraft" },
+  // ── Gear slot — apparel, bags, athletic ──
+  { id: "campusgear", name: "Campus Gear Co.", slot: "gear", tier: 1, signing: 500, stipend: 400, coach: true, reqRating: 38, reqStage: "highschool" },
+  { id: "voltathletic", name: "Volt Athletic", slot: "gear", tier: 3, signing: 15000, stipend: 12000, coach: false, reqRating: 66, reqStage: "pro" },
+  { id: "global", name: "Global Sportswear", slot: "gear", tier: 4, signing: 90000, stipend: 60000, coach: true, reqRating: 80, reqStage: "pro" },
+  // ── General slot — food, energy, lifestyle ──
+  { id: "fairwayfoods", name: "Fairway Foods", slot: "general", tier: 2, signing: 1500, stipend: 1200, coach: false, reqRating: 50, reqStage: "college" },
+  { id: "surgeenergy", name: "Surge Energy", slot: "general", tier: 3, signing: 18000, stipend: 14000, coach: false, reqRating: 68, reqStage: "pro" },
+  { id: "skylinebank", name: "Skyline Bank", slot: "general", tier: 4, signing: 80000, stipend: 55000, coach: true, reqRating: 80, reqStage: "pro" },
 ];
 
 // ── Career disc collection. Career mode runs its OWN disc progression, totally
@@ -376,9 +391,21 @@ export function normalizeCareer(c: Career): Career {
   // every load — carrying the head-to-head record once it's already the pro tour.
   if (c.stage === "pro") rivals = proRivals(careerYear(c), isProRivals(rivals) ? rivals : undefined);
   const discs = c.discs?.length ? c.discs : [...CAREER_CORE_DISCS];
+  // Backfill the category `slot` on already-signed sponsors (older saves predate
+  // slots). An old flat-cap save could hold two that now map to the SAME slot, so
+  // spread collisions onto any free slot — every signed sponsor keeps its own slot
+  // (and stipend), and future swaps re-sort it naturally.
+  const sponsorById = new Map(SPONSOR_POOL.map((s) => [s.id, s] as const));
+  const usedSlots = new Set<SponsorSlot>();
+  const sponsors = (c.sponsors ?? []).map((s) => {
+    let slot: SponsorSlot = s.slot ?? sponsorById.get(s.id)?.slot ?? "general";
+    if (usedSlots.has(slot)) slot = SPONSOR_SLOTS.find((sl) => !usedSlots.has(sl)) ?? slot;
+    usedSlots.add(slot);
+    return { ...s, slot };
+  });
   return {
     ...c, skills, potential, skillFrac, cash: c.cash ?? 0,
-    energy: c.energy ?? seasonEnergy(skills.stamina), sponsors: c.sponsors ?? [],
+    energy: c.energy ?? seasonEnergy(skills.stamina), sponsors,
     // Existing saves: treat their currently-signed sponsors as already-paid, so a
     // first drop + re-sign after this update can't re-collect those bonuses.
     sponsorBonusClaimed: c.sponsorBonusClaimed ?? (c.sponsors ?? []).map((s) => s.id),
@@ -1073,21 +1100,21 @@ function applyBrandDeal(c: Career, brand: string): Career {
   return { ...c, discs, bag: brandBag(keys) };
 }
 // Sponsor offers you currently qualify for (by rating + stage) and haven't signed.
-// Regular sponsors need one of your 3 slots free. A MANUFACTURER deal also takes a
-// slot the first time, but if you already hold one, the rival brand is still
-// offered as a SWITCH (no slot needed — it replaces your current deal).
+// Offers show even when a slot is FULL — signing one just swaps out the slot's
+// current occupant. To keep the list meaningful, an occupied slot only surfaces a
+// genuine UPGRADE (higher tier); two manufacturer deals always offer each other as a
+// brand switch even at the same tier.
 export function availableSponsors(c: Career): Sponsor[] {
   if (c.retired) return [];
   const rating = careerRating(c.skills);
   const reached = STAGE_ORDER.indexOf(c.stage);
   const signed = new Set(c.sponsors.map((s) => s.id));
-  const hasBrand = c.sponsors.some((s) => s.brand);
-  const slotFree = c.sponsors.length < SPONSOR_CAP;
   return SPONSOR_POOL.filter((s) => {
     if (signed.has(s.id)) return false;
     if (rating < s.reqRating || reached < STAGE_ORDER.indexOf(s.reqStage)) return false;
-    if (s.brand) return hasBrand || slotFree; // switch (have one) or a free slot for the first
-    return slotFree;
+    const occupant = c.sponsors.find((x) => x.slot === s.slot);
+    if (occupant && s.tier <= occupant.tier && !(s.brand && occupant.brand)) return false; // not worth a downgrade swap
+    return true;
   });
 }
 export function signSponsor(c: Career, id: string): Career {
@@ -1098,18 +1125,13 @@ export function signSponsor(c: Career, id: string): Career {
   const claimed = c.sponsorBonusClaimed ?? [];
   const bonus = claimed.includes(id) ? 0 : s.signing;
   const sponsorBonusClaimed = claimed.includes(id) ? claimed : [...claimed, id];
-  if (s.brand) {
-    const current = c.sponsors.find((x) => x.brand);
-    if (current) {
-      // SWITCH manufacturers: replace the deal in place (no extra slot), pay the new
-      // brand's bonus only if you've never repped them before, then rebuild the bag.
-      return applyBrandDeal({ ...c, sponsors: c.sponsors.map((x) => (x.brand ? s : x)), cash: c.cash + bonus, sponsorBonusClaimed }, s.brand);
-    }
-    if (c.sponsors.length >= SPONSOR_CAP) return c; // first manufacturer deal needs a free slot
-    return applyBrandDeal({ ...c, sponsors: [...c.sponsors, s], cash: c.cash + bonus, sponsorBonusClaimed }, s.brand);
-  }
-  if (c.sponsors.length >= SPONSOR_CAP) return c;
-  return { ...c, sponsors: [...c.sponsors, s], cash: c.cash + bonus, sponsorBonusClaimed };
+  // One deal per slot: if the slot is occupied, SWAP the new sponsor in for the old
+  // one; otherwise just fill the empty slot.
+  const occupied = c.sponsors.some((x) => x.slot === s.slot);
+  const sponsors = occupied ? c.sponsors.map((x) => (x.slot === s.slot ? s : x)) : [...c.sponsors, s];
+  const next = { ...c, sponsors, cash: c.cash + bonus, sponsorBonusClaimed };
+  // A manufacturer deal (Disc slot) also re-locks the bag to its brand and rebuilds it.
+  return s.brand ? applyBrandDeal(next, s.brand) : next;
 }
 // Drop a sponsor — frees its slot so you can switch who reps you. You keep cash
 // already paid but forfeit its future stipend/coach. Dropping a manufacturer deal

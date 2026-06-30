@@ -44,7 +44,7 @@ import {
   newCareer, normalizeCareer, skillMods, momentumAfter, seasonSchedule, simEvent, recordResult, advanceSeason, retire,
   placeLabel, STAGE_LABEL, SKILL_KEYS, SKILL_LABEL, SKILL_DESC, IDENTITY_MODS,
   seasonEnergy, eventEnergyCost, canEnterEvent,
-  availableSponsors, signSponsor, unsignSponsor, sponsorBrandLock, trainingPointCost, buyTrainingPoint, spendSkillPoint, trainBonusFor, fmtCash, SPONSOR_CAP,
+  availableSponsors, signSponsor, unsignSponsor, sponsorBrandLock, trainingPointCost, buyTrainingPoint, spendSkillPoint, trainBonusFor, fmtCash, SPONSOR_CAP, SPONSOR_SLOTS, SPONSOR_SLOT_LABEL,
   careerRating, careerCoins as coinsForFinish, careerDiscShop, buyCareerDisc, toggleCareerBag, CAREER_BAG_MAX,
   buyCareerCosmetic, equipCareerLook, DEFAULT_CAREER_LOOK, type CareerLook,
   careerFieldForRound, careerCardRacers, careerLiveStandings, careerHoleLenScale, careerYear,
@@ -5301,36 +5301,55 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
       </div>
       </>)}
 
-      {/* Sponsors */}
+      {/* Sponsors — three category slots. Each holds one deal; signing a better offer
+          in a slot swaps out the current one. You start with no offer and earn them
+          as your rating climbs. */}
       {tab === "sponsors" && (
-      <div className="bg-[#1a1d23] border border-white/5 rounded-xl p-3 space-y-1.5">
-        <p className="text-gray-400 text-xs font-bold uppercase tracking-wide">Sponsors ({career.sponsors.length}/{SPONSOR_CAP})</p>
-        {career.sponsors.length === 0 && sponsorOffers.length === 0 && (
-          <p className="text-gray-600 text-[11px]">Win events and raise your rating to attract sponsors.</p>
-        )}
-        {career.sponsors.map((s) => (
-          <div key={s.id} className={`flex items-center justify-between gap-2 text-[11px] ${s.brand ? "text-[#f5d24a]" : ""}`}>
-            <span className={`min-w-0 truncate ${s.brand ? "font-bold" : "text-white"}`}>{s.brand ? "🥏 " : ""}{s.name}{s.coach ? " 🎓" : ""}{s.brand ? <span className="text-gray-500 font-normal"> · {s.brand} discs only</span> : ""}</span>
-            <span className="shrink-0 flex items-center gap-2">
-              <span className={s.brand ? "font-mono" : "text-gray-400 font-mono"}>{fmtCash(s.stipend)}/yr</span>
-              {dropId === s.id ? (
-                <span className="text-[10px] text-gray-400">Drop? <button type="button" onClick={() => { onUnsign(s.id); setDropId(null); }} className="text-[#e2453b] font-bold">Yes</button> · <button type="button" onClick={() => setDropId(null)} className="text-gray-300">No</button></span>
-              ) : (
-                <button type="button" onClick={() => setDropId(s.id)} title="Drop this sponsor" className="text-gray-500 hover:text-[#e2453b] text-sm leading-none">×</button>
-              )}
-            </span>
-          </div>
-        ))}
-        {sponsorOffers.map((s) => {
-          const isSwitch = !!s.brand && !!brandLock; // already have a manufacturer → this one swaps it
+      <div className="space-y-2">
+        <div className="flex items-baseline justify-between">
+          <p className="text-gray-400 text-xs font-bold uppercase tracking-wide">Sponsors ({career.sponsors.length}/{SPONSOR_CAP})</p>
+          <p className="text-[10px] text-gray-500">Fill a slot · sign a better offer to swap</p>
+        </div>
+        {SPONSOR_SLOTS.map((slot) => {
+          const held = career.sponsors.find((s) => s.slot === slot);
+          const offers = sponsorOffers.filter((o) => o.slot === slot);
           return (
-            <div key={s.id} className={`flex items-center justify-between gap-2 rounded px-2 py-1.5 ${s.brand ? "bg-[#f5d24a]/[0.07] border border-[#f5d24a]/25" : "bg-white/[0.03]"}`}>
-              <div className="min-w-0">
-                <p className={`text-xs font-semibold truncate ${s.brand ? "text-[#f5d24a]" : "text-white"}`}>{s.brand ? "🥏 " : ""}{s.name}{s.coach ? " 🎓" : ""}</p>
-                <p className="text-gray-500 text-[10px]">{!isSwitch && `${fmtCash(s.signing)} signing · `}{fmtCash(s.stipend)}/yr{s.coach ? " · +1 training" : ""}</p>
-                {s.brand && <p className="text-[#e0923b] text-[10px] font-semibold">Exclusive — you’ll carry only {s.brand} discs{isSwitch ? " (switches your current deal)" : ""}.</p>}
+            <div key={slot} className="bg-[#1a1d23] border border-white/5 rounded-xl p-3 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">{SPONSOR_SLOT_LABEL[slot]} slot</p>
+                {!held && <p className="text-[10px] text-gray-600">Open</p>}
               </div>
-              <button type="button" onClick={() => onSign(s.id)} className="shrink-0 rounded bg-[#e0923b] hover:brightness-110 text-[#0f1117] text-[11px] font-bold px-2.5 py-1">{isSwitch ? "Switch" : "Sign"}</button>
+              {held && (
+                <div className={`flex items-center justify-between gap-2 text-[11px] ${held.brand ? "text-[#f5d24a]" : ""}`}>
+                  <span className={`min-w-0 truncate ${held.brand ? "font-bold" : "text-white"}`}>{held.brand ? "🥏 " : ""}{held.name}{held.coach ? " 🎓" : ""}{held.brand ? <span className="text-gray-500 font-normal"> · {held.brand} discs only</span> : ""}</span>
+                  <span className="shrink-0 flex items-center gap-2">
+                    <span className={held.brand ? "font-mono" : "text-gray-400 font-mono"}>{fmtCash(held.stipend)}/yr</span>
+                    {dropId === held.id ? (
+                      <span className="text-[10px] text-gray-400">Drop? <button type="button" onClick={() => { onUnsign(held.id); setDropId(null); }} className="text-[#e2453b] font-bold">Yes</button> · <button type="button" onClick={() => setDropId(null)} className="text-gray-300">No</button></span>
+                    ) : (
+                      <button type="button" onClick={() => setDropId(held.id)} title="Drop this sponsor" className="text-gray-500 hover:text-[#e2453b] text-sm leading-none">×</button>
+                    )}
+                  </span>
+                </div>
+              )}
+              {offers.map((s) => {
+                const isSwap = !!held; // slot occupied → signing swaps the current deal out
+                const paid = (career.sponsorBonusClaimed ?? []).includes(s.id); // re-signing a dropped deal pays no second bonus
+                return (
+                  <div key={s.id} className={`flex items-center justify-between gap-2 rounded px-2 py-1.5 ${s.brand ? "bg-[#f5d24a]/[0.07] border border-[#f5d24a]/25" : "bg-white/[0.03]"}`}>
+                    <div className="min-w-0">
+                      <p className={`text-xs font-semibold truncate ${s.brand ? "text-[#f5d24a]" : "text-white"}`}>{s.brand ? "🥏 " : ""}{s.name}{s.coach ? " 🎓" : ""}</p>
+                      <p className="text-gray-500 text-[10px]">{!paid && `${fmtCash(s.signing)} signing · `}{fmtCash(s.stipend)}/yr{s.coach ? " · +1 training" : ""}</p>
+                      {s.brand && <p className="text-[#e0923b] text-[10px] font-semibold">Exclusive — you’ll carry only {s.brand} discs.</p>}
+                      {isSwap && <p className="text-gray-500 text-[10px]">Swaps out {held!.name}.</p>}
+                    </div>
+                    <button type="button" onClick={() => onSign(s.id)} className="shrink-0 rounded bg-[#e0923b] hover:brightness-110 text-[#0f1117] text-[11px] font-bold px-2.5 py-1">{isSwap ? "Swap" : "Sign"}</button>
+                  </div>
+                );
+              })}
+              {!held && offers.length === 0 && (
+                <p className="text-gray-600 text-[11px]">No offers yet — raise your rating to attract a {SPONSOR_SLOT_LABEL[slot].toLowerCase()} sponsor.</p>
+              )}
             </div>
           );
         })}
