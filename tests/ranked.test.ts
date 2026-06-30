@@ -33,11 +33,12 @@ describe("ranked weeks + board key", () => {
 });
 
 describe("placement RP", () => {
-  it("a win gains the most, mid-pack is near-neutral, last loses points", () => {
-    expect(placementRP(1, 25)).toBeGreaterThan(placementRP(13, 25));
-    expect(placementRP(13, 25)).toBeGreaterThan(placementRP(25, 25));
-    expect(placementRP(1, 25)).toBeGreaterThan(0); // winning climbs
-    expect(placementRP(25, 25)).toBeLessThan(0); // last place drops
+  it("a 5-card pays top 2, neutral 3rd, and the bottom 2 lose — 1st/last the most", () => {
+    expect(placementRP(1, 5)).toBe(50);   // 1st gains the most
+    expect(placementRP(2, 5)).toBe(25);   // 2nd gains, but less
+    expect(placementRP(3, 5)).toBe(0);    // 3rd is neutral
+    expect(placementRP(4, 5)).toBe(-25);  // 4th loses
+    expect(placementRP(5, 5)).toBe(-50);  // 5th loses the most
   });
   it("streak bonus only kicks in from a second consecutive podium and is capped", () => {
     expect(streakBonus(1)).toBe(0);
@@ -49,7 +50,7 @@ describe("placement RP", () => {
 
 describe("applyRankedRound", () => {
   it("a win climbs RP, counts the win, starts a podium streak, tracks best to-par", () => {
-    const { state, result } = applyRankedRound(null, 1, 25, -4);
+    const { state, result } = applyRankedRound(null, 1, 5, -4);
     expect(result.win).toBe(true);
     expect(result.podium).toBe(true);
     expect(result.rpDelta).toBeGreaterThan(0);
@@ -60,25 +61,25 @@ describe("applyRankedRound", () => {
     expect(state.bestToPar).toBe(-4);
     expect(state.rounds).toBe(1);
   });
-  it("consecutive podiums build a streak that pays an escalating bonus", () => {
-    const s = applyRankedRound(null, 2, 25, 0).state; // podium, streak 1
-    const r2 = applyRankedRound(s, 3, 25, 1);         // podium, streak 2 → bonus
+  it("consecutive top-2 finishes build a streak that pays an escalating bonus", () => {
+    const s = applyRankedRound(null, 2, 5, 0).state; // 2nd → podium, streak 1
+    const r2 = applyRankedRound(s, 1, 5, 1);         // 1st → podium, streak 2 → bonus
     expect(r2.result.streak).toBe(2);
     expect(r2.result.bonus).toBeGreaterThan(0);
     expect(r2.state.bestStreak).toBe(2);
-    // A poor finish resets the streak.
-    const r3 = applyRankedRound(r2.state, 20, 25, 6);
+    // A 3rd-or-worse finish isn't a podium, so it resets the streak.
+    const r3 = applyRankedRound(r2.state, 4, 5, 6);
     expect(r3.result.podium).toBe(false);
     expect(r3.state.streak).toBe(0);
     expect(r3.state.bestStreak).toBe(2); // best is remembered
   });
   it("RP never falls below 0 — Bronze is the floor", () => {
-    const low = applyRankedRound({ rp: 10, bestToPar: 0, rounds: 1, streak: 0, bestStreak: 0, wins: 0, podiums: 0, placed: true, placeEstimates: [] }, 25, 25, 18);
+    const low = applyRankedRound({ rp: 10, bestToPar: 0, rounds: 1, streak: 0, bestStreak: 0, wins: 0, podiums: 0, placed: true, placeEstimates: [] }, 5, 5, 18);
     expect(low.state.rp).toBe(0);
   });
   it("flags promotion when a result crosses a tier threshold", () => {
     const before = { ...EMPTY_RANKED, rp: TIERS[1].min - 10 }; // just below Silver
-    const { result } = applyRankedRound(before, 1, 25, -8);
+    const { result } = applyRankedRound(before, 1, 5, -8);
     expect(result.tierUp).toBe(true);
   });
 });
@@ -125,19 +126,19 @@ describe("placement (calibration rounds)", () => {
   });
 
   it("reads your level from where you finish in the wide calibration field", () => {
-    // Round 1: field of 25 (24 opponents + you), evenly spread Bronze→Master.
-    expect(applyPlacementRound(EMPTY_RANKED, 1, 25, -10).result.tier.key).toBe("master"); // beat everyone
-    expect(applyPlacementRound(EMPTY_RANKED, 13, 25, 0).result.tier.key).toBe("gold");     // dead middle
-    expect(applyPlacementRound(EMPTY_RANKED, 25, 25, 12).result.tier.key).toBe("bronze");  // finished last
+    // Round 1: a card of 5 (you + 4), evenly spread Bronze→Master.
+    expect(applyPlacementRound(EMPTY_RANKED, 1, 5, -10).result.tier.key).toBe("master"); // beat everyone
+    expect(applyPlacementRound(EMPTY_RANKED, 3, 5, 0).result.tier.key).toBe("gold");      // dead middle
+    expect(applyPlacementRound(EMPTY_RANKED, 5, 5, 12).result.tier.key).toBe("bronze");   // finished last
   });
 
   it("later rounds test you within your projected division's band (tier mean ±14)", () => {
     // Projected Diamond → field spans ~[66, 94]. Holding mid keeps Diamond; a win
     // pushes toward Master; a poor round slips toward Gold/Platinum.
     const lo = 66, hi = 94;
-    expect(applyPlacementRound(EMPTY_RANKED, 13, 25, 0, lo, hi).result.tier.key).toBe("diamond"); // mid → ~80
-    expect(["diamond", "master"]).toContain(applyPlacementRound(EMPTY_RANKED, 1, 25, -8, lo, hi).result.tier.key);
-    expect(["gold", "platinum"]).toContain(applyPlacementRound(EMPTY_RANKED, 25, 25, 6, lo, hi).result.tier.key);
+    expect(applyPlacementRound(EMPTY_RANKED, 3, 5, 0, lo, hi).result.tier.key).toBe("diamond"); // mid → ~80
+    expect(["diamond", "master"]).toContain(applyPlacementRound(EMPTY_RANKED, 1, 5, -8, lo, hi).result.tier.key);
+    expect(["gold", "platinum"]).toContain(applyPlacementRound(EMPTY_RANKED, 5, 5, 6, lo, hi).result.tier.key);
   });
 
   it("placement bots carry a 7-stroke difficulty edge", () => {
@@ -145,7 +146,7 @@ describe("placement (calibration rounds)", () => {
   });
 
   it("projects a rank after round 1, adjusts to how you play, and locks in after PLACEMENT_ROUNDS", () => {
-    const r1 = applyPlacementRound(EMPTY_RANKED, 13, 25, 0); // middling → projects Gold
+    const r1 = applyPlacementRound(EMPTY_RANKED, 3, 5, 0); // middling → projects Gold
     expect(r1.result.placement).toBe(true);
     expect(r1.result.round).toBe(1);
     expect(r1.result.remaining).toBe(PLACEMENT_ROUNDS - 1);
@@ -153,11 +154,11 @@ describe("placement (calibration rounds)", () => {
     expect(r1.state.placed).toBe(false);
     expect(tierFromRP(r1.state.rp).tier.key).toBe("gold");
 
-    const r2 = applyPlacementRound(r1.state, 1, 25, -9); // then dominate → projection climbs
+    const r2 = applyPlacementRound(r1.state, 1, 5, -9); // then dominate → projection climbs
     expect(r2.result.placed).toBe(false);
     expect(r2.state.rp).toBeGreaterThan(r1.state.rp);
 
-    const r3 = applyPlacementRound(r2.state, 4, 25, -3);
+    const r3 = applyPlacementRound(r2.state, 2, 5, -3);
     expect(r3.result.placed).toBe(true);
     expect(r3.state.placed).toBe(true);
     expect(r3.result.remaining).toBe(0);
@@ -168,7 +169,7 @@ describe("placement (calibration rounds)", () => {
   });
 
   it("doesn't start a streak during placement, but does count wins/podiums + best to-par", () => {
-    const w = applyPlacementRound(EMPTY_RANKED, 1, 25, -5);
+    const w = applyPlacementRound(EMPTY_RANKED, 1, 5, -5);
     expect(w.state.streak).toBe(0);
     expect(w.state.wins).toBe(1);
     expect(w.state.podiums).toBe(1);
@@ -177,7 +178,7 @@ describe("placement (calibration rounds)", () => {
 
   it("after placement, normal RP rounds take over and you stay placed", () => {
     const placedState = { ...EMPTY_RANKED, placed: true, rp: 1500, placeEstimates: [1500, 1500, 1500] };
-    const after = applyRankedRound(placedState, 1, 25, -6);
+    const after = applyRankedRound(placedState, 1, 5, -6);
     expect(after.state.placed).toBe(true);
     expect("placement" in after.result).toBe(false); // a normal RankedResult
     expect(after.result.rpDelta).toBeGreaterThan(0);

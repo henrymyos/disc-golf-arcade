@@ -807,12 +807,10 @@ export function rankedPlacementField(seed: number, size: number, roundHoles: Hol
   }
   return field;
 }
-// On-course ghost racers for a ranked hole: three mid-pack opponents, so the race
-// alongside you stays close (the career card uses your rivals; ranked has none).
+// On-course ghost racers for a ranked hole: the card IS the whole field now (you +
+// 4), so every cardmate races alongside you.
 export function rankedCardRacers(field: FieldPlayer[], holeIndex: number): GhostRacer[] {
-  const sorted = [...field].sort((a, b) => a.total - b.total);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.slice(Math.max(0, mid - 1), mid + 2).map((p) => ({ name: p.name.split(" ").pop() || p.name, color: p.color, shots: Math.max(1, p.holes[holeIndex] ?? 1) }));
+  return [...field].sort((a, b) => a.total - b.total).map((p) => ({ name: p.name.split(" ").pop() || p.name, color: p.color, shots: Math.max(1, p.holes[holeIndex] ?? 1) }));
 }
 
 // Live standings through `holesPlayed` holes (you + the whole field), sorted,

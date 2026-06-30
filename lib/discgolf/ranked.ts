@@ -28,8 +28,8 @@ export const RANKED_PAR_OFFSET = 100;
 export function encodeToParScore(toPar: number): number { return Math.round(toPar) + RANKED_PAR_OFFSET; }
 export function decodeToParScore(stored: number): number { return stored - RANKED_PAR_OFFSET; }
 
-// How many AI opponents fill a ranked round (you make it a field of N+1).
-export const RANKED_FIELD = 24;
+// A ranked round is a small CARD: you + this many AI opponents = a field of 5.
+export const RANKED_FIELD = 4;
 
 // ── Placement. Your first PLACEMENT_ROUNDS ranked rounds are calibration rounds:
 // instead of grinding up from Bronze, you play a wide field that spans the whole
@@ -86,16 +86,21 @@ export function rankedFieldMean(rp: number): number {
   return base + within;
 }
 
-// RP for finishing `place` of `field` (1 = win). A win is a big gain, mid-pack is
-// roughly neutral, the back half bleeds points — so only consistently strong
-// finishes climb. Range ≈ −35 (last) … +55 (a full-field win).
+// RP for finishing `place` in a ranked card of `field` (a card is 5 — you + 4).
+// Symmetric around the middle place: the top half GAINS (1st the most), the exact
+// middle is neutral, the bottom half LOSES (last the most). For a 5-card that's
+// 1st +50, 2nd +25, 3rd 0, 4th −25, 5th −50.
+export const RANKED_WIN_RP = 50;
 export function placementRP(place: number, field: number): number {
-  const frac = field <= 1 ? 1 : (field - place) / (field - 1); // 1 at a win → 0 at last
-  return Math.round(-35 + frac * 90);
+  const mid = (field + 1) / 2; // the neutral place (3 in a 5-card)
+  if (mid <= 1) return 0;
+  const stepsFromMid = mid - place; // + above the middle, − below it
+  return Math.round(stepsFromMid * (RANKED_WIN_RP / (mid - 1)));
 }
 
-// A podium (top-3) finish extends your streak; each consecutive one adds an
-// escalating bonus (capped), rewarding hot runs. streak 1 → 0, 2 → +10 … cap +50.
+// A podium (top-2 — the RP-gaining places) finish extends your streak; each
+// consecutive one adds an escalating bonus (capped), rewarding hot runs.
+// streak 1 → 0, 2 → +10 … cap +50.
 export function streakBonus(streak: number): number {
   return Math.min(50, Math.max(0, streak - 1) * 10);
 }
@@ -104,10 +109,10 @@ export type RankedState = {
   rp: number;            // lifetime rank points — rises with strong finishes, falls with weak ones (floored at 0)
   bestToPar: number | null; // best (lowest) to-par on any ranked round
   rounds: number;        // ranked rounds completed
-  streak: number;        // current consecutive-podium (top-3) streak
+  streak: number;        // current consecutive-podium (top-2) streak
   bestStreak: number;    // longest podium streak reached
   wins: number;          // 1st-place finishes
-  podiums: number;       // top-3 finishes
+  podiums: number;       // top-2 finishes
   placed: boolean;       // true once placement (the calibration rounds) is complete
   placeEstimates: number[]; // per-placement-round RP estimates → the projected rank
 };
@@ -140,7 +145,7 @@ export type RankedResult = {
   rpDelta: number;     // total RP change (placement + streak bonus)
   base: number;        // placement RP
   bonus: number;       // streak bonus
-  podium: boolean;     // finished top 3
+  podium: boolean;     // finished top 2 (gained RP)
   win: boolean;        // finished 1st
   streak: number;      // streak AFTER this round
   tierUp: boolean;     // crossed up into a new tier
@@ -151,7 +156,7 @@ export type RankedResult = {
 // ladder. RP can drop on a poor finish but never below 0 — Bronze is the floor.
 export function applyRankedRound(state: RankedState | null, place: number, field: number, toPar: number): { state: RankedState; result: RankedResult } {
   const s = normalizeRanked(state);
-  const podium = place <= 3;
+  const podium = place <= 2; // top 2 gain RP — that's the "podium" on a 5-card
   const win = place === 1;
   const streak = podium ? s.streak + 1 : 0;
   const base = placementRP(place, field);
@@ -239,7 +244,7 @@ export function applyPlacementRound(state: RankedState | null, place: number, fi
     rounds: s.rounds + 1,
     bestToPar: s.bestToPar == null ? toPar : Math.min(s.bestToPar, toPar),
     wins: s.wins + (place === 1 ? 1 : 0),
-    podiums: s.podiums + (place <= 3 ? 1 : 0),
+    podiums: s.podiums + (place <= 2 ? 1 : 0),
   };
   const result: PlacementResult = {
     placement: true,

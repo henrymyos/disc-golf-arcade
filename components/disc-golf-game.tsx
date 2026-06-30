@@ -4224,8 +4224,8 @@ export function DiscGolfGame() {
                 return (
                   <div className="mt-3 bg-[#1a1d23] border border-white/10 rounded-xl px-4 py-3 text-left">
                     <div className="flex items-center justify-between">
-                      <span className="text-white font-black text-lg">{r.win ? "🏆 1st place!" : r.podium ? `${ordinal(r.place)} — podium!` : `Finished ${ordinal(r.place)} of ${r.field}`}</span>
-                      <span className="font-mono font-bold text-sm" style={{ color: r.rpDelta >= 0 ? "#36D7B7" : "#e08a3b" }}>{r.rpDelta >= 0 ? "+" : ""}{r.rpDelta} RP</span>
+                      <span className="text-white font-black text-lg">{r.win ? "🏆 1st place!" : r.podium ? `${ordinal(r.place)} place!` : `Finished ${ordinal(r.place)} of ${r.field}`}</span>
+                      <span className="font-mono font-bold text-sm" style={{ color: r.rpDelta > 0 ? "#36D7B7" : r.rpDelta < 0 ? "#e08a3b" : "#9aa0aa" }}>{r.rpDelta > 0 ? "+" : ""}{r.rpDelta} RP</span>
                     </div>
                     <div className="flex items-center gap-2 mt-1.5">
                       <span className="text-xl leading-none">{tr.tier.emoji}</span>
@@ -6196,7 +6196,7 @@ function RankedPanel({ ranked, onPlay, onClose }: {
         )}
 
         <p className="text-gray-400 text-[11px] leading-snug">
-          A fresh 18-hole course every round, against a field of pros that gets tougher as you climb. Where you FINISH drives your RP — win to surge, blow up to drop. Podium (top&nbsp;3) finishes build a streak. Play as many rounds as you like.
+          A fresh 18-hole course every round, on a card of 5 — you and four pros that get tougher as you climb. Finish top&nbsp;2 to gain RP (1st gains the most), 3rd holds steady, bottom&nbsp;2 lose RP. Play as many rounds as you like.
         </p>
 
         <button type="button" onClick={onPlay} className={`${btn} w-full`}>
