@@ -3130,25 +3130,22 @@ export function DiscGolfGame() {
             ctx.globalAlpha = 1;
           }
           const aimStyle = cosmeticByKey(AIM_STYLES, aimStyleRef.current) ?? AIM_STYLES[0];
+          // On light courses (snow, sand) the aim line takes the dark contrast ink,
+          // matching the basket ring, so it doesn't wash out; elsewhere it keeps
+          // your chosen aim-line color.
+          const aimColor = ink.onLight ? ink.line : aimStyle.color;
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = aimColor;
           if (aimStyle.dash) ctx.setLineDash(aimStyle.dash);
-          ctx.lineCap = "round";
-          // Two passes: a contrast halo (wider, background-derived ink) UNDER the
-          // styled line (your chosen color), so the preview stays legible on any
-          // course — dark ink on light snow/sand, light ink on dark night courses.
-          for (const pass of [{ w: 4, color: ink.line }, { w: 2, color: aimStyle.color }]) {
-            ctx.lineWidth = pass.w;
-            ctx.strokeStyle = pass.color;
-            if (aimStyle.glow && pass.w === 2) { ctx.shadowBlur = 6; ctx.shadowColor = aimStyle.color; } else { ctx.shadowBlur = 0; }
-            for (let i = 0; i < shown - 1; i++) {
-              const t = i / (shown - 1);
-              ctx.globalAlpha = Math.max(0.04, 0.95 * (1 - Math.pow(t, 1.4)));
-              ctx.beginPath();
-              ctx.moveTo(pts[i].x, pts[i].y - cam);
-              ctx.lineTo(pts[i + 1].x, pts[i + 1].y - cam);
-              ctx.stroke();
-            }
+          if (aimStyle.glow && !ink.onLight) { ctx.shadowBlur = 6; ctx.shadowColor = aimStyle.color; }
+          for (let i = 0; i < shown - 1; i++) {
+            const t = i / (shown - 1);
+            ctx.globalAlpha = Math.max(0.04, 0.95 * (1 - Math.pow(t, 1.4)));
+            ctx.beginPath();
+            ctx.moveTo(pts[i].x, pts[i].y - cam);
+            ctx.lineTo(pts[i + 1].x, pts[i + 1].y - cam);
+            ctx.stroke();
           }
-          ctx.lineCap = "butt";
           ctx.globalAlpha = 1;
           ctx.setLineDash([]);
           ctx.shadowBlur = 0;
@@ -7334,13 +7331,13 @@ function drawTree(ctx: CanvasRenderingContext2D, tr: Tree) {
 // A high-contrast "ink" for overlays (the basket ring, the aim line), chosen from
 // the course's fairway color so they stay legible on light courses (snow, sand)
 // and dark ones (night) alike.
-function themeInk(bgHex: string): { line: string; ring: string } {
+function themeInk(bgHex: string): { line: string; ring: string; onLight: boolean } {
   const m = /#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(bgHex);
   const r = m ? parseInt(m[1], 16) : 90, g = m ? parseInt(m[2], 16) : 90, b = m ? parseInt(m[3], 16) : 90;
-  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return lum > 0.5
-    ? { line: "rgba(15,17,23,0.95)", ring: "rgba(15,17,23,0.55)" }        // light course → dark ink
-    : { line: "rgba(255,255,255,0.95)", ring: "rgba(255,255,255,0.5)" };  // dark course  → light ink
+  const onLight = (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.5; // is the course background light?
+  return onLight
+    ? { line: "rgba(15,17,23,0.95)", ring: "rgba(15,17,23,0.55)", onLight }        // light course → dark ink
+    : { line: "rgba(255,255,255,0.95)", ring: "rgba(255,255,255,0.5)", onLight };  // dark course  → light ink
 }
 function drawBasket(ctx: CanvasRenderingContext2D, x: number, y: number, catchR = CATCH_R, skin?: BasketSkin, ring = "rgba(255,255,255,0.15)") {
   const s = skin ?? BASKET_SKINS[0];
