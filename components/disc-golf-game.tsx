@@ -87,6 +87,27 @@ function readResume(): ResumeSnap | null {
   }
 }
 
+// Persist the current online lobby so a reload / relaunch (or the OS killing the
+// PWA) can rejoin it instead of dumping you back on the title screen. Ephemeral:
+// only honored for a couple of hours, and cleared the moment you leave.
+const LOBBY_KEY = "discgolf.lobby.v1";
+const LOBBY_TTL = 2 * 60 * 60 * 1000; // 2h — don't reopen a stale lobby
+type LobbySnap = { code: string; name: string; isHost: boolean; mode: Mode; seed?: number; courseKey: string; courseLabel: string; ts: number };
+function readLobbySession(): LobbySnap | null {
+  try {
+    const s = JSON.parse(localStorage.getItem(LOBBY_KEY) || "null");
+    if (!s || typeof s.code !== "string" || typeof s.name !== "string") return null;
+    if (Date.now() - (s.ts ?? 0) > LOBBY_TTL) return null;
+    return s as LobbySnap;
+  } catch { return null; }
+}
+function writeLobbySession(s: Omit<LobbySnap, "ts">) {
+  try { localStorage.setItem(LOBBY_KEY, JSON.stringify({ ...s, ts: Date.now() })); } catch { /* ignore */ }
+}
+function clearLobbySession() {
+  try { localStorage.removeItem(LOBBY_KEY); } catch { /* ignore */ }
+}
+
 // Tournament rivals (visible "ghost" discs) are built in the engine; see
 // buildTournGhosts / ghostPosAt.
 
@@ -1653,12 +1674,15 @@ export function DiscGolfGame() {
     if (!connectLobby(code, who, true, c.mode, c.seed, c.name)) return;
     setLobbyPlayers([{ id: "self", name: who, host: true, mode: c.mode, courseLabel: c.name }]);
     setLobby({ code, isHost: true, mode: c.mode, seed: c.seed, courseKey: challengeKey(c), courseLabel: c.name });
+    writeLobbySession({ code, name: who, isHost: true, mode: c.mode, seed: c.seed, courseKey: challengeKey(c), courseLabel: c.name });
   }, [connectLobby]);
 
   const joinLobby = useCallback((code: string, name: string) => {
     const c = code.trim().toUpperCase();
-    if (!connectLobby(c, name.trim() || "Player", false, "winthrop")) return;
+    const who = name.trim() || "Player";
+    if (!connectLobby(c, who, false, "winthrop")) return;
     setLobby({ code: c, isHost: false, mode: "winthrop", courseKey: "winthrop", courseLabel: "Winthrop Lake" });
+    writeLobbySession({ code: c, name: who, isHost: false, mode: "winthrop", seed: undefined, courseKey: "winthrop", courseLabel: "Winthrop Lake" });
   }, [connectLobby]);
 
   // Host picks a course from the lobby dropdown: update our ref + presence (so
@@ -1671,6 +1695,7 @@ export function DiscGolfGame() {
     o.seed = c.seed;
     void o.channel.track({ id: o.myId, name: o.myName, host: true, mode: c.mode, courseLabel: c.name });
     setLobby((lb) => (lb ? { ...lb, mode: c.mode, seed: c.seed, courseKey: challengeKey(c), courseLabel: c.name } : lb));
+    writeLobbySession({ code: o.code, name: o.myName, isHost: true, mode: c.mode, seed: c.seed, courseKey: challengeKey(c), courseLabel: c.name });
   }, []);
 
   const startOnlineHost = useCallback(() => {
@@ -1684,6 +1709,7 @@ export function DiscGolfGame() {
   }, [beginOnlineRound]);
 
   const leaveLobby = useCallback(() => {
+    clearLobbySession(); // an explicit leave shouldn't auto-rejoin next launch
     const o = onlineRef.current;
     if (o) void supa?.removeChannel(o.channel);
     onlineRef.current = null;
@@ -1703,6 +1729,24 @@ export function DiscGolfGame() {
   // Tear down any live lobby channel if the component unmounts mid-session, so
   // the Realtime subscription doesn't leak.
   useEffect(() => () => { const o = onlineRef.current; if (o) void supa?.removeChannel(o.channel); }, [supa]);
+
+  // On first mount, rejoin the lobby you were last in — a reload / relaunch (or
+  // the OS killing the PWA in the background) otherwise drops you back on the
+  // title screen. The session is cleared on an explicit leave and expires after
+  // LOBBY_TTL, so this only fires for a genuinely live one. If the host already
+  // started the round, connectLobby's "hello" ping pulls us straight into it.
+  const reconnectedRef = useRef(false);
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (reconnectedRef.current || !supa || onlineRef.current) return;
+    reconnectedRef.current = true;
+    const s = readLobbySession();
+    if (!s || !connectLobby(s.code, s.name, s.isHost, s.mode, s.seed, s.courseLabel)) return;
+    setLobby({ code: s.code, isHost: s.isHost, mode: s.mode, seed: s.seed, courseKey: s.courseKey, courseLabel: s.courseLabel });
+    setLobbyPlayers([{ id: "self", name: s.name, host: s.isHost, mode: s.mode, courseLabel: s.courseLabel }]);
+    setScreen("title"); // the lobby panel only renders on the title screen
+  }, [supa, connectLobby]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const selectDisc = useCallback((i: number) => {
     // Only discs carried in the bag are selectable during a round.
