@@ -535,6 +535,16 @@ export function DiscGolfGame() {
     releaseRef.current = release;
   }, [release]);
 
+  // Your saved DEFAULT shot shape (set in Settings) — distinct from the current,
+  // in-round shape above. Each hole tees off from these; in-round stance/angle
+  // tweaks are temporary and never overwrite the default (see the tee-reset effect).
+  const [defaultThrowStyle, setDefaultThrowStyle] = useState<"BH" | "FH">("BH");
+  const defaultThrowStyleRef = useRef<"BH" | "FH">("BH");
+  useEffect(() => { defaultThrowStyleRef.current = defaultThrowStyle; }, [defaultThrowStyle]);
+  const [defaultRelease, setDefaultRelease] = useState<Release>("flat");
+  const defaultReleaseRef = useRef<Release>("flat");
+  useEffect(() => { defaultReleaseRef.current = defaultRelease; }, [defaultRelease]);
+
   // ── Settings (persisted) ──
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [tutorialOpen, setTutorialOpen] = useState(false);
@@ -817,8 +827,8 @@ export function DiscGolfGame() {
       setWinthropBest(wBest && Number.isFinite(Number(wBest)) ? Number(wBest) : null);
 
       const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
-      if (s.throwStyle === "BH" || s.throwStyle === "FH") setThrowStyle(s.throwStyle);
-      if (s.release === "hyzer" || s.release === "flat" || s.release === "anny") setRelease(s.release);
+      if (s.throwStyle === "BH" || s.throwStyle === "FH") { setDefaultThrowStyle(s.throwStyle); setThrowStyle(s.throwStyle); }
+      if (s.release === "hyzer" || s.release === "flat" || s.release === "anny") { setDefaultRelease(s.release); setRelease(s.release); }
       if (typeof s.musicVolume === "number") setMusicVolume(s.musicVolume);
       if (typeof s.leftHanded === "boolean") setLeftHanded(s.leftHanded);
       if (typeof s.showGhost === "boolean") setShowGhost(s.showGhost);
@@ -1111,10 +1121,24 @@ export function DiscGolfGame() {
   useEffect(() => {
     audioRef.current?.setMusicVolume(musicVolume);
     try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ throwStyle, release, musicVolume, leftHanded, showGhost, muted }));
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ throwStyle: defaultThrowStyle, release: defaultRelease, musicVolume, leftHanded, showGhost, muted }));
     } catch { /* ignore */ }
     saveProgress();
-  }, [throwStyle, release, musicVolume, leftHanded, showGhost, muted, saveProgress]);
+  }, [defaultThrowStyle, defaultRelease, musicVolume, leftHanded, showGhost, muted, saveProgress]);
+
+  // Each hole tees off with your DEFAULT shot shape. In-round stance/angle tweaks
+  // last only for the hole you're on — reaching the next tee (the screen returns to
+  // "playing") snaps the shape back to your saved default, mirroring how the
+  // auto-caddie re-clubs the disc for every lie.
+  useEffect(() => {
+    if (screen !== "playing") return;
+    throwStyleRef.current = defaultThrowStyleRef.current;
+    releaseRef.current = defaultReleaseRef.current;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setThrowStyle(defaultThrowStyleRef.current);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setRelease(defaultReleaseRef.current);
+  }, [screen]);
 
   // Sync the career save to the cloud whenever it changes (debounced; no-op
   // when signed out). localStorage is already written by saveCareer.
@@ -4210,7 +4234,8 @@ export function DiscGolfGame() {
         {settingsOpen && (
           <SettingsPanel
             onClose={() => setSettingsOpen(false)}
-            throwStyle={throwStyle} setThrowStyle={setThrowStyle}
+            throwStyle={defaultThrowStyle} setThrowStyle={setDefaultThrowStyle}
+            release={defaultRelease} setRelease={setDefaultRelease}
             musicVolume={musicVolume} setMusicVolume={setMusicVolume}
             leftHanded={leftHanded} setLeftHanded={setLeftHanded}
             showGhost={showGhost} setShowGhost={setShowGhost}
@@ -6914,6 +6939,8 @@ function SettingsPanel(props: {
   onClose: () => void;
   throwStyle: "BH" | "FH";
   setThrowStyle: (s: "BH" | "FH") => void;
+  release: Release;
+  setRelease: (r: Release) => void;
   musicVolume: number;
   setMusicVolume: (v: number) => void;
   leftHanded: boolean;
@@ -6923,7 +6950,7 @@ function SettingsPanel(props: {
   muted: boolean;
   onToggleSound: () => void;
 }) {
-  const { onClose, throwStyle, setThrowStyle, musicVolume, setMusicVolume, leftHanded, setLeftHanded, showGhost, setShowGhost, muted, onToggleSound } = props;
+  const { onClose, throwStyle, setThrowStyle, release, setRelease, musicVolume, setMusicVolume, leftHanded, setLeftHanded, showGhost, setShowGhost, muted, onToggleSound } = props;
   const seg = (active: boolean) =>
     `flex-1 rounded-md px-2 py-2 text-xs font-bold transition ${active ? "bg-[#36D7B7] text-[#0f1117]" : "text-gray-400 hover:text-white"}`;
   return (
@@ -6939,6 +6966,15 @@ function SettingsPanel(props: {
           <div className="flex gap-1 bg-[#1a1d23] border border-white/10 rounded-lg p-1">
             <button type="button" onClick={() => setThrowStyle("BH")} className={seg(throwStyle === "BH")}>Backhand</button>
             <button type="button" onClick={() => setThrowStyle("FH")} className={seg(throwStyle === "FH")}>Forehand</button>
+          </div>
+        </div>
+
+        <div>
+          <p className="text-gray-400 text-xs font-semibold mb-1">Default shot shape</p>
+          <div className="flex gap-1 bg-[#1a1d23] border border-white/10 rounded-lg p-1">
+            <button type="button" onClick={() => setRelease("hyzer")} className={seg(release === "hyzer")}>Hyzer</button>
+            <button type="button" onClick={() => setRelease("flat")} className={seg(release === "flat")}>Flat</button>
+            <button type="button" onClick={() => setRelease("anny")} className={seg(release === "anny")}>Anny</button>
           </div>
         </div>
 
