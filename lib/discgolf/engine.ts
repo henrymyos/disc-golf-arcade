@@ -17,7 +17,7 @@ const STOP_SPEED = 0.35;
 // it doesn't keep gliding forever after the fade.
 const GRAVITY = 0.08; // downward pull on height per frame (gentler = floatier flight)
 const AIRBORNE_H = 3; // above this height, hazards are cleared
-const CATCH_H = 6; // a descending disc still drops in the basket up to this height (chain height)
+const CATCH_H = 4; // a descending disc still drops in the basket up to this height (chain height)
 const GROUND_FRICTION = 0.8; // hard deceleration once on the ground
 const MAX_DRAG = 95; // pull-back distance (internal px) that maps to full power
 const CANCEL_R = 13; // pull the knob back inside this radius (around the disc) and release to cancel
