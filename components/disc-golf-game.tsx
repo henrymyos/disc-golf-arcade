@@ -4502,47 +4502,49 @@ export function DiscGolfGame() {
                 `scorecard` is only the last player's card (the standings table
                 above is the real result). */}
             {!finalParty && (
-            <div className="bg-[#1a1d23] border border-white/5 rounded-2xl p-3 space-y-3 text-[11px]">
+            <div className="bg-[#1a1d23] border border-white/5 rounded-2xl p-3 space-y-3">
               {(finalPars.length > 9
                 ? [{ label: "Out", from: 0, to: 9 }, { label: "In", from: 9, to: 18 }]
                 : [{ label: "Tot", from: 0, to: finalPars.length }]
               ).map(({ label, from, to }) => {
-                const pars = finalPars.slice(from, to);
-                const parSum = pars.reduce((s, n) => s + n, 0);
+                const cells = finalPars.slice(from, to);
+                const parSum = cells.reduce((s, n) => s + n, 0);
                 const youSum = scorecard.slice(from, to).reduce((s, n) => s + (n ?? 0), 0);
                 return (
-                  <table key={label} className="w-full text-center tabular-nums">
-                    <thead>
-                      <tr className="text-gray-500">
-                        <th className="text-left font-semibold pr-1 w-7"></th>
-                        {pars.map((_, i) => (
-                          <th key={i} className="font-semibold px-0.5">{from + i + 1}</th>
-                        ))}
-                        <th className="font-bold pl-1 text-gray-300">{label}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr className="text-gray-400">
-                        <td className="text-left pr-1">Par</td>
-                        {pars.map((p, i) => (
-                          <td key={i} className="px-0.5">{p}</td>
-                        ))}
-                        <td className="pl-1 font-mono">{parSum}</td>
-                      </tr>
-                      <tr className="text-white font-semibold">
-                        <td className="text-left pr-1">You</td>
-                        {pars.map((p, i) => {
-                          const s = scorecard[from + i];
-                          const diff = (s ?? p) - p;
-                          const color = s == null ? "#6b7280" : diff < 0 ? "#36D7B7" : diff > 1 ? "#e23b3b" : diff === 1 ? "#f5d24a" : "#ffffff";
-                          return (
-                            <td key={i} className="px-0.5 font-mono" style={{ color }}>{s ?? "–"}</td>
-                          );
-                        })}
-                        <td className="pl-1 font-mono">{youSum}</td>
-                      </tr>
-                    </tbody>
-                  </table>
+                  <div key={label}>
+                    <div className="flex items-center justify-between px-0.5 mb-1.5 text-[11px]">
+                      <span className="text-gray-400 font-semibold">{label}</span>
+                      <span className="font-mono text-gray-300">{youSum} <span className="text-gray-600">· par {parSum}</span></span>
+                    </div>
+                    {/* Same look as the in-round card: hole # / line / par / boxed, color-coded score. */}
+                    <div className="grid gap-x-1 gap-y-0.5 justify-center items-center" style={{ gridTemplateColumns: `repeat(${cells.length}, 24px)` }}>
+                      {cells.map((_, i) => (
+                        <span key={`n${from + i}`} className="text-center text-[10px] font-semibold leading-none text-gray-300">{from + i + 1}</span>
+                      ))}
+                      <div className="col-span-full border-t border-white/15" />
+                      {cells.map((p, i) => (
+                        <span key={`p${from + i}`} className="text-center text-[9px] leading-none text-gray-500">{p}</span>
+                      ))}
+                      {cells.map((p, i) => {
+                        const s = scorecard[from + i];
+                        const diff = s == null ? null : s - p;
+                        const boxed = diff != null && diff !== 0;
+                        // Under par climbs green → cyan → blue; over par deepens red → dark red → brown.
+                        const color =
+                          diff == null ? "#5b6270" :
+                          diff <= -3 ? "#4d7fff" :
+                          diff === -2 ? "#20b8d8" :
+                          diff === -1 ? "#36D7B7" :
+                          diff === 0 ? "#e5e7eb" :
+                          diff === 1 ? "#e23b3b" :
+                          diff === 2 ? "#b02525" :
+                          "#7d2b1e";
+                        return (
+                          <span key={`s${from + i}`} className={`w-6 h-6 flex items-center justify-center text-[11px] font-mono font-bold leading-none border ${boxed ? "rounded-md" : ""}`} style={{ color, borderColor: boxed ? color : "transparent" }}>{s ?? "–"}</span>
+                        );
+                      })}
+                    </div>
+                  </div>
                 );
               })}
               <div className="flex justify-between border-t border-white/5 pt-2 text-white font-bold text-sm">
@@ -4635,8 +4637,12 @@ export function DiscGolfGame() {
               ) : (
                 <button type="button" onClick={() => (finalMode === "ranked" ? startRankedRound() : finalMode === "tour" ? startGame("tour", finalSeed) : startGame())} className={btn}>↻ Play again</button>
               )}
-              <button type="button" onClick={shareCard} aria-label="Share card" title="Share card" className="mt-1 flex items-center justify-center bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white text-lg px-3.5 py-3 rounded-lg transition">
-                📤
+              <button type="button" onClick={shareCard} aria-label="Share card" title="Share card" className="mt-1 flex items-center justify-center bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white px-3.5 py-3 rounded-lg transition">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5" aria-hidden="true">
+                  <path d="M12 3v11" />
+                  <path d="M8.5 6.5 12 3l3.5 3.5" />
+                  <path d="M8 8.5H6.5A1.5 1.5 0 0 0 5 10v9a1.5 1.5 0 0 0 1.5 1.5h11a1.5 1.5 0 0 0 1.5-1.5v-9a1.5 1.5 0 0 0-1.5-1.5H16" />
+                </svg>
               </button>
               <button
                 type="button"
