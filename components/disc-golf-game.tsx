@@ -339,7 +339,7 @@ export function DiscGolfGame() {
   const [muted, setMuted] = useState(false);
   const [discIndex, setDiscIndex] = useState(DEFAULT_DISC_INDEX); // Buzzz (core mid) by default
   const [throwStyle, setThrowStyle] = useState<"BH" | "FH">("BH");
-  const [hud, setHud] = useState<{ hole: number; par: number; throws: number; holes: number; player?: string }>({ hole: 1, par: 3, throws: 0, holes: 18 });
+  const [hud, setHud] = useState<{ hole: number; par: number; throws: number; holes: number; player?: string; scores: (number | null)[]; pars: number[] }>({ hole: 1, par: 3, throws: 0, holes: 18, scores: [], pars: [] });
 
   // An interrupted solo round to offer "Resume" on the title screen.
   const [resumeRound, setResumeRound] = useState<ResumeSnap | null>(null);
@@ -1089,7 +1089,12 @@ export function DiscGolfGame() {
   const syncHud = useCallback(() => {
     const g = stateRef.current;
     if (!g) return;
-    setHud({ hole: g.holeIndex + 1, par: g.roundHoles[g.holeIndex].par, throws: g.throws, holes: g.roundHoles.length, player: g.party ? g.party.names[g.party.current] : undefined });
+    setHud({
+      hole: g.holeIndex + 1, par: g.roundHoles[g.holeIndex].par, throws: g.throws, holes: g.roundHoles.length,
+      player: g.party ? g.party.names[g.party.current] : undefined,
+      scores: g.roundHoles.map((_, i) => (typeof g.scores[i] === "number" ? g.scores[i] : null)),
+      pars: g.roundHoles.map((h) => h.par),
+    });
   }, []);
 
   // Auto-caddie: equip the disc the current lie calls for — a straight driver
@@ -3850,6 +3855,35 @@ export function DiscGolfGame() {
                     ? <span className="text-[#f5d24a]">★ New best for this hole!</span>
                     : <span className="text-gray-500">Your best here: {holeBestNote.best}</span>}
                 </p>
+              )}
+              {/* Round scorecard so far — a row per nine; non-pars boxed + color-coded
+                  (birdie-or-better green, bogey-or-worse red). */}
+              {hud.pars.length > 0 && (
+                <div className="w-full max-w-[280px] space-y-1.5 pt-0.5">
+                  {(hud.pars.length > 9 ? [[0, 9], [9, hud.pars.length]] : [[0, hud.pars.length]]).map(([from, to]) => (
+                    <div key={from} className="flex justify-center gap-1">
+                      {hud.pars.slice(from, to).map((p, i) => {
+                        const idx = from + i;
+                        const s = hud.scores[idx];
+                        const diff = s == null ? null : s - p;
+                        const boxed = diff != null && diff !== 0;
+                        const color = diff == null ? "#5b6270" : diff < 0 ? "#36D7B7" : diff > 0 ? "#e23b3b" : "#e5e7eb";
+                        const current = idx === hud.hole - 1;
+                        return (
+                          <div key={idx} className="flex flex-col items-center gap-0.5">
+                            <span className="text-[8px] leading-none text-gray-600">{idx + 1}</span>
+                            <span
+                              className={`w-[22px] h-[22px] flex items-center justify-center text-[11px] font-mono font-bold leading-none border ${boxed ? "rounded-md" : ""} ${current ? "ring-1 ring-white/40 rounded-md" : ""}`}
+                              style={{ color, borderColor: boxed ? color : "transparent" }}
+                            >
+                              {s ?? "·"}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
               )}
               {tournLiveView && (() => {
                 const top = tournLiveView.rows.slice(0, 10);
