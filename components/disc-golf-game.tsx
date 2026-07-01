@@ -3904,38 +3904,50 @@ export function DiscGolfGame() {
                   (birdie-or-better green, bogey-or-worse red). */}
               {hud.pars.length > 0 && (
                 <div className="w-full max-w-[280px] bg-black/25 border border-white/15 rounded-xl px-2.5 py-2.5 space-y-1.5">
-                  {(hud.pars.length > 9 ? [[0, 9], [9, hud.pars.length]] : [[0, hud.pars.length]]).map(([from, to]) => (
-                    <div key={from} className="flex justify-center gap-1">
-                      {hud.pars.slice(from, to).map((p, i) => {
-                        const idx = from + i;
-                        const s = hud.scores[idx];
-                        const diff = s == null ? null : s - p;
-                        const boxed = diff != null && diff !== 0;
-                        // Under par climbs green → cyan → blue (birdie, eagle, albatross+);
-                        // over par deepens red → dark red → brown (bogey, double, triple+).
-                        const color =
-                          diff == null ? "#5b6270" :
-                          diff <= -3 ? "#4d7fff" :   // albatross or better — blue
-                          diff === -2 ? "#20b8d8" :  // eagle — green-blue
-                          diff === -1 ? "#36D7B7" :  // birdie — green
-                          diff === 0 ? "#e5e7eb" :   // par
-                          diff === 1 ? "#e23b3b" :   // bogey — red
-                          diff === 2 ? "#b02525" :   // double bogey — darker red
-                          "#7d2b1e";                 // triple or worse — dark red / brown
-                        return (
-                          <div key={idx} className="flex flex-col items-center gap-0.5">
-                            <span className="text-[10px] font-semibold leading-none text-gray-300">{idx + 1}</span>
+                  {(hud.pars.length > 9 ? [[0, 9], [9, hud.pars.length]] : [[0, hud.pars.length]]).map(([from, to]) => {
+                    const cells = hud.pars.slice(from, to);
+                    return (
+                      <div key={from} className="grid gap-x-1 gap-y-0.5 justify-center items-center" style={{ gridTemplateColumns: `repeat(${cells.length}, 22px)` }}>
+                        {/* Hole numbers */}
+                        {cells.map((_, i) => (
+                          <span key={`n${from + i}`} className="text-center text-[10px] font-semibold leading-none text-gray-300">{from + i + 1}</span>
+                        ))}
+                        {/* Divider under the numbers, above the pars */}
+                        <div className="col-span-full border-t border-white/15" />
+                        {/* Par per hole */}
+                        {cells.map((p, i) => (
+                          <span key={`p${from + i}`} className="text-center text-[9px] leading-none text-gray-500">{p}</span>
+                        ))}
+                        {/* Score cells — non-pars boxed + color-coded */}
+                        {cells.map((p, i) => {
+                          const idx = from + i;
+                          const s = hud.scores[idx];
+                          const diff = s == null ? null : s - p;
+                          const boxed = diff != null && diff !== 0;
+                          // Under par climbs green → cyan → blue (birdie, eagle, albatross+);
+                          // over par deepens red → dark red → brown (bogey, double, triple+).
+                          const color =
+                            diff == null ? "#5b6270" :
+                            diff <= -3 ? "#4d7fff" :   // albatross or better — blue
+                            diff === -2 ? "#20b8d8" :  // eagle — green-blue
+                            diff === -1 ? "#36D7B7" :  // birdie — green
+                            diff === 0 ? "#e5e7eb" :   // par
+                            diff === 1 ? "#e23b3b" :   // bogey — red
+                            diff === 2 ? "#b02525" :   // double bogey — darker red
+                            "#7d2b1e";                 // triple or worse — dark red / brown
+                          return (
                             <span
+                              key={`s${idx}`}
                               className={`w-[22px] h-[22px] flex items-center justify-center text-[11px] font-mono font-bold leading-none border ${boxed ? "rounded-md" : ""}`}
                               style={{ color, borderColor: boxed ? color : "transparent" }}
                             >
                               {s ?? "·"}
                             </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ))}
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
               {tournLiveView && (() => {
