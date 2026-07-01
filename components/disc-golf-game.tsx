@@ -6561,21 +6561,6 @@ function RankedPanel({ ranked, onPlay, onClose }: {
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
 
-        {/* Placement banner — shown until you've finished your calibration rounds */}
-        {!placed && (
-          <div className="bg-[#36D7B7]/10 border border-[#36D7B7]/30 rounded-xl px-3 py-2.5">
-            <p className="text-[#36D7B7] font-bold text-sm">🎯 Placement · {placeDone}/{PLACEMENT_ROUNDS} rounds</p>
-            <div className="my-2.5"><PlacementDots marks={placeMarks} done={placeDone} total={PLACEMENT_ROUNDS} /></div>
-            <p className="text-gray-300 text-[11px] mt-0.5 leading-snug">
-              {placeDone === 0
-                ? lastTier
-                  ? `New season! Replay your ${PLACEMENT_ROUNDS} placement rounds. You finished ${lastTier.name} last season — that gives your placement a head start.`
-                  : `Play ${PLACEMENT_ROUNDS} calibration rounds against a full-range field to find your rank. A projected rank shows after round 1.`
-                : `Your projected rank is below — it keeps adjusting to how you play until placement is done.`}
-            </p>
-          </div>
-        )}
-
         {/* Division Info — a clear open/close dropdown (arrow flips when open) */}
         <div>
           <button
@@ -6603,28 +6588,36 @@ function RankedPanel({ ranked, onPlay, onClose }: {
           )}
         </div>
 
-        {/* Tier card */}
-        <div className="flex items-center gap-3 bg-[#1a1d23] border border-white/10 rounded-xl px-3 py-3">
-          <span className="text-4xl leading-none shrink-0">{placed ? t.tier.emoji : placeDone > 0 ? t.tier.emoji : "❔"}</span>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="font-bold text-base" style={{ color: placed || placeDone > 0 ? t.tier.color : "#9aa0aa" }}>
-                {placed ? t.tier.name : placeDone > 0 ? `${t.tier.name} (projected)` : "Unranked"}
-              </span>
-              <span className="text-gray-400 font-mono text-[11px] shrink-0">{placed ? `${rp} RP` : ""}</span>
+        {/* Tier card — placed shows your RP bar; during placement it's a centered
+            "predicted rank" card with the three-round dot tracker underneath. */}
+        {placed ? (
+          <div className="flex items-center gap-3 bg-[#1a1d23] border border-white/10 rounded-xl px-3 py-3">
+            <span className="text-4xl leading-none shrink-0">{t.tier.emoji}</span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="font-bold text-base" style={{ color: t.tier.color }}>{t.tier.name}</span>
+                <span className="text-gray-400 font-mono text-[11px] shrink-0">{rp} RP</span>
+              </div>
+              <div className="mt-1.5 h-1.5 bg-white/10 rounded overflow-hidden">
+                <div className="h-full rounded" style={{ width: `${pct}%`, background: t.tier.color }} />
+              </div>
+              <p className="text-gray-500 text-[10px] mt-1">{t.next ? `${t.need - t.into} RP to ${t.next.name}` : "Top tier reached 👑"}</p>
             </div>
-            {placed ? (
-              <>
-                <div className="mt-1.5 h-1.5 bg-white/10 rounded overflow-hidden">
-                  <div className="h-full rounded" style={{ width: `${pct}%`, background: t.tier.color }} />
-                </div>
-                <p className="text-gray-500 text-[10px] mt-1">{t.next ? `${t.need - t.into} RP to ${t.next.name}` : "Top tier reached 👑"}</p>
-              </>
-            ) : (
-              <p className="text-gray-500 text-[10px] mt-1">{placeDone > 0 ? `${PLACEMENT_ROUNDS - placeDone} placement round${PLACEMENT_ROUNDS - placeDone === 1 ? "" : "s"} left` : "Finish placement to lock in a rank"}</p>
-            )}
           </div>
-        </div>
+        ) : (
+          <div className="bg-[#1a1d23] border border-white/10 rounded-xl px-4 py-4 text-center">
+            <span className="text-5xl leading-none block">{placeDone > 0 ? t.tier.emoji : "❔"}</span>
+            <p className="text-gray-500 text-[10px] font-bold uppercase tracking-[0.2em] mt-2.5">Predicted rank</p>
+            <p className="font-black text-2xl mt-0.5" style={{ color: placeDone > 0 ? t.tier.color : "#9aa0aa" }}>
+              {placeDone > 0 ? t.tier.name : "Unranked"}
+            </p>
+            <p className="text-gray-500 text-[10px] mt-1">
+              {placeDone > 0 ? "Calculated from your placement finishes" : "Play your placement rounds to reveal a rank"}
+            </p>
+            <p className="text-gray-400 text-[10px] font-bold uppercase tracking-[0.15em] mt-4">Placement progress · {placeDone}/{PLACEMENT_ROUNDS}</p>
+            <div className="mt-2.5"><PlacementDots marks={placeMarks} done={placeDone} total={PLACEMENT_ROUNDS} /></div>
+          </div>
+        )}
 
         {/* Season-end reward preview — the gold + badge your division pays out */}
         {(placed || placeDone > 0) && (
