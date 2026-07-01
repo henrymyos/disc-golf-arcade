@@ -3768,7 +3768,7 @@ export function DiscGolfGame() {
                     <span className="font-black text-lg">Challenge the Arcade</span>
                   </button>
                   <button type="button" onClick={() => { setCareerLastResult(null); setCareerNotes([]); leaveCareer(); setCareerOpen(true); }} className={hubCard}>
-                    <span className="font-black text-lg">Career{careers.filter(Boolean).length > 0 ? ` · ${careers.filter(Boolean).length} saved` : ""}</span>
+                    <span className="font-black text-lg">Career</span>
                   </button>
                   <button type="button" onClick={() => setTournamentOpen(true)} className={hubCard}>
                     <span className="font-black text-lg">Tournaments{tournament && !tournament.finished ? ` · ${tournDef(tournament.id)?.name ?? ""} R${tournament.myTotals.length + 1}` : ""}</span>
