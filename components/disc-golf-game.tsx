@@ -3130,14 +3130,14 @@ export function DiscGolfGame() {
             ctx.globalAlpha = 1;
           }
           const aimStyle = cosmeticByKey(AIM_STYLES, aimStyleRef.current) ?? AIM_STYLES[0];
-          // On light courses (snow, sand) the aim line takes the dark contrast ink,
-          // matching the basket ring, so it doesn't wash out; elsewhere it keeps
-          // your chosen aim-line color.
-          const aimColor = ink.onLight ? ink.line : aimStyle.color;
+          // Keep your chosen aim-line color unless it's too low-contrast on this
+          // course's fairway (e.g. white on snow); only then fall back to the dark
+          // ink that matches the basket ring. A darker, well-contrasting pick stays.
+          const aimColor = ink.onLight && contrastRatio(aimStyle.color, ground.fairway) < 3 ? ink.line : aimStyle.color;
           ctx.lineWidth = 2;
           ctx.strokeStyle = aimColor;
           if (aimStyle.dash) ctx.setLineDash(aimStyle.dash);
-          if (aimStyle.glow && !ink.onLight) { ctx.shadowBlur = 6; ctx.shadowColor = aimStyle.color; }
+          if (aimStyle.glow && aimColor === aimStyle.color) { ctx.shadowBlur = 6; ctx.shadowColor = aimStyle.color; }
           for (let i = 0; i < shown - 1; i++) {
             const t = i / (shown - 1);
             ctx.globalAlpha = Math.max(0.04, 0.95 * (1 - Math.pow(t, 1.4)));
@@ -7328,6 +7328,18 @@ function drawTree(ctx: CanvasRenderingContext2D, tr: Tree) {
   ctx.fill();
 }
 
+// WCAG contrast ratio (1–21) between two hex colors — used to decide whether a
+// chosen color reads well enough on a background before overriding it.
+function relLum(hex: string): number {
+  const m = /#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(hex);
+  const lin = (v: number) => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+  const r = m ? parseInt(m[1], 16) : 128, g = m ? parseInt(m[2], 16) : 128, b = m ? parseInt(m[3], 16) : 128;
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
+function contrastRatio(a: string, b: string): number {
+  const la = relLum(a), lb = relLum(b);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
 // A high-contrast "ink" for overlays (the basket ring, the aim line), chosen from
 // the course's fairway color so they stay legible on light courses (snow, sand)
 // and dark ones (night) alike.
