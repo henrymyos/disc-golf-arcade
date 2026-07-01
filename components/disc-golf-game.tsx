@@ -6543,7 +6543,9 @@ function RankedPanel({ ranked, onPlay, onClose }: {
   const earned = earnedDivisions(history); // division keys you hold a badge in
   return (
     <div className="absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start justify-center rounded-lg">
-      <div className="w-full max-w-xs space-y-3 my-auto text-left">
+      {/* Top-pinned (no my-auto): opening the Division Info dropdown grows the
+          panel downward only, instead of re-centering and shifting everything up. */}
+      <div className="w-full max-w-xs space-y-3 text-left">
         <div className="flex items-start justify-between">
           <div>
             <h2 className="text-white font-black text-xl leading-none">🏅 Ranked</h2>
