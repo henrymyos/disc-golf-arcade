@@ -39,7 +39,7 @@ export const RANKED_FIELD = 4;
 // round 1 and refines (running average) until it locks in. ──
 export const PLACEMENT_ROUNDS = 3;
 export const PLACEMENT_MIN_RATING = 40; // bottom of the round-1 calibration field's rating span
-export const PLACEMENT_MAX_RATING = 90; // top of it — beat ~everyone here ⇒ Master
+export const PLACEMENT_MAX_RATING = 84; // top of it — winning out ⇒ ~5500 RP, right at Master's doorstep (not deep Master)
 // Placement bots play this many strokes better than their rating implies, so a
 // rank has to be earned: you must out-play the division you're tested against,
 // not merely keep pace with it. Higher ⇒ harder to climb (esp. to Master).
@@ -306,14 +306,18 @@ export type PlacementResult = {
 // lock in a starting rank once PLACEMENT_ROUNDS are in. Streak stays dormant until
 // you're ranked; wins/podiums and best-to-par still count.
 // `lo`/`hi` are the rating span of the field you actually played: the full ladder
-// [40, 90] on round 1, then your projected division's band (tier mean ±14) on the
+// [40, 84] on round 1, then your projected division's band (tier mean ±14) on the
 // rounds after — so where you finish maps back onto that band. Because the bots
 // carry PLACEMENT_EDGE, you out-finish fewer of them than your raw rating would,
 // which is exactly what makes a high rank harder to reach.
 export function applyPlacementRound(state: RankedState | null, place: number, field: number, toPar: number, lo = PLACEMENT_MIN_RATING, hi = PLACEMENT_MAX_RATING): { state: RankedState; result: PlacementResult } {
   const s = normalizeRanked(state);
   const frac = field <= 1 ? 1 : (field - place) / (field - 1); // 1 = beat everyone → 0 = last
-  const estRating = lo + frac * (hi - lo);
+  // Cap any single round's read at the calibration ceiling. Rounds after the first
+  // are played against your PROJECTED band, so an unclamped top-of-band win would
+  // compound upward every round and rocket you well past Master. The ceiling keeps
+  // winning out at ~5500 (Master's doorstep) — you climb deeper Master by playing.
+  const estRating = Math.min(PLACEMENT_MAX_RATING, lo + frac * (hi - lo));
   const estimate = rpFromRating(estRating);
   const placeEstimates = [...s.placeEstimates, estimate].slice(0, PLACEMENT_ROUNDS);
   // Last season's finish (if any) is remembered as a prior — one weighted vote that

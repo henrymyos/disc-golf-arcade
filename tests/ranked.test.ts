@@ -190,10 +190,10 @@ describe("season payout scales with the division reached", () => {
 
 describe("placement carries last season as a fading prior", () => {
   it("pulls the projection toward last season's RP without overriding this season's play", () => {
-    const withPrior = applyPlacementRound({ ...EMPTY_RANKED, season: 6, lastSeasonRp: 1500 }, 3, 5, 4).result.projectedRp;
-    const noPrior = applyPlacementRound({ ...EMPTY_RANKED, season: 6, lastSeasonRp: null }, 3, 5, 4).result.projectedRp;
+    const withPrior = applyPlacementRound({ ...EMPTY_RANKED, season: 6, lastSeasonRp: 1500 }, 2, 5, 4).result.projectedRp;
+    const noPrior = applyPlacementRound({ ...EMPTY_RANKED, season: 6, lastSeasonRp: null }, 2, 5, 4).result.projectedRp;
     expect(withPrior).toBeLessThan(noPrior);   // a 1500 prior tugs a higher estimate down
-    expect(withPrior).toBeGreaterThan(1500);   // but a strong round still moves you off it
+    expect(withPrior).toBeGreaterThan(1500);   // but a strong round (2nd of 5) still moves you off it
   });
   it("fades as more placement rounds land — by the third round it barely matters", () => {
     const low = { ...EMPTY_RANKED, season: 6, lastSeasonRp: 200 }; // a stale low prior
