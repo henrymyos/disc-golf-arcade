@@ -22,7 +22,7 @@ import {
   DISC_SKINS, BASKET_SKINS, AIM_STYLES, GROUND_THEMES, CELEBRATIONS,
   DEFAULT_DISC_SKIN, DEFAULT_BASKET_SKIN, DEFAULT_AIM_STYLE, DEFAULT_GROUND_THEME, DEFAULT_CELEBRATION,
   COSMETIC_PREFIX, cosmeticOwnKey, cosmeticUnlocked, cosmeticByKey,
-  type DiscSkin, type BasketSkin, type AimStyle, type GroundTheme, type Celebration,
+  type DiscSkin, type BasketSkin, type AimStyle, type Celebration,
 } from "@/lib/discgolf/cosmetics";
 import {
   weekSeed, applyRankedRound, applyPlacementRound, rolloverSeason, tierFromRP, rankedFieldMean, RANKED_FIELD, PLACEMENT_ROUNDS, PLACEMENT_MIN_RATING, PLACEMENT_MAX_RATING, RANKED_BOARD_KEY, encodeToParScore, TIERS, seasonRewardCoins, earnedDivisions, type RankedState, type RankedResult, type PlacementResult, type SeasonRecord,
@@ -354,7 +354,7 @@ const TOUR_REPUTATION = [
 const TOUR_COURSE_INFOS: CourseInfo[] = TOUR_COURSES.map((c) => {
   const intro = TOUR_STYLE_INTRO[c.character] ?? "A varied championship layout that rewards all-round play";
   const pick = (arr: string[], salt: number) => arr[((c.seed >>> salt) >>> 0) % arr.length];
-  const blurb = `${c.emoji} ${intro}. ${pick(TOUR_FOUNDED, 0)}, ${pick(TOUR_ARCHITECT, 9)}. ${pick(TOUR_REPUTATION, 15)}`;
+  const blurb = `${intro}. ${pick(TOUR_FOUNDED, 0)}, ${pick(TOUR_ARCHITECT, 9)}. ${pick(TOUR_REPUTATION, 15)}`;
   return { mode: "tour" as Mode, name: c.name, holes: c.holes, par: c.par, seed: c.seed, blurb };
 });
 // Courses you can host in a Challenge Friends lobby: the two fixed venues plus
@@ -363,6 +363,41 @@ const TOUR_COURSE_INFOS: CourseInfo[] = TOUR_COURSES.map((c) => {
 // host can choose by name and broadcast to everyone.
 const CHALLENGE_COURSES: CourseInfo[] = [...FIXED_COURSES, ...TOUR_COURSE_INFOS];
 const challengeKey = (c: CourseInfo) => (c.seed != null ? `tour-${c.seed}` : c.mode);
+
+// Falling-weather overlay (screen space): light rain streaks or drifting snow,
+// animated from the timestamp alone so it needs no persistent particle state.
+// Drawn over the world but under the HUD; `t` is performance.now() in ms.
+function drawWeather(ctx: CanvasRenderingContext2D, weather: "rain" | "snow" | undefined, t: number) {
+  if (!weather) return;
+  ctx.save();
+  if (weather === "rain") {
+    ctx.strokeStyle = "rgba(182,206,230,0.34)";
+    ctx.lineWidth = 1.1;
+    for (let i = 0; i < 90; i++) {
+      const speed = 620 + (i % 5) * 130;
+      const len = 10 + (i % 4) * 4;
+      const x = (i * 47) % W;
+      const y = ((t * speed) / 1000 + i * 113) % (H + len);
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x - 4, y + len);
+      ctx.stroke();
+    }
+  } else {
+    ctx.fillStyle = "#ffffff";
+    for (let i = 0; i < 80; i++) {
+      const speed = 32 + (i % 6) * 12;
+      const base = (i * 79) % W;
+      const y = ((t * speed) / 1000 + i * 61) % (H + 6);
+      const x = (((base + Math.sin((t / 900) * (0.5 + (i % 5) * 0.15) + i) * 9) % W) + W) % W;
+      ctx.globalAlpha = 0.45 + (i % 4) * 0.13;
+      ctx.beginPath();
+      ctx.arc(x, y, 1.3 + (i % 3) * 0.7, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+}
 
 export function DiscGolfGame() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -717,13 +752,11 @@ export function DiscGolfGame() {
   const discSkinRef = useRef<string>(DEFAULT_DISC_SKIN);
   const basketSkinRef = useRef<string>(DEFAULT_BASKET_SKIN);
   const aimStyleRef = useRef<string>(DEFAULT_AIM_STYLE);
-  const groundThemeRef = useRef<string>(DEFAULT_GROUND_THEME);
   const celebrationRef = useRef<string>(DEFAULT_CELEBRATION);
   useEffect(() => { trailKeyRef.current = profile.trail || DEFAULT_TRAIL; }, [profile.trail]);
   useEffect(() => { discSkinRef.current = profile.discSkin || DEFAULT_DISC_SKIN; }, [profile.discSkin]);
   useEffect(() => { basketSkinRef.current = profile.basketSkin || DEFAULT_BASKET_SKIN; }, [profile.basketSkin]);
   useEffect(() => { aimStyleRef.current = profile.aimStyle || DEFAULT_AIM_STYLE; }, [profile.aimStyle]);
-  useEffect(() => { groundThemeRef.current = profile.groundTheme || DEFAULT_GROUND_THEME; }, [profile.groundTheme]);
   useEffect(() => { celebrationRef.current = profile.celebration || DEFAULT_CELEBRATION; }, [profile.celebration]);
   const profileRef = useRef(profile);
   useEffect(() => { profileRef.current = profile; }, [profile]);
@@ -731,13 +764,13 @@ export function DiscGolfGame() {
   // account profile's. These swap the render refs at round start / end.
   const applyCareerLook = useCallback((look: CareerLook) => {
     discSkinRef.current = look.discSkin; basketSkinRef.current = look.basketSkin;
-    aimStyleRef.current = look.aimStyle; groundThemeRef.current = look.groundTheme;
+    aimStyleRef.current = look.aimStyle;
     celebrationRef.current = look.celebration; trailKeyRef.current = look.trail;
   }, []);
   const applyAccountLook = useCallback(() => {
     const p = profileRef.current;
     discSkinRef.current = p.discSkin || DEFAULT_DISC_SKIN; basketSkinRef.current = p.basketSkin || DEFAULT_BASKET_SKIN;
-    aimStyleRef.current = p.aimStyle || DEFAULT_AIM_STYLE; groundThemeRef.current = p.groundTheme || DEFAULT_GROUND_THEME;
+    aimStyleRef.current = p.aimStyle || DEFAULT_AIM_STYLE;
     celebrationRef.current = p.celebration || DEFAULT_CELEBRATION; trailKeyRef.current = p.trail || DEFAULT_TRAIL;
   }, []);
   const saveProfile = useCallback((next: PlayerProfile) => {
@@ -878,6 +911,25 @@ export function DiscGolfGame() {
         return c && c.v === 1 && c.skills ? normalizeCareer(c) : null;
       });
       careersRef.current = loadedCareers; setCareers(loadedCareers);
+      // One-time: course backgrounds are now fixed per course, so ground themes are
+      // no longer purchasable. Refund coins spent on any owned ones and drop them
+      // from the owned set (guarded so it runs exactly once).
+      try {
+        if (!localStorage.getItem("discgolf.groundrefund.v1")) {
+          const ownRaw = JSON.parse(localStorage.getItem(OWNED_KEY) || "[]");
+          if (Array.isArray(ownRaw)) {
+            let refund = 0;
+            const kept = ownRaw.filter((k) => {
+              const t = GROUND_THEMES.find((g) => cosmeticOwnKey(COSMETIC_PREFIX.ground, g.key) === k);
+              if (t) { refund += t.price; return false; }
+              return true;
+            });
+            if (kept.length !== ownRaw.length) localStorage.setItem(OWNED_KEY, JSON.stringify(kept));
+            if (refund > 0) localStorage.setItem(COINS_KEY, String((Number(localStorage.getItem(COINS_KEY)) || 0) + refund));
+          }
+          localStorage.setItem("discgolf.groundrefund.v1", "1");
+        }
+      } catch { /* ignore */ }
       const coinRaw = localStorage.getItem(COINS_KEY);
       const co = coinRaw != null && Number.isFinite(Number(coinRaw)) ? Number(coinRaw) : 0;
       coinsRef.current = co; setCoins(co);
@@ -2658,7 +2710,7 @@ export function DiscGolfGame() {
 
       // Active ground/course theme (re-tints normal grass; hazard rough keeps
       // its warning colors).
-      const ground = cosmeticByKey(GROUND_THEMES, groundThemeRef.current) ?? GROUND_THEMES[0];
+      const ground = cosmeticByKey(GROUND_THEMES, hole.theme ?? DEFAULT_GROUND_THEME) ?? GROUND_THEMES[0];
 
       // Everything outside the fairway is rough — out of bounds normally, or
       // olive-tinted hazard ground on rope-lined holes (+1, play where it lies).
@@ -3159,6 +3211,10 @@ export function DiscGolfGame() {
       ctx.globalAlpha = 1;
 
       ctx.restore(); // end of world-space (horizontally panned) drawing
+
+      // Weather (screen space, over the world but under the HUD) gives each course
+      // its own atmosphere — light rain or drifting snow per the hole's scene.
+      drawWeather(ctx, hole.weather, performance.now());
 
       // ── Ambient wind (screen-fixed) — faint streaks blowing across the whole
       // viewport in the wind's direction. Density and speed scale with strength,
@@ -5392,7 +5448,6 @@ const CAREER_STYLE_CATS: { slot: keyof CareerLook; prefix: string; label: string
   { slot: "discSkin", prefix: COSMETIC_PREFIX.discSkin, label: "Disc", items: DISC_SKINS.map((i) => ({ key: i.key, name: i.name, price: i.price, color: i.body })) },
   { slot: "basketSkin", prefix: COSMETIC_PREFIX.basket, label: "Basket", items: BASKET_SKINS.map((i) => ({ key: i.key, name: i.name, price: i.price, color: i.band })) },
   { slot: "aimStyle", prefix: COSMETIC_PREFIX.aim, label: "Aim line", items: AIM_STYLES.map((i) => ({ key: i.key, name: i.name, price: i.price, color: i.color })) },
-  { slot: "groundTheme", prefix: COSMETIC_PREFIX.ground, label: "Course", items: GROUND_THEMES.map((i) => ({ key: i.key, name: i.name, price: i.price, color: i.fairway })) },
   { slot: "celebration", prefix: COSMETIC_PREFIX.celebration, label: "Win pop", items: CELEBRATIONS.map((i) => ({ key: i.key, name: i.name, price: i.price, color: i.colors[0] ?? "#888" })) },
   { slot: "trail", prefix: "trail", label: "Trail", items: TRAILS.filter((i) => i.key !== "none").map((i) => ({ key: i.key, name: i.name, price: i.price, color: i.colors[0] ?? "#888" })) },
 ];
@@ -6212,9 +6267,6 @@ function discSkinSwatch(s: DiscSkin): string {
 function basketSwatch(b: BasketSkin): string {
   return `linear-gradient(90deg,${b.band},${b.pole},${b.base})`;
 }
-function groundSwatch(g: GroundTheme): string {
-  return `linear-gradient(90deg,${g.rough},${g.fairway},${g.stripe})`;
-}
 function celebrationSwatch(c: Celebration): string {
   if (c.colors.length === 1) return c.colors[0];
   return `linear-gradient(90deg,${c.colors.join(",")})`;
@@ -6234,7 +6286,7 @@ function ShopPanel({ coins, unlocked, owned, level, profile, onBuy, onEquip, onC
   onEquip: (field: CosmeticField, key: string) => void;
   onClose: () => void;
 }) {
-  const [tab, setTab] = useState<"discs" | "trails" | "discskin" | "basket" | "aim" | "ground" | "celebration">("discs");
+  const [tab, setTab] = useState<"discs" | "trails" | "discskin" | "basket" | "aim" | "celebration">("discs");
   const seg = (active: boolean) =>
     `shrink-0 rounded-md px-2.5 py-1.5 text-xs font-bold whitespace-nowrap transition ${active ? "bg-[#36D7B7] text-[#0f1117]" : "text-gray-400 hover:text-white"}`;
   // Every priced disc across both bags, cheapest first.
@@ -6273,7 +6325,6 @@ function ShopPanel({ coins, unlocked, owned, level, profile, onBuy, onEquip, onC
     { id: "discskin", label: "🎨 Disc" },
     { id: "basket", label: "🧺 Basket" },
     { id: "aim", label: "🎯 Aim" },
-    { id: "ground", label: "🌿 Ground" },
     { id: "celebration", label: "🎉 Win" },
   ];
   return (
@@ -6337,11 +6388,6 @@ function ShopPanel({ coins, unlocked, owned, level, profile, onBuy, onEquip, onC
         {tab === "aim" && <>
           <p className="text-gray-500 text-[11px]">Restyle the predicted-flight aim line you see while pulling back.</p>
           {AIM_STYLES.map((a) => cosmeticRow(a, COSMETIC_PREFIX.aim, profile.aimStyle || DEFAULT_AIM_STYLE, "aimStyle", a.color))}
-        </>}
-
-        {tab === "ground" && <>
-          <p className="text-gray-500 text-[11px]">Re-tint the grass and fairway. Hazard rough keeps its warning colors.</p>
-          {GROUND_THEMES.map((g) => cosmeticRow(g, COSMETIC_PREFIX.ground, profile.groundTheme || DEFAULT_GROUND_THEME, "groundTheme", groundSwatch(g)))}
         </>}
 
         {tab === "celebration" && <>
