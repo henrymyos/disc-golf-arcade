@@ -4873,6 +4873,68 @@ function ChallengePanel({ online, onBack, onCreate, onJoin }: {
 
 // Lobby waiting room: shows the code, live roster (Realtime presence), and a
 // Start button for the host. Friends join with the code from another device.
+// A custom dropdown styled to match the app — shared by the Challenge-lobby
+// course picker and the Leaderboards board picker so they look identical. An
+// option may carry a `group` label that prints once above its first option.
+function StyledDropdown({ icon, options, value, onChange, ariaLabel }: {
+  icon?: string;
+  options: { key: string; label: string; group?: string }[];
+  value: string;
+  onChange: (key: string) => void;
+  ariaLabel?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("pointerdown", onDown); document.removeEventListener("keydown", onKey); };
+  }, [open]);
+  const current = options.find((o) => o.key === value);
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={ariaLabel}
+        className="w-full flex items-center gap-2 bg-gradient-to-b from-[#22262e] to-[#16191f] border border-white/10 hover:border-[#36D7B7]/50 rounded-xl px-3 py-2.5 text-left transition-colors"
+      >
+        {icon && <span className="text-[#f5d24a] text-sm leading-none">{icon}</span>}
+        <span className="flex-1 min-w-0 truncate text-white text-sm font-bold">{current?.label ?? ""}</span>
+        <span className={`text-[#36D7B7] text-xs leading-none transition-transform ${open ? "rotate-180" : ""}`}>▾</span>
+      </button>
+      {open && (
+        <div role="listbox" className="absolute left-0 right-0 z-30 mt-1.5 max-h-64 overflow-y-auto rounded-xl border border-white/10 bg-[#13161c] py-1 shadow-xl shadow-black/50">
+          {options.map((o, i) => {
+            const active = o.key === value;
+            const showGroup = o.group && o.group !== options[i - 1]?.group;
+            return (
+              <div key={o.key}>
+                {showGroup && <p className="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-[0.15em] text-gray-500">{o.group}</p>}
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={active}
+                  onClick={() => { onChange(o.key); setOpen(false); }}
+                  className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${active ? "bg-[#36D7B7]/10 font-bold text-[#36D7B7]" : "text-gray-300 hover:bg-white/5 hover:text-white"}`}
+                >
+                  <span className="min-w-0 flex-1 truncate">{o.label}</span>
+                  {active && <span className="text-[#36D7B7] text-xs leading-none">✓</span>}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LobbyPanel({ lobby, players, hostLeft, error, courses, onPickCourse, onStart, onLeave }: {
   lobby: { code: string; isHost: boolean; mode: Mode; courseKey: string; courseLabel: string };
   players: LobbyPlayer[];
@@ -4901,20 +4963,13 @@ function LobbyPanel({ lobby, players, hostLeft, error, courses, onPickCourse, on
         <div>
           <p className="text-gray-400 text-xs font-semibold mb-1.5">Course</p>
           {lobby.isHost ? (
-            <div className="relative">
-              <select
-                value={lobby.courseKey}
-                onChange={(e) => { const c = courses.find((x) => challengeKey(x) === e.target.value); if (c) onPickCourse(c); }}
-                className="appearance-none w-full bg-[#1a1d23] border border-white/10 rounded-lg pl-3 pr-9 py-2.5 text-white text-sm font-semibold focus:outline-none focus:border-[#4B3DFF] hover:border-white/25 transition"
-                style={{ colorScheme: "dark" }}
-                aria-label="Choose course"
-              >
-                {courses.map((c) => (
-                  <option key={challengeKey(c)} value={challengeKey(c)}>{c.name}</option>
-                ))}
-              </select>
-              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-xs">▾</span>
-            </div>
+            <StyledDropdown
+              icon="⛳"
+              ariaLabel="Choose course"
+              value={lobby.courseKey}
+              onChange={(key) => { const c = courses.find((x) => challengeKey(x) === key); if (c) onPickCourse(c); }}
+              options={courses.map((c) => ({ key: challengeKey(c), label: c.name, group: c.seed != null ? "Pro Tour" : undefined }))}
+            />
           ) : (
             <div className="w-full bg-[#1a1d23] border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm font-semibold">{courseLabel}</div>
           )}
@@ -6480,18 +6535,7 @@ function LeaderboardPanel({ onClose }: { onClose: () => void }) {
   });
   const [pick, setPick] = useState<Board>(boards[0]);
   const [rows, setRows] = useState<ArcadeScore[] | null>(null);
-  const [open, setOpen] = useState(false);
-  const ddRef = useRef<HTMLDivElement | null>(null);
   const over = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
-  // Close the custom dropdown on an outside tap or Escape.
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: PointerEvent) => { if (ddRef.current && !ddRef.current.contains(e.target as Node)) setOpen(false); };
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
-    document.addEventListener("pointerdown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("pointerdown", onDown); document.removeEventListener("keydown", onKey); };
-  }, [open]);
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     let active = true;
@@ -6507,43 +6551,13 @@ function LeaderboardPanel({ onClose }: { onClose: () => void }) {
           <h2 className="text-white font-black text-xl">🏆 Leaderboards</h2>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
-        {/* Custom dropdown — styled to match the app instead of a bare OS <select>. */}
-        <div className="relative" ref={ddRef}>
-          <button
-            type="button"
-            onClick={() => setOpen((o) => !o)}
-            aria-haspopup="listbox"
-            aria-expanded={open}
-            className="w-full flex items-center gap-2 bg-gradient-to-b from-[#22262e] to-[#16191f] border border-white/10 hover:border-[#36D7B7]/50 rounded-xl px-3 py-2.5 text-left transition-colors"
-          >
-            <span className="text-[#f5d24a] text-sm leading-none">🏆</span>
-            <span className="flex-1 min-w-0 truncate text-white text-sm font-bold">{pick.label}</span>
-            <span className={`text-[#36D7B7] text-xs leading-none transition-transform ${open ? "rotate-180" : ""}`}>▾</span>
-          </button>
-          {open && (
-            <div role="listbox" className="absolute left-0 right-0 z-30 mt-1.5 max-h-64 overflow-y-auto rounded-xl border border-white/10 bg-[#13161c] py-1 shadow-xl shadow-black/50">
-              {boards.map((b, i) => {
-                const active = b.courseKey === pick.courseKey;
-                const firstTour = b.courseKey.startsWith("tour-") && !boards[i - 1]?.courseKey.startsWith("tour-");
-                return (
-                  <div key={b.courseKey}>
-                    {firstTour && <p className="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-[0.15em] text-gray-500">Pro Tour</p>}
-                    <button
-                      type="button"
-                      role="option"
-                      aria-selected={active}
-                      onClick={() => { setPick(b); setOpen(false); }}
-                      className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${active ? "bg-[#36D7B7]/10 font-bold text-[#36D7B7]" : "text-gray-300 hover:bg-white/5 hover:text-white"}`}
-                    >
-                      <span className="min-w-0 flex-1 truncate">{b.label}</span>
-                      {active && <span className="text-[#36D7B7] text-xs leading-none">✓</span>}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+        <StyledDropdown
+          icon="🏆"
+          ariaLabel="Choose a leaderboard"
+          value={pick.courseKey}
+          onChange={(key) => { const b = boards.find((x) => x.courseKey === key); if (b) setPick(b); }}
+          options={boards.map((b) => ({ key: b.courseKey, label: b.label, group: b.courseKey.startsWith("tour-") ? "Pro Tour" : undefined }))}
+        />
         <p className="text-gray-500 text-[11px]">
           {pick.daily ? "Today's course · par " : "All-time · par "}{pick.par}
         </p>
