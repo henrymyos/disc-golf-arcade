@@ -3678,17 +3678,16 @@ export function DiscGolfGame() {
 
         {screen === "title" && (
           <>
-          {hub === "home" && (
-            <button
-              type="button"
-              onClick={() => setSettingsOpen(true)}
-              aria-label="Settings"
-              className="absolute z-10 right-3 w-9 h-9 flex items-center justify-center rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 active:bg-white/15 text-gray-300 hover:text-white text-lg transition"
-              style={{ top: "max(env(safe-area-inset-top), 0.5rem)" }}
-            >
-              ⚙
-            </button>
-          )}
+          {/* Settings gear — top-right on every title hub (wherever the logo + profile show) */}
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(true)}
+            aria-label="Settings"
+            className="absolute z-10 right-3 w-9 h-9 flex items-center justify-center rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 active:bg-white/15 text-gray-300 hover:text-white text-lg transition"
+            style={{ top: "max(env(safe-area-inset-top), 0.5rem)" }}
+          >
+            ⚙
+          </button>
           <div className="absolute inset-0 overflow-y-auto rounded-lg bg-gradient-to-b from-[#1c2233] via-[#141926] to-[#0f1117]">
             <div
               className="min-h-full flex items-start justify-center px-5"
