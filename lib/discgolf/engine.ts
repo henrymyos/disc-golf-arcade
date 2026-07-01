@@ -55,7 +55,11 @@ type Water = { x: number; y: number; w: number; h: number };
 // `lenMul` scales a hole's length below its par default (e.g. 0.68 ≈ a short
 // par-3 you can reach off the tee with a midrange instead of a driver). Not a
 // world coordinate — it's a multiplier applied in materializeHole.
-type Hole = { par: number; worldH: number; worldW?: number; lenMul?: number; tee: Vec; basket: Vec; fairway: Vec[]; fairways?: Vec[][]; fwWidth: number; trees: Tree[]; water: Water[]; hazard?: Water[]; obZones?: Water[]; dropZone?: Vec; walls?: { x: number; y: number; w: number }[]; roughIsHazard?: boolean; wind?: Vec; windMag?: number; elev?: number; elevZones?: { to: number; elev: number }[]; treeMul?: number };
+// A hole's visual scene, giving every course its own look: `theme` is a
+// GROUND_THEMES palette key (grass/fairway tint), `weather` an optional falling
+// overlay. Stamped per hole so the look travels with the hole into the Daily mix.
+export type Weather = "rain" | "snow";
+type Hole = { par: number; worldH: number; worldW?: number; lenMul?: number; tee: Vec; basket: Vec; fairway: Vec[]; fairways?: Vec[][]; fwWidth: number; trees: Tree[]; water: Water[]; hazard?: Water[]; obZones?: Water[]; dropZone?: Vec; walls?: { x: number; y: number; w: number }[]; roughIsHazard?: boolean; wind?: Vec; windMag?: number; elev?: number; elevZones?: { to: number; elev: number }[]; treeMul?: number; theme?: string; weather?: Weather };
 
 // Holes are authored in this old 448-tall frame, then stretched to a length
 // that scales with par (below).
@@ -1357,11 +1361,12 @@ function tourCharacter(seed: number): { character: string; emoji: string } {
 function generateTourCourse(seed: number, lenScale = 1): Hole[] {
   const pars = tourPars(seed);
   const style = tourStyle(seed);
+  const scene = tourScene(seed);
   const rng = mulberry32((seed ^ 0x2545f491) >>> 0);
   return pars.map((par) => {
     const h = genDailyHole(rng, { par, ...style.gen, ...(lenScale === 1 ? {} : { lenScale }) });
     const { wind, windMag } = seededWind(rng);
-    return { ...h, wind: { x: wind.x * style.windMul, y: wind.y * style.windMul }, windMag: windMag * style.windMul };
+    return { ...h, wind: { x: wind.x * style.windMul, y: wind.y * style.windMul }, windMag: windMag * style.windMul, theme: scene.theme, weather: scene.weather };
   });
 }
 // Named venues for generated pro "tour" courses. The seed picks one (and builds
@@ -1401,6 +1406,37 @@ function buildTourRoster(count: number): TourCourse[] {
   return out;
 }
 const TOUR_COURSES: TourCourse[] = buildTourRoster(8);
+
+// ── Per-course scene: a ground palette (a GROUND_THEMES key) plus optional
+// falling weather, so every venue has its own identity that also travels with its
+// holes into the Daily mix. Hand-tuned per tour venue — indexed to the roster so
+// the eight courses are all visually distinct and each fits its character (sandy →
+// desert, water-laden → rain, a winter timber course → snow, etc.). Ranked's
+// random seeds fall back to a character-based palette. ──
+type Scene = { theme: string; weather?: Weather };
+const TOUR_SCENES: Scene[] = [
+  { theme: "desert" },                    // 0 Blue Heron Park — Sandy
+  { theme: "classic", weather: "rain" },  // 1 Birchwood Trace — Water-laden
+  { theme: "autumn" },                    // 2 Silver Creek — Links
+  { theme: "classic" },                   // 3 Stonebriar — Wooded (lush green)
+  { theme: "night" },                     // 4 Cedar Hollow — Tight & technical
+  { theme: "snow", weather: "snow" },     // 5 Timber Ridge — Tight & technical (winter)
+  { theme: "night", weather: "rain" },    // 6 Coyote Canyon — Links (stormy)
+  { theme: "sakura" },                    // 7 Wolf Ridge — Wooded (cherry blossom)
+];
+const CHAR_THEME: Record<string, string> = {
+  "Wooded": "classic", "Water-laden": "classic", "Links (open & windy)": "autumn",
+  "Sandy": "desert", "Tight & technical": "night", "Parkland": "classic",
+};
+const TOUR_SCENE_BY_SEED = new Map<number, Scene>(TOUR_COURSES.map((c, i) => [c.seed >>> 0, TOUR_SCENES[i % TOUR_SCENES.length]]));
+// The scene for a tour seed: the hand-tuned one for a roster venue, else a
+// character-appropriate palette (with an occasional shower) for ad-hoc seeds.
+function tourScene(seed: number): Scene {
+  const hit = TOUR_SCENE_BY_SEED.get(seed >>> 0);
+  if (hit) return hit;
+  const theme = CHAR_THEME[tourCharacter(seed).character] ?? "classic";
+  return { theme, weather: (seed >>> 7) % 3 === 0 ? "rain" : undefined };
+}
 
 // The tournament roster — named events on the play-courses: single-course
 // championships (3 rounds, cut) plus two-course series (2–3 rounds). Built once
@@ -1443,12 +1479,13 @@ const TOURN_DIVISION_INDEX: Map<string, number> = (() => {
   sorted.forEach((d, i) => m.set(d.id, Math.round((i / last) * (TIERS.length - 1))));
   return m;
 })();
-// Round count scales with division: the easier half — Bronze / Silver / Gold —
-// run 2 rounds; Platinum and up run 3 (with a top-half cut after round 2). Extra
-// rounds cycle back through the event's venues; a trim just drops the tail.
-const TOURN_3ROUND_MIN_DIVISION = 3; // TIERS index 3 = Platinum
+// Round count scales with division: Bronze / Silver / Gold are single-round events,
+// Platinum and Diamond run 2, and Master runs 3 (with a top-half cut after round 2).
+// Extra rounds cycle back through the event's venues; a trim just drops the tail.
+// TIERS indices: bronze/silver/gold = 0..2, platinum/diamond = 3..4, master = 5.
+const tournRoundCount = (divisionIdx: number): number => (divisionIdx >= 5 ? 3 : divisionIdx >= 3 ? 2 : 1);
 const TOURNAMENTS: TournDef[] = BASE_TOURNAMENTS.map((d) => {
-  const nRounds = (TOURN_DIVISION_INDEX.get(d.id) ?? 0) >= TOURN_3ROUND_MIN_DIVISION ? 3 : 2;
+  const nRounds = tournRoundCount(TOURN_DIVISION_INDEX.get(d.id) ?? 0);
   if (d.rounds.length === nRounds) return d;
   const rounds = Array.from({ length: nRounds }, (_, i) => d.rounds[i % d.rounds.length]);
   return { ...d, rounds, cut: nRounds === 3 };
@@ -1484,13 +1521,13 @@ function dailyHolePool(lenScale = 1): Hole[] {
     // Glendoveer plays with its authored elevation profile (the same per-hole
     // values "course" mode applies); Winthrop and the tour venues carry their own.
     HOLES.forEach((h, i) => pool.push({ ...h, elev: HOLE_ELEV[i] ?? 0 }));
-    pool.push(...WINTHROP_HOLES);
+    WINTHROP_HOLES.forEach((h) => pool.push({ ...h, weather: "rain" as Weather })); // lakeside drizzle sets it apart from Glendoveer
     for (const c of TOUR_COURSES) pool.push(...generateTourCourse(c.seed));
   } else {
     // The same real holes, re-materialized shorter (exactly how "course",
     // "winthrop" and tour modes shorten a hole for the early Career).
     HOLE_TEMPLATES.forEach((t, i) => pool.push({ ...materializeHole({ ...t, lenMul: (t.lenMul ?? 1) * lenScale }), elev: HOLE_ELEV[i] ?? 0 }));
-    WINTHROP_TEMPLATES.forEach((t) => pool.push(materializeHole({ ...t, lenMul: (t.lenMul ?? 1) * lenScale })));
+    WINTHROP_TEMPLATES.forEach((t) => pool.push({ ...materializeHole({ ...t, lenMul: (t.lenMul ?? 1) * lenScale }), weather: "rain" as Weather }));
     for (const c of TOUR_COURSES) pool.push(...generateTourCourse(c.seed, lenScale));
   }
   DAILY_POOLS.set(lenScale, pool);
@@ -1534,10 +1571,11 @@ function buildRound(seed: number, mode: Mode, lenScale = 1): Hole[] {
   if (mode === "tour" || mode === "ranked") return generateTourCourse(seed, lenScale);
   const templates = mode === "winthrop" ? WINTHROP_TEMPLATES : HOLE_TEMPLATES;
   const full = mode === "winthrop" ? WINTHROP_HOLES : HOLES;
+  const weather: Weather | undefined = mode === "winthrop" ? "rain" : undefined; // Glendoveer stays clear; Winthrop is a wet lakeside
   return templates.map((t, i) => {
     const h = lenScale === 1 ? full[i] : materializeHole({ ...t, lenMul: (t.lenMul ?? 1) * lenScale });
     const { wind, windMag } = seededWind(rng);
-    return { ...h, wind, windMag, elev: mode === "course" ? HOLE_ELEV[i] ?? 0 : h.elev ?? 0 };
+    return { ...h, wind, windMag, elev: mode === "course" ? HOLE_ELEV[i] ?? 0 : h.elev ?? 0, weather };
   });
 }
 // Elevation acts on the disc DURING flight: a per-frame pull along the hole

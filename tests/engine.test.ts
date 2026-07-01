@@ -691,11 +691,19 @@ describe("tournament division scaling (Bronze → Master)", () => {
     expect(tournDivision(byDiff[byDiff.length - 1]).key).toBe("master");
   });
 
-  it("division climbs monotonically with difficulty and spans the whole ladder", () => {
+  it("division climbs with difficulty on average and spans the whole ladder", () => {
     const idx = byDiff.map((d) => DIV_ORDER.indexOf(tournDivision(d).key));
     expect(idx.every((i) => i >= 0)).toBe(true);                 // every event resolves to a known division
-    for (let i = 1; i < idx.length; i++) expect(idx[i]).toBeGreaterThanOrEqual(idx[i - 1]);
     expect(new Set(idx).size).toBe(DIV_ORDER.length);            // Bronze through Master all represented
+    // Divisions are assigned from each event's full-roster (base) difficulty. A
+    // single-round lower division only plays its first venue, so per-event play
+    // difficulty isn't strictly ordered — but the MEAN difficulty per division
+    // still climbs Bronze → Master.
+    const meanByDiv = DIV_ORDER.map((key) => {
+      const evs = TOURNAMENTS.filter((d) => tournDivision(d).key === key);
+      return evs.reduce((s, d) => s + tournDifficulty(d), 0) / evs.length;
+    });
+    for (let i = 1; i < meanByDiv.length; i++) expect(meanByDiv[i]).toBeGreaterThan(meanByDiv[i - 1]);
   });
 
   it("a higher-division field shoots lower on identical holes", () => {
@@ -709,13 +717,13 @@ describe("tournament division scaling (Bronze → Master)", () => {
 });
 
 describe("tournament roster", () => {
-  it("offers 10–20 named events, each 2–3 rounds on one or two courses", () => {
+  it("offers 10–20 named events, each 1–3 rounds on one or two courses", () => {
     expect(TOURNAMENTS.length).toBeGreaterThanOrEqual(10);
     expect(TOURNAMENTS.length).toBeLessThanOrEqual(20);
     const ids = new Set(TOURNAMENTS.map((d) => d.id));
     expect(ids.size).toBe(TOURNAMENTS.length); // unique
     for (const d of TOURNAMENTS) {
-      expect(d.rounds.length).toBeGreaterThanOrEqual(2);
+      expect(d.rounds.length).toBeGreaterThanOrEqual(1); // Bronze/Silver/Gold = 1, Plat/Diamond = 2, Master = 3
       expect(d.rounds.length).toBeLessThanOrEqual(3);
       const courses = new Set(d.rounds.map((r) => `${r.mode}:${r.seed ?? ""}`));
       expect(courses.size).toBeGreaterThanOrEqual(1);
@@ -727,7 +735,7 @@ describe("tournament roster", () => {
 });
 
 describe("tournament", () => {
-  const def = TOURNAMENTS.find((d) => d.id === "Winthrop Lake Classic")!; // 3 rounds, cut
+  const def = TOURNAMENTS.find((d) => d.rounds.length === 3)!; // a Master event: 3 rounds + cut
   const seed = def.seed;
   // A tournament where two rounds have been played by everyone.
   const make = (myR1: number, myR2: number): Tournament => {
