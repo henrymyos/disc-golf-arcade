@@ -2711,6 +2711,7 @@ export function DiscGolfGame() {
       // Active ground/course theme (re-tints normal grass; hazard rough keeps
       // its warning colors).
       const ground = cosmeticByKey(GROUND_THEMES, hole.theme ?? DEFAULT_GROUND_THEME) ?? GROUND_THEMES[0];
+      const ink = themeInk(ground.fairway); // high-contrast ink for the basket ring + aim line
 
       // Everything outside the fairway is rough — out of bounds normally, or
       // olive-tinted hazard ground on rope-lined holes (+1, play where it lies).
@@ -2927,7 +2928,7 @@ export function DiscGolfGame() {
           ctx.strokeStyle = "rgba(255,255,255,0.35)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(tx, ty, r, 0, Math.PI * 2); ctx.stroke();
         }
       }
-      drawBasket(ctx, hole.basket.x + rattle, hole.basket.y - cam, g.skill.catchR * (g.momentum ?? 1), cosmeticByKey(BASKET_SKINS, basketSkinRef.current));
+      drawBasket(ctx, hole.basket.x + rattle, hole.basket.y - cam, g.skill.catchR * (g.momentum ?? 1), cosmeticByKey(BASKET_SKINS, basketSkinRef.current), ink.ring);
       for (const tr of hole.trees) {
         // A tree you're stuck right behind goes translucent — a cue that this
         // throw passes through it (the aim line runs straight on through, too).
@@ -3129,18 +3130,25 @@ export function DiscGolfGame() {
             ctx.globalAlpha = 1;
           }
           const aimStyle = cosmeticByKey(AIM_STYLES, aimStyleRef.current) ?? AIM_STYLES[0];
-          ctx.lineWidth = 2;
-          ctx.strokeStyle = aimStyle.color;
           if (aimStyle.dash) ctx.setLineDash(aimStyle.dash);
-          if (aimStyle.glow) { ctx.shadowBlur = 6; ctx.shadowColor = aimStyle.color; }
-          for (let i = 0; i < shown - 1; i++) {
-            const t = i / (shown - 1);
-            ctx.globalAlpha = Math.max(0.04, 0.95 * (1 - Math.pow(t, 1.4)));
-            ctx.beginPath();
-            ctx.moveTo(pts[i].x, pts[i].y - cam);
-            ctx.lineTo(pts[i + 1].x, pts[i + 1].y - cam);
-            ctx.stroke();
+          ctx.lineCap = "round";
+          // Two passes: a contrast halo (wider, background-derived ink) UNDER the
+          // styled line (your chosen color), so the preview stays legible on any
+          // course — dark ink on light snow/sand, light ink on dark night courses.
+          for (const pass of [{ w: 4, color: ink.line }, { w: 2, color: aimStyle.color }]) {
+            ctx.lineWidth = pass.w;
+            ctx.strokeStyle = pass.color;
+            if (aimStyle.glow && pass.w === 2) { ctx.shadowBlur = 6; ctx.shadowColor = aimStyle.color; } else { ctx.shadowBlur = 0; }
+            for (let i = 0; i < shown - 1; i++) {
+              const t = i / (shown - 1);
+              ctx.globalAlpha = Math.max(0.04, 0.95 * (1 - Math.pow(t, 1.4)));
+              ctx.beginPath();
+              ctx.moveTo(pts[i].x, pts[i].y - cam);
+              ctx.lineTo(pts[i + 1].x, pts[i + 1].y - cam);
+              ctx.stroke();
+            }
           }
+          ctx.lineCap = "butt";
           ctx.globalAlpha = 1;
           ctx.setLineDash([]);
           ctx.shadowBlur = 0;
@@ -7323,9 +7331,20 @@ function drawTree(ctx: CanvasRenderingContext2D, tr: Tree) {
   ctx.fill();
 }
 
-function drawBasket(ctx: CanvasRenderingContext2D, x: number, y: number, catchR = CATCH_R, skin?: BasketSkin) {
+// A high-contrast "ink" for overlays (the basket ring, the aim line), chosen from
+// the course's fairway color so they stay legible on light courses (snow, sand)
+// and dark ones (night) alike.
+function themeInk(bgHex: string): { line: string; ring: string } {
+  const m = /#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(bgHex);
+  const r = m ? parseInt(m[1], 16) : 90, g = m ? parseInt(m[2], 16) : 90, b = m ? parseInt(m[3], 16) : 90;
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return lum > 0.5
+    ? { line: "rgba(15,17,23,0.95)", ring: "rgba(15,17,23,0.55)" }        // light course → dark ink
+    : { line: "rgba(255,255,255,0.95)", ring: "rgba(255,255,255,0.5)" };  // dark course  → light ink
+}
+function drawBasket(ctx: CanvasRenderingContext2D, x: number, y: number, catchR = CATCH_R, skin?: BasketSkin, ring = "rgba(255,255,255,0.15)") {
   const s = skin ?? BASKET_SKINS[0];
-  ctx.strokeStyle = "rgba(255,255,255,0.15)";
+  ctx.strokeStyle = ring;
   ctx.beginPath();
   ctx.arc(x, y, catchR, 0, Math.PI * 2);
   ctx.stroke();
