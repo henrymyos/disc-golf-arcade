@@ -70,6 +70,17 @@ const RESUME_KEY = "discgolf.resume.v1";
 const TOURBEST_KEY = "discgolf.tourbests.v1"; // best score per pro-tour venue (by seed)
 const TOURNBEST_KEY = "discgolf.tournplaces.v1"; // best finishing place per tournament (by id)
 const ENTRY_KEY = "discgolf.entry.v1"; // "offline" | "auth" — which front-door choice was made
+// Your finishing place (1..field) in each of the current placement run's rounds,
+// so the Ranked placement tracker can color each dot green (top 2) / gray (3rd) /
+// red (bottom 2). Reset when a fresh run's first round lands. Device-local: it's
+// just the current calibration's UI, not synced ranked progress.
+const PLACEMARKS_KEY = "discgolf.placemarks.v1";
+function readPlaceMarks(): (number | null)[] {
+  try {
+    const a = JSON.parse(localStorage.getItem(PLACEMARKS_KEY) || "null");
+    return Array.isArray(a) ? a.map((n) => (typeof n === "number" ? n : null)) : [null, null, null];
+  } catch { return [null, null, null]; }
+}
 type ResumeSnap = { v: 1; mode: Mode; seed: number; scores: number[] };
 function holesForMode(mode: Mode): number {
   return mode === "daily" || mode === "academy" ? 9 : 18;
@@ -704,6 +715,10 @@ export function DiscGolfGame() {
   const rankedRef = useRef<RankedState | null>(null);
   const [rankedOpen, setRankedOpen] = useState(false);
   const [rankedResult, setRankedResult] = useState<RankedResult | PlacementResult | null>(null); // outcome of the ranked round just finished (placement or ranked)
+  const [placeMarks, setPlaceMarks] = useState<(number | null)[]>([null, null, null]); // finish place per placement round → the dot colors
+  const placeMarksRef = useRef<(number | null)[]>(placeMarks);
+  useEffect(() => { placeMarksRef.current = placeMarks; }, [placeMarks]);
+  const [placementReveal, setPlacementReveal] = useState<PlacementResult | null>(null); // the "you're placed!" celebration after round 3
   const [seasonReward, setSeasonReward] = useState<SeasonRecord | null>(null); // last season's payout, shown as a one-time card
 
   // ── Recurring daily + weekly challenges (rotating objectives that pay coins) ──
@@ -860,6 +875,11 @@ export function DiscGolfGame() {
       const { state: st, reward: seasonReward } = rolloverSeason(rk && typeof rk === "object" ? rk : null, rankedMonth);
       rankedRef.current = st; setRanked(st);
       if (!rk || rk.season !== rankedMonth) { try { localStorage.setItem(RANKED_KEY, JSON.stringify(st)); } catch { /* ignore */ } }
+      // Placement dot colors track the current run; a rollover that wiped
+      // placement clears them, otherwise restore where the run left off.
+      const pm = st.placeEstimates.length === 0 ? [null, null, null] : readPlaceMarks();
+      placeMarksRef.current = pm; setPlaceMarks(pm);
+      if (st.placeEstimates.length === 0) { try { localStorage.setItem(PLACEMARKS_KEY, JSON.stringify(pm)); } catch { /* ignore */ } }
       // A season just ended → pay out the gold and show the season-end card.
       if (seasonReward) { addCoins(seasonReward.coins); setSeasonReward(seasonReward); }
       const tb = JSON.parse(localStorage.getItem(TOURBEST_KEY) || "{}");
@@ -1992,6 +2012,15 @@ export function DiscGolfGame() {
       rankedRef.current = state; setRanked(state);
       try { localStorage.setItem(RANKED_KEY, JSON.stringify(state)); } catch { /* ignore */ }
       setRankedResult(result);
+      // Record this placement round's finish for the dot tracker (round 1 starts
+      // a fresh run), and fire the reveal once the third round lands.
+      if ("placement" in result) {
+        const marks = result.round === 1 ? [null, null, null] : placeMarksRef.current.slice();
+        marks[result.round - 1] = place;
+        placeMarksRef.current = marks; setPlaceMarks(marks);
+        try { localStorage.setItem(PLACEMARKS_KEY, JSON.stringify(marks)); } catch { /* ignore */ }
+        if (result.placed) setPlacementReveal(result);
+      }
     } else {
       setRankedResult(null);
     }
@@ -4163,6 +4192,10 @@ export function DiscGolfGame() {
           />
         )}
 
+        {placementReveal && (
+          <PlacementReveal result={placementReveal} marks={placeMarks} onClose={() => setPlacementReveal(null)} />
+        )}
+
         {challengesOpen && (
           <ChallengesPanel
             history={history}
@@ -4415,6 +4448,7 @@ export function DiscGolfGame() {
                         <span className="text-white font-black text-lg">{r.placed ? "🏅 Placement complete!" : `Placement ${r.round}/${r.rounds}`}</span>
                         <span className="font-mono font-bold text-sm text-gray-300">{ordinal(r.place)} of {r.field}</span>
                       </div>
+                      <div className="my-3"><PlacementDots marks={placeMarks} done={r.round} total={r.rounds} /></div>
                       <div className="flex items-center gap-2 mt-1.5">
                         <span className="text-xl leading-none">{r.tier.emoji}</span>
                         <span className="font-bold text-sm" style={{ color: r.tier.color }}>{r.placed ? "" : "Projected: "}{r.tier.name}</span>
@@ -6430,6 +6464,65 @@ function ChallengesPanel({ history, owned, coins, today, onClaim, onClose }: {
   );
 }
 
+// The placement progress tracker: one dot per calibration round, colored by where
+// you finished — green ✓ for top 2, red ✕ for bottom 2, gray – for the middle 3rd.
+// Dots past your progress read as empty/pending. `animate` pops them in one by one
+// for the completion reveal.
+function placeDotStyle(played: boolean, mark: number | null) {
+  if (!played) return { bg: "#161a20", border: "rgba(255,255,255,0.12)", glyph: "", color: "#4b5563", glow: false };
+  if (mark == null) return { bg: "#22262e", border: "rgba(255,255,255,0.30)", glyph: "•", color: "#9aa0aa", glow: false };
+  if (mark <= 2) return { bg: "rgba(54,215,183,0.12)", border: "#36D7B7", glyph: "✓", color: "#36D7B7", glow: true };
+  if (mark >= 4) return { bg: "rgba(226,69,59,0.14)", border: "#e2453b", glyph: "✕", color: "#ff6b63", glow: true };
+  return { bg: "rgba(255,255,255,0.05)", border: "#7c828c", glyph: "–", color: "#c0c5cc", glow: false };
+}
+function PlacementDots({ marks, done, total, animate = false }: { marks: (number | null)[]; done: number; total: number; animate?: boolean }) {
+  return (
+    <div className="flex items-center justify-center">
+      {Array.from({ length: total }, (_, i) => {
+        const s = placeDotStyle(i < done, marks[i] ?? null);
+        return (
+          <div key={i} className="flex items-center">
+            <div
+              className="w-9 h-9 rounded-full flex items-center justify-center border-2 text-base font-black"
+              style={{
+                background: s.bg, borderColor: s.border, color: s.color,
+                boxShadow: s.glow ? `0 0 10px ${s.border}55` : "none",
+                animation: animate ? "place-pop 0.4s ease-out both" : undefined,
+                animationDelay: animate ? `${i * 0.35}s` : undefined,
+              }}
+            >
+              {s.glyph}
+            </div>
+            {i < total - 1 && (
+              <div className="w-5 h-[3px] rounded" style={{ background: i + 1 <= done ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.08)" }} />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// Shown once the third placement round lands: the dots fill in, then the division
+// you've been placed in scales up beneath them.
+function PlacementReveal({ result, marks, onClose }: { result: PlacementResult; marks: (number | null)[]; onClose: () => void }) {
+  return (
+    <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/70 backdrop-blur-sm px-6" onClick={onClose}>
+      <div className="w-full max-w-xs rounded-2xl bg-[#13161c] border border-white/10 p-6 text-center shadow-2xl shadow-black/60" onClick={(e) => e.stopPropagation()}>
+        <p className="text-gray-400 text-[11px] font-bold uppercase tracking-[0.2em]">Placement complete</p>
+        <div className="my-5"><PlacementDots marks={marks} done={result.rounds} total={result.rounds} animate /></div>
+        <div style={{ animation: "place-reveal 0.5s ease-out both", animationDelay: "1.25s" }}>
+          <p className="text-7xl leading-none my-1">{result.tier.emoji}</p>
+          <p className="text-gray-300 text-sm mt-2">You've been placed in</p>
+          <p className="font-black text-3xl" style={{ color: result.tier.color }}>{result.tier.name}</p>
+          <p className="text-gray-500 text-[11px] mt-1">{result.projectedRp} RP · ranked rounds move you from here</p>
+          <button type="button" onClick={onClose} className={`${btn} w-full mt-5`}>Continue</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Ranked ladder. Every round is a FRESH course against a tier-scaled AI field;
 // finishing position drives RP, podium streaks pay a bonus, and lifetime RP climbs
 // a tier. Play as many rounds as you like.
@@ -6444,6 +6537,7 @@ function RankedPanel({ ranked, onPlay, onClose }: {
   const pct = t.need ? Math.round((t.into / t.need) * 100) : 100;
   const placed = ranked?.placed ?? false;
   const placeDone = ranked?.placeEstimates?.length ?? 0; // placement rounds banked so far
+  const placeMarks = readPlaceMarks(); // dot colors for the current placement run
   const season = ranked?.season ?? 0;
   const lastSeasonRp = ranked?.lastSeasonRp ?? null;
   const lastTier = lastSeasonRp != null ? tierFromRP(lastSeasonRp).tier : null; // last season's finish
@@ -6473,6 +6567,7 @@ function RankedPanel({ ranked, onPlay, onClose }: {
         {!placed && (
           <div className="bg-[#36D7B7]/10 border border-[#36D7B7]/30 rounded-xl px-3 py-2.5">
             <p className="text-[#36D7B7] font-bold text-sm">🎯 Placement · {placeDone}/{PLACEMENT_ROUNDS} rounds</p>
+            <div className="my-2.5"><PlacementDots marks={placeMarks} done={placeDone} total={PLACEMENT_ROUNDS} /></div>
             <p className="text-gray-300 text-[11px] mt-0.5 leading-snug">
               {placeDone === 0
                 ? lastTier
