@@ -235,8 +235,9 @@ describe("placement (calibration rounds)", () => {
   });
 
   it("reads your level from where you finish in the wide calibration field", () => {
-    // Round 1: a card of 5 (you + 4), evenly spread Bronze→Master.
-    expect(applyPlacementRound(EMPTY_RANKED, 1, 5, -10).result.tier.key).toBe("master"); // beat everyone
+    // A card of 5 (you + 4) spread across the placement span; your finish reads back
+    // onto it, capped at the ceiling — the best you can place is low Diamond.
+    expect(applyPlacementRound(EMPTY_RANKED, 1, 5, -10).result.tier.key).toBe("diamond"); // beat everyone ⇒ the ceiling
     expect(applyPlacementRound(EMPTY_RANKED, 3, 5, 0).result.tier.key).toBe("gold");      // dead middle
     expect(applyPlacementRound(EMPTY_RANKED, 5, 5, 12).result.tier.key).toBe("bronze");   // finished last
   });
@@ -272,9 +273,9 @@ describe("placement (calibration rounds)", () => {
     expect(r3.state.placed).toBe(true);
     expect(r3.result.remaining).toBe(0);
     expect(r3.state.rounds).toBe(3);
-    // Final RP is the average of the three round estimates.
-    const avg = Math.round(r3.state.placeEstimates.reduce((a, b) => a + b, 0) / PLACEMENT_ROUNDS);
-    expect(r3.state.rp).toBe(avg);
+    // Placement converges onto the latest read — final RP is the last round's
+    // estimate, not an average of all three.
+    expect(r3.state.rp).toBe(r3.state.placeEstimates[r3.state.placeEstimates.length - 1]);
   });
 
   it("doesn't start a streak during placement, but does count wins/podiums + best to-par", () => {

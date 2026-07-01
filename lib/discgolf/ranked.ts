@@ -38,8 +38,8 @@ export const RANKED_FIELD = 4;
 // level immediately rather than farming a soft tier. A projected rank shows after
 // round 1 and refines (running average) until it locks in. ──
 export const PLACEMENT_ROUNDS = 3;
-export const PLACEMENT_MIN_RATING = 40; // bottom of the round-1 calibration field's rating span
-export const PLACEMENT_MAX_RATING = 84; // top of it — winning out ⇒ ~5500 RP, right at Master's doorstep (not deep Master)
+export const PLACEMENT_MIN_RATING = 40; // bottom of a calibration field's rating span
+export const PLACEMENT_MAX_RATING = 76; // placement ceiling — winning out ⇒ ~3600 RP (low Diamond); you earn Diamond→Master by playing
 // Placement bots play this many strokes better than their rating implies, so a
 // rank has to be earned: you must out-play the division you're tested against,
 // not merely keep pace with it. Higher ⇒ harder to climb (esp. to Master).
@@ -300,32 +300,33 @@ export type PlacementResult = {
 };
 
 // A placement (calibration) round. Read your level from where you finished in the
-// wide calibration field — your finishing fraction maps straight back onto the
-// field's rating span (PLACEMENT_*_RATING), so beating the weak third ≈ Bronze and
-// beating nearly everyone ≈ Master. Fold the estimate into the running average and
-// lock in a starting rank once PLACEMENT_ROUNDS are in. Streak stays dormant until
-// you're ranked; wins/podiums and best-to-par still count.
-// `lo`/`hi` are the rating span of the field you actually played: the full ladder
-// [40, 84] on round 1, then your projected division's band (tier mean ±14) on the
-// rounds after — so where you finish maps back onto that band. Because the bots
+// field — your finishing fraction maps straight back onto the field's rating span
+// ([lo, hi]), so beating the weak third reads low and beating everyone reads at the
+// top of that band. Placement CONVERGES: the latest read is your projection, and
+// each round re-centers the next field on it. Lock in a starting rank once
+// PLACEMENT_ROUNDS are in. Streak stays dormant until you're ranked; wins/podiums
+// and best-to-par still count.
+// `lo`/`hi` are the rating span of the field you actually played: a Silver-level
+// field on round 1, then your projected division's band (tier mean ±14) on the
+// rounds after — beat them and the next field is harder, lose and it's easier. The
+// read is capped at PLACEMENT_MAX_RATING, so the best you can PLACE is low Diamond;
+// Diamond→Master is earned by playing ranked rounds afterward. Because the bots
 // carry PLACEMENT_EDGE, you out-finish fewer of them than your raw rating would,
 // which is exactly what makes a high rank harder to reach.
 export function applyPlacementRound(state: RankedState | null, place: number, field: number, toPar: number, lo = PLACEMENT_MIN_RATING, hi = PLACEMENT_MAX_RATING): { state: RankedState; result: PlacementResult } {
   const s = normalizeRanked(state);
   const frac = field <= 1 ? 1 : (field - place) / (field - 1); // 1 = beat everyone → 0 = last
-  // Cap any single round's read at the calibration ceiling. Rounds after the first
-  // are played against your PROJECTED band, so an unclamped top-of-band win would
-  // compound upward every round and rocket you well past Master. The ceiling keeps
-  // winning out at ~5500 (Master's doorstep) — you climb deeper Master by playing.
+  // Your finish reads straight onto the field's band, capped at the placement
+  // ceiling so the best you can PLACE is low Diamond (Master is earned by playing).
   const estRating = Math.min(PLACEMENT_MAX_RATING, lo + frac * (hi - lo));
   const estimate = rpFromRating(estRating);
   const placeEstimates = [...s.placeEstimates, estimate].slice(0, PLACEMENT_ROUNDS);
-  // Last season's finish (if any) is remembered as a prior — one weighted vote that
-  // nudges your new placement toward where you ended, without overriding how you
-  // play this season. It fades automatically as more placement estimates come in.
-  const priorN = s.lastSeasonRp != null ? 1 : 0;
-  const priorSum = s.lastSeasonRp ?? 0;
-  const projectedRp = Math.round((priorSum + placeEstimates.reduce((a, b) => a + b, 0)) / (priorN + placeEstimates.length));
+  // Converge onto the latest read (each round was played at your projected level, so
+  // the newest read is the truest). Last season's finish (if any) seeds it as a vote
+  // that fades to nothing by the final round — a returning player reaches their level
+  // faster but still can't place past the ceiling.
+  const priorWeight = s.lastSeasonRp != null ? 0.5 * (PLACEMENT_ROUNDS - placeEstimates.length) / PLACEMENT_ROUNDS : 0;
+  const projectedRp = Math.round(estimate * (1 - priorWeight) + (s.lastSeasonRp ?? 0) * priorWeight);
   const placed = placeEstimates.length >= PLACEMENT_ROUNDS;
   const next: RankedState = {
     ...s,
