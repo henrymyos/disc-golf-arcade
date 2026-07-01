@@ -17,6 +17,7 @@ const STOP_SPEED = 0.35;
 // it doesn't keep gliding forever after the fade.
 const GRAVITY = 0.08; // downward pull on height per frame (gentler = floatier flight)
 const AIRBORNE_H = 3; // above this height, hazards are cleared
+const CATCH_H = 6; // a descending disc still drops in the basket up to this height (chain height)
 const GROUND_FRICTION = 0.8; // hard deceleration once on the ground
 const MAX_DRAG = 95; // pull-back distance (internal px) that maps to full power
 const CANCEL_R = 13; // pull the knob back inside this radius (around the disc) and release to cancel
@@ -1672,6 +1673,17 @@ function treesAtLie(hole: Hole, x: number, y: number): Tree[] {
   return hole.trees.filter((tr) => Math.hypot(x - tr.x, y - tr.y) <= tr.r + DISC_R * 3);
 }
 
+// Shortest distance from point (cx,cy) to the line segment (ax,ay)→(bx,by).
+// Used so the basket catch tests the disc's whole path this frame, not just its
+// end point — a fast disc can't tunnel across the basket between two frames.
+function segPointDist(ax: number, ay: number, bx: number, by: number, cx: number, cy: number): number {
+  const dx = bx - ax, dy = by - ay;
+  const len2 = dx * dx + dy * dy;
+  let t = len2 > 0 ? ((cx - ax) * dx + (cy - ay) * dy) / len2 : 0;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  return Math.hypot(cx - (ax + t * dx), cy - (ay + t * dy));
+}
+
 // `opts` carries Career skill effects for the player's own flights: `windMul`
 // scales how hard the wind shoves the disc (low control → blown around), and
 // `catchR` widens/narrows the basket catch radius (putting skill). `ghostTrees`
@@ -1680,6 +1692,7 @@ function treesAtLie(hole: Hole, x: number, y: number): Tree[] {
 function stepFlight(f: Flight, disc: Disc, fadeSign: number, path: FlightPath, hole: Hole, release: Release = "flat", opts: { catchR?: number; windMul?: number; ghostTrees?: Tree[]; preview?: boolean } = {}): { status: StepStatus; treeHit: boolean } {
   const catchR = opts.catchR ?? CATCH_R;
   const windMul = opts.windMul ?? 1;
+  const px = f.x, py = f.y; // step start — the swept basket-catch test below spans px,py → f.x,f.y
   f.x += f.vx;
   f.y += f.vy;
   f.h += f.vh;
@@ -1778,25 +1791,31 @@ function stepFlight(f: Flight, disc: Disc, fadeSign: number, path: FlightPath, h
   // only "lands" while descending or grounded (vh <= 0) — so on takeoff it can
   // climb up and OVER water/OB right next to the lie instead of instantly going
   // OB before it has gained any height.
+  // Basket catch. Tested for any DESCENDING disc that's low enough to be at chain
+  // height (h ≤ CATCH_H, a bit above the ground gate) — so a shot that comes down
+  // right on the pin drops even if it's still a hair airborne as it crosses it.
+  // We measure the disc's whole swept path this frame (px,py → f.x,f.y), not just
+  // the end point, so a disc can't slide/fly straight through the circle between
+  // two frames without registering.
+  if (f.vh <= 0 && f.h <= CATCH_H) {
+    // A disc screaming at the basket tends to blow through the chains, so the
+    // catch radius shrinks with horizontal speed: a controlled approach or putt
+    // (slow, sp ≲ 0.45) catches in the full radius, while a full-power bomb has
+    // to be nearly dead-center to drop. Keeps throw-in eagles possible but hard.
+    const effCatchR = catchR * Math.max(0.3, Math.min(1, 1 - (sp - 0.45) / 1.7));
+    if (segPointDist(px, py, f.x, f.y, hole.basket.x, hole.basket.y) < effCatchR) return { status: "hole", treeHit };
+  }
   if (!airborne) {
     const settling = f.vh <= 0;
-    if (settling) {
-      // A disc screaming at the basket tends to blow through the chains, so the
-      // catch radius shrinks with horizontal speed: a controlled approach or putt
-      // (slow, sp ≲ 0.45) catches in the full radius, while a full-power bomb has
-      // to be nearly dead-center to drop. Keeps throw-in eagles possible but hard.
-      const effCatchR = catchR * Math.max(0.3, Math.min(1, 1 - (sp - 0.45) / 1.7));
-      if (Math.hypot(f.x - hole.basket.x, f.y - hole.basket.y) < effCatchR) return { status: "hole", treeHit };
-      // Off every fairway ribbon, or in water, is out of bounds — except on
-      // hazard-rough holes, where off-ribbon is a playable +1 (handled at rest).
-      // The aim preview (opts.preview) skips these terminations and rolls the
-      // disc to a natural stop, so the drawn line's length never leaks whether
-      // the throw ends in water/OB — the disc just looks like it landed clean.
-      if (!opts.preview) {
-        if (!hole.roughIsHazard && offRibbons(hole, f.x, f.y)) return { status: "ob", treeHit };
-        for (const wt of hole.water) if (inRect(wt, f.x, f.y)) return { status: "ob", treeHit };
-        for (const ob of hole.obZones ?? []) if (inRect(ob, f.x, f.y)) return { status: "ob", treeHit };
-      }
+    // Off every fairway ribbon, or in water, is out of bounds — except on
+    // hazard-rough holes, where off-ribbon is a playable +1 (handled at rest).
+    // The aim preview (opts.preview) skips these terminations and rolls the
+    // disc to a natural stop, so the drawn line's length never leaks whether
+    // the throw ends in water/OB — the disc just looks like it landed clean.
+    if (settling && !opts.preview) {
+      if (!hole.roughIsHazard && offRibbons(hole, f.x, f.y)) return { status: "ob", treeHit };
+      for (const wt of hole.water) if (inRect(wt, f.x, f.y)) return { status: "ob", treeHit };
+      for (const ob of hole.obZones ?? []) if (inRect(ob, f.x, f.y)) return { status: "ob", treeHit };
     }
     // Hazards (sand) don't stop the disc — they only cost a stroke if it comes
     // to rest in one, handled where "stop" is processed.

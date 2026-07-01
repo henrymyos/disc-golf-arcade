@@ -901,3 +901,32 @@ describe("throw-through-a-tree-you're-behind", () => {
     expect(through.y).toBeLessThan(1900); // and the disc actually flew on down the fairway
   });
 });
+
+describe("basket catch — swept path (no tunneling past the pin)", () => {
+  const hole: Hole = {
+    par: 3, worldH: 2000, worldW: 320,
+    tee: { x: 160, y: 1950 }, basket: { x: 160, y: 60 },
+    fairway: [{ x: 160, y: 1950 }, { x: 160, y: 60 }], fwWidth: 600,
+    trees: [], water: [], hazard: [], elev: 0,
+  };
+
+  it("catches a fast, low disc whose single frame straddles the basket center", () => {
+    // One step carries the disc from the near side of the pin (y=66) to the far
+    // side (y=54): the END point sits 6px from the pin — outside the shrunk catch
+    // radius of a screaming disc — but the swept segment runs dead through it, so
+    // it drops instead of sliding past.
+    const f: Flight = { x: 160, y: 66, vx: 0, vy: -12, h: 0, vh: 0, fadeTurn: 0 };
+    expect(stepFlight(f, ADV_DISCS[0], -1, "straight", hole, "flat", {}).status).toBe("hole");
+  });
+
+  it("still misses a disc that passes wide of the basket", () => {
+    const f: Flight = { x: 185, y: 66, vx: 0, vy: -12, h: 0, vh: 0, fadeTurn: 0 };
+    let holed = false;
+    for (let i = 0; i < 200; i++) {
+      const r = stepFlight(f, ADV_DISCS[0], -1, "straight", hole, "flat", {});
+      if (r.status === "hole") holed = true;
+      if (r.status !== "fly") break;
+    }
+    expect(holed).toBe(false);
+  });
+});
