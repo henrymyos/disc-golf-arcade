@@ -4300,7 +4300,7 @@ export function DiscGolfGame() {
                     onClick={() => setThrowStyle(s.key)}
                     aria-pressed={throwStyle === s.key}
                     className={`flex-1 rounded-md px-2 py-1.5 text-xs font-bold transition ${
-                      throwStyle === s.key ? "bg-[#4B3DFF] text-white shadow" : "text-gray-400 hover:text-white"
+                      throwStyle === s.key ? "bg-[#36D7B7] text-[#0f1117] shadow" : "text-gray-400 hover:text-white"
                     }`}
                   >
                     {s.label}
@@ -4679,7 +4679,7 @@ export function DiscGolfGame() {
 }
 
 const btn =
-  "mt-1 bg-[#4B3DFF] hover:bg-[#3a2ee0] text-white font-bold px-6 py-3 rounded-lg transition";
+  "mt-1 bg-[#36D7B7] hover:bg-[#2ec2a6] text-[#0f1117] font-bold px-6 py-3 rounded-lg transition";
 
 // Uniform title-screen action cards: one dark fill, a green outline.
 const titleCard =
@@ -4931,7 +4931,7 @@ function ChallengePanel({ online, onBack, onCreate, onJoin }: {
 }) {
   const [step, setStep] = useState<"menu" | "join">("menu");
   const [code, setCode] = useState("");
-  const input = "w-full bg-[#1a1d23] border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-[#4B3DFF]";
+  const input = "w-full bg-[#1a1d23] border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-[#36D7B7]";
   // Renders inline inside the title column (same hub styling as Single Player /
   // Online), so the logo and profile stay visible above and the screen is blank
   // below the buttons. ‹ Back steps out to the Online hub (or up a sub-step).
@@ -5105,7 +5105,7 @@ function PartyPanel({ onClose, onStart }: { onClose: () => void; onStart: (m: Mo
   const [count, setCount] = useState(2);
   const [names, setNames] = useState<string[]>(["", "", "", ""]);
   const seg = (active: boolean) =>
-    `flex-1 rounded-md px-2 py-2 text-xs font-bold transition ${active ? "bg-[#4B3DFF] text-white" : "text-gray-400 hover:text-white"}`;
+    `flex-1 rounded-md px-2 py-2 text-xs font-bold transition ${active ? "bg-[#36D7B7] text-[#0f1117]" : "text-gray-400 hover:text-white"}`;
   return (
     <div className="absolute inset-0 z-20 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start justify-center rounded-lg">
       <div className="w-full max-w-xs space-y-3 my-auto text-left">
@@ -5133,7 +5133,7 @@ function PartyPanel({ onClose, onStart }: { onClose: () => void; onStart: (m: Mo
               maxLength={12}
               onChange={(e) => setNames((ns) => ns.map((n, j) => (j === i ? e.target.value : n)))}
               placeholder={`Player ${i + 1}`}
-              className="w-full bg-[#1a1d23] border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-[#4B3DFF]"
+              className="w-full bg-[#1a1d23] border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-[#36D7B7]"
             />
           ))}
         </div>
@@ -5279,7 +5279,7 @@ function TournamentPanel({ tournaments, active, bests, onStart, onAbandon, onPla
                   <span className="text-[11px] text-gray-400">
                     {best ? <>🏅 Best <span className="text-[#f5d24a] font-bold">{ordinal(best)}</span> <span className="text-gray-500">of {TOURN_FIELD}</span></> : "Not played yet"}
                   </span>
-                  <button type="button" onClick={() => onStart(d)} className="shrink-0 rounded-lg bg-[#4B3DFF] hover:bg-[#3a2ee0] text-white text-sm font-bold px-5 py-1.5 transition">Play</button>
+                  <button type="button" onClick={() => onStart(d)} className="shrink-0 rounded-lg bg-[#36D7B7] hover:bg-[#2ec2a6] text-[#0f1117] text-sm font-bold px-5 py-1.5 transition">Play</button>
                 </div>
               </div>
             );
@@ -5511,7 +5511,7 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
           panel BELOW scrolls. The header's Overall/cash/energy stay on every tab. */}
       <div className="shrink-0 flex gap-1 bg-[#1a1d23] border border-white/10 rounded-lg p-1 text-[11px] font-bold">
         {([["skills", "Skills"], ["bag", "Bag"], ["schedule", "Events"], ["sponsors", "Sponsors"]] as const).map(([key, label]) => (
-          <button key={key} type="button" onClick={() => setTab(key)} className={`flex-1 rounded-md py-1.5 transition ${tab === key ? "bg-[#4B3DFF] text-white" : "text-gray-400 hover:text-white"}`}>{label}</button>
+          <button key={key} type="button" onClick={() => setTab(key)} className={`flex-1 rounded-md py-1.5 transition ${tab === key ? "bg-[#36D7B7] text-[#0f1117]" : "text-gray-400 hover:text-white"}`}>{label}</button>
         ))}
       </div>
 
@@ -5747,7 +5747,7 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
                   <span className="shrink-0 text-[10px] text-gray-500 text-right leading-tight">out of<br />energy</span>
                 ) : (
                   <div className="shrink-0 flex gap-1">
-                    <button type="button" onClick={() => onPlay(ev)} className="rounded bg-[#4B3DFF] hover:bg-[#3a2ee0] text-white text-xs font-bold px-2.5 py-1">Play</button>
+                    <button type="button" onClick={() => onPlay(ev)} className="rounded bg-[#36D7B7] hover:bg-[#2ec2a6] text-[#0f1117] text-xs font-bold px-2.5 py-1">Play</button>
                     <button type="button" onClick={() => onSim(ev)} className="rounded bg-white/10 hover:bg-white/20 text-white text-xs font-bold px-2.5 py-1">⚡ Sim</button>
                   </div>
                 )}
@@ -6155,7 +6155,7 @@ function ShopPanel({ coins, unlocked, owned, level, profile, onBuy, onEquip, onC
 }) {
   const [tab, setTab] = useState<"discs" | "trails" | "discskin" | "basket" | "aim" | "ground" | "celebration">("discs");
   const seg = (active: boolean) =>
-    `shrink-0 rounded-md px-2.5 py-1.5 text-xs font-bold whitespace-nowrap transition ${active ? "bg-[#4B3DFF] text-white" : "text-gray-400 hover:text-white"}`;
+    `shrink-0 rounded-md px-2.5 py-1.5 text-xs font-bold whitespace-nowrap transition ${active ? "bg-[#36D7B7] text-[#0f1117]" : "text-gray-400 hover:text-white"}`;
   // Every priced disc across both bags, cheapest first.
   const items = ADV_DISCS.filter((d) => DISC_PRICE[d.key] != null).sort((a, b) => DISC_PRICE[a.key] - DISC_PRICE[b.key]);
   // One buy/equip row, shared by every cosmetic category.
@@ -6301,7 +6301,7 @@ function CoursesPanel({ courses, tourCourses, bests, tourBests, onClose, onPlay 
   useEffect(() => { scrollRef.current?.scrollTo(0, 0); }, [tab]);
   const over = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
   const seg = (active: boolean) =>
-    `flex-1 rounded-md px-2 py-2 text-xs font-bold transition ${active ? "bg-[#4B3DFF] text-white" : "text-gray-400 hover:text-white"}`;
+    `flex-1 rounded-md px-2 py-2 text-xs font-bold transition ${active ? "bg-[#36D7B7] text-[#0f1117]" : "text-gray-400 hover:text-white"}`;
   const bestFor = (c: CourseInfo) => (c.seed != null ? tourBests[c.seed] ?? null : bests[c.mode] ?? null);
   // Sort each tab easiest → hardest by intrinsic difficulty.
   const byDiff = (cs: CourseInfo[]) => cs.map((c) => ({ c, d: courseDifficultyOf(c.mode, c.seed) })).sort((a, b) => a.d - b.d);
@@ -6333,7 +6333,7 @@ function CoursesPanel({ courses, tourCourses, bests, tourBests, onClose, onPlay 
               {best != null ? <>Best <span className="text-[#36D7B7] font-bold">{best}</span> ({over(best - c.par)})</> : "Not played yet"}
             </span>
           </div>
-          <button type="button" onClick={() => onPlay(c.mode, c.seed)} className="shrink-0 rounded-lg bg-[#4B3DFF] hover:bg-[#3a2ee0] text-white text-sm font-bold px-5 py-1.5 transition">Play</button>
+          <button type="button" onClick={() => onPlay(c.mode, c.seed)} className="shrink-0 rounded-lg bg-[#36D7B7] hover:bg-[#2ec2a6] text-[#0f1117] text-sm font-bold px-5 py-1.5 transition">Play</button>
         </div>
       </div>
     );
@@ -6793,7 +6793,7 @@ function HolePracticePicker({ onBack, onPick }: {
           const sel = key(c) === key(course);
           return (
             <button key={key(c)} type="button" onClick={() => setCourse(c)}
-              className={`shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-bold whitespace-nowrap transition ${sel ? "bg-[#4B3DFF] text-white" : "bg-[#1a1d23] border border-white/10 text-gray-300 hover:border-white/25"}`}>
+              className={`shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-bold whitespace-nowrap transition ${sel ? "bg-[#36D7B7] text-[#0f1117]" : "bg-[#1a1d23] border border-white/10 text-gray-300 hover:border-white/25"}`}>
               {c.name}
             </button>
           );
@@ -6837,7 +6837,7 @@ function SettingsPanel(props: {
 }) {
   const { onClose, throwStyle, setThrowStyle, musicVolume, setMusicVolume, leftHanded, setLeftHanded, showGhost, setShowGhost, muted, onToggleSound } = props;
   const seg = (active: boolean) =>
-    `flex-1 rounded-md px-2 py-2 text-xs font-bold transition ${active ? "bg-[#4B3DFF] text-white" : "text-gray-400 hover:text-white"}`;
+    `flex-1 rounded-md px-2 py-2 text-xs font-bold transition ${active ? "bg-[#36D7B7] text-[#0f1117]" : "text-gray-400 hover:text-white"}`;
   return (
     <div className="absolute inset-0 z-20 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start justify-center rounded-lg">
       <div className="w-full max-w-xs space-y-4 my-auto text-left">
@@ -6933,8 +6933,8 @@ function AuthPanel(props: {
   const [showPw, setShowPw] = useState(false);
   const switchTo = (m: "login" | "signup") => { if (m !== mode) { setMode(m); clearFeedback(); } };
   const seg = (active: boolean) =>
-    `flex-1 rounded-md py-1.5 text-sm font-bold transition ${active ? "bg-[#4B3DFF] text-white shadow" : "text-gray-400 hover:text-white"}`;
-  const input = "w-full bg-[#0f1117] border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-[#4B3DFF] transition";
+    `flex-1 rounded-md py-1.5 text-sm font-bold transition ${active ? "bg-[#36D7B7] text-[#0f1117] shadow" : "text-gray-400 hover:text-white"}`;
+  const input = "w-full bg-[#0f1117] border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-[#36D7B7] transition";
   return (
     <div className="absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start justify-center rounded-lg">
       <div className="w-full max-w-xs my-auto">
@@ -6956,7 +6956,7 @@ function AuthPanel(props: {
               </div>
               {error && <p className="text-red-400 text-xs">{error}</p>}
               {message && <p className="text-[#36D7B7] text-xs">{message}</p>}
-              <button type="submit" disabled={busy || !password} className="w-full bg-[#4B3DFF] hover:bg-[#3a2ee0] active:scale-[0.99] text-white font-bold py-2.5 rounded-lg transition disabled:opacity-50">
+              <button type="submit" disabled={busy || !password} className="w-full bg-[#36D7B7] hover:bg-[#2ec2a6] active:scale-[0.99] text-[#0f1117] font-bold py-2.5 rounded-lg transition disabled:opacity-50">
                 {busy ? "…" : "Update password"}
               </button>
             </form>
@@ -7009,7 +7009,7 @@ function AuthPanel(props: {
               {error && <p className="text-red-400 text-xs">{error}</p>}
               {message && <p className="text-[#36D7B7] text-xs">{message}</p>}
 
-              <button type="submit" disabled={busy || !email || !password} className="w-full bg-[#4B3DFF] hover:bg-[#3a2ee0] active:scale-[0.99] text-white font-bold py-2.5 rounded-lg transition disabled:opacity-50">
+              <button type="submit" disabled={busy || !email || !password} className="w-full bg-[#36D7B7] hover:bg-[#2ec2a6] active:scale-[0.99] text-[#0f1117] font-bold py-2.5 rounded-lg transition disabled:opacity-50">
                 {busy ? "…" : mode === "login" ? "Log in" : "Create account"}
               </button>
             </form>
