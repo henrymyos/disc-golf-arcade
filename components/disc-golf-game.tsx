@@ -6630,7 +6630,7 @@ function RankedPanel({ ranked, onPlay, onClose }: {
                 return (
                   <div key={tier.key} className={`flex items-center gap-2.5 px-3 py-2 ${i ? "border-t border-white/5" : ""} ${current ? "bg-white/5" : ""}`}>
                     <span className="text-xl leading-none shrink-0">{tier.emoji}</span>
-                    <span className="font-bold text-sm flex-1" style={{ color: tier.color }}>{tier.name}{current ? " · you" : ""}{earned.has(tier.key) ? " 🏅" : ""}</span>
+                    <span className="font-bold text-sm flex-1" style={{ color: tier.color }}>{tier.name}{earned.has(tier.key) ? " 🏅" : ""}</span>
                     <span className="text-gray-500 font-mono text-[10px]">{tier.min === 0 ? "0 RP" : `${tier.min.toLocaleString()}+ RP`}</span>
                   </div>
                 );
