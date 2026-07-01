@@ -313,22 +313,44 @@ const TOUR_STYLE_INTRO: Record<string, string> = {
   "Parkland": "A classic parkland layout of rolling, generous fairways and well-guarded tree-gate greens",
 };
 // The standalone pro-tour venues — the same procedural courses the Career tour
-// visits, now playable on their own. Each blurb is built from the venue's actual
-// generated 18 holes, so it describes the real layout you're about to play.
+// visits, now playable on their own. Each blurb is pure flavor: the venue's
+// character vibe plus fabricated background — a founding note, an architect, and
+// a reputation line — picked deterministically per seed so every stop reads like
+// it has its own history. The real hole count + par live in the card header.
+const TOUR_FOUNDED = [
+  "Carved out of a retired cattle ranch in 1971",
+  "Laid along an old railway easement in 1985",
+  "Opened to little fanfare in 1963 and quietly beloved ever since",
+  "Built over reclaimed quarry land in 1978",
+  "Grown from nine holes behind a lumber mill in 1958",
+  "Stitched through a former apple orchard in 1990",
+  "Founded by a co-op of local players in 1969",
+  "Rebuilt from a storm-flattened parkland in 2004",
+];
+const TOUR_ARCHITECT = [
+  "its routing credited to pro-turned-designer Cal Rourke",
+  "shaped at the drafting table of Marta Lindqvist",
+  "given its teeth by old-school course-builder 'Big' Ted Halloran",
+  "the final project of green-designer Idris Fontaine",
+  "reworked into a championship test by the Vance & Ojeda firm",
+  "bearing the bold, risk-reward signature of Priya Naganathan",
+  "quietly redrawn by minimalist architect Sun-woo Park",
+  "an unnamed groundskeeper's design the pros later fell for",
+];
+const TOUR_REPUTATION = [
+  "The tour circles it on the calendar and dreads the closing stretch.",
+  "Locals swear its back nine has never given up an easy birdie.",
+  "It has a habit of chewing up overnight leaders on Sunday.",
+  "Careers are made and unmade on its signature island green.",
+  "A fan favorite — loud, raucous, and unforgiving by the final round.",
+  "Rain or shine it plays mean, a true ball-striker's proving ground.",
+  "Clubhouse legend says no one has ever shot the course record twice.",
+  "Every pro leaves here with a story about the one that got away.",
+];
 const TOUR_COURSE_INFOS: CourseInfo[] = TOUR_COURSES.map((c) => {
-  const holes = courseHoles("tour", c.seed);
-  const n3 = holes.filter((h) => h.par === 3).length;
-  const n4 = holes.filter((h) => h.par === 4).length;
-  const n5 = holes.filter((h) => h.par === 5).length;
-  const water = holes.filter((h) => (h.water?.length ?? 0) > 0).length;
-  const sand = holes.filter((h) => (h.hazard?.length ?? 0) > 0).length;
-  const totalFt = holes.reduce((s, h) => s + pxToFeet(h.worldH), 0);
   const intro = TOUR_STYLE_INTRO[c.character] ?? "A varied championship layout that rewards all-round play";
-  const feats: string[] = [];
-  if (water) feats.push(`water guards ${water} hole${water > 1 ? "s" : ""}`);
-  if (sand) feats.push(`${sand} play through sand`);
-  feats.push(`it plays ${totalFt.toLocaleString()} ft from the tees`);
-  const blurb = `${c.emoji} ${intro}. ${n3} par-3s, ${n4} par-4s and ${n5} par-5s for a par of ${c.par}; ${feats.join(", ")}.`;
+  const pick = (arr: string[], salt: number) => arr[((c.seed >>> salt) >>> 0) % arr.length];
+  const blurb = `${c.emoji} ${intro}. ${pick(TOUR_FOUNDED, 0)}, ${pick(TOUR_ARCHITECT, 9)}. ${pick(TOUR_REPUTATION, 15)}`;
   return { mode: "tour" as Mode, name: c.name, holes: c.holes, par: c.par, seed: c.seed, blurb };
 });
 // Courses you can host in a Challenge Friends lobby: the two fixed venues plus
