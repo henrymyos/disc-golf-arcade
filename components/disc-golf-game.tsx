@@ -81,6 +81,10 @@ function readPlaceMarks(): (number | null)[] {
     return Array.isArray(a) ? a.map((n) => (typeof n === "number" ? n : null)) : [null, null, null];
   } catch { return [null, null, null]; }
 }
+// Everyone's first placement round is played against a mid-Silver field; every
+// round after re-centers on your running projection. So placement always starts
+// from the same rung and climbs (or falls) based on how you do.
+const PLACEMENT_START_RP = 700;
 type ResumeSnap = { v: 1; mode: Mode; seed: number; scores: number[] };
 function holesForMode(mode: Mode): number {
   return mode === "daily" || mode === "academy" ? 9 : 18;
@@ -1313,17 +1317,17 @@ export function DiscGolfGame() {
     }
     const seed = (Math.random() * 1e9) | 0; // a brand-new course each round
     const roundHoles = buildRound(seed, "ranked");
-    // Your first rounds are placement. Round 1 reads you against the whole ladder;
-    // each later placement round is played against your PROJECTED division (its
-    // tier mean ±14), so you face bots at your level. After you're placed, the
-    // field scales to your tier as usual.
+    // Your first rounds are placement. Round 1 is a fixed SILVER-level field; each
+    // later placement round re-centers on your PROJECTED division (its tier mean
+    // ±14) — beat them and the next field is harder, lose and it's easier. After
+    // you're placed, the field scales to your tier as usual.
     const rk = rankedRef.current;
     if (rk?.placed) {
       rankedFieldRef.current = rankedFieldForRound(seed, rankedFieldMean(rk.rp), RANKED_FIELD, roundHoles);
     } else {
       const done = rk?.placeEstimates?.length ?? 0;
-      const mean = rankedFieldMean(rk?.rp ?? 0); // current projection's tier mean
-      const span: [number, number] = done === 0 ? [PLACEMENT_MIN_RATING, PLACEMENT_MAX_RATING] : [mean - 14, mean + 14];
+      const mean = rankedFieldMean(done === 0 ? PLACEMENT_START_RP : (rk?.rp ?? 0)); // round 1 = Silver, then your projection
+      const span: [number, number] = [mean - 14, mean + 14];
       rankedPlaceSpanRef.current = span;
       rankedFieldRef.current = rankedPlacementField(seed, RANKED_FIELD, roundHoles, span[0], span[1]);
     }
@@ -3876,9 +3880,7 @@ export function DiscGolfGame() {
                     <span className="font-black text-lg">Challenge Friends</span>
                   </button>
                   <button type="button" onClick={() => setRankedOpen(true)} className={hubCard}>
-                    <span className="font-black text-lg">Ranked · {ranked?.placed
-                      ? `${tierFromRP(ranked.rp).tier.emoji} ${tierFromRP(ranked.rp).tier.name}`
-                      : `Placement ${ranked?.placeEstimates?.length ?? 0}/${PLACEMENT_ROUNDS}`}</span>
+                    <span className="font-black text-lg">Ranked</span>
                   </button>
                 </div>
               )}
