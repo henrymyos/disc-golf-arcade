@@ -39,7 +39,7 @@ import {
 import type {
   Vec, Tree, Hole, Mode, Tournament, TournDef, TournLiveRow, Achievement, FlightPath, Release, Flight, GhostState,
 } from "@/lib/discgolf/engine";
-import { parseChallenge } from "@/lib/discgolf/challenge";
+import { parseChallenge, challengeParam } from "@/lib/discgolf/challenge";
 import {
   newCareer, normalizeCareer, skillMods, momentumAfter, seasonSchedule, simEvent, recordResult, advanceSeason, retire,
   placeLabel, STAGE_LABEL, SKILL_KEYS, SKILL_LABEL, IDENTITY_MODS,
@@ -499,6 +499,7 @@ export function DiscGolfGame() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveErr, setSaveErr] = useState<string | null>(null);
+  const [shareMsg, setShareMsg] = useState<string | null>(null); // transient share/copy confirmation
 
   const screenRef = useRef<Screen>("title");
   const pausedRef = useRef(false); // freezes the sim while the pause menu is open
@@ -2175,30 +2176,47 @@ export function DiscGolfGame() {
     c.font = "12px ui-monospace, monospace";
     c.fillText("play it yourself · disc-golf-arcade.vercel.app", 28, 308);
 
+    const flash = (msg: string) => { setShareMsg(msg); window.setTimeout(() => setShareMsg(null), 2200); };
+    const where = isDaily ? "today's Daily Challenge" : courseLabel;
+    // A replay link when the mode supports it (course/winthrop/daily), else just the app.
+    const canLink = finalMode === "course" || finalMode === "winthrop" || finalMode === "daily";
+    const link = `${location.origin}${location.pathname}${canLink ? `?ch=${challengeParam(finalMode, finalSeed, total, profile.name.trim() || "A friend")}` : ""}`;
+    const shareText = `I shot ${total} (${os(over)}) on ${where}! ${link}`;
     await new Promise<void>((resolve) => {
       cv.toBlob(async (blob) => {
         if (!blob) return resolve();
-        const file = new File([blob], "discgolf-scorecard.png", { type: "image/png" });
-        const where = isDaily ? "today's Daily Challenge" : courseLabel;
+        // 1) Native share sheet with the scorecard image (mobile). If the sheet
+        //    opens we're done — success OR cancel — we never fall back to a download.
         try {
           const nav = navigator as Navigator & { canShare?: (d: { files: File[] }) => boolean };
+          const file = new File([blob], "discgolf-scorecard.png", { type: "image/png" });
           if (nav.canShare?.({ files: [file] })) {
             await nav.share({ files: [file], title: "Disc Golf", text: `I shot ${total} (${os(over)}) on ${where}!` });
             return resolve();
           }
-        } catch {
-          /* fall through to download */
-        }
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "discgolf-scorecard.png";
-        a.click();
-        URL.revokeObjectURL(url);
+        } catch { return resolve(); /* cancelled/failed — do nothing (no download) */ }
+        // 2) No share sheet (desktop): copy to the clipboard instead of downloading —
+        //    the scorecard image if the browser allows it, otherwise the challenge link.
+        try {
+          const CI = (window as unknown as { ClipboardItem?: typeof ClipboardItem }).ClipboardItem;
+          if (CI && navigator.clipboard?.write) {
+            await navigator.clipboard.write([new CI({ [blob.type]: blob })]);
+            flash("Scorecard copied to clipboard");
+            return resolve();
+          }
+        } catch { /* image clipboard unsupported — fall back to a text link */ }
+        try {
+          if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(shareText);
+            flash("Share link copied to clipboard");
+            return resolve();
+          }
+        } catch { /* ignore */ }
+        flash("Sharing isn't available here");
         resolve();
       }, "image/png");
     });
-  }, [finalTotal, finalPars, finalMode, finalSeed, scorecard]);
+  }, [finalTotal, finalPars, finalMode, finalSeed, scorecard, profile.name]);
 
   // When a hole finishes, record/show the best-ever strokes for that hole.
   // Only for Glendoveer — the daily course's holes change every day.
@@ -4638,12 +4656,13 @@ export function DiscGolfGame() {
                 <button type="button" onClick={() => (finalMode === "ranked" ? startRankedRound() : finalMode === "tour" ? startGame("tour", finalSeed) : startGame())} className={btn}>↻ Play again</button>
               )}
               <button type="button" onClick={shareCard} aria-label="Share card" title="Share card" className="mt-1 flex items-center justify-center bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white px-3.5 py-3 rounded-lg transition">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5" aria-hidden="true">
-                  <path d="M12 3v11" />
-                  <path d="M8.5 6.5 12 3l3.5 3.5" />
-                  <path d="M8 8.5H6.5A1.5 1.5 0 0 0 5 10v9a1.5 1.5 0 0 0 1.5 1.5h11a1.5 1.5 0 0 0 1.5-1.5v-9a1.5 1.5 0 0 0-1.5-1.5H16" />
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5 -mt-px" aria-hidden="true">
+                  <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+                  <path d="m16 6-4-4-4 4" />
+                  <path d="M12 2v13" />
                 </svg>
               </button>
+              {shareMsg && <p className="text-[#36D7B7] text-[11px] text-center -mt-0.5">{shareMsg}</p>}
               <button
                 type="button"
                 onClick={() => { audioRef.current?.stopMusic(); if (finalOnline) leaveLobby(); setScreen("title"); }}
