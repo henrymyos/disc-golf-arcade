@@ -3867,13 +3867,22 @@ export function DiscGolfGame() {
                         const s = hud.scores[idx];
                         const diff = s == null ? null : s - p;
                         const boxed = diff != null && diff !== 0;
-                        const color = diff == null ? "#5b6270" : diff < 0 ? "#36D7B7" : diff > 0 ? "#e23b3b" : "#e5e7eb";
-                        const current = idx === hud.hole - 1;
+                        // Under par climbs green → cyan → blue (birdie, eagle, albatross+);
+                        // over par deepens red → dark red → brown (bogey, double, triple+).
+                        const color =
+                          diff == null ? "#5b6270" :
+                          diff <= -3 ? "#4d7fff" :   // albatross or better — blue
+                          diff === -2 ? "#20b8d8" :  // eagle — green-blue
+                          diff === -1 ? "#36D7B7" :  // birdie — green
+                          diff === 0 ? "#e5e7eb" :   // par
+                          diff === 1 ? "#e23b3b" :   // bogey — red
+                          diff === 2 ? "#b02525" :   // double bogey — darker red
+                          "#7d2b1e";                 // triple or worse — dark red / brown
                         return (
                           <div key={idx} className="flex flex-col items-center gap-0.5">
                             <span className="text-[10px] font-semibold leading-none text-gray-300">{idx + 1}</span>
                             <span
-                              className={`w-[22px] h-[22px] flex items-center justify-center text-[11px] font-mono font-bold leading-none border ${boxed ? "rounded-md" : ""} ${current ? "ring-1 ring-white/40 rounded-md" : ""}`}
+                              className={`w-[22px] h-[22px] flex items-center justify-center text-[11px] font-mono font-bold leading-none border ${boxed ? "rounded-md" : ""}`}
                               style={{ color, borderColor: boxed ? color : "transparent" }}
                             >
                               {s ?? "·"}
