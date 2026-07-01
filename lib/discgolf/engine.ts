@@ -1424,7 +1424,10 @@ function buildTournaments(): TournDef[] {
   if (t[6] && t[7]) list.push(ev("Autumn Classic", `${t[6].name} + ${t[7].name}`, [tour(t[6]), tour(t[7])], false));
   return list;
 }
-const TOURNAMENTS: TournDef[] = buildTournaments();
+// The base roster, before round-count scaling. Divisions are assigned from these
+// base difficulties (below); each event's round count is then derived from its
+// division, so changing counts never reshuffles which division an event sits in.
+const BASE_TOURNAMENTS: TournDef[] = buildTournaments();
 
 // ── Division scaling: every tournament fields bots at one of the ranked divisions
 // (Bronze → Master), set by how hard the event is. The roster is laid out across
@@ -1433,12 +1436,22 @@ const TOURNAMENTS: TournDef[] = buildTournaments();
 // divisions. The field then plays to that division's strength (see tournFieldHoles).
 const DIVISION_FIELD_STROKES = [6, 3.5, 1.5, -1, -3.5, -6]; // per-round handicap by division; + = weaker field
 const TOURN_DIVISION_INDEX: Map<string, number> = (() => {
-  const sorted = [...TOURNAMENTS].sort((a, b) => tournDifficulty(a) - tournDifficulty(b));
+  const sorted = [...BASE_TOURNAMENTS].sort((a, b) => tournDifficulty(a) - tournDifficulty(b));
   const last = Math.max(1, sorted.length - 1);
   const m = new Map<string, number>();
   sorted.forEach((d, i) => m.set(d.id, Math.round((i / last) * (TIERS.length - 1))));
   return m;
 })();
+// Round count scales with division: the easier half — Bronze / Silver / Gold —
+// run 2 rounds; Platinum and up run 3 (with a top-half cut after round 2). Extra
+// rounds cycle back through the event's venues; a trim just drops the tail.
+const TOURN_3ROUND_MIN_DIVISION = 3; // TIERS index 3 = Platinum
+const TOURNAMENTS: TournDef[] = BASE_TOURNAMENTS.map((d) => {
+  const nRounds = (TOURN_DIVISION_INDEX.get(d.id) ?? 0) >= TOURN_3ROUND_MIN_DIVISION ? 3 : 2;
+  if (d.rounds.length === nRounds) return d;
+  const rounds = Array.from({ length: nRounds }, (_, i) => d.rounds[i % d.rounds.length]);
+  return { ...d, rounds, cut: nRounds === 3 };
+});
 const TOURN_DIVISION_BY_SEED: Map<number, number> = new Map(TOURNAMENTS.map((d) => [d.seed >>> 0, TOURN_DIVISION_INDEX.get(d.id) ?? 0]));
 function tournDivisionIndex(def: TournDef): number {
   return TOURN_DIVISION_INDEX.get(def.id) ?? 0;
