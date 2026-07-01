@@ -1506,28 +1506,54 @@ const secondCourse = (primary: TournRound, seed: number): TournRound => {
   const pick = pool.length ? pool[seed % Math.min(3, pool.length)] : null; // one of the three closest
   return pick ? { mode: "tour", seed: pick.seed } : primary;
 };
-const TOURNAMENTS: TournDef[] = BASE_TOURNAMENTS.map((d) => {
-  const idx = TOURN_DIVISION_INDEX.get(d.id) ?? 0;
-  const base = distinctVenues(d.rounds);
-  const v0 = base[0];
-  let rounds: TournRound[];
-  let venueList: TournRound[];
-  if (idx <= 2) {                       // Bronze / Silver / Gold — one course, one round
-    rounds = [v0]; venueList = [v0];
-  } else if (idx <= 4) {                // Platinum / Diamond — two rounds
-    // A two-venue base plays both; a one-venue base is split ~half/half (by seed
-    // parity) into "two courses, one round each" vs "one course, two rounds", so
-    // both variants show up across Platinum AND Diamond.
-    const twoCourse = base.length >= 2 || d.seed % 2 === 0;
-    const v1 = base[1] ?? secondCourse(v0, d.seed);
-    if (twoCourse) { rounds = [v0, v1]; venueList = [v0, v1]; }
-    else { rounds = [v0, v0]; venueList = [v0]; }
-  } else {                              // Master — three rounds across two courses
-    const v1 = base[1] ?? secondCourse(v0, d.seed);
-    rounds = [v0, v1, v0]; venueList = [v0, v1];
-  }
-  return { ...d, rounds, venues: venueList.map(roundVenueName).join(" + "), cut: rounds.length === 3 };
-});
+// Display names track the courses actually played: a one-course event is named for
+// its course with a division-prestige suffix; a two-course event gets a terrain-
+// flavored "tour" name (its real courses still show in `venues`). The stable id/seed
+// are left untouched, so saved best-places and division mapping don't move.
+const SINGLE_SUFFIX = ["Open", "Classic", "Invitational", "Championship", "Crown", "Trophy", "Cup", "Challenge"];
+const TOUR_SUFFIX = ["Series", "Circuit", "Swing", "Tour", "Showcase", "Cup"];
+const CHAR_FEEL: Record<string, string> = {
+  "Wooded": "Woodland", "Water-laden": "Lakeside", "Links (open & windy)": "Coastal",
+  "Sandy": "Desert", "Tight & technical": "Summit", "Parkland": "Parkland",
+};
+const feelWord = (r: TournRound): string =>
+  r.mode === "course" ? "Highland" : r.mode === "winthrop" ? "Lakeside" : (CHAR_FEEL[tourCharacter(r.seed ?? 0).character] ?? "Grand");
+const TOURNAMENTS: TournDef[] = (() => {
+  const used = new Set<string>();
+  const pick = (stem: string, suffixes: string[]): string => {
+    for (const s of suffixes) { const n = `${stem} ${s}`; if (!used.has(n)) { used.add(n); return n; } }
+    let k = 2, n = `${stem} ${suffixes[0]} ${k}`;
+    while (used.has(n)) { k++; n = `${stem} ${suffixes[0]} ${k}`; }
+    used.add(n); return n;
+  };
+  const rot = (arr: string[], start: number): string[] => arr.slice(start % arr.length).concat(arr.slice(0, start % arr.length));
+  return BASE_TOURNAMENTS.map((d) => {
+    const idx = TOURN_DIVISION_INDEX.get(d.id) ?? 0;
+    const base = distinctVenues(d.rounds);
+    const v0 = base[0];
+    let rounds: TournRound[];
+    let venueList: TournRound[];
+    if (idx <= 2) {                       // Bronze / Silver / Gold — one course, one round
+      rounds = [v0]; venueList = [v0];
+    } else if (idx <= 4) {                // Platinum / Diamond — two rounds
+      // A two-venue base plays both; a one-venue base is split ~half/half (by seed
+      // parity) into "two courses, one round each" vs "one course, two rounds", so
+      // both variants show up across Platinum AND Diamond.
+      const twoCourse = base.length >= 2 || d.seed % 2 === 0;
+      const v1 = base[1] ?? secondCourse(v0, d.seed);
+      if (twoCourse) { rounds = [v0, v1]; venueList = [v0, v1]; }
+      else { rounds = [v0, v0]; venueList = [v0]; }
+    } else {                              // Master — three rounds across two courses
+      const v1 = base[1] ?? secondCourse(v0, d.seed);
+      rounds = [v0, v1, v0]; venueList = [v0, v1];
+    }
+    // One course → named for it (prestige suffix by division); two → a tour name.
+    const name = venueList.length === 1
+      ? pick(roundVenueName(v0), rot(SINGLE_SUFFIX, idx))
+      : pick(feelWord(v0), rot(TOUR_SUFFIX, d.seed));
+    return { ...d, name, rounds, venues: venueList.map(roundVenueName).join(" + "), cut: rounds.length === 3 };
+  });
+})();
 const TOURN_DIVISION_BY_SEED: Map<number, number> = new Map(TOURNAMENTS.map((d) => [d.seed >>> 0, TOURN_DIVISION_INDEX.get(d.id) ?? 0]));
 function tournDivisionIndex(def: TournDef): number {
   return TOURN_DIVISION_INDEX.get(def.id) ?? 0;
