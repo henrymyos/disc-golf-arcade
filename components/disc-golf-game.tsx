@@ -4578,19 +4578,15 @@ export function DiscGolfGame() {
                 above is the real result). */}
             {!finalParty && (
             <div className="bg-[#1a1d23] border border-white/5 rounded-2xl p-3 space-y-3">
+              {/* One continuous 1–18 card (front nine / back nine rows so it fits on a
+                  phone) — no Out/In split totals, just the holes and one grand total. */}
               {(finalPars.length > 9
-                ? [{ label: "Out", from: 0, to: 9 }, { label: "In", from: 9, to: 18 }]
-                : [{ label: "Tot", from: 0, to: finalPars.length }]
-              ).map(({ label, from, to }) => {
+                ? [{ from: 0, to: 9 }, { from: 9, to: 18 }]
+                : [{ from: 0, to: finalPars.length }]
+              ).map(({ from, to }) => {
                 const cells = finalPars.slice(from, to);
-                const parSum = cells.reduce((s, n) => s + n, 0);
-                const youSum = scorecard.slice(from, to).reduce((s, n) => s + (n ?? 0), 0);
                 return (
-                  <div key={label}>
-                    <div className="flex items-center justify-between px-0.5 mb-1.5 text-[11px]">
-                      <span className="text-gray-400 font-semibold">{label}</span>
-                      <span className="font-mono text-gray-300">{youSum} <span className="text-gray-600">· par {parSum}</span></span>
-                    </div>
+                  <div key={from}>
                     {/* Same look as the in-round card: hole # / line / par / boxed, color-coded score. */}
                     <div className="grid gap-x-1 gap-y-0.5 justify-center items-center" style={{ gridTemplateColumns: `repeat(${cells.length}, 24px)` }}>
                       {cells.map((_, i) => (
@@ -4709,8 +4705,11 @@ export function DiscGolfGame() {
                 <button type="button" onClick={() => { audioRef.current?.stopMusic(); setScreen("title"); }} className={btn}>
                   🎉 Back to lobby
                 </button>
+              ) : finalMode === "ranked" ? (
+                // Ranked's only way onward is back to the ladder — no replay/home here.
+                <button type="button" onClick={() => { audioRef.current?.stopMusic(); setScreen("title"); setRankedOpen(true); }} className={btn}>🏅 Back to Ranked</button>
               ) : (
-                <button type="button" onClick={() => (finalMode === "ranked" ? startRankedRound() : finalMode === "tour" ? startGame("tour", finalSeed) : startGame())} className={btn}>↻ Play again</button>
+                <button type="button" onClick={() => (finalMode === "tour" ? startGame("tour", finalSeed) : startGame())} className={btn}>↻ Play again</button>
               )}
               <button type="button" onClick={shareCard} aria-label="Share card" title="Share card" className="mt-1 flex items-center justify-center bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white px-3.5 py-3 rounded-lg transition">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5 -mt-px" aria-hidden="true">
@@ -4720,13 +4719,15 @@ export function DiscGolfGame() {
                 </svg>
               </button>
               {shareMsg && <p className="text-[#36D7B7] text-[11px] text-center -mt-0.5">{shareMsg}</p>}
-              <button
-                type="button"
-                onClick={() => { audioRef.current?.stopMusic(); if (finalOnline) leaveLobby(); setScreen("title"); }}
-                className="mt-1 bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white font-bold px-6 py-3 rounded-lg transition"
-              >
-                🏠 Home
-              </button>
+              {finalMode !== "ranked" && (
+                <button
+                  type="button"
+                  onClick={() => { audioRef.current?.stopMusic(); if (finalOnline) leaveLobby(); setScreen("title"); }}
+                  className="mt-1 bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white font-bold px-6 py-3 rounded-lg transition"
+                >
+                  🏠 Home
+                </button>
+              )}
             </div>
           </div>
         </div>
