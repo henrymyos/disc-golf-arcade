@@ -4271,7 +4271,7 @@ export function DiscGolfGame() {
                 {`${ADV_DISCS[discIndex]?.brand ?? ""} ${ADV_DISCS[discIndex]?.name ?? ""}`}
               </span>
             </div>
-            <div className="flex gap-2 overflow-x-auto pb-0.5 -mx-1 px-1" style={{ scrollbarWidth: "thin" }}>
+            <div className="flex gap-1.5 -mx-1 px-1">
               {activeBag.map((key) => {
                 const d = discByKey(key);
                 if (!d) return null;
@@ -4281,15 +4281,13 @@ export function DiscGolfGame() {
                   key={key}
                   type="button"
                   onClick={() => selectDisc(i)}
-                  className={`shrink-0 w-[90px] rounded-lg border px-2 py-1.5 text-left transition ${
+                  title={`${d.brand} ${d.name}`}
+                  className={`flex-1 min-w-0 rounded-lg border px-1.5 py-2 flex items-center justify-center gap-1 transition ${
                     i === discIndex ? "border-[#36D7B7]/70 bg-[#36D7B7]/10" : "border-white/10 hover:border-white/25 bg-white/[0.02]"
                   }`}
                 >
-                  <span className="flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: d.color }} />
-                    <span className={`text-xs font-bold truncate ${i === discIndex ? "text-white" : "text-gray-300"}`}>{d.name}</span>
-                  </span>
-                  <span className="block text-[9px] text-gray-500 mt-0.5">{d.brand}</span>
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ background: d.color }} />
+                  <span className={`min-w-0 truncate text-[11px] font-bold ${i === discIndex ? "text-white" : "text-gray-300"}`}>{d.name}</span>
                 </button>
                 );
               })}
