@@ -2712,6 +2712,7 @@ export function DiscGolfGame() {
       // its warning colors).
       const ground = cosmeticByKey(GROUND_THEMES, hole.theme ?? DEFAULT_GROUND_THEME) ?? GROUND_THEMES[0];
       const ink = themeInk(ground.fairway); // high-contrast ink for the basket ring + aim line
+      const treeStyle = treeStyleFor(hole.theme); // per-course tree palette (winter, autumn, ...)
 
       // Everything outside the fairway is rough — out of bounds normally, or
       // olive-tinted hazard ground on rope-lined holes (+1, play where it lies).
@@ -2934,7 +2935,7 @@ export function DiscGolfGame() {
         // throw passes through it (the aim line runs straight on through, too).
         const ghosted = g.ghostTrees?.includes(tr);
         if (ghosted) ctx.globalAlpha = 0.4;
-        drawTree(ctx, { x: tr.x, y: tr.y - cam, r: tr.r });
+        drawTree(ctx, { x: tr.x, y: tr.y - cam, r: tr.r }, treeStyle);
         if (ghosted) ctx.globalAlpha = 1;
       }
 
@@ -3283,10 +3284,10 @@ export function DiscGolfGame() {
         const oy = 25; // below the HUD pill
         ctx.fillStyle = "rgba(0,0,0,0.5)";
         ctx.fillRect(ox - 3, oy - 3, mw + 6, mh + 6);
-        ctx.fillStyle = "#2f5a26"; // rough
+        ctx.fillStyle = ground.rough; // rough (themed)
         ctx.fillRect(ox, oy, mw, mh);
         // curved fairway ribbon(s)
-        ctx.strokeStyle = "#4d9a39";
+        ctx.strokeStyle = ground.fairway;
         ctx.lineJoin = "round";
         ctx.lineCap = "round";
         ctx.lineWidth = Math.max(3, hole.fwWidth * s);
@@ -3324,14 +3325,14 @@ export function DiscGolfGame() {
         for (const ob of hole.obZones ?? []) {
           ctx.strokeRect(ox + ob.x * s + 0.5, oy + ob.y * s + 0.5, Math.max(2, ob.w * s) - 1, Math.max(2, ob.h * s) - 1);
         }
-        ctx.fillStyle = "#234d1f";
+        ctx.fillStyle = treeStyle.base;
         for (const tr of hole.trees) {
           ctx.beginPath();
           ctx.arc(ox + tr.x * s, oy + tr.y * s, Math.max(1.4, tr.r * s), 0, Math.PI * 2);
           ctx.fill();
         }
         // viewport window (tracks both camera axes)
-        ctx.strokeStyle = "rgba(255,255,255,0.7)";
+        ctx.strokeStyle = ink.ring;
         ctx.lineWidth = 1;
         ctx.strokeRect(ox + camX * s + 0.5, oy + cam * s + 0.5, Math.min(mw, W * s) - 1, Math.min(mh, H * s) - 1);
         // tournament rivals
@@ -3348,7 +3349,7 @@ export function DiscGolfGame() {
           }
         }
         // basket + disc
-        ctx.fillStyle = "#fff";
+        ctx.fillStyle = ink.line;
         ctx.beginPath();
         ctx.arc(ox + hole.basket.x * s, oy + hole.basket.y * s, 2.4, 0, Math.PI * 2);
         ctx.fill();
@@ -7309,23 +7310,44 @@ function drawTrail(ctx: CanvasRenderingContext2D, pts: Vec[], cam: number, trail
   ctx.restore();
 }
 
-function drawTree(ctx: CanvasRenderingContext2D, tr: Tree) {
+// Per-course tree palettes so foliage matches the biome — autumn golds, a snowy
+// flocked evergreen (winter trees), dry desert scrub, etc. Keyed by GROUND_THEMES.
+type TreeStyle = { trunk: string; base: string; mid: string; hi: string; cap?: string };
+const TREE_STYLES: Record<string, TreeStyle> = {
+  classic: { trunk: "#5a3a1a", base: "#225e1f", mid: "#2f6b2a", hi: "#3f8a37" },
+  autumn:  { trunk: "#4e3116", base: "#8a4a1c", mid: "#c47122", hi: "#e6a83c" },
+  sakura:  { trunk: "#5a3a2a", base: "#a05578", mid: "#d98fb5", hi: "#f4c7dd" },
+  desert:  { trunk: "#6a5330", base: "#566b2c", mid: "#74893a", hi: "#9aad55" },
+  snow:    { trunk: "#4a3a2a", base: "#35594b", mid: "#46705d", hi: "#cfe0e8", cap: "#f2f7fb" },
+  night:   { trunk: "#2e2416", base: "#163a1c", mid: "#1f4a27", hi: "#2c6033" },
+};
+function treeStyleFor(theme: string | undefined): TreeStyle {
+  return TREE_STYLES[theme ?? "classic"] ?? TREE_STYLES.classic;
+}
+function drawTree(ctx: CanvasRenderingContext2D, tr: Tree, style: TreeStyle = TREE_STYLES.classic) {
   // Trunk (taller, to read as a full-height tree you can't throw over).
-  ctx.fillStyle = "#5a3a1a";
+  ctx.fillStyle = style.trunk;
   ctx.fillRect(Math.round(tr.x) - 1, Math.round(tr.y), 3, tr.r + 7);
   // Dark base ring + a canopy lifted slightly for a touch of height.
-  ctx.fillStyle = "#225e1f";
+  ctx.fillStyle = style.base;
   ctx.beginPath();
   ctx.arc(tr.x, tr.y + 1, tr.r + 1, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = "#2f6b2a";
+  ctx.fillStyle = style.mid;
   ctx.beginPath();
   ctx.arc(tr.x, tr.y - 2, tr.r, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = "#3f8a37";
+  ctx.fillStyle = style.hi;
   ctx.beginPath();
   ctx.arc(tr.x - tr.r * 0.3, tr.y - tr.r * 0.45, tr.r * 0.5, 0, Math.PI * 2);
   ctx.fill();
+  // A snow-capped canopy for winter courses.
+  if (style.cap) {
+    ctx.fillStyle = style.cap;
+    ctx.beginPath();
+    ctx.arc(tr.x, tr.y - tr.r * 0.55, tr.r * 0.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
 // WCAG contrast ratio (1–21) between two hex colors — used to decide whether a
