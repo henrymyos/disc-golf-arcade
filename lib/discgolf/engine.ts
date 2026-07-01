@@ -1479,16 +1479,54 @@ const TOURN_DIVISION_INDEX: Map<string, number> = (() => {
   sorted.forEach((d, i) => m.set(d.id, Math.round((i / last) * (TIERS.length - 1))));
   return m;
 })();
-// Round count scales with division: Bronze / Silver / Gold are single-round events,
-// Platinum and Diamond run 2, and Master runs 3 (with a top-half cut after round 2).
-// Extra rounds cycle back through the event's venues; a trim just drops the tail.
-// TIERS indices: bronze/silver/gold = 0..2, platinum/diamond = 3..4, master = 5.
-const tournRoundCount = (divisionIdx: number): number => (divisionIdx >= 5 ? 3 : divisionIdx >= 3 ? 2 : 1);
+// Round + course layout by division (divisions are set from base difficulty above,
+// so this never reshuffles them). TIERS indices: bronze/silver/gold = 0..2,
+// platinum/diamond = 3..4, master = 5.
+//   Bronze / Silver / Gold — ONE course, one round.
+//   Platinum / Diamond — two rounds: a two-venue event plays both courses once,
+//     a one-venue event plays its single course twice.
+//   Master — three rounds across TWO courses (the first course hosts rounds 1 & 3).
+const roundVenueName = (r: TournRound): string =>
+  r.mode === "course" ? "Glendoveer East" : r.mode === "winthrop" ? "Winthrop Lake" : tourVenue(r.seed ?? 0);
+const distinctVenues = (rounds: TournRound[]): TournRound[] => {
+  const seen = new Set<string>(); const out: TournRound[] = [];
+  for (const r of rounds) { const k = `${r.mode}:${r.seed ?? ""}`; if (!seen.has(k)) { seen.add(k); out.push(r); } }
+  return out;
+};
+// A second, distinct tour course for an event whose base is a single venue —
+// deterministic per event, picked near the primary's difficulty so the event stays
+// in its division's band (a hard Master primary keeps a hard partner, a mid one a
+// mid partner).
+const secondCourse = (primary: TournRound, seed: number): TournRound => {
+  const primDiff = courseDifficulty(tournRoundHoles(primary));
+  const pool = TOUR_COURSES
+    .filter((c) => !(primary.mode === "tour" && primary.seed === c.seed))
+    .map((c) => ({ seed: c.seed, diff: courseDifficulty(courseHoles("tour", c.seed)) }))
+    .sort((a, b) => Math.abs(a.diff - primDiff) - Math.abs(b.diff - primDiff));
+  const pick = pool.length ? pool[seed % Math.min(3, pool.length)] : null; // one of the three closest
+  return pick ? { mode: "tour", seed: pick.seed } : primary;
+};
 const TOURNAMENTS: TournDef[] = BASE_TOURNAMENTS.map((d) => {
-  const nRounds = tournRoundCount(TOURN_DIVISION_INDEX.get(d.id) ?? 0);
-  if (d.rounds.length === nRounds) return d;
-  const rounds = Array.from({ length: nRounds }, (_, i) => d.rounds[i % d.rounds.length]);
-  return { ...d, rounds, cut: nRounds === 3 };
+  const idx = TOURN_DIVISION_INDEX.get(d.id) ?? 0;
+  const base = distinctVenues(d.rounds);
+  const v0 = base[0];
+  let rounds: TournRound[];
+  let venueList: TournRound[];
+  if (idx <= 2) {                       // Bronze / Silver / Gold — one course, one round
+    rounds = [v0]; venueList = [v0];
+  } else if (idx <= 4) {                // Platinum / Diamond — two rounds
+    // A two-venue base plays both; a one-venue base is split ~half/half (by seed
+    // parity) into "two courses, one round each" vs "one course, two rounds", so
+    // both variants show up across Platinum AND Diamond.
+    const twoCourse = base.length >= 2 || d.seed % 2 === 0;
+    const v1 = base[1] ?? secondCourse(v0, d.seed);
+    if (twoCourse) { rounds = [v0, v1]; venueList = [v0, v1]; }
+    else { rounds = [v0, v0]; venueList = [v0]; }
+  } else {                              // Master — three rounds across two courses
+    const v1 = base[1] ?? secondCourse(v0, d.seed);
+    rounds = [v0, v1, v0]; venueList = [v0, v1];
+  }
+  return { ...d, rounds, venues: venueList.map(roundVenueName).join(" + "), cut: rounds.length === 3 };
 });
 const TOURN_DIVISION_BY_SEED: Map<number, number> = new Map(TOURNAMENTS.map((d) => [d.seed >>> 0, TOURN_DIVISION_INDEX.get(d.id) ?? 0]));
 function tournDivisionIndex(def: TournDef): number {
