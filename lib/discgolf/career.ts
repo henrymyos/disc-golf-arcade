@@ -38,7 +38,7 @@ export function skillMods(s: CareerSkills): SkillMods {
     speedMul: 0.74 + 0.26 * power,             // 0.74 (beginner, ~80% carry) … 1.0 (full range at 99)
     catchR: CATCH_R * (0.80 + 0.30 * putt),    // 0.80× (forgiving) … 1.1× normal at 99
     windMul: 1,                                 // wind hits you normally now (control no longer fights it)
-    aimSpread: 0.20 * (1 - control),           // 0 rad (dead-on) … ~±11° cone — gentler on a rookie so trying hard pays off
+    aimSpread: 0.205 * (1 - control),          // 0 rad (dead-on at 99) … ~±11.7° cone; a fresh 20-control rookie sprays ~±9.4°
     birdieBoost: 0,                             // momentum retired with the Mental skill — every hole is neutral
     bogeyPenalty: 0,
   };
@@ -352,10 +352,8 @@ export function newCareer(name: string, seed: number): Career {
   const rng = mulberry32((seed ^ 0x5bd1e995) >>> 0);
   const talent = rng(); // 0..1 overall ceiling shift
   const pot = (base: number) => Math.round(clamp(base + talent * 26 + rng() * 16, 40, 99));
-  // A raw high-school freshman: skills start at 20, with control a touch behind —
-  // a rookie sprays it a little more off the tee. All upside ahead (potential is
-  // unchanged, so training brings control right up with the rest).
-  const skills: CareerSkills = { power: 20, control: 18, putt: 20, stamina: 20 };
+  // A raw high-school freshman: every skill starts at 20, all upside ahead.
+  const skills: CareerSkills = { power: 20, control: 20, putt: 20, stamina: 20 };
   const potential: CareerSkills = {
     power: Math.max(skills.power + 15, pot(58)),
     control: Math.max(skills.control + 15, pot(58)),
