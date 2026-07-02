@@ -5396,8 +5396,17 @@ function TournamentPanel({ tournaments, active, bests, onStart, onAbandon, onPla
         <div className="flex-1 overflow-y-auto mt-2.5 space-y-2.5 pr-0.5 -mr-0.5">
           {roster.map(({ d }) => {
             const best = bests[d.id];
+            // Top-3 best finish medals the card: gold / silver / bronze outline + medal.
+            const medal = best === 1 ? { emoji: "🥇", color: "#f5d24a" }
+              : best === 2 ? { emoji: "🥈", color: "#cbd5e1" }
+              : best === 3 ? { emoji: "🥉", color: "#cd7f32" }
+              : null;
             return (
-              <div key={d.id} className="rounded-xl bg-[#1a1d23] border border-white/10 p-3">
+              <div
+                key={d.id}
+                className={`rounded-xl bg-[#1a1d23] p-3 ${medal ? "border-2" : "border border-white/10"}`}
+                style={medal ? { borderColor: medal.color, boxShadow: `0 0 12px -4px ${medal.color}` } : undefined}
+              >
                 <div className="flex items-start justify-between gap-2">
                   <span className="text-white font-bold text-sm truncate pt-0.5">{d.name}</span>
                   <div className="shrink-0 text-right">
@@ -5408,7 +5417,9 @@ function TournamentPanel({ tournaments, active, bests, onStart, onAbandon, onPla
                 <p className="text-gray-500 text-[11px] mt-0.5 truncate">{d.venues}</p>
                 <div className="flex items-center justify-between mt-2.5">
                   <span className="text-[11px] text-gray-400">
-                    {best ? <>🏅 Best <span className="text-[#f5d24a] font-bold">{ordinal(best)}</span> <span className="text-gray-500">of {TOURN_FIELD}</span></> : "Not played yet"}
+                    {best
+                      ? <>{medal ? medal.emoji : "🏅"} Best <span className="font-bold" style={{ color: medal?.color ?? "#f5d24a" }}>{ordinal(best)}</span> <span className="text-gray-500">of {TOURN_FIELD}</span></>
+                      : "Not played yet"}
                   </span>
                   <button type="button" onClick={() => onStart(d)} className="shrink-0 rounded-lg bg-[#36D7B7] hover:bg-[#2ec2a6] text-[#0f1117] text-sm font-bold px-5 py-1.5 transition">Play</button>
                 </div>
