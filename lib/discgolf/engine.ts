@@ -1416,7 +1416,7 @@ const VENUE_NAMES = [
 function tourVenue(seed: number): string {
   return VENUE_NAMES[seed % VENUE_NAMES.length];
 }
-// A fixed roster of pro-tour venues, playable standalone from "Play Courses"
+// A fixed roster of pro-tour venues, playable standalone from "Challenge the Arcade"
 // (the same procedurally-generated layouts the Career tour visits). Built by
 // walking seeds until we have a set of distinct, varied venues — deterministic,
 // so a venue's layout never changes between sessions.
@@ -1600,7 +1600,7 @@ function tournDivisionStrokesForSeed(seed: number): number {
 }
 
 // Every REAL hole in the app's playable courses — Glendoveer East, Winthrop Lake,
-// and the eight pro-tour venues (the exact set shown on "Play Courses"). This is
+// and the eight pro-tour venues (the exact set shown on "Challenge the Arcade"). This is
 // the pool the Daily Challenge AND the early-Career events draw from, so they
 // always serve holes that exist in a real course and never invent their own.
 // `lenScale` (<1) re-materializes every course shorter — the same shrink the

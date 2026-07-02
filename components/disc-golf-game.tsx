@@ -298,7 +298,7 @@ function targetHole(station: number): Hole {
   return { par: 1, worldH: H, tee, basket, fairway: [tee, basket], fwWidth: 640, trees: [], water: [], hazard: [], elev: 0 };
 }
 
-// Every fixed course in the app (shown on the "Play Courses" page). Add new
+// Every fixed course in the app (shown on the "Challenge the Arcade" page). Add new
 // hand-authored courses here. `seed` is set for procedural pro-tour venues
 // (mode "tour"); the two hand-authored layouts need none.
 type CourseInfo = { mode: Mode; name: string; holes: number; par: number; blurb: string; seed?: number };
@@ -6487,7 +6487,7 @@ function CoursesPanel({ courses, tourCourses, bests, tourBests, onClose, onPlay 
     <div className="absolute inset-0 z-20 bg-[#0f1117]/95 backdrop-blur-sm rounded-lg flex flex-col">
       <div className="w-full max-w-xs mx-auto flex flex-col h-full px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] text-left">
         <div className="flex items-center justify-between shrink-0">
-          <h2 className="text-white font-black text-xl">⛳ Play Courses</h2>
+          <h2 className="text-white font-black text-xl">⛳ Challenge the Arcade</h2>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
         <div className="flex gap-1 bg-[#1a1d23] border border-white/10 rounded-lg p-1 mt-3 shrink-0">
