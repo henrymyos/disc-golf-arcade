@@ -671,8 +671,8 @@ describe("course difficulty (1–5 stars)", () => {
     expect(courseHoles("tour", TOUR_COURSES[0].seed)).toHaveLength(18);
   });
   it("a tournament's difficulty is the average of its courses", () => {
-    const single = TOURNAMENTS.find((d) => d.id === "Winthrop Lake Classic")!;
-    expect(tournStarDifficulty(single)).toBe(courseStarDifficulty("winthrop"));
+    const single = TOURNAMENTS.find((d) => d.rounds.length === 1)!;
+    expect(tournStarDifficulty(single)).toBe(courseStarDifficulty(single.rounds[0].mode, single.rounds[0].seed));
     for (const d of TOURNAMENTS) {
       const avg = d.rounds.reduce((s, r) => s + courseDifficulty(courseHoles(r.mode, r.seed)), 0) / d.rounds.length;
       expect(tournDifficulty(d)).toBeCloseTo(avg, 5);
@@ -722,6 +722,13 @@ describe("tournament roster", () => {
     expect(TOURNAMENTS.length).toBeLessThanOrEqual(20);
     const ids = new Set(TOURNAMENTS.map((d) => d.id));
     expect(ids.size).toBe(TOURNAMENTS.length); // unique
+    // No two events play the same course schedule — neither the same round-by-round
+    // sequence nor even the same set of courses (so no duplicate one-round venues).
+    const courseKey = (r: (typeof TOURNAMENTS)[number]["rounds"][number]) => `${r.mode}:${r.seed ?? ""}`;
+    const scheds = new Set(TOURNAMENTS.map((d) => d.rounds.map(courseKey).join(">")));
+    const sets = new Set(TOURNAMENTS.map((d) => [...new Set(d.rounds.map(courseKey))].sort().join("+")));
+    expect(scheds.size).toBe(TOURNAMENTS.length);
+    expect(sets.size).toBe(TOURNAMENTS.length);
     for (const d of TOURNAMENTS) {
       expect(d.rounds.length).toBeGreaterThanOrEqual(1); // Bronze/Silver/Gold = 1, Plat/Diamond = 2, Master = 3
       expect(d.rounds.length).toBeLessThanOrEqual(3);

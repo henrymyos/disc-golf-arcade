@@ -1483,29 +1483,14 @@ const TOURN_DIVISION_INDEX: Map<string, number> = (() => {
 // so this never reshuffles them). TIERS indices: bronze/silver/gold = 0..2,
 // platinum/diamond = 3..4, master = 5.
 //   Bronze / Silver / Gold — ONE course, one round.
-//   Platinum / Diamond — two rounds: a two-venue event plays both courses once,
-//     a one-venue event plays its single course twice.
+//   Platinum / Diamond — two rounds: two distinct courses, or one course twice.
 //   Master — three rounds across TWO courses (the first course hosts rounds 1 & 3).
+// Every event gets a UNIQUE course schedule: the eight one-course events take the
+// eight easiest courses one apiece, and the eight multi-round events take distinct
+// harder combinations. (Ten courses over sixteen events means the toughest courses
+// recur across events, but no two events ever play the same schedule.)
 const roundVenueName = (r: TournRound): string =>
   r.mode === "course" ? "Glendoveer East" : r.mode === "winthrop" ? "Winthrop Lake" : tourVenue(r.seed ?? 0);
-const distinctVenues = (rounds: TournRound[]): TournRound[] => {
-  const seen = new Set<string>(); const out: TournRound[] = [];
-  for (const r of rounds) { const k = `${r.mode}:${r.seed ?? ""}`; if (!seen.has(k)) { seen.add(k); out.push(r); } }
-  return out;
-};
-// A second, distinct tour course for an event whose base is a single venue —
-// deterministic per event, picked near the primary's difficulty so the event stays
-// in its division's band (a hard Master primary keeps a hard partner, a mid one a
-// mid partner).
-const secondCourse = (primary: TournRound, seed: number): TournRound => {
-  const primDiff = courseDifficulty(tournRoundHoles(primary));
-  const pool = TOUR_COURSES
-    .filter((c) => !(primary.mode === "tour" && primary.seed === c.seed))
-    .map((c) => ({ seed: c.seed, diff: courseDifficulty(courseHoles("tour", c.seed)) }))
-    .sort((a, b) => Math.abs(a.diff - primDiff) - Math.abs(b.diff - primDiff));
-  const pick = pool.length ? pool[seed % Math.min(3, pool.length)] : null; // one of the three closest
-  return pick ? { mode: "tour", seed: pick.seed } : primary;
-};
 // Display names track the courses actually played: a one-course event is named for
 // its course with a division-prestige suffix; a two-course event gets a terrain-
 // flavored "tour" name (its real courses still show in `venues`). The stable id/seed
@@ -1519,39 +1504,50 @@ const CHAR_FEEL: Record<string, string> = {
 const feelWord = (r: TournRound): string =>
   r.mode === "course" ? "Highland" : r.mode === "winthrop" ? "Lakeside" : (CHAR_FEEL[tourCharacter(r.seed ?? 0).character] ?? "Grand");
 const TOURNAMENTS: TournDef[] = (() => {
-  const used = new Set<string>();
+  // All ten courses, ranked easy → hard.
+  const all: TournRound[] = [
+    { mode: "course" }, { mode: "winthrop" },
+    ...TOUR_COURSES.map((c) => ({ mode: "tour", seed: c.seed } as TournRound)),
+  ];
+  const cDiff = (r: TournRound) => courseDifficulty(tournRoundHoles(r));
+  const byEasy = [...all].sort((a, b) => cDiff(a) - cDiff(b));
+  const div = (d: TournDef) => TOURN_DIVISION_INDEX.get(d.id) ?? 0;
+  const cmp = (a: TournDef, b: TournDef) => div(a) - div(b) || tournDifficulty(a) - tournDifficulty(b) || (a.id < b.id ? -1 : 1);
+
+  // Multi-round schedules, easiest → hardest, as indices into `byEasy`. One index =>
+  // a course played twice; two => two distinct courses (Master plays [a, b, a]).
+  // Hand-picked so every course-set is distinct, the division means keep climbing,
+  // and Master gets the toughest pairings.
+  const MULTI: number[][] = [
+    [5, 7], [6, 8], [8],       // Platinum
+    [7, 8], [5, 9], [6, 9],    // Diamond
+    [7, 9], [8, 9],            // Master
+  ];
+
+  const plan = new Map<string, { rounds: TournRound[]; venueList: TournRound[] }>();
+  BASE_TOURNAMENTS.filter((d) => div(d) <= 2).sort(cmp)
+    .forEach((d, i) => { const c = byEasy[i]; plan.set(d.id, { rounds: [c], venueList: [c] }); });
+  BASE_TOURNAMENTS.filter((d) => div(d) >= 3).sort(cmp)
+    .forEach((d, i) => {
+      const cs = (MULTI[i] ?? MULTI[MULTI.length - 1]).map((j) => byEasy[j]);
+      const rounds = div(d) >= 5 ? [cs[0], cs[1], cs[0]] : cs.length === 1 ? [cs[0], cs[0]] : [cs[0], cs[1]];
+      plan.set(d.id, { rounds, venueList: cs });
+    });
+
+  const usedName = new Set<string>();
   const pick = (stem: string, suffixes: string[]): string => {
-    for (const s of suffixes) { const n = `${stem} ${s}`; if (!used.has(n)) { used.add(n); return n; } }
+    for (const s of suffixes) { const n = `${stem} ${s}`; if (!usedName.has(n)) { usedName.add(n); return n; } }
     let k = 2, n = `${stem} ${suffixes[0]} ${k}`;
-    while (used.has(n)) { k++; n = `${stem} ${suffixes[0]} ${k}`; }
-    used.add(n); return n;
+    while (usedName.has(n)) { k++; n = `${stem} ${suffixes[0]} ${k}`; }
+    usedName.add(n); return n;
   };
   const rot = (arr: string[], start: number): string[] => arr.slice(start % arr.length).concat(arr.slice(0, start % arr.length));
   return BASE_TOURNAMENTS.map((d) => {
-    const idx = TOURN_DIVISION_INDEX.get(d.id) ?? 0;
-    const base = distinctVenues(d.rounds);
-    const v0 = base[0];
-    let rounds: TournRound[];
-    let venueList: TournRound[];
-    if (idx <= 2) {                       // Bronze / Silver / Gold — one course, one round
-      rounds = [v0]; venueList = [v0];
-    } else if (idx <= 4) {                // Platinum / Diamond — two rounds
-      // A two-venue base plays both; a one-venue base is split ~half/half (by seed
-      // parity) into "two courses, one round each" vs "one course, two rounds", so
-      // both variants show up across Platinum AND Diamond.
-      const twoCourse = base.length >= 2 || d.seed % 2 === 0;
-      const v1 = base[1] ?? secondCourse(v0, d.seed);
-      if (twoCourse) { rounds = [v0, v1]; venueList = [v0, v1]; }
-      else { rounds = [v0, v0]; venueList = [v0]; }
-    } else {                              // Master — three rounds across two courses
-      const v1 = base[1] ?? secondCourse(v0, d.seed);
-      rounds = [v0, v1, v0]; venueList = [v0, v1];
-    }
-    // One course → named for it (prestige suffix by division); two → a tour name.
-    const name = venueList.length === 1
-      ? pick(roundVenueName(v0), rot(SINGLE_SUFFIX, idx))
-      : pick(feelWord(v0), rot(TOUR_SUFFIX, d.seed));
-    return { ...d, name, rounds, venues: venueList.map(roundVenueName).join(" + "), cut: rounds.length === 3 };
+    const pl = plan.get(d.id)!;
+    const name = pl.venueList.length === 1
+      ? pick(roundVenueName(pl.venueList[0]), rot(SINGLE_SUFFIX, div(d)))
+      : pick(feelWord(pl.venueList[0]), rot(TOUR_SUFFIX, d.seed));
+    return { ...d, name, rounds: pl.rounds, venues: pl.venueList.map(roundVenueName).join(" + "), cut: pl.rounds.length === 3 };
   });
 })();
 const TOURN_DIVISION_BY_SEED: Map<number, number> = new Map(TOURNAMENTS.map((d) => [d.seed >>> 0, TOURN_DIVISION_INDEX.get(d.id) ?? 0]));
