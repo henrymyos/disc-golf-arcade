@@ -5393,7 +5393,6 @@ function TournamentPanel({ tournaments, active, bests, onStart, onAbandon, onPla
           <h2 className="text-white font-black text-xl">🏟 Tournaments</h2>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
-        <p className="text-gray-500 text-[11px] mt-1 shrink-0">Easiest first. <span className="text-[#e0923b]">★</span> = difficulty (5 = very hard). A {TOURN_FIELD}-strong field over 1–3 rounds; Master events cut after R2.</p>
         <div className="flex-1 overflow-y-auto mt-2.5 space-y-2.5 pr-0.5 -mr-0.5">
           {roster.map(({ d }) => {
             const best = bests[d.id];
