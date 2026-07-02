@@ -34,7 +34,7 @@ import {
   dailyClaimKey, eventClaimKey, type Challenge, type EventRound,
 } from "@/lib/discgolf/events";
 import {
-  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, TOTAL_PAR, WINTHROP_PAR, leaderboardCourse, TOURN_KEY, TOURN_FIELD, TOURNAMENTS, tournDef, tournRoundPlayHoles, tournPlace, tournFieldRound, tournLiveStandings, tournStandings, ACHIEVEMENTS, earnedAchievements, achievementReward, scoreLabel, courseStars, courseHoles, courseDifficultyOf, courseStarDifficulty, tournDifficulty, tournStarDifficulty, tournDivision, STRAIGHT_SPEED_MUL, releaseSpeedMul, ADV_DISCS, DISC_PRICE, isDiscUnlocked, levelUpChoices, validDiscIndex, DEFAULT_DISC_INDEX, BAG_MAX, discByKey, discIndexByKey, unlockedDiscKeys, reconcileBag, TOUR_COURSES, tourVenue, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, dailySeed, buildRound, elevAt, vibrate, pxToFeet, distBetween, autoDiscIndex, windAlong, resolvePenalty, treesAtLie, stepFlight,
+  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, TOTAL_PAR, WINTHROP_PAR, leaderboardCourse, TOURN_KEY, TOURN_FIELD, TOURNAMENTS, tournDef, tournRoundPlayHoles, tournPlace, tournFieldRound, tournLiveStandings, tournStandings, ACHIEVEMENTS, earnedAchievements, achievementReward, scoreLabel, courseStars, courseHoles, courseDifficultyOf, courseStarDifficulty, tournDifficulty, tournStarDifficulty, STRAIGHT_SPEED_MUL, releaseSpeedMul, ADV_DISCS, DISC_PRICE, isDiscUnlocked, levelUpChoices, validDiscIndex, DEFAULT_DISC_INDEX, BAG_MAX, discByKey, discIndexByKey, unlockedDiscKeys, reconcileBag, TOUR_COURSES, tourVenue, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, dailySeed, buildRound, elevAt, vibrate, pxToFeet, distBetween, autoDiscIndex, windAlong, resolvePenalty, treesAtLie, stepFlight,
 } from "@/lib/discgolf/engine";
 import type {
   Vec, Tree, Hole, Mode, Tournament, TournDef, TournLiveRow, Achievement, FlightPath, Release, Flight, GhostState,
@@ -5330,11 +5330,6 @@ function TournamentPanel({ tournaments, active, bests, onStart, onAbandon, onPla
             </div>
           </div>
           <p className="text-gray-500 text-[11px] shrink-0">{def.venues} · {def.rounds.length} rounds{hasCut ? " · cut after R2" : ""}</p>
-          <div className="mt-1 shrink-0">
-            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ color: tournDivision(def).color, background: `${tournDivision(def).color}1a` }}>
-              {tournDivision(def).emoji} {tournDivision(def).name} field
-            </span>
-          </div>
 
           {champion && (
             <div className="bg-[#f5d24a]/10 border border-[#f5d24a]/40 rounded-xl p-2.5 text-center mt-2 shrink-0">
@@ -5398,11 +5393,10 @@ function TournamentPanel({ tournaments, active, bests, onStart, onAbandon, onPla
           <h2 className="text-white font-black text-xl">🏟 Tournaments</h2>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
-        <p className="text-gray-500 text-[11px] mt-1 shrink-0">Easiest first. <span className="text-[#e0923b]">★</span> = difficulty (5 = very hard). The field plays at a ranked division — 🥉 Bronze to 👑 Master — that climbs with difficulty. A {TOURN_FIELD}-strong field over 2–3 rounds; 3-round events cut after R2.</p>
+        <p className="text-gray-500 text-[11px] mt-1 shrink-0">Easiest first. <span className="text-[#e0923b]">★</span> = difficulty (5 = very hard). A {TOURN_FIELD}-strong field over 1–3 rounds; 3-round events cut after R2.</p>
         <div className="flex-1 overflow-y-auto mt-2.5 space-y-2.5 pr-0.5 -mr-0.5">
           {roster.map(({ d }) => {
             const best = bests[d.id];
-            const div = tournDivision(d);
             return (
               <div key={d.id} className="rounded-xl bg-[#1a1d23] border border-white/10 p-3">
                 <div className="flex items-start justify-between gap-2">
@@ -5413,11 +5407,6 @@ function TournamentPanel({ tournaments, active, bests, onStart, onAbandon, onPla
                   </div>
                 </div>
                 <p className="text-gray-500 text-[11px] mt-0.5 truncate">{d.venues}</p>
-                <div className="mt-1.5">
-                  <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ color: div.color, background: `${div.color}1a` }}>
-                    {div.emoji} {div.name} field
-                  </span>
-                </div>
                 <div className="flex items-center justify-between mt-2.5">
                   <span className="text-[11px] text-gray-400">
                     {best ? <>🏅 Best <span className="text-[#f5d24a] font-bold">{ordinal(best)}</span> <span className="text-gray-500">of {TOURN_FIELD}</span></> : "Not played yet"}
