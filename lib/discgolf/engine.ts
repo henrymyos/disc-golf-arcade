@@ -1483,26 +1483,18 @@ const TOURN_DIVISION_INDEX: Map<string, number> = (() => {
 // so this never reshuffles them). TIERS indices: bronze/silver/gold = 0..2,
 // platinum/diamond = 3..4, master = 5.
 //   Bronze / Silver / Gold — ONE course, one round.
-//   Platinum / Diamond — two rounds: two distinct courses, or one course twice.
+//   Platinum / Diamond — two rounds across two distinct courses.
 //   Master — three rounds across TWO courses (the first course hosts rounds 1 & 3).
-// Every event gets a UNIQUE course schedule: the eight one-course events take the
-// eight easiest courses one apiece, and the eight multi-round events take distinct
-// harder combinations. (Ten courses over sixteen events means the toughest courses
-// recur across events, but no two events ever play the same schedule.)
+// Every event has a UNIQUE course schedule. The eight one-course events take the
+// eight easiest courses one apiece; the eight multi-round events pair courses that
+// share a THEME so the combination feels intentional — the two night courses become
+// a night event, the two wooded courses a woods event, and so on (see MULTI).
 const roundVenueName = (r: TournRound): string =>
   r.mode === "course" ? "Glendoveer East" : r.mode === "winthrop" ? "Winthrop Lake" : tourVenue(r.seed ?? 0);
-// Display names track the courses actually played: a one-course event is named for
-// its course with a division-prestige suffix; a two-course event gets a terrain-
-// flavored "tour" name (its real courses still show in `venues`). The stable id/seed
-// are left untouched, so saved best-places and division mapping don't move.
+// One-course events are named for their course with a division-prestige suffix; the
+// themed multi-course events carry a hand-written name. The stable id/seed are left
+// untouched, so saved best-places and division mapping don't move.
 const SINGLE_SUFFIX = ["Open", "Classic", "Invitational", "Championship", "Crown", "Trophy", "Cup", "Challenge"];
-const TOUR_SUFFIX = ["Series", "Circuit", "Swing", "Tour", "Showcase", "Cup"];
-const CHAR_FEEL: Record<string, string> = {
-  "Wooded": "Woodland", "Water-laden": "Lakeside", "Links (open & windy)": "Coastal",
-  "Sandy": "Desert", "Tight & technical": "Summit", "Parkland": "Parkland",
-};
-const feelWord = (r: TournRound): string =>
-  r.mode === "course" ? "Highland" : r.mode === "winthrop" ? "Lakeside" : (CHAR_FEEL[tourCharacter(r.seed ?? 0).character] ?? "Grand");
 const TOURNAMENTS: TournDef[] = (() => {
   // All ten courses, ranked easy → hard.
   const all: TournRound[] = [
@@ -1514,27 +1506,33 @@ const TOURNAMENTS: TournDef[] = (() => {
   const div = (d: TournDef) => TOURN_DIVISION_INDEX.get(d.id) ?? 0;
   const cmp = (a: TournDef, b: TournDef) => div(a) - div(b) || tournDifficulty(a) - tournDifficulty(b) || (a.id < b.id ? -1 : 1);
 
-  // Multi-round schedules, easiest → hardest, as indices into `byEasy`. One index =>
-  // a course played twice; two => two distinct courses (Master plays [a, b, a]).
-  // Hand-picked so every course-set is distinct, the division means keep climbing,
-  // and Master gets the toughest pairings.
-  const MULTI: number[][] = [
-    [5, 7], [6, 8], [8],       // Platinum
-    [7, 8], [5, 9], [6, 9],    // Diamond
-    [7, 9], [8, 9],            // Master
+  // The eight multi-round events, ordered by division (Platinum → Master), as pairs
+  // of indices into `byEasy` (SC GL CC BH WI BW WR TR ST CH). The first three named
+  // events pair courses that literally share a theme; the tougher tiers stay on the
+  // hardest courses so their (stronger) fields still get a genuinely hard test.
+  const MULTI: { v: [number, number]; name: string }[] = [
+    { v: [4, 5], name: "Tempest Cup" },        // Platinum · storm — Winthrop + Birchwood (both rain)
+    { v: [2, 9], name: "Moonlight Classic" },  // Platinum · night — Coyote Canyon + Cedar Hollow (both night)
+    { v: [6, 8], name: "Woodland Series" },    // Platinum · woods — Wolf Ridge + Stonebriar (both wooded)
+    { v: [5, 8], name: "Ironwood Tour" },      // Diamond — Birchwood + Stonebriar
+    { v: [8, 7], name: "Evergreen Cup" },      // Diamond — Stonebriar + Timber Ridge
+    { v: [6, 9], name: "Ridgeline Series" },   // Diamond — Wolf Ridge + Cedar Hollow
+    { v: [7, 9], name: "Summit Series" },      // Master · technical — Timber Ridge + Cedar Hollow (both tight & technical)
+    { v: [8, 9], name: "Grand Championship" }, // Master · finale — Stonebriar + Cedar Hollow
   ];
 
-  const plan = new Map<string, { rounds: TournRound[]; venueList: TournRound[] }>();
+  const plan = new Map<string, { rounds: TournRound[]; venueList: TournRound[]; name?: string }>();
   BASE_TOURNAMENTS.filter((d) => div(d) <= 2).sort(cmp)
     .forEach((d, i) => { const c = byEasy[i]; plan.set(d.id, { rounds: [c], venueList: [c] }); });
   BASE_TOURNAMENTS.filter((d) => div(d) >= 3).sort(cmp)
     .forEach((d, i) => {
-      const cs = (MULTI[i] ?? MULTI[MULTI.length - 1]).map((j) => byEasy[j]);
-      const rounds = div(d) >= 5 ? [cs[0], cs[1], cs[0]] : cs.length === 1 ? [cs[0], cs[0]] : [cs[0], cs[1]];
-      plan.set(d.id, { rounds, venueList: cs });
+      const spec = MULTI[i] ?? MULTI[MULTI.length - 1];
+      const cs = spec.v.map((j) => byEasy[j]);
+      const rounds = div(d) >= 5 ? [cs[0], cs[1], cs[0]] : [cs[0], cs[1]];
+      plan.set(d.id, { rounds, venueList: cs, name: spec.name });
     });
 
-  const usedName = new Set<string>();
+  const usedName = new Set<string>(MULTI.map((m) => m.name));
   const pick = (stem: string, suffixes: string[]): string => {
     for (const s of suffixes) { const n = `${stem} ${s}`; if (!usedName.has(n)) { usedName.add(n); return n; } }
     let k = 2, n = `${stem} ${suffixes[0]} ${k}`;
@@ -1544,9 +1542,7 @@ const TOURNAMENTS: TournDef[] = (() => {
   const rot = (arr: string[], start: number): string[] => arr.slice(start % arr.length).concat(arr.slice(0, start % arr.length));
   return BASE_TOURNAMENTS.map((d) => {
     const pl = plan.get(d.id)!;
-    const name = pl.venueList.length === 1
-      ? pick(roundVenueName(pl.venueList[0]), rot(SINGLE_SUFFIX, div(d)))
-      : pick(feelWord(pl.venueList[0]), rot(TOUR_SUFFIX, d.seed));
+    const name = pl.name ?? pick(roundVenueName(pl.venueList[0]), rot(SINGLE_SUFFIX, div(d)));
     return { ...d, name, rounds: pl.rounds, venues: pl.venueList.map(roundVenueName).join(" + "), cut: pl.rounds.length === 3 };
   });
 })();

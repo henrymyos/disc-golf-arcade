@@ -695,15 +695,24 @@ describe("tournament division scaling (Bronze → Master)", () => {
     const idx = byDiff.map((d) => DIV_ORDER.indexOf(tournDivision(d).key));
     expect(idx.every((i) => i >= 0)).toBe(true);                 // every event resolves to a known division
     expect(new Set(idx).size).toBe(DIV_ORDER.length);            // Bronze through Master all represented
-    // Divisions are assigned from each event's full-roster (base) difficulty. A
-    // single-round lower division only plays its first venue, so per-event play
-    // difficulty isn't strictly ordered — but the MEAN difficulty per division
-    // still climbs Bronze → Master.
+    // Divisions are assigned from each event's full-roster (base) difficulty, but the
+    // COURSES are reassigned so Platinum can host a themed event that pairs an easy
+    // course with a hard one (e.g. the two night courses). So the per-division mean
+    // isn't strictly step-monotonic: Bronze is the softest tier and Master the
+    // toughest, the single-course tiers (Bronze→Gold) climb, and the strong-field
+    // tiers (Diamond, Master) climb above Gold — Platinum is the themed wildcard.
+    // The hidden division handicap still separates every tier (see field test below).
     const meanByDiv = DIV_ORDER.map((key) => {
       const evs = TOURNAMENTS.filter((d) => tournDivision(d).key === key);
       return evs.reduce((s, d) => s + tournDifficulty(d), 0) / evs.length;
     });
-    for (let i = 1; i < meanByDiv.length; i++) expect(meanByDiv[i]).toBeGreaterThan(meanByDiv[i - 1]);
+    const [bronze, silver, gold, , diamond, master] = meanByDiv;
+    expect(silver).toBeGreaterThan(bronze);
+    expect(gold).toBeGreaterThan(silver);
+    expect(diamond).toBeGreaterThan(gold);
+    expect(master).toBeGreaterThan(diamond);
+    expect(Math.min(...meanByDiv)).toBe(bronze);   // Bronze is the softest tier
+    expect(Math.max(...meanByDiv)).toBe(master);    // Master is the toughest tier
   });
 
   it("a higher-division field shoots lower on identical holes", () => {
