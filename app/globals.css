@@ -67,6 +67,15 @@ body {
   overscroll-behavior: contain;
 }
 
+/* Opt-in: a region that scrolls but never shows a scrollbar (e.g. the career
+   style shelf's horizontal swatch rows). */
+.no-scrollbar {
+  scrollbar-width: none; /* Firefox */
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none; /* WebKit / Chromium / iOS */
+}
+
 /* Ranked placement reveal: the three result dots pop in one after another, then
    the division badge scales up. */
 @keyframes place-pop {

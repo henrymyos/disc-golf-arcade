@@ -5761,7 +5761,7 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
             {CAREER_STYLE_CATS.map((cat) => (
               <div key={cat.slot} className="space-y-1">
                 <p className="text-gray-500 text-[10px] font-semibold uppercase tracking-wide">{cat.label}</p>
-                <div className="flex gap-1.5 overflow-x-auto pb-0.5 -mx-1 px-1" style={{ scrollbarWidth: "thin" }}>
+                <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-0.5 -mx-1 px-1">
                   {cat.items.map((it) => {
                     const ownKey = cosmeticOwnKey(cat.prefix, it.key);
                     const owned = it.price === 0 || career.cosmetics.includes(ownKey);
