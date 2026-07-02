@@ -43,7 +43,7 @@ import { parseChallenge, challengeParam } from "@/lib/discgolf/challenge";
 import {
   newCareer, normalizeCareer, skillMods, momentumAfter, seasonSchedule, simEvent, recordResult, advanceSeason, retire,
   placeLabel, STAGE_LABEL, SKILL_KEYS, SKILL_LABEL, IDENTITY_MODS,
-  seasonEnergy, eventEnergyCost, canEnterEvent,
+  eventEnergyCost, canEnterEvent,
   availableSponsors, signSponsor, unsignSponsor, sponsorBrandLock, trainingPointCost, buyTrainingPoint, spendSkillPoint, trainBonusFor, fmtCash, SPONSOR_CAP, SPONSOR_SLOTS, SPONSOR_SLOT_LABEL,
   careerRating, careerCoins as coinsForFinish, careerDiscShop, buyCareerDisc, toggleCareerBag, CAREER_BAG_MAX,
   buyCareerCosmetic, equipCareerLook, DEFAULT_CAREER_LOOK, type CareerLook,
@@ -5579,10 +5579,12 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
   // Current in-play effect of each skill, so the benefit of training is concrete.
   const mods = skillMods(career.skills);
   const effectFor = (k: keyof CareerSkills): string => {
-    if (k === "power") return `${Math.round(mods.speedMul * 100)}% dist`; // 100% at 99
-    if (k === "control") return `cone ±${((mods.aimSpread * 180) / Math.PI).toFixed(0)}°`; // 0° at 99
-    if (k === "putt") return `catch ${Math.round((mods.catchR / CATCH_R) * 100)}%`; // 100% at 99
-    return `${seasonEnergy(career.skills.stamina)} ⚡/yr`; // stamina → season energy pool
+    // One decimal place so every training point visibly moves the readout — a point
+    // only nudges these by ~0.1–0.3, which a whole-number display hid for ~6 points.
+    if (k === "power") return `${(mods.speedMul * 100).toFixed(1)}% dist`; // 100% at 99
+    if (k === "control") return `cone ±${((mods.aimSpread * 180) / Math.PI).toFixed(1)}°`; // 0° at 99
+    if (k === "putt") return `catch ${((mods.catchR / CATCH_R) * 100).toFixed(1)}%`; // 110% at 99
+    return `${(8 + (Math.min(99, career.skills.stamina) / 99) * 16).toFixed(1)} ⚡/yr`; // stamina → season energy pool
   };
 
   // Retired legacy screen.
@@ -5676,7 +5678,7 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
                 <div className="absolute inset-y-0 left-0 bg-[#36D7B7] rounded transition-all" style={{ width: `${Math.min(100, val)}%` }} />
               </div>
               <span className="w-7 text-right text-[11px] font-mono text-white">{val}</span>
-              <span className="w-[4.25rem] text-right text-[10px] font-mono text-[#36D7B7] shrink-0">{effectFor(k)}</span>
+              <span className="w-20 text-right text-[10px] font-mono text-[#36D7B7] shrink-0">{effectFor(k)}</span>
               <div className="flex gap-0.5 shrink-0">
                 <button type="button" onClick={() => onAllocateSkill(k, -1)} disabled={!canRemove} className="w-5 h-5 rounded bg-white/10 text-white text-xs leading-none disabled:opacity-30">−</button>
                 <button type="button" onClick={() => onAllocateSkill(k, 1)} disabled={!canAdd} className="w-5 h-5 rounded bg-white/10 text-white text-xs leading-none disabled:opacity-30">+</button>
