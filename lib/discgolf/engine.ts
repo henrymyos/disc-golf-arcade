@@ -797,14 +797,24 @@ const FAIRWAY_BASE: Disc = { key: "fairway", name: "Fairway", power: 1.17, arc: 
 // on the climb (overstable); printed Fade sets the low-speed finish. Every rate
 // is small and the flight is capped (MAX_FADE_TURN), so nothing ever loops.
 function flightShape(speed: number, _glide: number, turnNum: number, fadeNum: number): { turn: number; sFade: number; fade: number } {
-  const ss = 0.55 + 0.05 * speed;                    // faster discs carve more
-  const turn =
-    turnNum < 0
-      ? ss * 0.011 * (1 + 0.55 * Math.log(-turnNum)) // understable: turns over (sub-linear in Turn)
-      : -ss * 0.003 * fadeNum;                       // overstable: a touch of fade even on the climb, ∝ Fade
-  const sFade = ss * (0.005 * fadeNum + 0.0012);     // low-speed finish, ∝ Fade
-  const fade = ss * (0.006 * fadeNum + 0.003);       // hard-fade strength for hyzer / anhyzer
-  return { turn, sFade, fade };
+  const ss = 0.55 + 0.05 * speed;                        // faster discs carve more
+  if (turnNum < 0) {
+    // Understable: turns OVER on the climb (sub-linear in Turn), gentle finish.
+    return {
+      turn: ss * 0.011 * (1 + 0.55 * Math.log(-turnNum)),
+      sFade: ss * (0.005 * fadeNum + 0.0012),
+      fade: ss * (0.006 * fadeNum + 0.003),
+    };
+  }
+  // Overstable / stable: fades the WHOLE way like a real meat hook — a hard fade
+  // held from release that scales up steeply with printed Fade, plus a firm
+  // low-speed finish. (Turn 0 / Fade 4 discs — Firebird, Nuke OS — hook hardest.)
+  const hook = ss * 0.006 * Math.max(0, fadeNum - 1);    // fade carried through the climb
+  return {
+    turn: -hook,                                          // climb already bends toward the fade side
+    sFade: ss * (0.006 * fadeNum + 0.0016),               // low-speed finish
+    fade: ss * (0.007 * fadeNum + 0.004),                 // hard-fade strength for hyzer / anhyzer
+  };
 }
 // A coarse feel bucket from the printed numbers — >0 overstable, <0 understable,
 // 0 neutral. Used to offer a varied pair at level-up and to keep the auto-caddie
@@ -832,7 +842,7 @@ const ADV_DISCS: Disc[] = [
   // Midrange (mid tier). Buzzz is an original — pinned.
   advDisc("buzzz", "Buzzz", "Discraft", "#f5d24a", TIER_BASE[1], "5 / 4 / 0 / 1", { turn: 0, sFade: 0.002, fade: 0.008 }), // original — pinned
   advDisc("swarm", "Swarm", "Discraft", "#b85cd6", TIER_BASE[1], "5 / 4 / 0 / 3"), // overstable
-  advDisc("roc", "Roc3", "Innova", "#7ad17a", TIER_BASE[1], "5 / 4 / 0 / 3"), // same numbers as Swarm → same flight
+  advDisc("roc", "Roc3", "Innova", "#7ad17a", TIER_BASE[1], "5 / 4 / 0 / 3", flightShape(5, 4, 0, 2)), // card shows Fade 3 but it flies like Fade 2 — a touch less overstable than the Swarm
   // Fairway / control (fairway tier). Teebird is an original — pinned.
   advDisc("teebird", "Teebird", "Innova", "#5fb0e8", FAIRWAY_BASE, "7 / 5 / 0 / 2", { turn: 0.004, sFade: 0.0095, fade: 0.011 }), // original — pinned
   advDisc("firebird", "Firebird", "Innova", "#e2453b", FAIRWAY_BASE, "9 / 3 / 0 / 4"), // hard meat hook
