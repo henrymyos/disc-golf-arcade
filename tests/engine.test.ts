@@ -22,6 +22,7 @@ import {
   distToSeg,
   fullPowerRange,
   autoDiscIndex,
+  discStabilityBucket,
   windAlong,
   tournFieldRound,
   distBetween,
@@ -427,15 +428,15 @@ describe("auto-caddie disc selection", () => {
     expect(hi(reach("aviar") * 0.5).key).toBe("aviar"); // putter
     expect(hi((reach("aviar") + reach("buzzz")) / 2).key).toBe("buzzz"); // midrange
     const longDrive = hi(reach("teebird") + 20); // past the fairway tier's reach
-    expect(longDrive.flight).toBe("straight");
-    expect(longDrive.key).toBe("destroyer"); // the straight driver, not the overstable Zone
+    expect(longDrive.key).not.toBe("zone"); // not the overstable meat-hook
+    expect(longDrive.key).toBe("destroyer"); // the reliable driver, not the overstable Zone
     expect(disc(autoDiscIndex(2000, bag, 0)).key).toBe("destroyer"); // unreachable → longest straight
   });
 
   it("never auto-equips an overstable disc when a straight one is in the bag", () => {
     const bag = ["aviar", "buzzz", "teebird", "destroyer", "zone"];
     for (let rem = 0; rem <= 600; rem += 15)
-      expect(disc(autoDiscIndex(rem, bag, 0)).flight).toBe("straight");
+      expect(disc(autoDiscIndex(rem, bag, 0)).key).not.toBe("zone"); // never the overstable hook
   });
 
   it("falls back to an overstable disc only if the bag has no straight discs", () => {
@@ -511,7 +512,7 @@ describe("level-up disc draft (levelUpChoices)", () => {
     const choices = levelUpChoices(3, [], []); // lvl 3: zone/swarm/harp/roc/teebird available
     expect(choices).toHaveLength(2);
     const discs = choices.map((k) => ADV_DISCS.find((d) => d.key === k)!);
-    expect(discs[0].flight).not.toBe(discs[1].flight); // a straight vs an overstable pick
+    expect(discStabilityBucket(discs[0])).not.toBe(discStabilityBucket(discs[1])); // varied pair (e.g. overstable vs neutral)
     for (const d of discs) expect(isDiscUnlocked(d, [], [], 3)).toBe(false);
   });
   it("never offers a distance driver before level 10", () => {

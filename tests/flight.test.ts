@@ -35,7 +35,7 @@ function mkHole(over: Partial<Hole> = {}): Hole {
 }
 
 const DISC: Disc = ADV_DISCS[0];
-const STRAIGHT: Disc = ADV_DISCS.find((d) => d.flight === "straight") ?? ADV_DISCS[0];
+const STRAIGHT: Disc = ADV_DISCS.find((d) => d.key === "teebird") ?? ADV_DISCS[0];
 
 // Run one physics frame. Returns the status + mutated flight.
 function step(f: Flight, hole: Hole, disc: Disc = DISC, opts: { catchR?: number; windMul?: number } = {}) {

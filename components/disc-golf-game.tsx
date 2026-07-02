@@ -1884,7 +1884,7 @@ export function DiscGolfGame() {
     const disc = ADV_DISCS[g.discIndex];
     // Each disc flies its baked-in shape (e.g. Nuke OS overstable, Destroyer
     // straight).
-    g.path = disc.flight ?? "straight";
+    g.path = "straight";
     g.release = releaseRef.current;
     // Slower launch + extra glide (disc friction) so it floats across the
     // fairway. Straight throws carry farther; the hole's slope acts on the
@@ -3031,7 +3031,7 @@ export function DiscGolfGame() {
         const aimDisc = ADV_DISCS[g.discIndex];
         const lh2 = leftHandedRef.current ? -1 : 1;
         const sign = (throwStyleRef.current === "BH" ? -1 : 1) * lh2;
-        const path: FlightPath = aimDisc.flight ?? "straight";
+        const path: FlightPath = "straight";
         const dsx = g.disc.x;
         const dsy = g.disc.y - cam; // disc screen position
 
@@ -5957,7 +5957,7 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
               </div>
               <div className="grid grid-cols-2 gap-2 mt-3">
                 <div className="bg-white/5 rounded-lg py-1.5 text-center"><p className="text-gray-500 text-[9px] uppercase tracking-wide">Type</p><p className="text-white text-xs font-bold">{discTypeLabel(d.power)}</p></div>
-                <div className="bg-white/5 rounded-lg py-1.5 text-center"><p className="text-gray-500 text-[9px] uppercase tracking-wide">Flight</p><p className="text-white text-xs font-bold">{d.flight === "overstable" ? "Overstable" : "Straight"}</p></div>
+                <div className="bg-white/5 rounded-lg py-1.5 text-center"><p className="text-gray-500 text-[9px] uppercase tracking-wide">Glide</p><p className="text-white text-xs font-bold">{d.flightNums?.glide ?? "—"}</p></div>
               </div>
               <div className="mt-2 bg-white/5 rounded-lg p-2 text-center">
                 <p className="text-gray-500 text-[9px] uppercase tracking-wide mb-0.5">Speed · Glide · Turn · Fade</p>
@@ -6175,7 +6175,7 @@ function LevelUpPanel({ level, choices, bagHasRoom, onPick }: {
               <span className="w-4 h-4 rounded-full shrink-0" style={{ background: d.color }} />
               <div className="min-w-0 flex-1">
                 <p className="text-white font-bold text-sm truncate">{d.name} <span className="text-gray-500 font-normal text-[10px]">{d.brand}</span></p>
-                <p className="text-[10px] font-mono text-gray-400 truncate">{d.blurb.split("· ")[1]} · {d.flight === "overstable" ? "overstable" : "straight"}</p>
+                <p className="text-[10px] font-mono text-gray-400 truncate">{d.blurb.split("· ")[1]}</p>
               </div>
               <span className="text-[#36D7B7] text-xl shrink-0 leading-none">＋</span>
             </button>
@@ -6203,7 +6203,7 @@ function BagPanel({ bag, unlocked, owned, level, onAdd, onRemove, onMove, onShop
   const collection = ADV_DISCS.filter((d) => !bag.includes(d.key) && isDiscUnlocked(d, unlocked, owned, level));
   const locked = ADV_DISCS.filter((d) => !isDiscUnlocked(d, unlocked, owned, level));
   const full = bag.length >= BAG_MAX;
-  const nums = (d: { blurb: string; flight?: string }) => `${d.blurb.split("· ")[1] ?? ""} · ${d.flight === "overstable" ? "overstable" : "straight"}`;
+  const nums = (d: { blurb: string }) => `${d.blurb.split("· ")[1] ?? ""}`;
   const row = (d: NonNullable<ReturnType<typeof discByKey>>, action: React.ReactNode) => (
     <div key={d.key} className="flex items-center gap-2.5 bg-[#1a1d23] border border-white/5 rounded-lg px-3 py-2">
       <span className="w-3 h-3 rounded-full shrink-0" style={{ background: d.color }} />

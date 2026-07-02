@@ -750,14 +750,13 @@ function courseStars(best: number | null | undefined, par: number): 0 | 1 | 2 | 
   return 0;
 }
 
-// The two flight shapes you can pick per throw:
-//  • "overstable" — bends steadily one way the whole flight (uses `fade`).
-//  • "straight"   — flies straighter and FARTHER. On the climb it `turn`s the
-//    opposite way (high-speed turn), then on the descent it fades back with
-//    `sFade`. Tuned so the mid is nearly dead straight while the driver carves
-//    a gentle S (for a backhand: out to the right, finishing slightly left).
+// Every disc flies one unified shape now: it turns a little while it climbs
+// (high-speed `turn`) and fades back as it drops (`sFade`) — a gentle S. A
+// disc's printed numbers, not a category, decide how far it turns and fades.
+// `path` survives only as an internal per-throw handle (always "straight").
 type FlightPath = "overstable" | "straight";
-// Straight throws launch this much faster (carry farther) than overstable ones.
+// The standard launch speed (every throw uses it — this was the old "straight"
+// pace, now universal since discs are no longer split into two flight classes).
 const STRAIGHT_SPEED_MUL = 1.13;
 
 // Release angle, chosen per throw. Hyzer locks in a hard, early, reliable fade
@@ -769,12 +768,13 @@ function releaseSpeedMul(r: Release) {
   return r === "hyzer" ? 0.94 : r === "anny" ? 1.04 : 1;
 }
 
-// Disc physics — power scales throw speed, `fade` is how many radians an
-// overstable flight curves per frame (backhand left, forehand right);
-// `turn`/`sFade` are the climb-turn / descent-fade for a straight flight;
-// friction is glide (higher = floats/rolls farther). Curving is capped per
-// throw (MAX_FADE_TURN) so a disc can never loop or fade backward.
-type Disc = { key: string; name: string; brand?: string; power: number; arc: number; fade: number; turn: number; sFade: number; friction: number; color: string; blurb: string; flight?: FlightPath };
+// Disc physics — power scales throw speed; `turn` is the high-speed turnover
+// while climbing and `sFade` the low-speed fade while dropping (both radians per
+// frame, backhand left / forehand right); `fade` is the hard-fade strength a
+// hyzer/anhyzer release leans on; friction is glide. `turn`/`sFade`/`fade` are
+// all derived from the disc's printed flight numbers (see flightShape). Curving
+// is capped per throw (MAX_FADE_TURN) so a disc can never loop or fade backward.
+type Disc = { key: string; name: string; brand?: string; power: number; arc: number; fade: number; turn: number; sFade: number; friction: number; color: string; blurb: string; flightNums?: { speed: number; glide: number; turn: number; fade: number } };
 // Hidden tier base stats (putter / mid / driver). Not a playable bag of their
 // own — every real disc in ADV_DISCS borrows one of these tiers' physics.
 // `arc` is the vertical launch per unit power: the putter flies flat and low
@@ -786,47 +786,72 @@ const TIER_BASE: Disc[] = [
 ];
 
 // The disc bag — real discs, each borrowing a tier's stats (putter / mid /
-// fairway / driver) plus a baked-in flight shape: "overstable" bends steadily
-// one way, "straight" flies the farther S-line. The fairway tier sits halfway
-// between mid and driver for distance.
+// fairway / driver) for carry distance. How a disc TURNS and FADES is computed
+// straight from its printed flight numbers (Speed / Glide / Turn / Fade) by
+// flightShape, so the number line on the disc is its flight. The fairway tier
+// sits halfway between mid and driver for distance.
 const FAIRWAY_BASE: Disc = { key: "fairway", name: "Fairway", power: 1.17, arc: 2.55, fade: 0.011, turn: 0.0055, sFade: 0.0085, friction: 0.987, color: "", blurb: "" };
-// `over` lets a disc deviate from its tier's stock physics so two discs in the
-// same tier+flight aren't byte-identical. Only the curve params (turn/sFade/
-// fade) are tuned per disc — power/arc/friction stay on the tier, so carry
-// distance is unchanged and the discs differ only in how they bend, matching
-// their printed flight numbers. (straight discs: `turn` = high-speed turnover
-// while climbing, `sFade` = fade-back while descending. overstable: `fade`.)
-function advDisc(key: string, name: string, brand: string, color: string, base: Disc, flight: FlightPath, nums: string, over: Partial<Disc> = {}): Disc {
-  return { ...base, key, name, brand, color, flight, blurb: `${brand} · ${nums}`, ...over };
+// Turn/fade a disc flies, read straight from its printed flight numbers. Speed
+// sets how hard it carves; a negative printed Turn makes it turn OVER while
+// climbing (understable), a 0/positive Turn with fade makes it hold or fade even
+// on the climb (overstable); printed Fade sets the low-speed finish. Every rate
+// is small and the flight is capped (MAX_FADE_TURN), so nothing ever loops.
+function flightShape(speed: number, _glide: number, turnNum: number, fadeNum: number): { turn: number; sFade: number; fade: number } {
+  const ss = 0.55 + 0.05 * speed;                    // faster discs carve more
+  const turn =
+    turnNum < 0
+      ? ss * 0.011 * (1 + 0.55 * Math.log(-turnNum)) // understable: turns over (sub-linear in Turn)
+      : -ss * 0.003 * fadeNum;                       // overstable: a touch of fade even on the climb, ∝ Fade
+  const sFade = ss * (0.005 * fadeNum + 0.0012);     // low-speed finish, ∝ Fade
+  const fade = ss * (0.006 * fadeNum + 0.003);       // hard-fade strength for hyzer / anhyzer
+  return { turn, sFade, fade };
+}
+// A coarse feel bucket from the printed numbers — >0 overstable, <0 understable,
+// 0 neutral. Used to offer a varied pair at level-up and to keep the auto-caddie
+// off the flippy/hook discs when a predictable one is in the bag.
+function discStabilityBucket(d: Disc): number {
+  const n = d.flightNums;
+  if (!n) return 0;
+  const s = n.fade + n.turn;                         // printed fade + turn ≈ overall stability
+  return s >= 3 ? 1 : s <= 0 ? -1 : 0;
+}
+// `over` pins a disc's curve params — the four originals (Aviar / Buzzz /
+// Teebird / Destroyer) keep their exact hand-tuned flight; every other disc
+// takes turn/sFade/fade straight from flightShape(numbers).
+function advDisc(key: string, name: string, brand: string, color: string, base: Disc, nums: string, over: Partial<Disc> = {}): Disc {
+  const [speed, glide, turnNum, fadeNum] = nums.split("/").map((n) => parseFloat(n));
+  const shape = flightShape(speed, glide, turnNum, fadeNum);
+  return { ...base, key, name, brand, color, blurb: `${brand} · ${nums}`, flightNums: { speed, glide, turn: turnNum, fade: fadeNum }, turn: shape.turn, sFade: shape.sFade, fade: shape.fade, ...over };
 }
 const ADV_DISCS: Disc[] = [
-  // Putt & approach — straight Aviar vs overstable Zone/Harp (putter tier)
-  advDisc("aviar", "Aviar", "Innova", "#36D7B7", TIER_BASE[0], "straight", "2 / 3 / 0 / 1"),
-  advDisc("zone", "Zone", "Discraft", "#e07b3b", TIER_BASE[0], "overstable", "4 / 3 / 0 / 3", { fade: 0.005 }),
-  advDisc("harp", "Harp", "Westside", "#d6b85c", TIER_BASE[0], "overstable", "3 / 1 / 0 / 4", { fade: 0.008 }), // harder, low-glide meat hook
-  // Midrange — straight Buzzz vs overstable Swarm/Roc (mid tier)
-  advDisc("buzzz", "Buzzz", "Discraft", "#f5d24a", TIER_BASE[1], "straight", "5 / 4 / 0 / 1"),
-  advDisc("swarm", "Swarm", "Discraft", "#b85cd6", TIER_BASE[1], "overstable", "5 / 4 / 0 / 3", { fade: 0.010 }), // more overstable
-  advDisc("roc", "Roc3", "Innova", "#7ad17a", TIER_BASE[1], "overstable", "5 / 4 / 0 / 3", { fade: 0.006 }), // workable, near-neutral
-  // Fairway / control — straight Teebird/River vs overstable Firebird/PD (fairway tier)
-  advDisc("teebird", "Teebird", "Innova", "#5fb0e8", FAIRWAY_BASE, "straight", "7 / 5 / 0 / 2", { turn: 0.004, sFade: 0.0095 }), // dead-straight, reliable fade
-  advDisc("firebird", "Firebird", "Innova", "#e2453b", FAIRWAY_BASE, "overstable", "9 / 3 / 0 / 4", { fade: 0.015 }), // hard meat hook
-  advDisc("river", "River", "Latitude 64", "#5fd6c8", FAIRWAY_BASE, "straight", "7 / 7 / -1 / 1", { turn: 0.010, sFade: 0.005 }), // understable glider
-  advDisc("pd", "PD", "Discmania", "#3b6fe2", FAIRWAY_BASE, "overstable", "9 / 4 / 0 / 3", { fade: 0.012 }), // overstable, more glide than Firebird
-  // Distance — overstable Nuke OS/Zeus vs straight Destroyer/Wraith (driver tier)
-  advDisc("nukeos", "Nuke OS", "Discraft", "#2f6fe0", TIER_BASE[2], "overstable", "13 / 5 / 0 / 4", { fade: 0.018 }), // the most overstable bomber
-  advDisc("destroyer", "Destroyer", "Innova", "#e23b7b", TIER_BASE[2], "straight", "12 / 5 / -1 / 3", { turn: 0.011, sFade: 0.017 }), // fast, dependable finish
-  advDisc("wraith", "Wraith", "Innova", "#e2843b", TIER_BASE[2], "straight", "11 / 5 / -1 / 3", { turn: 0.015, sFade: 0.013 }), // longer, more turnover
-  advDisc("zeus", "Zeus", "Discraft", "#9b3be2", TIER_BASE[2], "overstable", "12 / 5 / -1 / 3", { fade: 0.013 }), // controllable overstable
+  // Putt & approach (putter tier). Aviar is an original — pinned to its exact
+  // classic flight; the others fly straight off their printed numbers.
+  advDisc("aviar", "Aviar", "Innova", "#36D7B7", TIER_BASE[0], "2 / 3 / 0 / 1", { turn: 0.004, sFade: 0.006, fade: 0.004 }), // original — pinned
+  advDisc("zone", "Zone", "Discraft", "#e07b3b", TIER_BASE[0], "4 / 3 / 0 / 3"), // overstable meat hook
+  advDisc("harp", "Harp", "Westside", "#d6b85c", TIER_BASE[0], "3 / 1 / 0 / 4"), // low-glide meat hook
+  // Midrange (mid tier). Buzzz is an original — pinned.
+  advDisc("buzzz", "Buzzz", "Discraft", "#f5d24a", TIER_BASE[1], "5 / 4 / 0 / 1", { turn: 0, sFade: 0.002, fade: 0.008 }), // original — pinned
+  advDisc("swarm", "Swarm", "Discraft", "#b85cd6", TIER_BASE[1], "5 / 4 / 0 / 3"), // overstable
+  advDisc("roc", "Roc3", "Innova", "#7ad17a", TIER_BASE[1], "5 / 4 / 0 / 3"), // same numbers as Swarm → same flight
+  // Fairway / control (fairway tier). Teebird is an original — pinned.
+  advDisc("teebird", "Teebird", "Innova", "#5fb0e8", FAIRWAY_BASE, "7 / 5 / 0 / 2", { turn: 0.004, sFade: 0.0095, fade: 0.011 }), // original — pinned
+  advDisc("firebird", "Firebird", "Innova", "#e2453b", FAIRWAY_BASE, "9 / 3 / 0 / 4"), // hard meat hook
+  advDisc("river", "River", "Latitude 64", "#5fd6c8", FAIRWAY_BASE, "7 / 7 / -1 / 1"), // understable glider
+  advDisc("pd", "PD", "Discmania", "#3b6fe2", FAIRWAY_BASE, "9 / 4 / 0 / 3"), // overstable, glidey
+  // Distance (driver tier). Destroyer is an original — pinned.
+  advDisc("nukeos", "Nuke OS", "Discraft", "#2f6fe0", TIER_BASE[2], "13 / 5 / 0 / 4"), // the most overstable bomber
+  advDisc("destroyer", "Destroyer", "Innova", "#e23b7b", TIER_BASE[2], "12 / 5 / -1 / 3", { turn: 0.011, sFade: 0.017, fade: 0.014 }), // original — pinned
+  advDisc("wraith", "Wraith", "Innova", "#e2843b", TIER_BASE[2], "11 / 5 / -1 / 3"), // long, turny finish
+  advDisc("zeus", "Zeus", "Discraft", "#9b3be2", TIER_BASE[2], "12 / 5 / -1 / 3"), // controllable distance
   // ── Expanded collection: more molds to buy in the shop / draft, each filling
   // a distinct flight niche the starter bag doesn't cover. (Appended on purpose
   // so existing disc indices — incl. DEFAULT_DISC_INDEX — stay put.) ──
-  advDisc("pure", "Pure", "Latitude 64", "#6ee0a0", TIER_BASE[0], "straight", "3 / 3 / -1 / 1", { turn: 0.009, sFade: 0.004 }), // understable putter — turnover putts + rollers
-  advDisc("mako", "Mako3", "Innova", "#c8e85f", TIER_BASE[1], "straight", "5 / 5 / 0 / 0", { turn: 0.002, sFade: 0.0012 }), // the dead-straight mid, almost no fade
-  advDisc("leopard", "Leopard3", "Innova", "#e89a3b", FAIRWAY_BASE, "straight", "6 / 5 / -2 / 1", { turn: 0.013, sFade: 0.004 }), // understable fairway — easy turnover + tailwind bombs
-  advDisc("thunderbird", "Thunderbird", "Innova", "#3b8ee2", FAIRWAY_BASE, "straight", "9 / 5 / 0 / 2", { turn: 0.003, sFade: 0.011 }), // stable control driver — straight with a dependable finish
-  advDisc("sidewinder", "Sidewinder", "Innova", "#d65fc8", TIER_BASE[2], "straight", "9 / 5 / -3 / 1", { turn: 0.018, sFade: 0.010 }), // big-turn distance glider for huge anhyzers
-  advDisc("boss", "Boss", "Innova", "#b03b3b", TIER_BASE[2], "overstable", "13 / 5 / -1 / 3", { fade: 0.016 }), // overstable power driver — holds a hard line into wind
+  advDisc("pure", "Pure", "Latitude 64", "#6ee0a0", TIER_BASE[0], "3 / 3 / -1 / 1"), // understable putter — turnover putts + rollers
+  advDisc("mako", "Mako3", "Innova", "#c8e85f", TIER_BASE[1], "5 / 5 / 0 / 0"), // dead-straight mid, almost no fade
+  advDisc("leopard", "Leopard3", "Innova", "#e89a3b", FAIRWAY_BASE, "6 / 5 / -2 / 1"), // understable fairway — easy turnover + tailwind bombs
+  advDisc("thunderbird", "Thunderbird", "Innova", "#3b8ee2", FAIRWAY_BASE, "9 / 5 / 0 / 2"), // stable control driver — straight with a dependable finish
+  advDisc("sidewinder", "Sidewinder", "Innova", "#d65fc8", TIER_BASE[2], "9 / 5 / -3 / 1"), // big-turn distance glider for huge anhyzers
+  advDisc("boss", "Boss", "Innova", "#b03b3b", TIER_BASE[2], "13 / 5 / -1 / 3"), // power driver — heavy fade finish
 ];
 // Some advanced discs are earned, not given: each maps to the achievement that
 // unlocks it. Every player STARTS with just a putter + a midrange — the simple
@@ -907,7 +932,7 @@ function levelUpChoices(level: number, unlocked: string[], owned: string[] = [])
     // both already owned (e.g. bought in the shop) → fall through to the generic pick
   }
   const c1 = cands[0];
-  const c2 = cands.find((d) => d.key !== c1.key && d.flight !== c1.flight) ?? cands.find((d) => d.key !== c1.key);
+  const c2 = cands.find((d) => d.key !== c1.key && discStabilityBucket(d) !== discStabilityBucket(c1)) ?? cands.find((d) => d.key !== c1.key);
   return c2 ? [c1.key, c2.key] : [c1.key];
 }
 const DEFAULT_DISC_INDEX = 3; // Buzzz — the free core midrange
@@ -1704,19 +1729,19 @@ function distBetween(a: Vec, b: Vec): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 // Auto-caddie: pick the disc to start the next shot with, from the player's BAG,
-// based on how far the basket still is. Prefers a STRAIGHT disc — the shortest
-// one whose full-power carry still reaches (so close shots get a putter, mid
-// shots a midrange, long drives a driver); if no straight disc reaches, the
-// longest straight in the bag; if the bag has no straight discs at all, the
-// best-fitting disc of any flight. Overstable discs aren't auto-picked when a
-// straight option exists (those are for manual shaping).
+// based on how far the basket still is. Prefers a PREDICTABLE disc — the
+// shortest one whose full-power carry still reaches (so close shots get a
+// putter, mid shots a midrange, long drives a driver); if none reaches, the
+// longest predictable disc in the bag; if the bag holds only meat-hooks, the
+// best-fitting one of those. The overstable hooks aren't auto-picked when a
+// predictable option exists (those are for manual shaping).
 function autoDiscIndex(remaining: number, bag: string[], elev = 0, alongWind = 0): number {
   const inBag = ADV_DISCS
-    .map((d, i) => ({ i, d, reach: fullPowerRange(d, elev, d.flight === "straight" ? STRAIGHT_SPEED_MUL : 1, alongWind) }))
+    .map((d, i) => ({ i, d, reach: fullPowerRange(d, elev, STRAIGHT_SPEED_MUL, alongWind) }))
     .filter((x) => bag.includes(x.d.key));
   if (!inBag.length) return DEFAULT_DISC_INDEX;
-  const straight = inBag.filter((x) => x.d.flight === "straight").sort((a, b) => a.reach - b.reach);
-  const pool = (straight.length ? straight : inBag.slice()).sort((a, b) => a.reach - b.reach);
+  const predictable = inBag.filter((x) => discStabilityBucket(x.d) <= 0).sort((a, b) => a.reach - b.reach);
+  const pool = (predictable.length ? predictable : inBag.slice()).sort((a, b) => a.reach - b.reach);
   for (const x of pool) if (x.reach >= remaining) return x.i;
   return pool[pool.length - 1].i; // nothing reaches → the longest disc in the pool
 }
@@ -2131,6 +2156,7 @@ export {
   releaseSpeedMul,
   FAIRWAY_BASE,
   advDisc,
+  discStabilityBucket,
   ADV_DISCS,
   DISC_UNLOCKS,
   DISC_PRICE,
