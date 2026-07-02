@@ -52,11 +52,11 @@ export const AIM_STYLES: AimStyle[] = [
 // their warning colors; only the normal grass is re-tinted. ──
 export const GROUND_THEMES: GroundTheme[] = [
   { key: "classic", name: "Classic", desc: "Lush green course", price: 0, rough: "#2f5a26", roughBand: "#2b5323", fairway: "#4d9a39", stripe: "#56a541" },
-  { key: "desert", name: "Desert", desc: "Sun-baked sand course", price: 2500, rough: "#7a6a45", roughBand: "#6a5b3a", fairway: "#b0975a", stripe: "#c2a868" },
-  { key: "autumn", name: "Autumn", desc: "Golden fall foliage", price: 2800, rough: "#5a4a26", roughBand: "#4e3f1f", fairway: "#a8893a", stripe: "#bd9a45" },
-  { key: "sakura", name: "Sakura", desc: "Soft cherry-blossom tint", price: 3500, rough: "#5a4350", roughBand: "#4d3a45", fairway: "#a06a88", stripe: "#b87f9e" },
-  { key: "snow", name: "Snow", desc: "Frosted winter course", price: 3500, rough: "#9fb0bd", roughBand: "#8da0ad", fairway: "#cdd9e1", stripe: "#dde7ee" },
-  { key: "night", name: "Night", desc: "Moonlit night round", price: 4200, rough: "#1c2433", roughBand: "#18202c", fairway: "#2a3b4a", stripe: "#34465a" },
+  { key: "desert", name: "Desert", desc: "Sun-baked sand course", price: 2500, rough: "#645a45", roughBand: "#58503c", fairway: "#988963", stripe: "#a79770" },
+  { key: "autumn", name: "Autumn", desc: "Golden fall foliage", price: 2800, rough: "#534931", roughBand: "#4a402a", fairway: "#95814f", stripe: "#a58f59" },
+  { key: "sakura", name: "Sakura", desc: "Soft cherry-blossom tint", price: 3500, rough: "#53444d", roughBand: "#493c44", fairway: "#926e82", stripe: "#a37e92" },
+  { key: "snow", name: "Snow", desc: "Frosted winter course", price: 3500, rough: "#788187", roughBand: "#6c757c", fairway: "#a7adb2", stripe: "#b4babd" },
+  { key: "night", name: "Night", desc: "Moonlit night round", price: 4200, rough: "#2c3443", roughBand: "#27303c", fairway: "#465868", stripe: "#516276" },
 ];
 
 // ── Hole-out celebrations (the particle burst when you sink it). Each is a set
