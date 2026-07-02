@@ -1506,15 +1506,16 @@ const TOURNAMENTS: TournDef[] = (() => {
   const div = (d: TournDef) => TOURN_DIVISION_INDEX.get(d.id) ?? 0;
   const cmp = (a: TournDef, b: TournDef) => div(a) - div(b) || tournDifficulty(a) - tournDifficulty(b) || (a.id < b.id ? -1 : 1);
 
-  // The eight multi-round events, ordered by division (Platinum → Master), as pairs
-  // of indices into `byEasy` (SC GL CC BH WI BW WR TR ST CH). The first three named
-  // events pair courses that literally share a theme; the tougher tiers stay on the
-  // hardest courses so their (stronger) fields still get a genuinely hard test.
-  const MULTI: { v: [number, number]; name: string }[] = [
+  // The eight multi-round events, ordered by division (Platinum → Master), as indices
+  // into `byEasy` (SC GL CC BH WI BW WR TR ST CH). Most pair courses that literally
+  // share a theme; the Diamond "Seasons Tour" is three DISTINCT courses played once
+  // each — autumn → winter → spring — and the tougher tiers stay on the hardest
+  // courses so their (stronger) fields still get a genuinely hard test.
+  const MULTI: { v: number[]; name: string }[] = [
     { v: [4, 5], name: "Tempest Cup" },        // Platinum · storm — Winthrop + Birchwood (both rain)
     { v: [2, 9], name: "Moonlight Classic" },  // Platinum · night — Coyote Canyon + Cedar Hollow (both night)
     { v: [6, 8], name: "Woodland Series" },    // Platinum · woods — Wolf Ridge + Stonebriar (both wooded)
-    { v: [5, 8], name: "Ironwood Tour" },      // Diamond — Birchwood + Stonebriar
+    { v: [0, 7, 6], name: "Seasons Tour" },    // Diamond · 3 rounds — Silver Creek (autumn) → Timber Ridge (winter) → Wolf Ridge (spring)
     { v: [8, 7], name: "Evergreen Cup" },      // Diamond — Stonebriar + Timber Ridge
     { v: [6, 9], name: "Ridgeline Series" },   // Diamond — Wolf Ridge + Cedar Hollow
     { v: [7, 9], name: "Summit Series" },      // Master · technical — Timber Ridge + Cedar Hollow (both tight & technical)
@@ -1528,7 +1529,8 @@ const TOURNAMENTS: TournDef[] = (() => {
     .forEach((d, i) => {
       const spec = MULTI[i] ?? MULTI[MULTI.length - 1];
       const cs = spec.v.map((j) => byEasy[j]);
-      const rounds = div(d) >= 5 ? [cs[0], cs[1], cs[0]] : [cs[0], cs[1]];
+      // 3 distinct courses => one round each (Seasons); Master => [a, b, a]; else [a, b].
+      const rounds = cs.length >= 3 ? cs : div(d) >= 5 ? [cs[0], cs[1], cs[0]] : [cs[0], cs[1]];
       plan.set(d.id, { rounds, venueList: cs, name: spec.name });
     });
 
@@ -1543,7 +1545,8 @@ const TOURNAMENTS: TournDef[] = (() => {
   return BASE_TOURNAMENTS.map((d) => {
     const pl = plan.get(d.id)!;
     const name = pl.name ?? pick(roundVenueName(pl.venueList[0]), rot(SINGLE_SUFFIX, div(d)));
-    return { ...d, name, rounds: pl.rounds, venues: pl.venueList.map(roundVenueName).join(" + "), cut: pl.rounds.length === 3 };
+    // Only Master events cut — the 3-round Diamond "Seasons Tour" plays all rounds.
+    return { ...d, name, rounds: pl.rounds, venues: pl.venueList.map(roundVenueName).join(" + "), cut: div(d) >= 5 };
   });
 })();
 const TOURN_DIVISION_BY_SEED: Map<number, number> = new Map(TOURNAMENTS.map((d) => [d.seed >>> 0, TOURN_DIVISION_INDEX.get(d.id) ?? 0]));

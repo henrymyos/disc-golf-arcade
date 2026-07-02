@@ -726,7 +726,7 @@ describe("tournament division scaling (Bronze → Master)", () => {
 });
 
 describe("tournament roster", () => {
-  it("offers 10–20 named events, each 1–3 rounds on one or two courses", () => {
+  it("offers 10–20 named events, each 1–3 rounds on one to three courses", () => {
     expect(TOURNAMENTS.length).toBeGreaterThanOrEqual(10);
     expect(TOURNAMENTS.length).toBeLessThanOrEqual(20);
     const ids = new Set(TOURNAMENTS.map((d) => d.id));
@@ -743,7 +743,7 @@ describe("tournament roster", () => {
       expect(d.rounds.length).toBeLessThanOrEqual(3);
       const courses = new Set(d.rounds.map((r) => `${r.mode}:${r.seed ?? ""}`));
       expect(courses.size).toBeGreaterThanOrEqual(1);
-      expect(courses.size).toBeLessThanOrEqual(2); // one or two distinct courses
+      expect(courses.size).toBeLessThanOrEqual(3); // 1 course, a 2-course pair, or the 3-course Seasons Tour
       for (const r of d.rounds) expect(tournRoundHoles(r).length).toBe(18); // every round resolves
       expect(tournDef(d.id)).toBe(d);
     }
@@ -751,7 +751,7 @@ describe("tournament roster", () => {
 });
 
 describe("tournament", () => {
-  const def = TOURNAMENTS.find((d) => d.rounds.length === 3)!; // a Master event: 3 rounds + cut
+  const def = TOURNAMENTS.find((d) => d.rounds.length === 3 && d.cut)!; // a Master event: 3 rounds + cut
   const seed = def.seed;
   // A tournament where two rounds have been played by everyone.
   const make = (myR1: number, myR2: number): Tournament => {
