@@ -17,7 +17,7 @@ const STOP_SPEED = 0.35;
 // it doesn't keep gliding forever after the fade.
 const GRAVITY = 0.08; // downward pull on height per frame (gentler = floatier flight)
 const AIRBORNE_H = 3; // above this height, hazards are cleared
-const CATCH_H = 4; // a descending disc still drops in the basket up to this height (chain height)
+const CATCH_H = 8; // a descending disc still drops in the basket up to this height (chain height); the catch radius tightens the higher it still is, see stepFlight
 const GROUND_FRICTION = 0.8; // hard deceleration once on the ground
 const MAX_DRAG = 95; // pull-back distance (internal px) that maps to full power
 const CANCEL_R = 13; // pull the knob back inside this radius (around the disc) and release to cancel
@@ -1934,7 +1934,13 @@ function stepFlight(f: Flight, disc: Disc, fadeSign: number, path: FlightPath, h
     // catch radius shrinks with horizontal speed: a controlled approach or putt
     // (slow, sp ≲ 0.45) catches in the full radius, while a full-power bomb has
     // to be nearly dead-center to drop. Keeps throw-in eagles possible but hard.
-    const effCatchR = catchR * Math.max(0.3, Math.min(1, 1 - (sp - 0.45) / 1.7));
+    const speedTaper = Math.max(0.3, Math.min(1, 1 - (sp - 0.45) / 1.7));
+    // …and it tightens the higher the disc still is as it crosses: full-size at
+    // the old chain height (h ≤ 4) and below, shrinking toward the top of the
+    // taller window — so a shot that flies right over the pin coming down still
+    // drops, without the basket grabbing anything that skims over it up high.
+    const heightTaper = Math.max(0.5, 1 - Math.max(0, f.h - 4) / 8);
+    const effCatchR = catchR * speedTaper * heightTaper;
     if (segPointDist(px, py, f.x, f.y, hole.basket.x, hole.basket.y) < effCatchR) return { status: "hole", treeHit };
   }
   if (!airborne) {
