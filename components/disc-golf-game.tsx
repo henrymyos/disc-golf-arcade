@@ -5525,6 +5525,7 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
   // previous tab's scroll offset — jump back to the top whenever the tab changes.
   useEffect(() => { scrollRef.current?.scrollTo(0, 0); }, [tab]);
   const [showStyle, setShowStyle] = useState(false);
+  const [styleTab, setStyleTab] = useState(0); // which cosmetic category tab is open in the Style shop
   const [showShop, setShowShop] = useState(false); // Pro Shop disc list, collapsed by default
   const [discInfo, setDiscInfo] = useState<string | null>(null); // disc key for the details modal
   /* eslint-disable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
@@ -5758,10 +5759,20 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
         </button>
         {showStyle && (
           <div className="space-y-2">
-            {CAREER_STYLE_CATS.map((cat) => (
-              <div key={cat.slot} className="space-y-1">
-                <p className="text-gray-500 text-[10px] font-semibold uppercase tracking-wide">{cat.label}</p>
-                <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-0.5 -mx-1 px-1">
+            {/* Category tabs — Disc / Basket / Aim line / Win pop / Trail. Pick a tab and
+                its items wrap below, replacing the old sideways-scrolling rows. */}
+            <div className="flex flex-wrap gap-1">
+              {CAREER_STYLE_CATS.map((cat, i) => (
+                <button key={cat.slot} type="button" onClick={() => setStyleTab(i)}
+                  className={`rounded-md px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition ${styleTab === i ? "bg-white/10 text-white" : "text-gray-500 hover:text-gray-300"}`}>
+                  {cat.label}
+                </button>
+              ))}
+            </div>
+            {(() => {
+              const cat = CAREER_STYLE_CATS[styleTab] ?? CAREER_STYLE_CATS[0];
+              return (
+                <div className="flex flex-wrap gap-1.5">
                   {cat.items.map((it) => {
                     const ownKey = cosmeticOwnKey(cat.prefix, it.key);
                     const owned = it.price === 0 || career.cosmetics.includes(ownKey);
@@ -5771,7 +5782,7 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
                       <button key={it.key} type="button"
                         onClick={() => (owned ? onEquipLook(cat.slot, it.key) : career.cash >= cost ? onBuyCosmetic(ownKey, cost) : undefined)}
                         disabled={!owned && career.cash < cost}
-                        className={`shrink-0 rounded-lg border px-2 py-1 flex items-center gap-1 transition ${equipped ? "border-[#36D7B7]/70 bg-[#36D7B7]/10" : owned ? "border-white/15 bg-white/[0.02] hover:border-white/30" : "border-white/10 bg-white/[0.02] disabled:opacity-40"}`}>
+                        className={`rounded-lg border px-2 py-1 flex items-center gap-1 transition ${equipped ? "border-[#36D7B7]/70 bg-[#36D7B7]/10" : owned ? "border-white/15 bg-white/[0.02] hover:border-white/30" : "border-white/10 bg-white/[0.02] disabled:opacity-40"}`}>
                         <span className="w-2.5 h-2.5 rounded-full shrink-0 border border-black/30" style={{ background: it.color }} />
                         <span className="text-[10px] text-white font-semibold whitespace-nowrap">{it.name}</span>
                         {equipped ? <span className="text-[9px] text-[#36D7B7]">✓</span> : !owned && <span className="text-[9px] text-[#e0923b] font-mono whitespace-nowrap">{fmtCash(cost)}</span>}
@@ -5779,8 +5790,8 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
                     );
                   })}
                 </div>
-              </div>
-            ))}
+              );
+            })()}
             <p className="text-gray-600 text-[10px]">Worn during Career rounds — a flex for your prize money, separate from your account cosmetics.</p>
           </div>
         )}
