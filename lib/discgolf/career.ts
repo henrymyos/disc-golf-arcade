@@ -352,8 +352,10 @@ export function newCareer(name: string, seed: number): Career {
   const rng = mulberry32((seed ^ 0x5bd1e995) >>> 0);
   const talent = rng(); // 0..1 overall ceiling shift
   const pot = (base: number) => Math.round(clamp(base + talent * 26 + rng() * 16, 40, 99));
-  // A raw high-school freshman: every skill starts at 20, all upside ahead.
-  const skills: CareerSkills = { power: 20, control: 20, putt: 20, stamina: 20 };
+  // A raw high-school freshman: skills start at 20, with control a touch behind —
+  // a rookie sprays it a little more off the tee. All upside ahead (potential is
+  // unchanged, so training brings control right up with the rest).
+  const skills: CareerSkills = { power: 20, control: 18, putt: 20, stamina: 20 };
   const potential: CareerSkills = {
     power: Math.max(skills.power + 15, pot(58)),
     control: Math.max(skills.control + 15, pot(58)),
