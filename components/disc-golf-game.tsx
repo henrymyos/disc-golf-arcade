@@ -5253,7 +5253,7 @@ function PartyPanel({ onClose, onStart }: { onClose: () => void; onStart: (m: Mo
     <div className="absolute inset-0 z-20 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start justify-center rounded-lg">
       <div className="w-full max-w-xs space-y-3 my-auto text-left">
         <div className="flex items-center justify-between">
-          <h2 className="text-white font-black text-xl">👥 Pass &amp; Play</h2>
+          <h2 className="text-white font-black text-xl">Pass &amp; Play</h2>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
         <p className="text-gray-500 text-[11px]">Take turns on each hole, one phone. Doesn&apos;t count toward records.</p>
@@ -5323,7 +5323,7 @@ function TournamentPanel({ tournaments, active, bests, onStart, onAbandon, onPla
       <div className="absolute inset-0 z-20 bg-[#0f1117]/95 backdrop-blur-sm rounded-lg flex flex-col">
         <div className="w-full max-w-sm mx-auto flex flex-col h-full px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] text-left">
           <div className="flex items-center justify-between gap-2 shrink-0">
-            <h2 className="text-white font-black text-lg truncate">🏟 {def.name}</h2>
+            <h2 className="text-white font-black text-lg truncate">{def.name}</h2>
             <div className="flex items-center gap-2 shrink-0">
               <DiffStars n={tournStarDifficulty(def)} />
               <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
@@ -5390,7 +5390,7 @@ function TournamentPanel({ tournaments, active, bests, onStart, onAbandon, onPla
     <div className="absolute inset-0 z-20 bg-[#0f1117]/95 backdrop-blur-sm rounded-lg flex flex-col">
       <div className="w-full max-w-xs mx-auto flex flex-col h-full px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] text-left">
         <div className="flex items-center justify-between shrink-0">
-          <h2 className="text-white font-black text-xl">🏟 Tournaments</h2>
+          <h2 className="text-white font-black text-xl">Tournaments</h2>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
         <div className="flex-1 overflow-y-auto mt-2.5 space-y-2.5 pr-0.5 -mr-0.5">
@@ -5470,7 +5470,7 @@ function CareerSlots({ careers, onPick, onDelete, onBack }: {
   return (
     <div className={wrap}><div className="w-full max-w-sm space-y-3 my-auto text-left">
       <div className="flex items-center justify-between">
-        <h2 className="text-white font-black text-xl">🌟 Career</h2>
+        <h2 className="text-white font-black text-xl">Career</h2>
         <button type="button" onClick={onBack} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
       </div>
       <p className="text-gray-400 text-sm">Pick a save slot. Each career is its own journey — keep up to {careers.length} going at once and switch between them anytime.</p>
@@ -5568,7 +5568,7 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
     return (
       <div className={wrap}><div className={card}>
         <div className="flex items-center justify-between">
-          <h2 className="text-white font-black text-xl">🌟 Career</h2>
+          <h2 className="text-white font-black text-xl">Career</h2>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
         <p className="text-gray-300 text-sm">Start as a 14-year-old freshman with two discs and $1,000 — a clean slate, kept <span className="text-white">completely separate from your main account</span>. Earn training points by <span className="text-white">finishing events well</span> and spend them on four skills (<span className="text-white">1 point = +1, up to 99</span>): <span className="text-white">Power, Control, Putting</span> set your scores, and <span className="text-[#f5d24a]">Stamina</span> sets your <span className="text-[#f5d24a]">season energy</span>. Each year offers far more events than you can enter — <span className="text-white">spend energy to choose which to play</span> (bigger events cost more and pay more), so train Stamina to play more. Unlock discs in the <span className="text-[#e0923b]">Pro Shop</span>. Climb from high school to college (Nationals at Winthrop Lake) to the pro tour and chase <span className="text-[#f5d24a]">World #1</span>. Play the big rounds yourself or sim them — any coins you earn still go to your account.</p>
@@ -5604,7 +5604,7 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
     return (
       <div className={wrap}><div className={card}>
         <div className="flex items-center justify-between">
-          <h2 className="text-white font-black text-xl">🏁 {career.name}</h2>
+          <h2 className="text-white font-black text-xl">{career.name}</h2>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
         <p className="text-gray-400 text-xs -mt-2">Retired at age {career.age} · {career.season} seasons · PDGA {career.pdgaRating} · earned {fmtCash(career.cash)}</p>
@@ -6007,7 +6007,7 @@ function ProfilePanel({ profile, coins, owned, unlocked, roundsPlayed, bestScore
     <div className="absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start justify-center rounded-lg">
       <div className="w-full max-w-xs space-y-3.5 my-auto text-left">
         <div className="flex items-center justify-between">
-          <h2 className="text-white font-black text-xl">👤 Profile</h2>
+          <h2 className="text-white font-black text-xl">Profile</h2>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
 
@@ -6218,7 +6218,7 @@ function BagPanel({ bag, unlocked, owned, level, onAdd, onRemove, onMove, onShop
     <div className="absolute inset-0 z-30 bg-[#0f1117]/95 backdrop-blur-sm rounded-lg flex flex-col">
       <div className="w-full max-w-xs mx-auto flex flex-col h-full px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] text-left">
         <div className="flex items-center justify-between shrink-0">
-          <h2 className="text-white font-black text-xl">🎒 Your Bag · {bag.length}/{BAG_MAX}</h2>
+          <h2 className="text-white font-black text-xl">Your Bag · {bag.length}/{BAG_MAX}</h2>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
         <p className="text-gray-500 text-[11px] mt-1 shrink-0">Carry up to {BAG_MAX} discs into a round — only these are usable. {full ? "Bag's full; remove one to swap." : "Add discs from your collection below."}</p>
@@ -6349,7 +6349,7 @@ function ShopPanel({ coins, unlocked, owned, level, profile, onBuy, onEquip, onC
     <div className="absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start justify-center rounded-lg">
       <div className="w-full max-w-xs space-y-2.5 my-auto text-left">
         <div className="flex items-center justify-between">
-          <h2 className="text-white font-black text-xl">🛒 Shop</h2>
+          <h2 className="text-white font-black text-xl">Shop</h2>
           <div className="flex items-center gap-2">
             <span className="text-[#f5d24a] font-bold font-mono text-sm">{fmtCoins(coins)} <Coin /></span>
             <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
@@ -6487,7 +6487,7 @@ function CoursesPanel({ courses, tourCourses, bests, tourBests, onClose, onPlay 
     <div className="absolute inset-0 z-20 bg-[#0f1117]/95 backdrop-blur-sm rounded-lg flex flex-col">
       <div className="w-full max-w-xs mx-auto flex flex-col h-full px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] text-left">
         <div className="flex items-center justify-between shrink-0">
-          <h2 className="text-white font-black text-xl">⛳ Challenge the Arcade</h2>
+          <h2 className="text-white font-black text-xl">Challenge the Arcade</h2>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
         <div className="flex gap-1 bg-[#1a1d23] border border-white/10 rounded-lg p-1 mt-3 shrink-0">
@@ -6554,7 +6554,7 @@ function ChallengesPanel({ history, owned, coins, today, onClaim, onClose }: {
     <div className="absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start justify-center rounded-lg">
       <div className="w-full max-w-xs space-y-1.5 my-auto text-left">
         <div className="flex items-center justify-between pb-0.5">
-          <h2 className="text-white font-black text-xl">🎯 Challenges</h2>
+          <h2 className="text-white font-black text-xl">Challenges</h2>
           <div className="flex items-center gap-2">
             <span className="text-[#f5d24a] font-bold font-mono text-sm inline-flex items-center gap-1">{fmtCoins(coins)} <Coin /></span>
             <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
@@ -6660,7 +6660,7 @@ function RankedPanel({ ranked, onPlay, onClose }: {
       <div className="w-full max-w-xs space-y-3 text-left">
         <div className="flex items-start justify-between">
           <div>
-            <h2 className="text-white font-black text-xl leading-none">🏅 Ranked</h2>
+            <h2 className="text-white font-black text-xl leading-none">Ranked</h2>
             {season > 0 && (
               <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
                 <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-bold text-gray-200">
@@ -6838,7 +6838,7 @@ function LeaderboardPanel({ onClose }: { onClose: () => void }) {
     <div className="absolute inset-0 z-20 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start justify-center rounded-lg">
       <div className="w-full max-w-xs space-y-3 my-auto text-left">
         <div className="flex items-center justify-between">
-          <h2 className="text-white font-black text-xl">🏆 Leaderboards</h2>
+          <h2 className="text-white font-black text-xl">Leaderboards</h2>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
         <StyledDropdown
