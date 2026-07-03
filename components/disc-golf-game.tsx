@@ -5475,7 +5475,7 @@ function CareerSlots({ careers, onPick, onDelete, onBack }: {
       </div>
       <p className="text-gray-400 text-sm">Pick a save slot. Each career is its own journey — keep up to {careers.length} going at once and switch between them anytime.</p>
       {careers.map((c, slot) => (
-        <div key={slot} className="bg-[#1a1d23] hover:bg-[#252932] active:bg-[#2d323c] border border-white/5 hover:border-white/15 rounded-xl p-3 transition-colors">
+        <div key={slot} className={`bg-[#1a1d23] hover:bg-[#252932] active:bg-[#2d323c] rounded-xl p-3 transition-colors ${c ? "border-2 border-[#36D7B7]/60 hover:border-[#36D7B7]" : "border border-dashed border-white/10 hover:border-white/25"}`}>
           {c ? (
             <div className="flex items-center gap-2">
               <button type="button" onClick={() => onPick(slot)} className="flex-1 min-w-0 text-left">
