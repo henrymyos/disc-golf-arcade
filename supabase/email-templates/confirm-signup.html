@@ -1,0 +1,33 @@
+<!-- Disc Golf Arcade — "Confirm signup" email template.
+     Paste into: Supabase Dashboard → Authentication → Emails → Confirm signup.
+     Suggested subject: Confirm your Disc Golf Arcade account -->
+<div style="background:#f4f5f7;padding:32px 16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <div style="max-width:480px;margin:0 auto;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e6e8ec;">
+    <div style="background:#0f1117;padding:20px 28px;">
+      <p style="margin:0;color:#36D7B7;font-size:18px;font-weight:800;letter-spacing:0.02em;">Disc Golf Arcade</p>
+    </div>
+    <div style="padding:28px;">
+      <h1 style="margin:0 0 12px;color:#0f1117;font-size:20px;font-weight:800;">Confirm your account</h1>
+      <p style="margin:0 0 20px;color:#4b5563;font-size:14px;line-height:1.6;">
+        Welcome! Confirm <strong>{{ .Email }}</strong> to finish creating your Disc Golf Arcade
+        account, and your progress will follow you onto any device.
+      </p>
+      <p style="margin:0 0 24px;">
+        <a href="{{ .ConfirmationURL }}"
+           style="display:inline-block;background:#36D7B7;color:#0f1117;text-decoration:none;font-weight:800;font-size:15px;padding:12px 22px;border-radius:10px;">
+          Confirm account
+        </a>
+      </p>
+      <p style="margin:0;color:#9aa0aa;font-size:12px;line-height:1.6;">
+        If the button doesn't work, copy this link into your browser:<br>
+        <a href="{{ .ConfirmationURL }}" style="color:#0f9d8a;word-break:break-all;">{{ .ConfirmationURL }}</a>
+      </p>
+    </div>
+    <div style="padding:16px 28px;border-top:1px solid #eef0f3;">
+      <p style="margin:0;color:#9aa0aa;font-size:12px;line-height:1.6;">
+        Didn't create an account? You can safely ignore this email.<br>
+        Sent by <a href="https://discgolfarcade.com" style="color:#0f9d8a;text-decoration:none;">discgolfarcade.com</a>
+      </p>
+    </div>
+  </div>
+</div>
