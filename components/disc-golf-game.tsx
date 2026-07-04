@@ -1156,7 +1156,10 @@ export function DiscGolfGame() {
     setAuthBusy(true); setAuthErr(null); setAuthMsg(null);
     const { error } = await supa.auth.resetPasswordForEmail(email, { redirectTo: typeof location !== "undefined" ? location.origin : undefined });
     if (error) setAuthErr(error.message);
-    else setAuthMsg("Password reset link sent — check your email.");
+    // Supabase reports success even when no account matches (so email addresses
+    // can't be probed), so phrase it conditionally — a wrong address otherwise
+    // sends people hunting for an email that will never come.
+    else setAuthMsg(`If an account exists for ${email}, a reset link is on its way. No email? Check spam, and make sure that's the address you signed up with.`);
     setAuthBusy(false);
   }, [supa, authEmail]);
 
