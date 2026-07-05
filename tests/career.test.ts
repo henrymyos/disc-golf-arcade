@@ -338,9 +338,9 @@ describe("rivals", () => {
     const winRes = recordResult(c, ev, 1, false); // win it
     expect(winRes.result.trainBonus).toBeGreaterThan(0);
     expect(winRes.career.trainPts).toBe(c.trainPts + winRes.result.trainBonus);
-    const poor = recordResult(c, ev, 999, false); // dead last
-    expect(poor.result.trainBonus).toBe(0);
-    expect(poor.career.trainPts).toBe(c.trainPts);
+    const poor = recordResult(c, ev, 999, false); // dead last — still develops a little
+    expect(poor.result.trainBonus).toBe(1);
+    expect(poor.career.trainPts).toBe(c.trainPts + 1);
   });
   it("careerCard is a group of 3 rivals; racers carry their hole scores", () => {
     const c = newCareer("Kid", 3);
@@ -751,7 +751,7 @@ describe("1:1 training + earned progression", () => {
     const minor = seasonSchedule(c).find((e) => e.importance === "minor")!;
     const champ = seasonSchedule(c).find((e) => e.importance === "championship")!;
     expect(recordResult(c, minor, 1, false).result.trainBonus).toBeGreaterThan(0); // win → points
-    expect(recordResult(c, minor, 999, false).result.trainBonus).toBe(0); // dead last → nothing
+    expect(recordResult(c, minor, 999, false).result.trainBonus).toBe(1); // dead last → the participation point
     expect(recordResult(c, champ, 1, false).result.trainBonus)
       .toBeGreaterThan(recordResult(c, minor, 1, false).result.trainBonus); // a title develops you most
   });
@@ -798,7 +798,7 @@ describe("trainBonusFor (reward preview) + early driver", () => {
     expect(trainBonusFor("major", 1, 30)).toBe(6);
     expect(trainBonusFor("minor", 1, 30)).toBe(4);
     expect(trainBonusFor("minor", 3, 30)).toBe(3);
-    expect(trainBonusFor("minor", 30, 30)).toBe(0); // dead last → nothing
+    expect(trainBonusFor("minor", 30, 30)).toBe(1); // dead last → the participation point
   });
   it("bigger events develop you faster PER ENERGY at every placement tier", () => {
     // Entry costs 2/3/4 (minor/major/championship): each tier's points-per-energy

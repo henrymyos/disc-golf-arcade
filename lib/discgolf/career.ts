@@ -839,6 +839,8 @@ export function careerCoins(importance: CareerEvent["importance"], placed: numbe
 // Training points earned for a finish — placement + event importance. Every tier
 // scales with the event, so per energy spent a bigger event develops you at least
 // as fast (and at the top, faster) — grinding minors is never the optimal plan.
+// Any finish earns at least 1: a rough week still develops you, so a struggling
+// player always progresses a little instead of stalling at zero.
 // Exported so the hub can preview "what you'll earn here" before you commit.
 export function trainBonusFor(importance: CareerEvent["importance"], placed: number, fieldN: number): number {
   const i = importance === "championship" ? 2 : importance === "major" ? 1 : 0;
@@ -846,7 +848,7 @@ export function trainBonusFor(importance: CareerEvent["importance"], placed: num
     : placed <= 3 ? [3, 5, 7][i]
     : placed <= Math.ceil(fieldN * 0.1) ? [2, 3, 4][i] // a top-10% finish develops you a little
     : placed <= Math.ceil(fieldN * 0.5) ? [1, 2, 3][i] // even a top-half finish teaches you something
-    : 0;
+    : 1; // showing up at all is worth something
 }
 
 // Record a finished event (played or simmed). Folds in your recurring rivals
