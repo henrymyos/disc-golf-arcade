@@ -45,7 +45,7 @@ import {
   placeLabel, STAGE_LABEL, SKILL_KEYS, SKILL_LABEL, IDENTITY_MODS,
   eventEnergyCost, canEnterEvent,
   availableSponsors, signSponsor, unsignSponsor, sponsorBrandLock, trainingPointCost, buyTrainingPoint, spendSkillPoint, trainBonusFor, fmtCash, SPONSOR_CAP, SPONSOR_SLOTS, SPONSOR_SLOT_LABEL,
-  careerRating, careerCoins as coinsForFinish, careerDiscShop, buyCareerDisc, toggleCareerBag, CAREER_BAG_MAX,
+  careerRating, careerCoins as coinsForFinish, careerDiscShop, buyCareerDisc, toggleCareerBag, CAREER_BAG_MAX, CAREER_CORE_DISCS,
   buyCareerCosmetic, equipCareerLook, DEFAULT_CAREER_LOOK, type CareerLook,
   careerFieldForRound, careerCardRacers, careerLiveStandings, careerHoleLenScale, careerYear,
   rankedFieldForRound, rankedPlacementField, rankedCardRacers,
@@ -5765,6 +5765,23 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
             </button>
             {showShop && (
               <div className="space-y-1 mt-1.5">
+                {/* The starters every career begins with — owned, listed so the
+                    shop shows the full catalog (tap for flight details) */}
+                {CAREER_CORE_DISCS.map((key) => {
+                  const d = discByKey(key);
+                  if (!d) return null;
+                  return (
+                    <div key={key} className="flex items-center justify-between gap-2 text-[11px]">
+                      <button type="button" onClick={() => setDiscInfo(key)} className="flex items-center gap-1.5 min-w-0 text-left hover:opacity-80">
+                        <span className="w-2 h-2 rounded-full shrink-0" style={{ background: d.color }} />
+                        <span className="text-white font-semibold truncate">{d.name}</span>
+                        <span className="text-gray-500 truncate hidden xs:inline">{d.brand}</span>
+                        <span className="text-gray-600 shrink-0">ⓘ</span>
+                      </button>
+                      <span className="shrink-0 text-[10px] font-bold text-[#36D7B7] px-2 py-0.5">Starter ✓</span>
+                    </div>
+                  );
+                })}
                 {shop.map(({ key, cost }) => {
                   const d = discByKey(key);
                   if (!d) return null;
@@ -6337,8 +6354,8 @@ function ShopPanel({ coins, unlocked, owned, level, profile, onBuy, onEquip, onC
   const [tab, setTab] = useState<"discs" | "trails" | "discskin" | "basket" | "aim" | "celebration">("discs");
   const seg = (active: boolean) =>
     `shrink-0 rounded-md px-2.5 py-1.5 text-xs font-bold whitespace-nowrap transition ${active ? "bg-[#36D7B7] text-[#0f1117]" : "text-gray-400 hover:text-white"}`;
-  // Every priced disc across both bags, cheapest first.
-  const items = ADV_DISCS.filter((d) => DISC_PRICE[d.key] != null).sort((a, b) => DISC_PRICE[a.key] - DISC_PRICE[b.key]);
+  // The full catalog, cheapest first — the free starters (no price) lead the list.
+  const items = [...ADV_DISCS].sort((a, b) => (DISC_PRICE[a.key] ?? 0) - (DISC_PRICE[b.key] ?? 0));
   // One buy/equip row, shared by every cosmetic category.
   const cosmeticRow = <T extends { key: string; name: string; desc: string; price: number }>(
     item: T, prefix: string, selected: string, field: CosmeticField, swatch: string,
@@ -6406,7 +6423,7 @@ function ShopPanel({ coins, unlocked, owned, level, profile, onBuy, onEquip, onC
                   <p className="text-[10px] font-mono text-gray-500">{d.blurb.split("· ")[1] ?? d.blurb}</p>
                 </div>
                 {have ? (
-                  <span className="shrink-0 text-[11px] font-bold text-[#36D7B7]">{bought ? "Owned ✓" : "Earned ✓"}</span>
+                  <span className="shrink-0 text-[11px] font-bold text-[#36D7B7]">{price == null ? "Starter ✓" : bought ? "Owned ✓" : "Earned ✓"}</span>
                 ) : (
                   <button type="button" onClick={() => onBuy(d.key, price)} disabled={!afford}
                     className="shrink-0 inline-flex items-center justify-center gap-1 rounded-lg bg-[#f5d24a] hover:brightness-110 text-[#0f1117] text-xs font-bold px-2.5 py-1.5 disabled:opacity-40 disabled:bg-white/10 disabled:text-gray-500">
