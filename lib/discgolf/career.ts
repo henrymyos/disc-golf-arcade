@@ -483,8 +483,11 @@ export function seasonSchedule(c: Career): CareerEvent[] {
     case "youth": {
       // ~4 junior events — a few opens plus the Junior Championship. A gentle
       // field so a raw beginner can place well from their very first event.
-      const out = take(YOUTH_NAMES, 3).map((n, i) => ev(`jr${i + 1}`, n, "academy", "minor", 12 + i * 2, 15 + ramp + i));
-      out.push(ev("jrc", "Junior Championship", "academy", "championship", 16, 21 + ramp));
+      // fieldSize is the OTHERS in the field, so totals incl. you land on round
+      // numbers (15-player opens, a 25-player Championship) — and the marquee
+      // event is clearly the big one. Same convention in every stage below.
+      const out = take(YOUTH_NAMES, 3).map((n, i) => ev(`jr${i + 1}`, n, "academy", "minor", 14, 15 + ramp + i));
+      out.push(ev("jrc", "Junior Championship", "academy", "championship", 24, 21 + ramp));
       return out;
     }
     case "highschool": {
@@ -494,17 +497,17 @@ export function seasonSchedule(c: Career): CareerEvent[] {
       // careerHoleLenScale). The two capstones (Regional Qualifier + State
       // Championship) are the full 18-hole Glendoveer test, the big tournaments
       // you grow into. Fields toughen each season via `ramp`.
-      const out = take(HS_NAMES, 4).map((n, i) => ev(`hs${i + 1}`, n, "academy", "minor", 20 + i * 2, 26 + ramp + i));
-      out.push(ev("hsq", "Regional Qualifier", "course", "major", 24, 30 + ramp));
-      out.push(ev("hss", "State Championship", "course", "championship", 28, 36 + ramp));
+      const out = take(HS_NAMES, 4).map((n, i) => ev(`hs${i + 1}`, n, "academy", "minor", 19, 26 + ramp + i)); // 20-player opens
+      out.push(ev("hsq", "Regional Qualifier", "course", "major", 29, 30 + ramp));       // 30 players
+      out.push(ev("hss", "State Championship", "course", "championship", 39, 36 + ramp)); // 40 players
       return out;
     }
     case "college": {
       // ~8 events, building to Nationals at Winthrop Lake.
-      const out = take(COLLEGE_NAMES, 5).map((n, i) => ev(`co${i + 1}`, n, "tour", "minor", 28 + i * 2, 40 + ramp + i));
-      out.push(ev("cc1", "Conference Championship", "winthrop", "major", 32, 46 + ramp));
-      out.push(ev("cc2", pick(["Regional Championship", "Division Finals"]), "tour", "major", 32, 47 + ramp));
-      out.push(ev("con", "College Nationals", "winthrop", "championship", 36, 52 + ramp));
+      const out = take(COLLEGE_NAMES, 5).map((n, i) => ev(`co${i + 1}`, n, "tour", "minor", 29, 40 + ramp + i)); // 30-player opens
+      out.push(ev("cc1", "Conference Championship", "winthrop", "major", 39, 46 + ramp));                        // 40 players
+      out.push(ev("cc2", pick(["Regional Championship", "Division Finals"]), "tour", "major", 39, 47 + ramp));
+      out.push(ev("con", "College Nationals", "winthrop", "championship", 49, 52 + ramp));                       // 50 players
       return out;
     }
     case "pro": {
@@ -515,11 +518,11 @@ export function seasonSchedule(c: Career): CareerEvent[] {
       // so even an elite player can't just show up and sweep — winning the tour
       // takes a truly dominant season, and the marquee events are the hardest.
       const out: CareerEvent[] = [];
-      take(PRO_MINORS, 10).forEach((n, i) => out.push(ev(`pt${i + 1}`, n, "tour", "minor", 72 + (i % 3) * 4, 78 + ramp * 0.4 + (i % 4))));
-      take(PRO_MAJORS, 3).forEach((n, i) => out.push(ev(`maj${i + 1}`, n, "tour", "major", 90, 84 + ramp * 0.4)));
-      out.push(ev("champ", pick(PRO_CHAMPS), "tour", "championship", 96, 87 + ramp * 0.4));
+      take(PRO_MINORS, 10).forEach((n, i) => out.push(ev(`pt${i + 1}`, n, "tour", "minor", 69 + (i % 3) * 10, 78 + ramp * 0.4 + (i % 4)))); // 70/80/90-player stops
+      take(PRO_MAJORS, 3).forEach((n, i) => out.push(ev(`maj${i + 1}`, n, "tour", "major", 119, 84 + ramp * 0.4)));                          // 120 players
+      out.push(ev("champ", pick(PRO_CHAMPS), "tour", "championship", 149, 87 + ramp * 0.4));                                                 // 150 players
       // A World Championship lands every other season once you're established.
-      if (c.season % 2 === 1) out.push(ev("wc", "World Championship", "course", "championship", 96, 89 + ramp * 0.4));
+      if (c.season % 2 === 1) out.push(ev("wc", "World Championship", "course", "championship", 149, 89 + ramp * 0.4));
       return out;
     }
     default:
