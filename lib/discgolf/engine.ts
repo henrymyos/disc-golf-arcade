@@ -1864,12 +1864,12 @@ function stepFlight(f: Flight, disc: Disc, fadeSign: number, path: FlightPath, h
         // on the anny line (which would hold the bank the whole way down).
         a = annyLean < ANNY_LEAN ? -fadeSign * (disc.fade + disc.turn + 0.004) : 0;
       } else {
-        // Dropping in: come out of the turn and settle into a gentle fade — close
-        // to a straight shot's finish, easing off the anny line rather than hooking
-        // hard back. A mild ramp keeps it soft near the apex, a touch firmer as it
-        // drops in to land.
+        // Dropping in: ease out of the turn into a soft fade — half a straight
+        // shot's fade rate near the apex, ramping to just over it fully dropped
+        // in — so the line relaxes back to land rather than hooking hard the
+        // other way at the end (which read as abrupt and over-compensating).
         const drop = Math.min(1, -f.vh / 2);
-        a = fadeSign * (disc.sFade + 0.0035) * (0.7 + drop * drop * 1.9);
+        a = fadeSign * disc.sFade * (0.5 + drop * drop * 0.7);
       }
     }
     const cos = Math.cos(a);
