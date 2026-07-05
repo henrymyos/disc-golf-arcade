@@ -2029,14 +2029,17 @@ function buildRacerGhosts(seed: number, holeIndex: number, hole: Hole, racers: G
     // throw flies right at the basket like a real drive; any remaining strokes are
     // putts that close in on the cup — instead of evenly dawdling down the fairway.
     const reach = Math.max(1, Math.ceil(distBetween(hole.tee, hole.basket) / GHOST_DRIVE));
+    // Once on the green the disc creeps toward the cup from one general side, each
+    // lie roughly halving the distance to it — so the approach lands a putt out, a
+    // miss leaves a comebacker, and the last lie before holing out is a tap-in,
+    // instead of orbiting the basket at a fixed radius from random directions.
+    const puttAng = rng() * Math.PI * 2;
     for (let k = 1; k < s; k++) {
       if (k >= reach) {
-        // On/around the green — short putts converging on the basket.
-        const putt = k - reach;        // 0 = the approach that lands on the green
-        const last = s - 1 - reach;    // index of the final putt before holing out
-        const spread = hole.fwWidth * 0.16 * (last > 0 ? 1 - putt / (last + 1) : 0.5);
-        const ang = rng() * Math.PI * 2;
-        pts.push({ x: hole.basket.x + Math.cos(ang) * spread, y: hole.basket.y + Math.sin(ang) * spread });
+        const putt = k - reach;                            // 0 = the approach that lands on the green
+        const dist = hole.fwWidth * 0.15 * Math.pow(0.4, putt);
+        const ang = puttAng + (rng() * 2 - 1) * 0.55;      // small drift, same general side
+        pts.push({ x: hole.basket.x + Math.cos(ang) * dist, y: hole.basket.y + Math.sin(ang) * dist });
       } else {
         // Still advancing down the fairway — reach the green (f→1) on throw #reach.
         const f = k / reach;
