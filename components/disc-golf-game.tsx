@@ -7209,6 +7209,9 @@ function AuthPanel(props: {
               <p className="text-white font-semibold break-all text-sm mt-0.5">{user.email}</p>
             </div>
             <p className="text-[#36D7B7] text-xs font-semibold">✓ Best scores, coins &amp; achievements sync across devices.</p>
+            {/* e.g. a dead email link landed here while already signed in */}
+            {error && <p className="text-red-400 text-xs">{error}</p>}
+            {message && <p className="text-[#36D7B7] text-xs">{message}</p>}
             <button type="button" onClick={onSignOut} className="w-full bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white font-bold py-2.5 rounded-lg transition">Log out</button>
           </div>
         ) : (
