@@ -3797,8 +3797,12 @@ export function DiscGolfGame() {
             type="button"
             onClick={() => setSettingsOpen(true)}
             aria-label="Settings"
-            className="absolute z-10 right-3 w-9 h-9 flex items-center justify-center rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 active:bg-white/15 text-gray-300 hover:text-white text-lg transition"
-            style={{ top: "max(env(safe-area-inset-top), 0.5rem)" }}
+            className="absolute z-10 w-9 h-9 flex items-center justify-center rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 active:bg-white/15 text-gray-300 hover:text-white text-lg transition"
+            // Pin to the top-right of the app's centered mobile-width column (the
+            // same 480px frame the in-round HUD caps at), not the window edge — on
+            // a wide desktop the window's corner is nowhere near the app. The max()
+            // keeps it 12px from the screen edge on phones.
+            style={{ top: "max(env(safe-area-inset-top), 0.5rem)", right: "max(0.75rem, calc(50% - 240px + 0.75rem))" }}
           >
             ⚙
           </button>
