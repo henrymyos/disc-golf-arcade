@@ -2025,30 +2025,69 @@ function buildRacerGhosts(seed: number, holeIndex: number, hole: Hole, racers: G
     const s = Math.max(1, rc.shots);
     const rng = mulberry32((seed ^ (gi * 2654435761) ^ (holeIndex * 40503) ^ 0x77777) >>> 0);
     const pts: Vec[] = [{ x: hole.tee.x, y: hole.tee.y }];
-    // Throws it takes to REACH the green. On a short hole this is 1, so the first
-    // throw flies right at the basket like a real drive; any remaining strokes are
-    // putts that close in on the cup — instead of evenly dawdling down the fairway.
-    const reach = Math.max(1, Math.ceil(distBetween(hole.tee, hole.basket) / GHOST_DRIVE));
-    // Once on the green the disc creeps toward the cup from one general side, each
-    // lie roughly halving the distance to it — so the approach lands a putt out, a
-    // miss leaves a comebacker, and the last lie before holing out is a tap-in,
-    // instead of orbiting the basket at a fixed radius from random directions.
-    const puttAng = rng() * Math.PI * 2;
-    for (let k = 1; k < s; k++) {
-      if (k >= reach) {
-        const putt = k - reach;                            // 0 = the approach that lands on the green
-        const dist = hole.fwWidth * 0.15 * Math.pow(0.4, putt);
-        const ang = puttAng + (rng() * 2 - 1) * 0.55;      // small drift, same general side
+    const nInter = s - 1; // shots before the hole-out (tee and basket are added around this)
+    // A point at path fraction `f` down the fairway, shoved `off` px to the side of
+    // the corridor (negative/positive = either edge). Used for drives, fairway shots
+    // and the trouble spots off in the rough.
+    const fwPoint = (f: number, off: number): Vec => {
+      const cf = Math.max(0, Math.min(1, f));
+      const base = pointOnPath(hole.fairway, cf);
+      const ahead = pointOnPath(hole.fairway, Math.min(1, cf + 0.02));
+      const dx = ahead.x - base.x, dy = ahead.y - base.y;
+      const len = Math.hypot(dx, dy) || 1;
+      return { x: base.x + (-dy / len) * off, y: base.y + (dx / len) * off };
+    };
+    if (nInter >= 1) {
+      // Throws it takes to REACH the green. On a short hole this is 1, so the drive
+      // flies right at the basket like a real one, rather than dawdling down the
+      // fairway. Bounded by the shots available (a great score can't reach in more
+      // throws than it has).
+      const reach = Math.max(1, Math.min(Math.ceil(distBetween(hole.tee, hole.basket) / GHOST_DRIVE), nInter));
+      // Strokes beyond "reach the green + hole out" are where the variety lives:
+      // sometimes a lag/three-putt, but mostly trouble on the way out — a shot flung
+      // OB into the rough, or a tree kick that comes up short. So a bad score plays
+      // out through misadventure instead of endless taps at the cup.
+      const excess = nInter - reach;
+      let extraPutts = 0, mishaps = 0;
+      for (let e = 0; e < excess; e++) {
+        if (extraPutts < 2 && rng() < 0.4) extraPutts++; // an occasional lag/three-putt
+        else mishaps++;                                  // OB / tree trouble en route
+      }
+      // Interleave the fairway advances (reach−1 of them; the reach-th shot is the
+      // approach onto the green, added after) with the trouble shots, so OB/tree
+      // mishaps can strike anywhere on the way out — even off the tee. Fisher–Yates
+      // with the ghost's own RNG keeps it deterministic per hole.
+      const march: ("fw" | "ob")[] = [];
+      for (let i = 0; i < reach - 1; i++) march.push("fw");
+      for (let i = 0; i < mishaps; i++) march.push("ob");
+      for (let i = march.length - 1; i > 0; i--) {
+        const j = Math.floor(rng() * (i + 1));
+        [march[i], march[j]] = [march[j], march[i]];
+      }
+      let av = 0, lastF = 0; // advances taken, and the fraction of the last good lie
+      for (const step of march) {
+        if (step === "fw") {
+          av++;
+          lastF = av / reach;
+          pts.push(fwPoint(lastF, (rng() * 2 - 1) * hole.fwWidth * 0.22));
+        } else {
+          // Trouble: no forward progress, flung off the corridor. A tree kick drops
+          // it short and to the side; an OB shot sails well out into the rough.
+          const ob = rng() < 0.45;
+          const side = rng() < 0.5 ? -1 : 1;
+          const off = side * hole.fwWidth * (ob ? 0.7 + rng() * 0.4 : 0.32 + rng() * 0.22);
+          const f = ob ? lastF + rng() * 0.05 : Math.max(0, lastF - (0.1 + rng() * 0.1));
+          pts.push(fwPoint(f, off));
+        }
+      }
+      // The approach lands on the green a putt out; each extra putt then creeps in
+      // toward the cup from one general side, roughly halving the distance, so the
+      // last lie before holing out is a tap-in instead of orbiting the basket.
+      const puttAng = rng() * Math.PI * 2;
+      for (let p = 0; p <= extraPutts; p++) {
+        const dist = hole.fwWidth * 0.15 * Math.pow(0.4, p);
+        const ang = puttAng + (rng() * 2 - 1) * 0.55;
         pts.push({ x: hole.basket.x + Math.cos(ang) * dist, y: hole.basket.y + Math.sin(ang) * dist });
-      } else {
-        // Still advancing down the fairway — reach the green (f→1) on throw #reach.
-        const f = k / reach;
-        const base = pointOnPath(hole.fairway, f);
-        const ahead = pointOnPath(hole.fairway, Math.min(1, f + 0.02));
-        const dx = ahead.x - base.x, dy = ahead.y - base.y;
-        const len = Math.hypot(dx, dy) || 1;
-        const j = (rng() * 2 - 1) * hole.fwWidth * 0.22; // lateral spread within the corridor
-        pts.push({ x: base.x + (-dy / len) * j, y: base.y + (dx / len) * j });
       }
     }
     pts.push({ x: hole.basket.x, y: hole.basket.y });
