@@ -1844,7 +1844,15 @@ function stepFlight(f: Flight, disc: Disc, fadeSign: number, path: FlightPath, h
       path === "straight"
         ? (f.vh > 0 ? -fadeSign * disc.turn : fadeSign * disc.sFade)
         : fadeSign * disc.fade;
-    if (release === "hyzer") a = fadeSign * Math.max(disc.fade, disc.sFade) * 1.6;
+    if (release === "hyzer") {
+      // A hyzer holds its angle the WHOLE flight: the turn rate eases in
+      // proportion to the budget left under MAX_FADE_TURN, so the arc approaches
+      // the cap asymptotically — carving hardest early and still visibly bending
+      // as it lands — instead of spending the budget at full rate partway out,
+      // pinning against the cap, and flying the rest dead straight.
+      const room = Math.max(0, 1 - Math.abs(f.fadeTurn) / MAX_FADE_TURN);
+      a = fadeSign * Math.max(disc.fade, disc.sFade) * 2.2 * room;
+    }
     else if (release === "anny") {
       // `-fadeSign * fadeTurn` is how far the disc is already banked to the anny
       // side. Climbing, it turns over to that lean and then holds it; coming down,
