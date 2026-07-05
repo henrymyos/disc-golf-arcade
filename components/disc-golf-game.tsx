@@ -1028,6 +1028,24 @@ export function DiscGolfGame() {
   const [authErr, setAuthErr] = useState<string | null>(null);
   const [authMsg, setAuthMsg] = useState<string | null>(null);
   const [recovering, setRecovering] = useState(false); // arrived via a password-reset link → set a new password
+  // A failed email link (expired or already-used reset/confirmation) bounces back
+  // here with the error in the URL hash. Surface it in the auth panel — silently
+  // landing on the title screen reads as "the link did nothing".
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (typeof location === "undefined" || !location.hash.includes("error")) return;
+    const h = new URLSearchParams(location.hash.slice(1));
+    const desc = h.get("error_description") || h.get("error");
+    if (!desc) return;
+    setAuthErr(h.get("error_code") === "otp_expired"
+      ? "That email link has expired. Enter your email and tap Forgot password to get a fresh one."
+      : desc);
+    setAuthMsg(null);
+    setScreen("title");
+    setAuthOpen(true);
+    window.history.replaceState(null, "", location.pathname + location.search); // strip the error from the URL
+  }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Push the current local progress to the signed-in user's row in the
@@ -1143,6 +1161,11 @@ export function DiscGolfGame() {
       options: { emailRedirectTo: typeof location !== "undefined" ? location.origin : undefined },
     });
     if (error) setAuthErr(error.message);
+    // An already-registered email comes back as a FAKE user with no identities
+    // (Supabase hides account existence) — and no email is sent. Saying "check
+    // your email" would strand them waiting for mail that never comes.
+    else if (data.user && !data.session && (data.user.identities?.length ?? 0) === 0)
+      setAuthErr("An account with this email already exists — log in instead, or tap Forgot password.");
     else if (!data.session) setAuthMsg("Account created! Check your email for a confirmation link to finish signing in.");
     else { setAuthOpen(false); setAuthPassword(""); }
     setAuthBusy(false);
