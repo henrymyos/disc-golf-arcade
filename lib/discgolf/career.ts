@@ -828,18 +828,24 @@ export function careerLiveStandings(field: FieldPlayer[], myName: string, myScor
 // for showing up; the marquee events pay the most. Simmed events still pay nothing
 // — coins are the reward for actually playing the round. Exported for the preview.
 export function careerCoins(importance: CareerEvent["importance"], placed: number, fieldN: number): number {
-  const peak = importance === "championship" ? 140 : importance === "major" ? 95 : 60;
+  // Peaks steepen with importance so the payout per ENERGY climbs with the tier
+  // (30 → ~37 → ~43 per point at a win) — the marquee stops are the efficient
+  // way to spend a season's pool, not just a bigger sticker number.
+  const peak = importance === "championship" ? 170 : importance === "major" ? 110 : 60;
   const frac = Math.max(0, (fieldN - placed) / Math.max(1, fieldN - 1)); // 1 at a win → 0 at last
   return Math.round(8 + (peak - 8) * Math.pow(frac, 1.5));
 }
 
-// Training points earned for a finish — placement + event importance. Exported so
-// the hub can preview "what you'll earn here" before you commit to playing.
+// Training points earned for a finish — placement + event importance. Every tier
+// scales with the event, so per energy spent a bigger event develops you at least
+// as fast (and at the top, faster) — grinding minors is never the optimal plan.
+// Exported so the hub can preview "what you'll earn here" before you commit.
 export function trainBonusFor(importance: CareerEvent["importance"], placed: number, fieldN: number): number {
-  return placed === 1 ? (importance === "championship" ? 6 : importance === "major" ? 5 : 4)
-    : placed <= 3 ? 3
-    : placed <= Math.ceil(fieldN * 0.1) ? 2 // a top-10% finish develops you a little
-    : placed <= Math.ceil(fieldN * 0.5) ? 1 // even a top-half finish teaches you something
+  const i = importance === "championship" ? 2 : importance === "major" ? 1 : 0;
+  return placed === 1 ? [4, 6, 9][i]
+    : placed <= 3 ? [3, 5, 7][i]
+    : placed <= Math.ceil(fieldN * 0.1) ? [2, 3, 4][i] // a top-10% finish develops you a little
+    : placed <= Math.ceil(fieldN * 0.5) ? [1, 2, 3][i] // even a top-half finish teaches you something
     : 0;
 }
 
