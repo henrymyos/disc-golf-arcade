@@ -848,8 +848,7 @@ export function careerCoins(importance: CareerEvent["importance"], placed: numbe
 export function trainBonusFor(importance: CareerEvent["importance"], placed: number, fieldN: number): number {
   const i = importance === "championship" ? 2 : importance === "major" ? 1 : 0;
   return placed === 1 ? [4, 6, 9][i]
-    : placed <= 3 ? [3, 5, 7][i]
-    : placed <= Math.ceil(fieldN * 0.1) ? [2, 3, 4][i] // a top-10% finish develops you a little
+    : placed <= 5 ? [3, 5, 7][i]
     : placed <= Math.ceil(fieldN * 0.5) ? [1, 2, 3][i] // even a top-half finish teaches you something
     : 1; // showing up at all is worth something
 }

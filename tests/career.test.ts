@@ -797,7 +797,8 @@ describe("trainBonusFor (reward preview) + early driver", () => {
     expect(trainBonusFor("championship", 1, 30)).toBe(9);
     expect(trainBonusFor("major", 1, 30)).toBe(6);
     expect(trainBonusFor("minor", 1, 30)).toBe(4);
-    expect(trainBonusFor("minor", 3, 30)).toBe(3);
+    expect(trainBonusFor("minor", 5, 30)).toBe(3);  // top-5 pays the podium tier
+    expect(trainBonusFor("minor", 6, 30)).toBe(1);  // 6th is just a top-half finish
     expect(trainBonusFor("minor", 30, 30)).toBe(1); // dead last → the participation point
   });
   it("bigger events develop you faster PER ENERGY at every placement tier", () => {
@@ -805,7 +806,7 @@ describe("trainBonusFor (reward preview) + early driver", () => {
     // must never decrease as importance climbs, and must strictly climb at a win —
     // otherwise grinding minors would be the optimal training plan.
     const costs = { minor: 2, major: 3, championship: 4 } as const;
-    const tiers = [1, 3, Math.ceil(30 * 0.1), Math.ceil(30 * 0.5)];
+    const tiers = [1, 5, Math.ceil(30 * 0.5)];
     for (const placed of tiers) {
       const per = (["minor", "major", "championship"] as const).map((im) => trainBonusFor(im, placed, 30) / costs[im]);
       expect(per[1]).toBeGreaterThanOrEqual(per[0]);

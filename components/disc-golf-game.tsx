@@ -5941,7 +5941,7 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
                     const fieldN = ev.fieldSize + 1;
                     return (
                       <div className="text-[9px] text-gray-500 mt-0.5 leading-tight space-y-0.5">
-                        <p><span className="text-[#36D7B7] font-semibold">▲ skill pts</span> win +{trainBonusFor(ev.importance, 1, fieldN)} · top-3 +{trainBonusFor(ev.importance, 3, fieldN)} · top-½ +{trainBonusFor(ev.importance, Math.ceil(fieldN / 2), fieldN)} · any +{trainBonusFor(ev.importance, fieldN, fieldN)}</p>
+                        <p><span className="text-[#36D7B7] font-semibold">▲ skill pts</span> win +{trainBonusFor(ev.importance, 1, fieldN)} · top-5 +{trainBonusFor(ev.importance, 5, fieldN)} · top-½ +{trainBonusFor(ev.importance, Math.ceil(fieldN / 2), fieldN)} · any +{trainBonusFor(ev.importance, fieldN, fieldN)}</p>
                         <p><span className="text-[#f5d24a] font-semibold">◆ coins</span> win {coinsForFinish(ev.importance, 1, fieldN)} · top-3 {coinsForFinish(ev.importance, 3, fieldN)} · top-½ {coinsForFinish(ev.importance, Math.ceil(fieldN / 2), fieldN)} <Coin className="!w-2.5 !h-2.5 align-[-1px]" /> <span className="text-gray-600">if played</span></p>
                       </div>
                     );
