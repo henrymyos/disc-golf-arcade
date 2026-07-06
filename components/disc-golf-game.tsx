@@ -4930,26 +4930,37 @@ const titleCardSm =
 const hubCard =
   "w-full flex items-center justify-center rounded-xl border border-[#36D7B7]/55 bg-[#1a1d23] hover:border-[#36D7B7] hover:bg-[#20262f] active:scale-[0.99] text-white py-6 transition";
 
-// A Daily-Challenge goal star: a big ★ with the to-par score it takes printed
-// inside — gold when earned, dim when still up for grabs.
+// A Daily-Challenge goal star with the to-par score it takes printed inside —
+// gold when earned, dim when still up for grabs. Drawn as an SVG rather than
+// the ★ glyph: a fat body (inner radius 0.58 of outer, vs ~0.38 for a regular
+// star) and stubby points leave real room for the number in the middle.
+const GOAL_STAR_POINTS =
+  "50,2 66.5,27.4 95.7,35.2 76.6,58.7 78.2,88.8 50,78 21.8,88.8 23.4,58.7 4.3,35.2 33.5,27.4";
 function GoalStar({ lit, label, size }: { lit: boolean; label: string; size: number }) {
+  const fill = lit ? "#f5d24a" : "#3a4050";
   return (
-    <span className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
-      <span
-        aria-hidden
-        className={`leading-none ${lit ? "text-[#f5d24a]" : "text-[#3a4050]"}`}
-        style={{ fontSize: size, filter: lit ? "drop-shadow(0 0 6px rgba(245,210,74,0.55))" : undefined }}
-      >
-        ★
-      </span>
-      {/* The goal sits in the star's body, a touch below the glyph's midline. */}
-      <span
-        className={`absolute left-1/2 top-1/2 font-mono font-black ${lit ? "text-[#4a3800]" : "text-gray-300"}`}
-        style={{ fontSize: Math.round(size * 0.24), transform: "translate(-50%, -42%)" }}
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 100 100"
+      aria-label={`${label} goal ${lit ? "earned" : "not earned"}`}
+      style={{ filter: lit ? "drop-shadow(0 0 6px rgba(245,210,74,0.55))" : undefined }}
+    >
+      {/* Same-color stroke with round joins softens the points a touch. */}
+      <polygon points={GOAL_STAR_POINTS} fill={fill} stroke={fill} strokeWidth="6" strokeLinejoin="round" />
+      <text
+        x="50"
+        y="55"
+        textAnchor="middle"
+        dominantBaseline="central"
+        fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+        fontWeight="900"
+        fontSize="26"
+        fill={lit ? "#4a3800" : "#cbd5e1"}
       >
         {label}
-      </span>
-    </span>
+      </text>
+    </svg>
   );
 }
 
