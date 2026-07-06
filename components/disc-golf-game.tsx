@@ -4937,7 +4937,10 @@ const hubCard =
 const GOAL_STAR_POINTS =
   "50,2 66.5,27.4 95.7,35.2 76.6,58.7 78.2,88.8 50,78 21.8,88.8 23.4,58.7 4.3,35.2 33.5,27.4";
 function GoalStar({ lit, label, size }: { lit: boolean; label: string; size: number }) {
-  const fill = lit ? "#f5d24a" : "#3a4050";
+  // Gold throughout: bright gold once earned, a muted antique gold while still
+  // up for grabs — each rimmed with a darker gold outline.
+  const fill = lit ? "#f5d24a" : "#7a6318";
+  const outline = lit ? "#b08d1e" : "#52430f";
   return (
     <svg
       width={size}
@@ -4946,17 +4949,17 @@ function GoalStar({ lit, label, size }: { lit: boolean; label: string; size: num
       aria-label={`${label} goal ${lit ? "earned" : "not earned"}`}
       style={{ filter: lit ? "drop-shadow(0 0 6px rgba(245,210,74,0.55))" : undefined }}
     >
-      {/* Same-color stroke with round joins softens the points a touch. */}
-      <polygon points={GOAL_STAR_POINTS} fill={fill} stroke={fill} strokeWidth="6" strokeLinejoin="round" />
+      {/* Darker-gold outline; round joins soften the points a touch. */}
+      <polygon points={GOAL_STAR_POINTS} fill={fill} stroke={outline} strokeWidth="6" strokeLinejoin="round" />
       <text
         x="50"
-        y="55"
+        y="52"
         textAnchor="middle"
         dominantBaseline="central"
         fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
         fontWeight="900"
         fontSize="26"
-        fill={lit ? "#4a3800" : "#cbd5e1"}
+        fill={lit ? "#4a3800" : "#f0e3ae"}
       >
         {label}
       </text>
