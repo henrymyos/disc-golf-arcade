@@ -10,7 +10,7 @@ import {
   readLocalProgress, applyProgress, mergeProgress, clearLocalProgress, trimDailyStars, type Progress,
 } from "@/lib/progress";
 import {
-  dayNumber, claimDailyReward, dailyAvailable, coinsForRound, modeCoinMult, fmtCoins, type DailyReward,
+  dayNumber, claimDailyReward, dailyAvailable, coinsForRound, modeCoinMult, fmtCoins, dailyStarCoins, type DailyReward,
 } from "@/lib/discgolf/wallet";
 import {
   AVATARS, DEFAULT_AVATAR, avatarOwnKey, avatarUnlocked, playerXp, levelFromXp, type PlayerProfile,
@@ -565,8 +565,9 @@ export function DiscGolfGame() {
   const [finalPars, setFinalPars] = useState<number[]>(HOLES.map((h) => h.par));
   const [finalMode, setFinalMode] = useState<Mode>("course");
   // Today's Daily-Challenge star result for the finish screen: stars earned this
-  // round, the day's (difficulty-adjusted) to-par goals, and the day's best so far.
-  const [finalDailyStars, setFinalDailyStars] = useState<{ earned: number; best: number; thresholds: [number, number, number] } | null>(null);
+  // round, the day's (difficulty-adjusted) to-par goals, the day's best so far,
+  // and the coin bonus paid for any newly earned star tiers.
+  const [finalDailyStars, setFinalDailyStars] = useState<{ earned: number; best: number; thresholds: [number, number, number]; coins: number } | null>(null);
   // Daily-Challenge stars by day index (persisted; per-day best of 1–3).
   const [dayStars, setDayStars] = useState<Record<string, number>>({});
   const [bestScore, setBestScore] = useState<number | null>(null);
@@ -2084,12 +2085,16 @@ export function DiscGolfGame() {
       let map: Record<string, number> = {};
       try { map = JSON.parse(localStorage.getItem(DAILYSTARS_KEY) || "{}") ?? {}; } catch { /* ignore */ }
       const prev = map[g.seed] ?? 0;
+      // Newly reached star tiers pay their coin bounty — as the difference from
+      // the day's previous best, so each tier pays at most once per day.
+      const starBonus = Math.max(0, dailyStarCoins(earned) - dailyStarCoins(prev));
+      if (starBonus > 0) addCoins(starBonus);
       if (earned > prev) {
         map = trimDailyStars({ ...map, [g.seed]: earned });
         try { localStorage.setItem(DAILYSTARS_KEY, JSON.stringify(map)); } catch { /* ignore */ }
       }
       setDayStars(map);
-      setFinalDailyStars({ earned, best: Math.max(earned, prev), thresholds });
+      setFinalDailyStars({ earned, best: Math.max(earned, prev), thresholds, coins: starBonus });
     } else {
       setFinalDailyStars(null);
     }
@@ -3983,18 +3988,13 @@ export function DiscGolfGame() {
               {hub === "solo" && (
                 <div className={`w-full flex flex-col gap-3 ${menuTopMargin}`}>
                   <button type="button" onClick={() => setHub("home")} className={`${titleCardSm} !flex-none self-start px-3`}>‹ Back</button>
-                  <button type="button" onClick={() => startGame("daily")} className={`${hubCard} !flex-col gap-1`}>
+                  <button type="button" onClick={() => startGame("daily")} className={`${hubCard} !flex-col gap-1 !py-4`}>
                     <span className="font-black text-lg">Daily Challenge</span>
                     {todayGoals && (
-                      <span className="flex items-center gap-2 text-[11px]">
-                        <span className="tracking-wide">
-                          {[0, 1, 2].map((i) => (
-                            <span key={i} className={todayStars > i ? "" : "opacity-25 grayscale"}>⭐</span>
-                          ))}
-                        </span>
-                        <span className="text-gray-400 font-mono">
-                          {todayStars >= 3 ? "all stars earned!" : todayGoals.map(overStr).join(" / ")}
-                        </span>
+                      <span className="flex items-center justify-center gap-1">
+                        {todayGoals.map((t, i) => (
+                          <GoalStar key={i} lit={todayStars > i} label={overStr(t)} size={44} />
+                        ))}
                       </span>
                     )}
                   </button>
@@ -4624,14 +4624,14 @@ export function DiscGolfGame() {
                 {/* Daily stars — the day's three to-par goals, lit as earned. */}
                 {finalDailyStars && (
                   <div className="mt-2.5 inline-block bg-[#1a1d23] border border-white/10 rounded-xl px-5 py-2.5">
-                    <div className="flex items-end justify-center gap-4">
+                    <div className="flex items-center justify-center gap-1.5">
                       {finalDailyStars.thresholds.map((t, i) => (
-                        <div key={i} className="flex flex-col items-center">
-                          <span className={`text-2xl leading-none ${finalDailyStars.earned > i ? "drop-shadow-[0_0_6px_rgba(245,210,74,0.6)]" : "opacity-25 grayscale"}`}>⭐</span>
-                          <span className={`text-[10px] font-mono font-bold mt-1 ${finalDailyStars.earned > i ? "text-[#f5d24a]" : "text-gray-500"}`}>{overStr(t)}</span>
-                        </div>
+                        <GoalStar key={i} lit={finalDailyStars.earned > i} label={overStr(t)} size={44} />
                       ))}
                     </div>
+                    {finalDailyStars.coins > 0 && (
+                      <p className="text-[#f5d24a] text-sm font-bold mt-1">+{finalDailyStars.coins} <Coin /> star bonus</p>
+                    )}
                     <p className="text-gray-400 text-[10px] mt-1.5">
                       {finalDailyStars.earned === 3
                         ? "All 3 stars — today's course, conquered!"
@@ -4929,6 +4929,29 @@ const titleCardSm =
 // the buttons to press.
 const hubCard =
   "w-full flex items-center justify-center rounded-xl border border-[#36D7B7]/55 bg-[#1a1d23] hover:border-[#36D7B7] hover:bg-[#20262f] active:scale-[0.99] text-white py-6 transition";
+
+// A Daily-Challenge goal star: a big ★ with the to-par score it takes printed
+// inside — gold when earned, dim when still up for grabs.
+function GoalStar({ lit, label, size }: { lit: boolean; label: string; size: number }) {
+  return (
+    <span className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
+      <span
+        aria-hidden
+        className={`leading-none ${lit ? "text-[#f5d24a]" : "text-[#3a4050]"}`}
+        style={{ fontSize: size, filter: lit ? "drop-shadow(0 0 6px rgba(245,210,74,0.55))" : undefined }}
+      >
+        ★
+      </span>
+      {/* The goal sits in the star's body, a touch below the glyph's midline. */}
+      <span
+        className={`absolute left-1/2 top-1/2 font-mono font-black ${lit ? "text-[#4a3800]" : "text-gray-300"}`}
+        style={{ fontSize: Math.round(size * 0.24), transform: "translate(-50%, -42%)" }}
+      >
+        {label}
+      </span>
+    </span>
+  );
+}
 
 // A small gold coin chip — used wherever a coin balance/amount is shown so the
 // currency reads as clearly gold (rather than the dull 🪙 emoji).

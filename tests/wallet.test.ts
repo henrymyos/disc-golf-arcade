@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { dayNumber, dailyCoins, claimDailyReward, dailyAvailable, coinsForRound } from "../lib/discgolf/wallet";
+import { dayNumber, dailyCoins, claimDailyReward, dailyAvailable, coinsForRound, dailyStarCoins } from "../lib/discgolf/wallet";
 
 describe("daily reward", () => {
   it("dayNumber rolls over at midnight Central, not UTC", () => {
@@ -37,5 +37,23 @@ describe("coinsForRound", () => {
     expect(coinsForRound(0, 18)).toBeGreaterThan(coinsForRound(0, 9));
     expect(coinsForRound(-10, 18)).toBeGreaterThan(coinsForRound(0, 18));
     expect(coinsForRound(5, 18)).toBe(coinsForRound(0, 18)); // over par = no bonus, not negative
+  });
+});
+
+describe("dailyStarCoins (Daily-Challenge star bounties)", () => {
+  it("is cumulative and strictly growing per star", () => {
+    expect(dailyStarCoins(0)).toBe(0);
+    expect(dailyStarCoins(1)).toBeGreaterThan(0);
+    expect(dailyStarCoins(2)).toBeGreaterThan(dailyStarCoins(1));
+    expect(dailyStarCoins(3)).toBeGreaterThan(dailyStarCoins(2));
+  });
+  it("clamps out-of-range star counts instead of crashing the wallet", () => {
+    expect(dailyStarCoins(-1)).toBe(0);
+    expect(dailyStarCoins(9)).toBe(dailyStarCoins(3));
+  });
+  it("upgrading pays only the difference (each tier at most once a day)", () => {
+    // 0★ → 2★ then 2★ → 3★ must sum to the same as 0★ → 3★ directly.
+    const upgrade = (from: number, to: number) => dailyStarCoins(to) - dailyStarCoins(from);
+    expect(upgrade(0, 2) + upgrade(2, 3)).toBe(dailyStarCoins(3));
   });
 });

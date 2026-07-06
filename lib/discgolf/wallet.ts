@@ -52,6 +52,14 @@ export function coinsForRound(toPar: number, holes: number, mult = 1): number {
   return Math.round((base + under * 6) * mult);
 }
 
+// Coin bounty for holding N Daily-Challenge stars, cumulative: 1★ = 20 total,
+// 2★ = 50, 3★ = 100. A better run later the same day pays only the difference
+// (see finishGame), so each tier pays out at most once per day.
+const DAILY_STAR_COINS = [0, 20, 50, 100] as const;
+export function dailyStarCoins(stars: number): number {
+  return DAILY_STAR_COINS[Math.max(0, Math.min(3, Math.round(stars)))];
+}
+
 export function fmtCoins(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1)}M`;
   if (n >= 10_000) return `${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1)}k`;
