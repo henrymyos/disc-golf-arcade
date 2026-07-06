@@ -5,6 +5,8 @@ import {
   courseHoles,
   courseDifficulty,
   difficultyStars,
+  dailyStarThresholds,
+  dailyStarsEarned,
   courseStarDifficulty,
   tournDifficulty,
   tournStarDifficulty,
@@ -310,6 +312,50 @@ describe("Daily Challenge is assembled from real courses", () => {
         expect(pool.has(sig(h)), `academy seed ${seed}: a hole that belongs to no course`).toBe(true);
       expect(len(short)).toBeLessThan(len(full)); // shrunk so a beginner can reach greens
     }
+  });
+});
+
+describe("Daily Challenge stars (three difficulty-adjusted goals)", () => {
+  it("thresholds are deterministic and strictly descending (1★ easiest, 3★ hardest)", () => {
+    for (let seed = 0; seed < 60; seed++) {
+      const [s1, s2, s3] = dailyStarThresholds(seed);
+      expect(dailyStarThresholds(seed)).toEqual([s1, s2, s3]);
+      expect(s1).toBeGreaterThan(s2);
+      expect(s2).toBeGreaterThan(s3);
+      // The 2★ and 3★ goals stay 5 strokes apart — only the whole ladder shifts.
+      expect(s1 - s2).toBe(5);
+      expect(s2 - s3).toBe(5);
+    }
+  });
+  it("shifts stay within ±3 strokes of the E / −5 / −10 base", () => {
+    for (let seed = 0; seed < 200; seed++) {
+      const [s1] = dailyStarThresholds(seed);
+      expect(Math.abs(s1)).toBeLessThanOrEqual(3);
+    }
+  });
+  it("harder-than-average days get more lenient goals (and vice versa)", () => {
+    // The shift must track the day's measured difficulty: across many seeds the
+    // relief (s1) and the raw difficulty rating should move together.
+    const rated = Array.from({ length: 120 }, (_, seed) => ({
+      shift: dailyStarThresholds(seed)[0],
+      diff: courseDifficulty(buildRound(seed, "daily")),
+    }));
+    const shifts = new Set(rated.map((r) => r.shift));
+    expect(shifts.size).toBeGreaterThan(1); // the adjustment actually varies day to day
+    const easyDays = rated.filter((r) => r.shift < 0).map((r) => r.diff);
+    const hardDays = rated.filter((r) => r.shift > 0).map((r) => r.diff);
+    if (easyDays.length && hardDays.length) {
+      expect(Math.max(...easyDays)).toBeLessThan(Math.min(...hardDays));
+    }
+  });
+  it("stars earned follow the day's thresholds", () => {
+    const seed = 7;
+    const [s1, s2, s3] = dailyStarThresholds(seed);
+    expect(dailyStarsEarned(seed, s1 + 1)).toBe(0);
+    expect(dailyStarsEarned(seed, s1)).toBe(1);
+    expect(dailyStarsEarned(seed, s2)).toBe(2);
+    expect(dailyStarsEarned(seed, s3)).toBe(3);
+    expect(dailyStarsEarned(seed, s3 - 4)).toBe(3);
   });
 });
 

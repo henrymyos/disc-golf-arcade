@@ -111,6 +111,24 @@ describe("mergeProgress", () => {
   });
 });
 
+describe("mergeProgress — Daily Challenge stars", () => {
+  it("keeps each day's best star count across devices", () => {
+    const a: Progress = { ...base, dailyStars: { "20600": 2, "20601": 1 } };
+    const b: Progress = { ...base, dailyStars: { "20600": 3, "20602": 2 } };
+    const m = mergeProgress(a, b);
+    expect(m.dailyStars).toEqual({ "20600": 3, "20601": 1, "20602": 2 });
+  });
+
+  it("trims the record to the most recent 60 days", () => {
+    const many: Record<string, number> = {};
+    for (let d = 20000; d < 20100; d++) many[d] = 1;
+    const m = mergeProgress({ ...base, dailyStars: many }, base);
+    const days = Object.keys(m.dailyStars ?? {}).map(Number);
+    expect(days).toHaveLength(60);
+    expect(Math.min(...days)).toBe(20040); // oldest 40 dropped
+  });
+});
+
 describe("mergeProgress — career slots", () => {
   const car = (season: number) => ({ season, results: [], careerPoints: 0 }) as unknown as NonNullable<Progress["career"]>;
 

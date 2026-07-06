@@ -458,6 +458,35 @@ function courseDifficultyOf(mode: Mode, seed?: number): number {
 function courseStarDifficulty(mode: Mode, seed?: number): 1 | 2 | 3 | 4 | 5 {
   return difficultyStars(courseDifficultyOf(mode, seed));
 }
+// ── Daily Challenge stars: three to-par goals each day (1★ / 2★ / 3★). The
+// base goals are E / −5 / −10, but they shift with how nasty that day's nine
+// holes actually play: a day whose mix rates harder than the pool's average
+// difficulty relaxes every goal by up to 3 strokes, an easier-than-average day
+// tightens them by up to 3. Deterministic per seed — everyone chases the same
+// goals on the same course.
+const DAILY_STAR_BASE: readonly [number, number, number] = [0, -5, -10];
+// Strokes of goal relief per point of course difficulty above the pool average.
+const DAILY_STAR_STROKES_PER_DIFF = 2;
+// The neutral reference a day is measured against: the whole daily pool's
+// average difficulty plus the mean seeded-wind term (pool holes carry no wind;
+// seededWind deals 0.004–0.018, mean 0.011, and courseDifficulty weighs wind
+// at ×26). Cached — the pool itself is already cached per lenScale.
+let DAILY_BASE_DIFF: number | null = null;
+function dailyBaselineDifficulty(): number {
+  if (DAILY_BASE_DIFF == null) DAILY_BASE_DIFF = courseDifficulty(dailyHolePool()) + 0.011 * 26;
+  return DAILY_BASE_DIFF;
+}
+// The day's three goals as to-par numbers, hardest last: [1★, 2★, 3★].
+function dailyStarThresholds(seed: number): [number, number, number] {
+  const diff = courseDifficulty(buildRound(seed, "daily"));
+  const shift = Math.max(-3, Math.min(3, Math.round((diff - dailyBaselineDifficulty()) * DAILY_STAR_STROKES_PER_DIFF)));
+  return [DAILY_STAR_BASE[0] + shift, DAILY_STAR_BASE[1] + shift, DAILY_STAR_BASE[2] + shift];
+}
+// Stars earned for finishing the day's round at `toPar` (0 = missed them all).
+function dailyStarsEarned(seed: number, toPar: number): 0 | 1 | 2 | 3 {
+  const [s1, s2, s3] = dailyStarThresholds(seed);
+  return toPar <= s3 ? 3 : toPar <= s2 ? 2 : toPar <= s1 ? 1 : 0;
+}
 // Winthrop's personal best lives in its own key (WBEST_KEY, from @/lib/progress).
 // Leaderboards are per course; each daily seed gets its own board.
 function leaderboardCourse(mode: Mode, seed: number): string {
@@ -2250,6 +2279,8 @@ export {
   inAnyOB,
   mulberry32,
   dailySeed,
+  dailyStarThresholds,
+  dailyStarsEarned,
   clampPin,
   seededWind,
   pointOnPath,

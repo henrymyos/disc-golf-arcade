@@ -6,8 +6,8 @@ import { submitArcadeScore, getArcadeLeaderboard, submitMiniScore, getMiniLeader
 import type { ArcadeScore } from "@/lib/arcade-types";
 import { getSupabase } from "@/lib/supabase/browser";
 import {
-  BEST_KEY, WBEST_KEY, HOLEBEST_KEY, SETTINGS_KEY, ACH_KEY, HIST_KEY, CAREER_KEY, CAREERS_KEY, CAREER_SLOTS, COINS_KEY, DAILY_KEY, OWNED_KEY, PROFILE_KEY, RANKED_KEY, BAG_KEY, BAGSEEN_KEY, LEVELREWARD_KEY, COINSEARNED_KEY, COINSSPENT_KEY, UPDATEDAT_KEY,
-  readLocalProgress, applyProgress, mergeProgress, clearLocalProgress, type Progress,
+  BEST_KEY, WBEST_KEY, HOLEBEST_KEY, SETTINGS_KEY, ACH_KEY, HIST_KEY, CAREER_KEY, CAREERS_KEY, CAREER_SLOTS, COINS_KEY, DAILY_KEY, OWNED_KEY, PROFILE_KEY, RANKED_KEY, BAG_KEY, BAGSEEN_KEY, LEVELREWARD_KEY, DAILYSTARS_KEY, COINSEARNED_KEY, COINSSPENT_KEY, UPDATEDAT_KEY,
+  readLocalProgress, applyProgress, mergeProgress, clearLocalProgress, trimDailyStars, type Progress,
 } from "@/lib/progress";
 import {
   dayNumber, claimDailyReward, dailyAvailable, coinsForRound, modeCoinMult, fmtCoins, type DailyReward,
@@ -34,7 +34,7 @@ import {
   dailyClaimKey, eventClaimKey, type Challenge, type EventRound,
 } from "@/lib/discgolf/events";
 import {
-  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, TOTAL_PAR, WINTHROP_PAR, leaderboardCourse, TOURN_KEY, TOURN_FIELD, TOURNAMENTS, tournDef, tournRoundPlayHoles, tournPlace, tournFieldRound, tournLiveStandings, tournStandings, ACHIEVEMENTS, earnedAchievements, achievementReward, scoreLabel, courseStars, courseHoles, courseDifficultyOf, courseStarDifficulty, tournDifficulty, tournStarDifficulty, STRAIGHT_SPEED_MUL, releaseSpeedMul, ADV_DISCS, DISC_PRICE, isDiscUnlocked, levelUpChoices, validDiscIndex, DEFAULT_DISC_INDEX, BAG_MAX, discByKey, discIndexByKey, unlockedDiscKeys, reconcileBag, TOUR_COURSES, tourVenue, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, dailySeed, buildRound, elevAt, vibrate, pxToFeet, distBetween, autoDiscIndex, windAlong, resolvePenalty, treesAtLie, stepFlight,
+  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, TOTAL_PAR, WINTHROP_PAR, leaderboardCourse, TOURN_KEY, TOURN_FIELD, TOURNAMENTS, tournDef, tournRoundPlayHoles, tournPlace, tournFieldRound, tournLiveStandings, tournStandings, ACHIEVEMENTS, earnedAchievements, achievementReward, scoreLabel, courseStars, courseHoles, courseDifficultyOf, courseStarDifficulty, tournDifficulty, tournStarDifficulty, STRAIGHT_SPEED_MUL, releaseSpeedMul, ADV_DISCS, DISC_PRICE, isDiscUnlocked, levelUpChoices, validDiscIndex, DEFAULT_DISC_INDEX, BAG_MAX, discByKey, discIndexByKey, unlockedDiscKeys, reconcileBag, TOUR_COURSES, tourVenue, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, dailySeed, dailyStarThresholds, dailyStarsEarned, buildRound, elevAt, vibrate, pxToFeet, distBetween, autoDiscIndex, windAlong, resolvePenalty, treesAtLie, stepFlight,
 } from "@/lib/discgolf/engine";
 import type {
   Vec, Tree, Hole, Mode, Tournament, TournDef, TournLiveRow, Achievement, FlightPath, Release, Flight, GhostState,
@@ -564,6 +564,11 @@ export function DiscGolfGame() {
   useEffect(() => { challengeRef.current = challenge; }, [challenge]);
   const [finalPars, setFinalPars] = useState<number[]>(HOLES.map((h) => h.par));
   const [finalMode, setFinalMode] = useState<Mode>("course");
+  // Today's Daily-Challenge star result for the finish screen: stars earned this
+  // round, the day's (difficulty-adjusted) to-par goals, and the day's best so far.
+  const [finalDailyStars, setFinalDailyStars] = useState<{ earned: number; best: number; thresholds: [number, number, number] } | null>(null);
+  // Daily-Challenge stars by day index (persisted; per-day best of 1–3).
+  const [dayStars, setDayStars] = useState<Record<string, number>>({});
   const [bestScore, setBestScore] = useState<number | null>(null);
   const [winthropBest, setWinthropBest] = useState<number | null>(null);
   const [isNewBest, setIsNewBest] = useState(false);
@@ -941,6 +946,8 @@ export function DiscGolfGame() {
       coinsSpentRef.current = csRaw != null && Number.isFinite(Number(csRaw)) ? Number(csRaw) : 0;
       setDaily(JSON.parse(localStorage.getItem(DAILY_KEY) || "null"));
       setToday(dayNumber(Date.now()));
+      const ds = JSON.parse(localStorage.getItem(DAILYSTARS_KEY) || "{}");
+      setDayStars(ds && typeof ds === "object" ? ds : {});
       const ow = JSON.parse(localStorage.getItem(OWNED_KEY) || "[]");
       ownedRef.current = Array.isArray(ow) ? ow : []; setOwned(ownedRef.current);
       const prof = JSON.parse(localStorage.getItem(PROFILE_KEY) || "null");
@@ -2063,6 +2070,28 @@ export function DiscGolfGame() {
       setNewAchievements(fresh.map((id) => ACHIEVEMENTS.find((a) => a.id === id)!).filter(Boolean));
     } else {
       setNewAchievements([]);
+    }
+
+    // Daily Challenge stars — three to-par goals tuned to how hard today's nine
+    // holes play (see dailyStarThresholds). Only today's own daily counts (a
+    // replayed challenge link from a past day earns nothing) and the day keeps
+    // its best result. Written before saveProgress below so the cloud sync
+    // (readLocalProgress) picks it up.
+    if (!practice && mode === "daily" && g && g.seed === dailySeed()) {
+      const toPar = total - pars.reduce((s, n) => s + n, 0);
+      const thresholds = dailyStarThresholds(g.seed);
+      const earned = dailyStarsEarned(g.seed, toPar);
+      let map: Record<string, number> = {};
+      try { map = JSON.parse(localStorage.getItem(DAILYSTARS_KEY) || "{}") ?? {}; } catch { /* ignore */ }
+      const prev = map[g.seed] ?? 0;
+      if (earned > prev) {
+        map = trimDailyStars({ ...map, [g.seed]: earned });
+        try { localStorage.setItem(DAILYSTARS_KEY, JSON.stringify(map)); } catch { /* ignore */ }
+      }
+      setDayStars(map);
+      setFinalDailyStars({ earned, best: Math.max(earned, prev), thresholds });
+    } else {
+      setFinalDailyStars(null);
     }
 
     // Tournament round: record it, simulate the AI field, run the cut (3-round
@@ -3704,6 +3733,11 @@ export function DiscGolfGame() {
   // The personal best for the course just played (null for the daily).
   const finalBest = finalMode === "course" ? bestScore : finalMode === "winthrop" ? winthropBest : finalMode === "tour" ? (tourBests[finalSeed] ?? null) : null;
   const overStr = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
+  // Today's Daily star goals (difficulty-adjusted, same for everyone) and the
+  // stars already banked today — for the Daily Challenge menu card. Deferred to
+  // the Single Player page so the daily hole pool isn't built on first paint.
+  const todayStars = today ? (dayStars[today] ?? 0) : 0;
+  const todayGoals = useMemo(() => (hub === "solo" && today ? dailyStarThresholds(today) : null), [hub, today]);
 
   return (
     <div className="app-root w-full bg-[#0f1117] flex flex-col select-none overflow-hidden">
@@ -3949,8 +3983,20 @@ export function DiscGolfGame() {
               {hub === "solo" && (
                 <div className={`w-full flex flex-col gap-3 ${menuTopMargin}`}>
                   <button type="button" onClick={() => setHub("home")} className={`${titleCardSm} !flex-none self-start px-3`}>‹ Back</button>
-                  <button type="button" onClick={() => startGame("daily")} className={hubCard}>
+                  <button type="button" onClick={() => startGame("daily")} className={`${hubCard} !flex-col gap-1`}>
                     <span className="font-black text-lg">Daily Challenge</span>
+                    {todayGoals && (
+                      <span className="flex items-center gap-2 text-[11px]">
+                        <span className="tracking-wide">
+                          {[0, 1, 2].map((i) => (
+                            <span key={i} className={todayStars > i ? "" : "opacity-25 grayscale"}>⭐</span>
+                          ))}
+                        </span>
+                        <span className="text-gray-400 font-mono">
+                          {todayStars >= 3 ? "all stars earned!" : todayGoals.map(overStr).join(" / ")}
+                        </span>
+                      </span>
+                    )}
                   </button>
                   <button type="button" onClick={() => setCoursesOpen(true)} className={hubCard}>
                     <span className="font-black text-lg">Challenge the Arcade</span>
@@ -4574,6 +4620,26 @@ export function DiscGolfGame() {
                 )}
                 {coinReward > 0 && (
                   <p className="text-[#f5d24a] text-sm font-bold mt-1">+{coinReward} <Coin /></p>
+                )}
+                {/* Daily stars — the day's three to-par goals, lit as earned. */}
+                {finalDailyStars && (
+                  <div className="mt-2.5 inline-block bg-[#1a1d23] border border-white/10 rounded-xl px-5 py-2.5">
+                    <div className="flex items-end justify-center gap-4">
+                      {finalDailyStars.thresholds.map((t, i) => (
+                        <div key={i} className="flex flex-col items-center">
+                          <span className={`text-2xl leading-none ${finalDailyStars.earned > i ? "drop-shadow-[0_0_6px_rgba(245,210,74,0.6)]" : "opacity-25 grayscale"}`}>⭐</span>
+                          <span className={`text-[10px] font-mono font-bold mt-1 ${finalDailyStars.earned > i ? "text-[#f5d24a]" : "text-gray-500"}`}>{overStr(t)}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-gray-400 text-[10px] mt-1.5">
+                      {finalDailyStars.earned === 3
+                        ? "All 3 stars — today's course, conquered!"
+                        : finalDailyStars.best > finalDailyStars.earned
+                          ? `Best today: ${finalDailyStars.best}★ · goals tuned to today's course`
+                          : "Goals are tuned to today's course difficulty"}
+                    </p>
+                  </div>
                 )}
               </>)}
               {finalMode === "ranked" && rankedResult && (() => {

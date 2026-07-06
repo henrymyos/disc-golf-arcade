@@ -23,6 +23,7 @@ export const RANKED_KEY = "discgolf.ranked.v1";
 export const BAG_KEY = "discgolf.bag.v1"; // the ≤5 disc keys carried into rounds
 export const BAGSEEN_KEY = "discgolf.bagseen.v1"; // disc keys already auto-processed for the bag
 export const LEVELREWARD_KEY = "discgolf.levelreward.v1"; // highest level whose disc draft was resolved
+export const DAILYSTARS_KEY = "discgolf.dailystars.v1"; // Daily Challenge stars earned, keyed by day index
 export const COINSEARNED_KEY = "discgolf.coinsEarned.v1"; // lifetime coins earned (monotonic, for loss-free merge)
 export const COINSSPENT_KEY = "discgolf.coinsSpent.v1"; // lifetime coins spent (monotonic, for loss-free merge)
 export const UPDATEDAT_KEY = "discgolf.updatedAt.v1"; // last local change time, for newer-wins preference merge
@@ -45,6 +46,7 @@ export type Progress = {
   bag: string[];
   bagSeen: string[];
   levelRewarded: number | null;
+  dailyStars?: Record<string, number>; // day index → stars earned that day (1–3)
   coinsEarned?: number; // monotonic lifetime earned (balance = earned − spent)
   coinsSpent?: number;  // monotonic lifetime spent
   updatedAt?: number;   // last local change time (ms), for newer-wins merges
@@ -71,6 +73,16 @@ function moreAdvancedCareer(a: Career | null, b: Career | null): Career | null {
 function parse<T>(raw: string | null, fallback: T): T {
   if (!raw) return fallback;
   try { return JSON.parse(raw) as T; } catch { return fallback; }
+}
+
+// Keep only the most recent days of Daily-Challenge stars so the record can't
+// grow without bound (60 days is plenty for streak/history UI).
+export const DAILY_STARS_MAX_DAYS = 60;
+export function trimDailyStars(map: Record<string, number>): Record<string, number> {
+  const days = Object.keys(map).map(Number).filter(Number.isFinite).sort((a, b) => b - a).slice(0, DAILY_STARS_MAX_DAYS);
+  const out: Record<string, number> = {};
+  for (const d of days) out[d] = map[d];
+  return out;
 }
 
 export function readLocalProgress(): Progress {
@@ -101,13 +113,14 @@ export function readLocalProgress(): Progress {
   const bagSeen = parse<string[]>(localStorage.getItem(BAGSEEN_KEY), []);
   const lrRaw = localStorage.getItem(LEVELREWARD_KEY);
   const levelRewarded = lrRaw != null && Number.isFinite(Number(lrRaw)) ? Number(lrRaw) : null;
+  const dailyStars = parse<Record<string, number>>(localStorage.getItem(DAILYSTARS_KEY), {});
   const ceRaw = localStorage.getItem(COINSEARNED_KEY);
   const coinsEarned = ceRaw != null && Number.isFinite(Number(ceRaw)) ? Number(ceRaw) : undefined;
   const csRaw = localStorage.getItem(COINSSPENT_KEY);
   const coinsSpent = csRaw != null && Number.isFinite(Number(csRaw)) ? Number(csRaw) : undefined;
   const uaRaw = localStorage.getItem(UPDATEDAT_KEY);
   const updatedAt = uaRaw != null && Number.isFinite(Number(uaRaw)) ? Number(uaRaw) : undefined;
-  return { best, winthropBest, holeBest, achievements, history, settings, career, careers, coins, daily, owned, profile, ranked, bag, bagSeen, levelRewarded, coinsEarned, coinsSpent, updatedAt };
+  return { best, winthropBest, holeBest, achievements, history, settings, career, careers, coins, daily, owned, profile, ranked, bag, bagSeen, levelRewarded, dailyStars, coinsEarned, coinsSpent, updatedAt };
 }
 
 // Wipe this device's saved progress (device SETTINGS are kept). Used on sign-out
@@ -115,7 +128,7 @@ export function readLocalProgress(): Progress {
 // account's data lives in the cloud, which logging back in restores.
 export function clearLocalProgress() {
   if (typeof localStorage === "undefined") return;
-  for (const k of [BEST_KEY, WBEST_KEY, HOLEBEST_KEY, ACH_KEY, HIST_KEY, CAREER_KEY, CAREERS_KEY, COINS_KEY, DAILY_KEY, OWNED_KEY, PROFILE_KEY, RANKED_KEY, BAG_KEY, BAGSEEN_KEY, LEVELREWARD_KEY, COINSEARNED_KEY, COINSSPENT_KEY, UPDATEDAT_KEY]) {
+  for (const k of [BEST_KEY, WBEST_KEY, HOLEBEST_KEY, ACH_KEY, HIST_KEY, CAREER_KEY, CAREERS_KEY, COINS_KEY, DAILY_KEY, OWNED_KEY, PROFILE_KEY, RANKED_KEY, BAG_KEY, BAGSEEN_KEY, LEVELREWARD_KEY, DAILYSTARS_KEY, COINSEARNED_KEY, COINSSPENT_KEY, UPDATEDAT_KEY]) {
     try { localStorage.removeItem(k); } catch { /* ignore */ }
   }
 }
@@ -141,6 +154,7 @@ export function applyProgress(p: Progress) {
     if (p.bag?.length) localStorage.setItem(BAG_KEY, JSON.stringify(p.bag));
     if (p.bagSeen?.length) localStorage.setItem(BAGSEEN_KEY, JSON.stringify(p.bagSeen));
     if (p.levelRewarded != null) localStorage.setItem(LEVELREWARD_KEY, String(p.levelRewarded));
+    if (p.dailyStars && Object.keys(p.dailyStars).length) localStorage.setItem(DAILYSTARS_KEY, JSON.stringify(trimDailyStars(p.dailyStars)));
     if (p.coinsEarned != null) localStorage.setItem(COINSEARNED_KEY, String(Math.max(0, Math.round(p.coinsEarned))));
     if (p.coinsSpent != null) localStorage.setItem(COINSSPENT_KEY, String(Math.max(0, Math.round(p.coinsSpent))));
     if (p.updatedAt != null) localStorage.setItem(UPDATEDAT_KEY, String(p.updatedAt));
@@ -234,6 +248,13 @@ export function mergeProgress(a: Progress, b: Progress): Progress {
   const ca = careersOf(a), cb = careersOf(b);
   const careers = ca.map((_, i) => moreAdvancedCareer(ca[i], cb[i]));
 
+  // Daily-Challenge stars: per-day max, so a better run on either device wins
+  // that day and nothing earned is ever lost.
+  const dailyStars: Record<string, number> = {};
+  for (const d of new Set([...Object.keys(a.dailyStars ?? {}), ...Object.keys(b.dailyStars ?? {})])) {
+    dailyStars[d] = Math.max(a.dailyStars?.[d] ?? 0, b.dailyStars?.[d] ?? 0);
+  }
+
   return {
     best: minDefined(a.best, b.best),
     winthropBest: minDefined(a.winthropBest, b.winthropBest),
@@ -260,5 +281,6 @@ export function mergeProgress(a: Progress, b: Progress): Progress {
     bagSeen: Array.from(new Set([...(a.bagSeen ?? []), ...(b.bagSeen ?? [])])),
     // Highest resolved level-up draft — keep the further-along device's.
     levelRewarded: a.levelRewarded == null ? b.levelRewarded : b.levelRewarded == null ? a.levelRewarded : Math.max(a.levelRewarded, b.levelRewarded),
+    dailyStars: trimDailyStars(dailyStars),
   };
 }
