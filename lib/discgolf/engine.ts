@@ -1608,6 +1608,7 @@ function tourScene(seed: number): Scene {
 function buildTournaments(): TournDef[] {
   const glen: TournRound = { mode: "course" };
   const wint: TournRound = { mode: "winthrop" };
+  const oly: TournRound = { mode: "olympus" };
   const tour = (c: TourCourse): TournRound => ({ mode: "tour", seed: c.seed });
   const seedOf = (s: string) => { let h = 2166136261 >>> 0; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
   const ev = (name: string, venues: string, rounds: TournRound[], cut: boolean): TournDef => ({ id: name, name, venues, rounds, cut, seed: seedOf(name) });
@@ -1615,6 +1616,7 @@ function buildTournaments(): TournDef[] {
   const list: TournDef[] = [
     ev("Glendoveer Championship", "Glendoveer East", [glen, glen, glen], true),
     ev("Winthrop Lake Classic", "Winthrop Lake", [wint, wint, wint], true),
+    ev("Supreme Flight Open", "Olympus", [oly, oly, oly], true),
     ...t.map((c) => ev(`${c.name} Open`, c.name, [tour(c), tour(c), tour(c)], true)),
     ev("Northwest Showdown", "Glendoveer East + Winthrop Lake", [glen, wint], false),
   ];
@@ -1650,19 +1652,19 @@ const TOURN_DIVISION_INDEX: Map<string, number> = (() => {
 //   Platinum / Diamond — two rounds across two distinct courses.
 //   Master — three rounds across TWO courses (the first course hosts rounds 1 & 3).
 // Every event has a UNIQUE course schedule. The eight one-course events take the
-// eight easiest courses one apiece; the eight multi-round events pair courses that
+// eight easiest courses one apiece; the nine multi-round events pair courses that
 // share a THEME so the combination feels intentional — the two night courses become
-// a night event, the two wooded courses a woods event, and so on (see MULTI).
+// a night event, the two desert courses the Quarry Cup, and so on (see MULTI).
 const roundVenueName = (r: TournRound): string =>
-  r.mode === "course" ? "Glendoveer East" : r.mode === "winthrop" ? "Winthrop Lake" : tourVenue(r.seed ?? 0);
+  r.mode === "course" ? "Glendoveer East" : r.mode === "winthrop" ? "Winthrop Lake" : r.mode === "olympus" ? "Olympus" : tourVenue(r.seed ?? 0);
 // One-course events are named for their course with a division-prestige suffix; the
 // themed multi-course events carry a hand-written name. The stable id/seed are left
 // untouched, so saved best-places and division mapping don't move.
 const SINGLE_SUFFIX = ["Open", "Classic", "Invitational", "Championship", "Crown", "Trophy", "Cup", "Challenge"];
 const TOURNAMENTS: TournDef[] = (() => {
-  // All ten courses, ranked easy → hard.
+  // All eleven courses, ranked easy → hard.
   const all: TournRound[] = [
-    { mode: "course" }, { mode: "winthrop" },
+    { mode: "course" }, { mode: "winthrop" }, { mode: "olympus" },
     ...TOUR_COURSES.map((c) => ({ mode: "tour", seed: c.seed } as TournRound)),
   ];
   const cDiff = (r: TournRound) => courseDifficulty(tournRoundHoles(r));
@@ -1670,20 +1672,21 @@ const TOURNAMENTS: TournDef[] = (() => {
   const div = (d: TournDef) => TOURN_DIVISION_INDEX.get(d.id) ?? 0;
   const cmp = (a: TournDef, b: TournDef) => div(a) - div(b) || tournDifficulty(a) - tournDifficulty(b) || (a.id < b.id ? -1 : 1);
 
-  // The eight multi-round events, ordered by division (Platinum → Master), as indices
-  // into `byEasy` (SC GL CC BH WI BW WR TR ST CH). Most pair courses that literally
+  // The nine multi-round events, ordered by division (Platinum → Master), as indices
+  // into `byEasy` (OL SC GL CC BH WI BW WR TR ST CH). Most pair courses that literally
   // share a theme; the Diamond "Seasons Tour" is three DISTINCT courses played once
   // each — autumn → winter → spring — and the tougher tiers stay on the hardest
   // courses so their (stronger) fields still get a genuinely hard test.
   const MULTI: { v: number[]; name: string }[] = [
-    { v: [4, 5], name: "Tempest Cup" },        // Platinum · storm — Winthrop + Birchwood (both rain)
-    { v: [2, 9], name: "Moonlight Classic" },  // Platinum · night — Coyote Canyon + Cedar Hollow (both night)
-    { v: [6, 8], name: "Woodland Series" },    // Platinum · woods — Wolf Ridge + Stonebriar (both wooded)
-    { v: [0, 7, 6], name: "Seasons Tour" },    // Diamond · 3 rounds — Silver Creek (autumn) → Timber Ridge (winter) → Wolf Ridge (spring)
-    { v: [8, 7], name: "Evergreen Cup" },      // Diamond — Stonebriar + Timber Ridge
-    { v: [6, 9], name: "Ridgeline Series" },   // Diamond — Wolf Ridge + Cedar Hollow
-    { v: [7, 9], name: "Summit Series" },      // Master · technical — Timber Ridge + Cedar Hollow (both tight & technical)
-    { v: [8, 9], name: "Grand Championship" }, // Master · finale — Stonebriar + Cedar Hollow
+    { v: [5, 6], name: "Tempest Cup" },        // Platinum · storm — Winthrop + Birchwood (both rain)
+    { v: [3, 10], name: "Moonlight Classic" }, // Platinum · night — Coyote Canyon + Cedar Hollow (both night)
+    { v: [7, 9], name: "Woodland Series" },    // Platinum · woods — Wolf Ridge + Stonebriar (both wooded)
+    { v: [0, 4], name: "Quarry Cup" },         // Platinum · sun-baked — Olympus + Blue Heron Park (both desert)
+    { v: [1, 8, 7], name: "Seasons Tour" },    // Diamond · 3 rounds — Silver Creek (autumn) → Timber Ridge (winter) → Wolf Ridge (spring)
+    { v: [9, 8], name: "Evergreen Cup" },      // Diamond — Stonebriar + Timber Ridge
+    { v: [7, 10], name: "Ridgeline Series" },  // Diamond — Wolf Ridge + Cedar Hollow
+    { v: [8, 10], name: "Summit Series" },     // Master · technical — Timber Ridge + Cedar Hollow (both tight & technical)
+    { v: [9, 10], name: "Grand Championship" },// Master · finale — Stonebriar + Cedar Hollow
   ];
 
   const plan = new Map<string, { rounds: TournRound[]; venueList: TournRound[]; name?: string }>();
