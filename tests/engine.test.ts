@@ -17,8 +17,10 @@ import {
   buildRound,
   HOLES,
   WINTHROP_HOLES,
+  OLYMPUS_HOLES,
   TOTAL_PAR,
   WINTHROP_PAR,
+  OLYMPUS_PAR,
   inHazard,
   inRect,
   distToSeg,
@@ -156,14 +158,19 @@ describe("course data", () => {
   it("has 18 holes per fixed course with the documented pars", () => {
     expect(HOLES).toHaveLength(18);
     expect(WINTHROP_HOLES).toHaveLength(18);
+    expect(OLYMPUS_HOLES).toHaveLength(18);
     expect(TOTAL_PAR).toBe(66);
     expect(WINTHROP_PAR).toBe(61);
+    expect(OLYMPUS_PAR).toBe(65); // Supreme Flight Open MPO par
   });
   it("stretches every hole's basket above its tee", () => {
-    for (const h of [...HOLES, ...WINTHROP_HOLES]) {
+    for (const h of [...HOLES, ...WINTHROP_HOLES, ...OLYMPUS_HOLES]) {
       expect(h.basket.y).toBeLessThan(h.tee.y);
       expect(h.worldH).toBeGreaterThan(250); // short holes (lenMul) are still well-formed
     }
+  });
+  it("Olympus keeps its quarry theme on every hole (it travels into the Daily mix)", () => {
+    for (const h of OLYMPUS_HOLES) expect(h.theme).toBe("desert");
   });
 });
 
@@ -272,6 +279,14 @@ describe("generated obstacles stay in bounds", () => {
     for (const c of TOUR_COURSES)
       generateTourCourse(c.seed).forEach((h, i) => checkHole(h, `${c.name} hole ${i + 1}`));
   });
+  it("Olympus (hand-authored) keeps every obstacle in play", () => {
+    OLYMPUS_HOLES.forEach((h, i) => {
+      checkHole(h, `Olympus hole ${i + 1}`);
+      // its quarry grass-OB islands must reach the corridor too, or they'd be dead art
+      for (const z of h.obZones ?? [])
+        expect(boxInCorridor(h, z), `Olympus hole ${i + 1}: an OB island never reaches the corridor`).toBe(true);
+    });
+  });
   it("tour & ranked courses keep obstacles in play across every venue style", () => {
     // generateTourCourse also backs Ranked (a weekly seed) — sweep many seeds so
     // all six venue characters and a wide spread of layouts are covered.
@@ -282,13 +297,14 @@ describe("generated obstacles stay in bounds", () => {
 
 describe("Daily Challenge is assembled from real courses", () => {
   // The daily must serve holes that EXIST in the app's playable courses —
-  // Glendoveer East, Winthrop Lake, and the eight pro-tour venues — never an
-  // invented one. Signature = the fields that identify a hole's layout (wind is
-  // re-seeded per day, so it's excluded).
+  // Glendoveer East, Winthrop Lake, Olympus, and the eight pro-tour venues —
+  // never an invented one. Signature = the fields that identify a hole's layout
+  // (wind is re-seeded per day, so it's excluded).
   const sig = (h: Hole) => `${h.par}|${Math.round(h.tee.x)}|${h.worldH}|${Math.round(h.basket.x)}|${Math.round(h.basket.y)}|${h.trees.length}`;
   const pool = new Set<string>();
   HOLES.forEach((h) => pool.add(sig(h)));
   WINTHROP_HOLES.forEach((h) => pool.add(sig(h)));
+  OLYMPUS_HOLES.forEach((h) => pool.add(sig(h)));
   for (const c of TOUR_COURSES) generateTourCourse(c.seed).forEach((h) => pool.add(sig(h)));
   it("serves 9 holes a day, every one drawn from a real course", () => {
     for (let seed = 0; seed < 40; seed++) {

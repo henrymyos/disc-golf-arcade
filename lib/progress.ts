@@ -8,6 +8,7 @@ import { SEASON_HISTORY_MAX, type RankedState, type SeasonRecord } from "./discg
 
 export const BEST_KEY = "discgolf.best.glendoveer18";
 export const WBEST_KEY = "discgolf.best.winthrop18";
+export const OBEST_KEY = "discgolf.best.olympus18";
 export const HOLEBEST_KEY = "discgolf.holebest.glendoveer18";
 export const SETTINGS_KEY = "discgolf.settings.v1";
 export const ACH_KEY = "discgolf.achievements.v1";
@@ -32,6 +33,7 @@ export type HistoryRow = { mode: string; total: number; date: number; scores?: n
 export type Progress = {
   best: number | null;
   winthropBest: number | null;
+  olympusBest?: number | null; // optional: rows written before Olympus existed don't carry it
   holeBest: (number | null)[];
   achievements: string[];
   history: HistoryRow[];
@@ -93,6 +95,8 @@ export function readLocalProgress(): Progress {
   const best = bestRaw != null && Number.isFinite(Number(bestRaw)) ? Number(bestRaw) : null;
   const wBestRaw = localStorage.getItem(WBEST_KEY);
   const winthropBest = wBestRaw != null && Number.isFinite(Number(wBestRaw)) ? Number(wBestRaw) : null;
+  const oBestRaw = localStorage.getItem(OBEST_KEY);
+  const olympusBest = oBestRaw != null && Number.isFinite(Number(oBestRaw)) ? Number(oBestRaw) : null;
   const holeBest = parse<(number | null)[]>(localStorage.getItem(HOLEBEST_KEY), []);
   const achievements = parse<string[]>(localStorage.getItem(ACH_KEY), []);
   const history = parse<HistoryRow[]>(localStorage.getItem(HIST_KEY), []);
@@ -120,7 +124,7 @@ export function readLocalProgress(): Progress {
   const coinsSpent = csRaw != null && Number.isFinite(Number(csRaw)) ? Number(csRaw) : undefined;
   const uaRaw = localStorage.getItem(UPDATEDAT_KEY);
   const updatedAt = uaRaw != null && Number.isFinite(Number(uaRaw)) ? Number(uaRaw) : undefined;
-  return { best, winthropBest, holeBest, achievements, history, settings, career, careers, coins, daily, owned, profile, ranked, bag, bagSeen, levelRewarded, dailyStars, coinsEarned, coinsSpent, updatedAt };
+  return { best, winthropBest, olympusBest, holeBest, achievements, history, settings, career, careers, coins, daily, owned, profile, ranked, bag, bagSeen, levelRewarded, dailyStars, coinsEarned, coinsSpent, updatedAt };
 }
 
 // Wipe this device's saved progress (device SETTINGS are kept). Used on sign-out
@@ -128,7 +132,7 @@ export function readLocalProgress(): Progress {
 // account's data lives in the cloud, which logging back in restores.
 export function clearLocalProgress() {
   if (typeof localStorage === "undefined") return;
-  for (const k of [BEST_KEY, WBEST_KEY, HOLEBEST_KEY, ACH_KEY, HIST_KEY, CAREER_KEY, CAREERS_KEY, COINS_KEY, DAILY_KEY, OWNED_KEY, PROFILE_KEY, RANKED_KEY, BAG_KEY, BAGSEEN_KEY, LEVELREWARD_KEY, DAILYSTARS_KEY, COINSEARNED_KEY, COINSSPENT_KEY, UPDATEDAT_KEY]) {
+  for (const k of [BEST_KEY, WBEST_KEY, OBEST_KEY, HOLEBEST_KEY, ACH_KEY, HIST_KEY, CAREER_KEY, CAREERS_KEY, COINS_KEY, DAILY_KEY, OWNED_KEY, PROFILE_KEY, RANKED_KEY, BAG_KEY, BAGSEEN_KEY, LEVELREWARD_KEY, DAILYSTARS_KEY, COINSEARNED_KEY, COINSSPENT_KEY, UPDATEDAT_KEY]) {
     try { localStorage.removeItem(k); } catch { /* ignore */ }
   }
 }
@@ -138,6 +142,7 @@ export function applyProgress(p: Progress) {
   try {
     if (p.best != null) localStorage.setItem(BEST_KEY, String(p.best));
     if (p.winthropBest != null) localStorage.setItem(WBEST_KEY, String(p.winthropBest));
+    if (p.olympusBest != null) localStorage.setItem(OBEST_KEY, String(p.olympusBest));
     if (p.holeBest?.length) localStorage.setItem(HOLEBEST_KEY, JSON.stringify(p.holeBest));
     localStorage.setItem(ACH_KEY, JSON.stringify(p.achievements ?? []));
     localStorage.setItem(HIST_KEY, JSON.stringify((p.history ?? []).slice(-100)));
@@ -258,6 +263,7 @@ export function mergeProgress(a: Progress, b: Progress): Progress {
   return {
     best: minDefined(a.best, b.best),
     winthropBest: minDefined(a.winthropBest, b.winthropBest),
+    olympusBest: minDefined(a.olympusBest ?? null, b.olympusBest ?? null),
     holeBest,
     achievements,
     history: history.slice(-100),

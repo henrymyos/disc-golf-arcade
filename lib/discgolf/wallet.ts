@@ -34,6 +34,7 @@ export function modeCoinMult(mode: Mode): number {
     case "ranked":
       return 1.5;
     case "winthrop":
+    case "olympus":
       return 1.4;
     case "tour":
       return 1.3;

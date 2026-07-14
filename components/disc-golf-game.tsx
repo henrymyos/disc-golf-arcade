@@ -6,7 +6,7 @@ import { submitArcadeScore, getArcadeLeaderboard, submitMiniScore, getMiniLeader
 import type { ArcadeScore } from "@/lib/arcade-types";
 import { getSupabase } from "@/lib/supabase/browser";
 import {
-  BEST_KEY, WBEST_KEY, HOLEBEST_KEY, SETTINGS_KEY, ACH_KEY, HIST_KEY, CAREER_KEY, CAREERS_KEY, CAREER_SLOTS, COINS_KEY, DAILY_KEY, OWNED_KEY, PROFILE_KEY, RANKED_KEY, BAG_KEY, BAGSEEN_KEY, LEVELREWARD_KEY, DAILYSTARS_KEY, COINSEARNED_KEY, COINSSPENT_KEY, UPDATEDAT_KEY,
+  BEST_KEY, WBEST_KEY, OBEST_KEY, HOLEBEST_KEY, SETTINGS_KEY, ACH_KEY, HIST_KEY, CAREER_KEY, CAREERS_KEY, CAREER_SLOTS, COINS_KEY, DAILY_KEY, OWNED_KEY, PROFILE_KEY, RANKED_KEY, BAG_KEY, BAGSEEN_KEY, LEVELREWARD_KEY, DAILYSTARS_KEY, COINSEARNED_KEY, COINSSPENT_KEY, UPDATEDAT_KEY,
   readLocalProgress, applyProgress, mergeProgress, clearLocalProgress, trimDailyStars, type Progress,
 } from "@/lib/progress";
 import {
@@ -34,10 +34,10 @@ import {
   dailyClaimKey, eventClaimKey, type Challenge, type EventRound,
 } from "@/lib/discgolf/events";
 import {
-  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, TOTAL_PAR, WINTHROP_PAR, leaderboardCourse, TOURN_KEY, TOURN_FIELD, TOURNAMENTS, tournDef, tournRoundPlayHoles, tournPlace, tournFieldRound, tournLiveStandings, tournStandings, ACHIEVEMENTS, earnedAchievements, achievementReward, scoreLabel, courseStars, courseHoles, courseDifficultyOf, courseStarDifficulty, tournDifficulty, tournStarDifficulty, STRAIGHT_SPEED_MUL, releaseSpeedMul, ADV_DISCS, DISC_PRICE, isDiscUnlocked, levelUpChoices, validDiscIndex, DEFAULT_DISC_INDEX, BAG_MAX, discByKey, discIndexByKey, unlockedDiscKeys, reconcileBag, TOUR_COURSES, tourVenue, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, dailySeed, dailyStarThresholds, dailyStarsEarned, buildRound, elevAt, vibrate, pxToFeet, distBetween, autoDiscIndex, windAlong, resolvePenalty, treesAtLie, stepFlight,
+  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, TOTAL_PAR, WINTHROP_PAR, OLYMPUS_PAR, leaderboardCourse, TOURN_KEY, TOURN_FIELD, TOURNAMENTS, tournDef, tournRoundPlayHoles, tournPlace, tournFieldRound, tournLiveStandings, tournStandings, ACHIEVEMENTS, earnedAchievements, achievementReward, scoreLabel, courseStars, courseHoles, courseDifficultyOf, courseStarDifficulty, tournDifficulty, tournStarDifficulty, STRAIGHT_SPEED_MUL, releaseSpeedMul, ADV_DISCS, DISC_PRICE, isDiscUnlocked, levelUpChoices, validDiscIndex, DEFAULT_DISC_INDEX, BAG_MAX, discByKey, discIndexByKey, unlockedDiscKeys, reconcileBag, TOUR_COURSES, tourVenue, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, dailySeed, dailyStarThresholds, dailyStarsEarned, buildRound, elevAt, vibrate, pxToFeet, distBetween, autoDiscIndex, windAlong, resolvePenalty, treesAtLie, stepFlight,
 } from "@/lib/discgolf/engine";
 import type {
-  Vec, Tree, Hole, Mode, Tournament, TournDef, TournLiveRow, Achievement, FlightPath, Release, Flight, GhostState,
+  Vec, Tree, Water, Hole, Mode, Tournament, TournDef, TournLiveRow, Achievement, FlightPath, Release, Flight, GhostState,
 } from "@/lib/discgolf/engine";
 import { parseChallenge, challengeParam } from "@/lib/discgolf/challenge";
 import {
@@ -93,7 +93,7 @@ function readResume(): ResumeSnap | null {
   try {
     const r = JSON.parse(localStorage.getItem(RESUME_KEY) || "null");
     if (!r || r.v !== 1 || !Array.isArray(r.scores)) return null;
-    if (r.mode !== "course" && r.mode !== "winthrop" && r.mode !== "daily") return null;
+    if (r.mode !== "course" && r.mode !== "winthrop" && r.mode !== "olympus" && r.mode !== "daily") return null;
     // Nothing played yet, or already finished — not resumable.
     if (r.scores.length === 0 || r.scores.length >= holesForMode(r.mode)) return null;
     return r as ResumeSnap;
@@ -305,6 +305,7 @@ type CourseInfo = { mode: Mode; name: string; holes: number; par: number; blurb:
 const FIXED_COURSES: CourseInfo[] = [
   { mode: "course", name: "Glendoveer East", holes: 18, par: TOTAL_PAR, blurb: "The Northwest's championship test. A central pond squeezes the front nine, hard doglegs bend around mature firs, and tree-gate greens punish anything but a clean approach — precision off the tee is everything here." },
   { mode: "winthrop", name: "Winthrop Lake", holes: 18, par: WINTHROP_PAR, blurb: "Host of College Nationals. The lake hugs the entire front side and forces nervy water carries, while the middle stretch is rope-hazard golf where one stray throw costs a stroke. A run of long par-4s on the back decides it." },
+  { mode: "olympus", name: "Olympus", holes: 18, par: OLYMPUS_PAR, blurb: "Home of the Supreme Flight Open, carved through Florida forest over a limestone quarry. Marked OB lines every corridor, cliff pockets flank the greens, and the round ends with a nervy carry to the island green on 18." },
 ];
 // A character-driven opening line per venue style. The concrete hole stats
 // (par mix, water/sand, length) get woven in below to finish the description.
@@ -572,6 +573,7 @@ export function DiscGolfGame() {
   const [dayStars, setDayStars] = useState<Record<string, number>>({});
   const [bestScore, setBestScore] = useState<number | null>(null);
   const [winthropBest, setWinthropBest] = useState<number | null>(null);
+  const [olympusBest, setOlympusBest] = useState<number | null>(null);
   const [isNewBest, setIsNewBest] = useState(false);
   const [leaderboard, setLeaderboard] = useState<ArcadeScore[]>([]);
   const [saving, setSaving] = useState(false);
@@ -890,6 +892,8 @@ export function DiscGolfGame() {
       setBestScore(best && Number.isFinite(Number(best)) ? Number(best) : null);
       const wBest = localStorage.getItem(WBEST_KEY);
       setWinthropBest(wBest && Number.isFinite(Number(wBest)) ? Number(wBest) : null);
+      const oBest = localStorage.getItem(OBEST_KEY);
+      setOlympusBest(oBest && Number.isFinite(Number(oBest)) ? Number(oBest) : null);
 
       const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
       if (s.throwStyle === "BH" || s.throwStyle === "FH") { setDefaultThrowStyle(s.throwStyle); setThrowStyle(s.throwStyle); }
@@ -1332,7 +1336,7 @@ export function DiscGolfGame() {
     };
     // Load this course's best-round ghost (drawn as faint gold lines).
     try {
-      ghostRef.current = m === "course" || m === "winthrop" ? JSON.parse(localStorage.getItem(`discgolf.ghost.${m}`) || "null") : null;
+      ghostRef.current = m === "course" || m === "winthrop" || m === "olympus" ? JSON.parse(localStorage.getItem(`discgolf.ghost.${m}`) || "null") : null;
     } catch { ghostRef.current = null; }
     setSaved(false);
     setSaveErr(null);
@@ -1547,7 +1551,7 @@ export function DiscGolfGame() {
       mode: snap.mode, skill: IDENTITY_MODS, seed: snap.seed, roundHoles, ...freshHole(roundHoles[holeIndex]),
     };
     try {
-      ghostRef.current = snap.mode === "course" || snap.mode === "winthrop" ? JSON.parse(localStorage.getItem(`discgolf.ghost.${snap.mode}`) || "null") : null;
+      ghostRef.current = snap.mode === "course" || snap.mode === "winthrop" || snap.mode === "olympus" ? JSON.parse(localStorage.getItem(`discgolf.ghost.${snap.mode}`) || "null") : null;
     } catch { ghostRef.current = null; }
     setSaved(false);
     setSaveErr(null);
@@ -2003,10 +2007,10 @@ export function DiscGolfGame() {
     setFinalParty(g?.party ? { names: g.party.names, totals: g.party.scores.map((sc) => sc.reduce<number>((a, b) => a + (b ?? 0), 0)) } : null);
     setFinalOnline(online);
 
-    // Personal bests are tracked per fixed course — Glendoveer and Winthrop
-    // each have their own key (the daily course changes every day).
-    if (!practice && (mode === "course" || mode === "winthrop")) {
-      const key = mode === "course" ? BEST_KEY : WBEST_KEY;
+    // Personal bests are tracked per fixed course — Glendoveer, Winthrop and
+    // Olympus each have their own key (the daily course changes every day).
+    if (!practice && (mode === "course" || mode === "winthrop" || mode === "olympus")) {
+      const key = mode === "course" ? BEST_KEY : mode === "winthrop" ? WBEST_KEY : OBEST_KEY;
       let prior: number | null = null;
       try {
         const raw = localStorage.getItem(key);
@@ -2019,7 +2023,8 @@ export function DiscGolfGame() {
       const best = newBest ? total : prior!;
       try { localStorage.setItem(key, String(best)); } catch { /* ignore */ }
       if (mode === "course") setBestScore(best);
-      else setWinthropBest(best);
+      else if (mode === "winthrop") setWinthropBest(best);
+      else setOlympusBest(best);
       setIsNewBest(newBest);
       // A new best round becomes the course ghost: every shot's flight path,
       // downsampled to keep storage small.
@@ -2321,7 +2326,7 @@ export function DiscGolfGame() {
     const over = total - parTotal;
     const nHoles = finalPars.length;
     const isDaily = finalMode === "daily";
-    const courseLabel = isDaily ? "Daily Challenge" : finalMode === "winthrop" ? "Winthrop Lake" : finalMode === "ranked" ? "Ranked" : finalMode === "tour" ? tourVenue(finalSeed) : "Glendoveer East";
+    const courseLabel = isDaily ? "Daily Challenge" : finalMode === "winthrop" ? "Winthrop Lake" : finalMode === "olympus" ? "Olympus" : finalMode === "ranked" ? "Ranked" : finalMode === "tour" ? tourVenue(finalSeed) : "Glendoveer East";
     const courseName = `${courseLabel} · ${nHoles} holes · par ${parTotal}`;
     const os = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
     const cv = document.createElement("canvas");
@@ -2370,7 +2375,7 @@ export function DiscGolfGame() {
     const flash = (msg: string) => { setShareMsg(msg); window.setTimeout(() => setShareMsg(null), 2200); };
     const where = isDaily ? "today's Daily Challenge" : courseLabel;
     // A replay link when the mode supports it (course/winthrop/daily), else just the app.
-    const canLink = finalMode === "course" || finalMode === "winthrop" || finalMode === "daily";
+    const canLink = finalMode === "course" || finalMode === "winthrop" || finalMode === "olympus" || finalMode === "daily";
     const link = `${location.origin}${location.pathname}${canLink ? `?ch=${challengeParam(finalMode, finalSeed, total, profile.name.trim() || "A friend")}` : ""}`;
     const shareText = `I shot ${total} (${os(over)}) on ${where}! ${link}`;
     await new Promise<void>((resolve) => {
@@ -2828,30 +2833,72 @@ export function DiscGolfGame() {
         for (let i = 0; i < wt.h; i += 6) ctx.fillRect(wt.x + 2, wy + 3 + i, wt.w - 6, 1);
       }
 
-      // Grass OB islands — turf patches inside the fairway, roped off with a
-      // dashed white OB line. Land in one and it plays exactly like water OB.
-      for (const ob of hole.obZones ?? []) {
-        const ocx = ob.x + ob.w / 2;
-        const ocy = ob.y - cam + ob.h / 2;
-        ctx.fillStyle = "#3c6b2e";
-        ctx.beginPath();
-        ctx.ellipse(ocx, ocy, ob.w / 2, ob.h / 2, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = "#eef1e6";
-        ctx.lineWidth = 1.5;
-        ctx.setLineDash([4, 3]);
-        ctx.beginPath();
-        ctx.ellipse(ocx, ocy, ob.w / 2, ob.h / 2, 0, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.lineWidth = 1;
-        ctx.fillStyle = "rgba(238,241,230,0.9)";
-        ctx.font = "bold 6px ui-monospace, monospace";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText("OB", ocx, ocy + 0.5);
-        ctx.textAlign = "left";
-        ctx.textBaseline = "alphabetic";
+      // Grass OB islands — ovals of ROUGH inside the fairway, colored exactly
+      // like the out-of-bounds rough beyond the ribbon (same ground color, same
+      // mowing bands, same white OB line) so they read as the side OB reaching
+      // in. Land in one and it plays exactly like water OB.
+      // Everything is clipped to the fairway corridor, so an oval that overlaps
+      // the ribbon edge merges seamlessly with the side OB. Two clips at
+      // slightly different radii make the junction clean: the rough FILL clips
+      // a hair OUTSIDE the boundary so it swallows the ribbon's white edge line
+      // (and its antialiased seam) where the oval crosses it, while the white
+      // OUTLINE clips a hair INSIDE so it terminates flush against the side OB
+      // line instead of drawing a bubble on top of the rough.
+      if (hole.obZones?.length) {
+        const corridorAt = (rad: number) => {
+          const p = new Path2D();
+          for (const fw of [hole.fairway, ...(hole.fairways ?? [])]) {
+            for (let i = 0; i < fw.length - 1; i++) {
+              const ax = fw[i].x, ay = fw[i].y, bx = fw[i + 1].x, by = fw[i + 1].y;
+              const steps = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / 8));
+              for (let s = 0; s <= steps; s++) {
+                const x = ax + ((bx - ax) * s) / steps, y = ay + ((by - ay) * s) / steps - cam;
+                p.moveTo(x + rad, y);
+                p.arc(x, y, rad, 0, Math.PI * 2);
+              }
+            }
+          }
+          return p;
+        };
+        const ovalOf = (ob: Water) => { ctx.beginPath(); ctx.ellipse(ob.x + ob.w / 2, ob.y - cam + ob.h / 2, ob.w / 2, ob.h / 2, 0, 0, Math.PI * 2); };
+
+        // Pass 1 — rough fill + mowing bands, spilling just past the boundary.
+        ctx.save();
+        ctx.clip(corridorAt(hole.fwWidth / 2 + 4));
+        for (const ob of hole.obZones) {
+          ovalOf(ob);
+          ctx.fillStyle = ground.rough;
+          ctx.fill();
+          // Bands phase-locked to the outer rough's world-space bands.
+          ctx.save();
+          ovalOf(ob);
+          ctx.clip();
+          ctx.fillStyle = ground.roughBand;
+          for (let y = Math.floor(ob.y / 32) * 32; y < ob.y + ob.h; y += 32) {
+            ctx.fillRect(ob.x, y - cam, ob.w, 16);
+          }
+          ctx.restore();
+        }
+        ctx.restore();
+
+        // Pass 2 — white OB outline + tag, stopping just inside the boundary.
+        ctx.save();
+        ctx.clip(corridorAt(hole.fwWidth / 2 - 1));
+        for (const ob of hole.obZones) {
+          ovalOf(ob);
+          ctx.strokeStyle = "#eef1e6"; // the same white OB line as the ribbon edge
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+          ctx.lineWidth = 1;
+          ctx.fillStyle = "rgba(238,241,230,0.9)";
+          ctx.font = "bold 6px ui-monospace, monospace";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText("OB", ob.x + ob.w / 2, ob.y - cam + ob.h / 2 + 0.5);
+          ctx.textAlign = "left";
+          ctx.textBaseline = "alphabetic";
+        }
+        ctx.restore();
       }
 
       // Hazards (sand) — sandy ovals ringed in caddie-book orange with an HZ
@@ -3736,7 +3783,7 @@ export function DiscGolfGame() {
   const finalOver = finalTotal - finalParTotal;
   const finalIsDaily = finalMode === "daily";
   // The personal best for the course just played (null for the daily).
-  const finalBest = finalMode === "course" ? bestScore : finalMode === "winthrop" ? winthropBest : finalMode === "tour" ? (tourBests[finalSeed] ?? null) : null;
+  const finalBest = finalMode === "course" ? bestScore : finalMode === "winthrop" ? winthropBest : finalMode === "olympus" ? olympusBest : finalMode === "tour" ? (tourBests[finalSeed] ?? null) : null;
   const overStr = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
   // Today's Daily star goals (difficulty-adjusted, same for everyone) and the
   // stars already banked today — for the Daily Challenge menu card. Deferred to
@@ -3915,7 +3962,7 @@ export function DiscGolfGame() {
                   className="w-full rounded-xl border border-[#e0923b]/60 bg-[#e0923b]/15 hover:bg-[#e0923b]/25 text-white font-bold py-3 px-3 mt-4 transition text-sm"
                 >
                   ⚔ {challenge.name} challenged you: {challenge.score} on{" "}
-                  {challenge.mode === "course" ? "Glendoveer" : challenge.mode === "winthrop" ? "Winthrop Lake" : "a Daily course"} — play it!
+                  {challenge.mode === "course" ? "Glendoveer" : challenge.mode === "winthrop" ? "Winthrop Lake" : challenge.mode === "olympus" ? "Olympus" : "a Daily course"} — play it!
                 </button>
               )}
 
@@ -3927,7 +3974,7 @@ export function DiscGolfGame() {
                   onClick={() => startResume(resumeBanner)}
                   className="w-full rounded-xl border border-[#36D7B7]/60 bg-[#36D7B7]/15 hover:bg-[#36D7B7]/25 text-white font-bold py-3 px-3 mt-4 transition text-sm"
                 >
-                  ↻ Resume {resumeBanner.mode === "course" ? "Glendoveer" : resumeBanner.mode === "winthrop" ? "Winthrop Lake" : resumeBanner.mode === "tour" ? tourVenue(resumeBanner.seed) : resumeBanner.mode === "ranked" ? "Ranked" : "round"} · hole {resumeBanner.scores.length + 1}
+                  ↻ Resume {resumeBanner.mode === "course" ? "Glendoveer" : resumeBanner.mode === "winthrop" ? "Winthrop Lake" : resumeBanner.mode === "olympus" ? "Olympus" : resumeBanner.mode === "tour" ? tourVenue(resumeBanner.seed) : resumeBanner.mode === "ranked" ? "Ranked" : "round"} · hole {resumeBanner.scores.length + 1}
                 </button>
               )}
 
@@ -4326,7 +4373,7 @@ export function DiscGolfGame() {
           <CoursesPanel
             courses={FIXED_COURSES}
             tourCourses={TOUR_COURSE_INFOS}
-            bests={{ course: bestScore, winthrop: winthropBest }}
+            bests={{ course: bestScore, winthrop: winthropBest, olympus: olympusBest }}
             tourBests={tourBests}
             onClose={() => setCoursesOpen(false)}
             onPlay={(m, seed) => { setCoursesOpen(false); startGame(m, seed); }}
@@ -4595,14 +4642,14 @@ export function DiscGolfGame() {
             <div className="text-center">
               <p className="text-gray-400 text-[11px] font-semibold uppercase tracking-wide">
                 {finalPracticeHole != null
-                  ? `${finalMode === "winthrop" ? "Winthrop Lake" : finalMode === "tour" ? tourVenue(finalSeed) : "Glendoveer East"} · hole ${finalPracticeHole} · par ${finalParTotal}`
+                  ? `${finalMode === "winthrop" ? "Winthrop Lake" : finalMode === "olympus" ? "Olympus" : finalMode === "tour" ? tourVenue(finalSeed) : "Glendoveer East"} · hole ${finalPracticeHole} · par ${finalParTotal}`
                   : finalIsDaily
                     ? `Today's course · ${finalPars.length} holes · par ${finalParTotal}`
                     : finalMode === "ranked"
                       ? `Ranked · ${finalPars.length} holes · par ${finalParTotal}`
                       : finalMode === "tour"
                         ? `${tourVenue(finalSeed)} · ${finalPars.length} holes · par ${finalParTotal}`
-                        : `${finalMode === "winthrop" ? "Winthrop Lake" : "Glendoveer East"} · 18 holes · par ${finalParTotal}`}
+                        : `${finalMode === "winthrop" ? "Winthrop Lake" : finalMode === "olympus" ? "Olympus" : "Glendoveer East"} · 18 holes · par ${finalParTotal}`}
               </p>
               <h2 className="text-white font-black text-2xl mt-0.5">
                 {finalParty || finalOnline ? "Match complete!" : finalPracticeHole != null ? "Practice complete!" : finalIsDaily ? "Daily Challenge complete!" : "Round complete!"}
@@ -4841,7 +4888,7 @@ export function DiscGolfGame() {
             ) : (
             <div className="bg-[#1a1d23] border border-white/5 rounded-2xl overflow-hidden">
               <p className="text-white font-bold text-sm px-4 py-2.5 border-b border-white/5">
-                🏆 {finalIsDaily ? "Today's leaderboard" : finalMode === "tour" ? `${tourVenue(finalSeed)} leaderboard` : `${finalMode === "winthrop" ? "Winthrop Lake" : "Glendoveer East"} leaderboard`}
+                🏆 {finalIsDaily ? "Today's leaderboard" : finalMode === "tour" ? `${tourVenue(finalSeed)} leaderboard` : `${finalMode === "winthrop" ? "Winthrop Lake" : finalMode === "olympus" ? "Olympus" : "Glendoveer East"} leaderboard`}
               </p>
               {leaderboard.length === 0 ? (
                 <p className="text-gray-400 text-sm text-center py-6">No scores yet — be the first!</p>
@@ -5393,6 +5440,7 @@ function PartyPanel({ onClose, onStart }: { onClose: () => void; onStart: (m: Mo
         <div className="flex gap-1 bg-[#1a1d23] border border-white/10 rounded-lg p-1">
           <button type="button" onClick={() => setCourse("course")} className={seg(course === "course")}>Glendoveer</button>
           <button type="button" onClick={() => setCourse("winthrop")} className={seg(course === "winthrop")}>Winthrop</button>
+          <button type="button" onClick={() => setCourse("olympus")} className={seg(course === "olympus")}>Olympus</button>
           <button type="button" onClick={() => setCourse("daily")} className={seg(course === "daily")}>Daily</button>
         </div>
         <div className="flex gap-1 bg-[#1a1d23] border border-white/10 rounded-lg p-1">
@@ -6030,7 +6078,7 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
           const r = resultFor(ev.id);
           const impColor = ev.importance === "championship" ? "text-[#f5d24a]" : ev.importance === "major" ? "text-[#5fb0e8]" : "text-gray-500";
           const impWord = ev.importance === "championship" ? "Championship" : ev.importance === "major" ? "Major" : "Tour";
-          const courseLabel = ev.venue ?? (ev.mode === "winthrop" ? "Winthrop Lake" : ev.mode === "course" ? "Glendoveer" : "9-hole");
+          const courseLabel = ev.venue ?? (ev.mode === "winthrop" ? "Winthrop Lake" : ev.mode === "olympus" ? "Olympus" : ev.mode === "course" ? "Glendoveer" : "9-hole");
           const cost = eventEnergyCost(ev);
           const broke = !canEnterEvent(career, ev); // can't afford the energy to enter
           return (
@@ -6964,7 +7012,7 @@ function RankedPanel({ ranked, onPlay, onClose }: {
 }
 
 // Browse the global (Supabase) leaderboard for any course from the title
-// screen. Daily uses today's seed; Glendoveer & Winthrop are all-time.
+// screen. Daily uses today's seed; the fixed courses are all-time.
 function LeaderboardPanel({ onClose }: { onClose: () => void }) {
   // Daily first, then the two fixed venues, then every pro-tour course on the app.
   type Board = { label: string; courseKey: string; par: number; daily?: boolean };
@@ -6975,6 +7023,7 @@ function LeaderboardPanel({ onClose }: { onClose: () => void }) {
       { label: "Daily Challenge", courseKey: `daily-${dSeed}`, par: dPar, daily: true },
       { label: "Glendoveer East", courseKey: "glendoveer", par: TOTAL_PAR },
       { label: "Winthrop Lake", courseKey: "winthrop", par: WINTHROP_PAR },
+      { label: "Olympus", courseKey: "olympus", par: OLYMPUS_PAR },
       ...TOUR_COURSE_INFOS.map((c) => ({ label: c.name, courseKey: `tour-${c.seed}`, par: c.par })),
     ];
   });
@@ -7062,6 +7111,7 @@ function StatsPanel({ onClose }: { onClose: () => void }) {
   const rowsFor: { label: string; rows: { total: number }[] }[] = [
     { label: "Glendoveer East", rows: byMode("course") },
     { label: "Winthrop Lake", rows: byMode("winthrop") },
+    { label: "Olympus", rows: byMode("olympus") },
     { label: "Daily Challenge", rows: byMode("daily") },
   ];
   const distRows = [

@@ -2,7 +2,7 @@
 // (same pins + wind, derived from the seed) so two players can compare fairly.
 // Shared by the game component (read + build), the home-page metadata, and the
 // OG image route — so the parsing/formatting stays in one place.
-import { TOTAL_PAR, WINTHROP_PAR, buildRound, type Mode } from "./engine";
+import { TOTAL_PAR, WINTHROP_PAR, OLYMPUS_PAR, buildRound, type Mode } from "./engine";
 
 export type ParsedChallenge = {
   mode: Mode;
@@ -17,13 +17,14 @@ export type ParsedChallenge = {
 
 const overLabel = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
 export function courseLabelFor(mode: Mode): string {
-  return mode === "course" ? "Glendoveer East" : mode === "winthrop" ? "Winthrop Lake" : "the Daily Challenge";
+  return mode === "course" ? "Glendoveer East" : mode === "winthrop" ? "Winthrop Lake" : mode === "olympus" ? "Olympus" : "the Daily Challenge";
 }
 
 // Par for a finished round on a course (the daily varies per seed).
 export function parForChallenge(mode: Mode, seed: number): number {
   if (mode === "course") return TOTAL_PAR;
   if (mode === "winthrop") return WINTHROP_PAR;
+  if (mode === "olympus") return OLYMPUS_PAR;
   return buildRound(seed, "daily").reduce((s, h) => s + h.par, 0);
 }
 
@@ -35,7 +36,7 @@ export function parseChallenge(raw: string | null | undefined): ParsedChallenge 
   const nameS = parts.slice(3).join("."); // the name may itself contain dots
   const seed = Number(seedS);
   const score = Number(scoreS);
-  if (m !== "course" && m !== "winthrop" && m !== "daily") return null;
+  if (m !== "course" && m !== "winthrop" && m !== "olympus" && m !== "daily") return null;
   if (!Number.isInteger(seed) || !Number.isInteger(score) || score <= 0 || score > 999) return null;
   // A crafted/garbled link can carry malformed percent-encoding, which makes
   // decodeURIComponent throw. parseChallenge runs server-side (page metadata +

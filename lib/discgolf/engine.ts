@@ -415,11 +415,111 @@ const WINTHROP_TEMPLATES: Omit<Hole, "worldH">[] = [
 const WINTHROP_HOLES: Hole[] = WINTHROP_TEMPLATES.map(materializeHole);
 const WINTHROP_PAR = WINTHROP_HOLES.reduce((s, h) => s + h.par, 0);
 
+// ── Olympus (Discraft Supreme Flight Open, Florida's Adventure Coast), 18 holes /
+// par 65 from the MPO caddie book. A pro-tour course carved through dense Florida
+// forest over a reclaimed limestone quarry: nearly every hole is a tree-lined
+// corridor with marked OB (property lines, fairway dividers, cliff edges) instead
+// of open park, the middle of the course skirts quarry cliff pockets (grass-OB
+// islands + sand scree), and the finish runs pond → mando → the famous island
+// green on 18. Comments note the real MPO par/distance + the caddie-book rules.
+const OLYMPUS_TEMPLATES: Omit<Hole, "worldH">[] = [
+  // ── Front nine (par 31) ──
+  // 1 — par 3, 347ft. A friendly opener drifting right — but a steep climb the
+  // whole way, so it plays far longer than the card; OB lines right/long/beyond.
+  { par: 3, lenMul: 0.8, elev: 2, tee: TEE, basket: { x: 190, y: 104 }, fairway: [{ x: 160, y: 416 }, { x: 150, y: 320 }, { x: 152, y: 230 }, { x: 170, y: 160 }, { x: 190, y: 104 }], fwWidth: 118, trees: [{ x: 215, y: 140, r: 9 }, { x: 152, y: 128, r: 9 }], water: [] },
+  // 2 — par 4, 785ft. The long swooper: tees off from the bottom-RIGHT corner
+  // by the road, sweeps LEFT early away from the property line, then runs
+  // straight up the left side to the green (caddie book).
+  { par: 4, tee: { x: 230, y: 416 }, basket: { x: 145, y: 96 }, fairway: [{ x: 230, y: 416 }, { x: 205, y: 335 }, { x: 182, y: 265 }, { x: 163, y: 200 }, { x: 150, y: 140 }, { x: 145, y: 96 }], fwWidth: 116, trees: [{ x: 245, y: 320, r: 9 }, { x: 160, y: 250, r: 9 }, { x: 200, y: 180, r: 9 }, { x: 115, y: 120, r: 9 }, { x: 178, y: 100, r: 9 }], water: [] },
+  // 3 — par 4, 540ft. Falls downhill off the road tee and curves HARD LEFT the
+  // whole way to the green. The marked cliff-side OB is a rectangular bite
+  // joined to the RIGHT OB line just past the tee, reaching most of the way
+  // across the fairway — squeeze past its left tip or fly it; OB off the tee
+  // may play from the marked DZ (+1) beyond the trouble.
+  { par: 4, lenMul: 0.85, elev: -1, tee: { x: 210, y: 416 }, basket: { x: 118, y: 112 }, fairway: [{ x: 210, y: 416 }, { x: 205, y: 340 }, { x: 192, y: 270 }, { x: 162, y: 205 }, { x: 130, y: 150 }, { x: 118, y: 112 }], fwWidth: 110, dropZone: { x: 230, y: 290 }, trees: [{ x: 170, y: 300, r: 9 }, { x: 230, y: 250, r: 9 }, { x: 150, y: 190, r: 9 }, { x: 95, y: 130, r: 9 }], water: [], obZones: [{ x: 185, y: 330, w: 95, h: 26 }] },
+  // 4 — par 4, 723ft. Rides the fence line (OB right and beyond) downhill off
+  // the tee, then the whole back half bends hard LEFT away from it to a green
+  // tucked upper-left.
+  { par: 4, elev: -1, tee: { x: 185, y: 416 }, basket: { x: 112, y: 98 }, fairway: [{ x: 185, y: 416 }, { x: 195, y: 335 }, { x: 190, y: 260 }, { x: 160, y: 190 }, { x: 125, y: 130 }, { x: 112, y: 98 }], fwWidth: 112, trees: [{ x: 165, y: 300, r: 9 }, { x: 230, y: 270, r: 9 }, { x: 140, y: 205, r: 9 }, { x: 190, y: 175, r: 9 }, { x: 80, y: 110, r: 9 }, { x: 145, y: 100, r: 9 }], water: [] },
+  // 5 — par 4, 630ft. The quarry gauntlet: a tight lane, dead straight for the
+  // first half, then curling LEFT past the mando tree (a fat trunk on the
+  // inside of the turn — the book restricts the plane left of it, so the play
+  // swings right) with the marked cliff edge OB right. (The book's wet areas
+  // play as casual — free — so they're plain fairway here.)
+  { par: 4, lenMul: 0.95, tee: TEE, basket: { x: 105, y: 84 }, fairway: [{ x: 160, y: 416 }, { x: 158, y: 330 }, { x: 156, y: 250 }, { x: 135, y: 175 }, { x: 112, y: 110 }, { x: 105, y: 84 }], fwWidth: 100, trees: [{ x: 185, y: 300, r: 9 }, { x: 118, y: 195, r: 11 }, { x: 90, y: 140, r: 9 }, { x: 150, y: 120, r: 9 }], water: [] },
+  // 6 — par 3, 320ft. Short, wooded and downhill, running diagonally up-RIGHT
+  // from a bottom-left tee — a clean drive is a look at birdie, a tree kick is
+  // a scramble.
+  { par: 3, lenMul: 0.7, elev: -1, tee: { x: 120, y: 416 }, basket: { x: 205, y: 108 }, fairway: [{ x: 120, y: 416 }, { x: 135, y: 330 }, { x: 160, y: 240 }, { x: 185, y: 160 }, { x: 205, y: 108 }], fwWidth: 104, trees: [{ x: 90, y: 300, r: 10 }, { x: 170, y: 270, r: 9 }, { x: 140, y: 190, r: 9 }, { x: 230, y: 140, r: 9 }, { x: 180, y: 100, r: 9 }], water: [] },
+  // 7 — par 3, 362ft. Straight tunnel to a green perched on bare quarry rock —
+  // the marked area RIGHT of the basket is OB turf, so favor the left half.
+  { par: 3, lenMul: 0.8, tee: TEE, basket: { x: 152, y: 100 }, fairway: [{ x: 160, y: 416 }, { x: 158, y: 310 }, { x: 154, y: 200 }, { x: 152, y: 100 }], fwWidth: 106, trees: [{ x: 190, y: 260, r: 9 }, { x: 120, y: 200, r: 9 }, { x: 188, y: 148, r: 9 }], water: [], obZones: [{ x: 182, y: 96, w: 34, h: 24 }] },
+  // 8 — par 3, 445ft. Works diagonally up-LEFT from a bottom-right tee, and a
+  // big tree cluster splits the downhill fairway into two lanes (caddie book
+  // shows the wood mid-hole); the divider with 18 is OB left.
+  { par: 3, elev: -1, tee: { x: 205, y: 416 }, basket: { x: 152, y: 95 }, fairway: [{ x: 205, y: 416 }, { x: 195, y: 330 }, { x: 175, y: 245 }, { x: 160, y: 165 }, { x: 152, y: 95 }], fwWidth: 122, trees: [{ x: 172, y: 245, r: 13 }, { x: 192, y: 232, r: 11 }, { x: 155, y: 225, r: 10 }, { x: 180, y: 120, r: 9 }, { x: 120, y: 110, r: 9 }], water: [] },
+  // 9 — par 3, 478ft. Long open triangle to the green. (The book's cliff-grade
+  // REQUIRED RELIEF area between the baskets is free relief, not a penalty, so
+  // it's plain fairway here.)
+  { par: 3, tee: TEE, basket: { x: 150, y: 92 }, fairway: [{ x: 160, y: 416 }, { x: 156, y: 310 }, { x: 152, y: 200 }, { x: 150, y: 92 }], fwWidth: 124, trees: [{ x: 200, y: 250, r: 9 }, { x: 115, y: 160, r: 9 }, { x: 190, y: 118, r: 9 }], water: [] },
+  // ── Back nine (par 34) ──
+  // 10 — par 3, 370ft. A narrowing cone with the property line tight on the
+  // right — the safe miss is always left.
+  { par: 3, lenMul: 0.82, tee: TEE, basket: { x: 152, y: 98 }, fairway: [{ x: 160, y: 416 }, { x: 156, y: 310 }, { x: 152, y: 205 }, { x: 152, y: 98 }], fwWidth: 100, trees: [{ x: 120, y: 270, r: 9 }, { x: 185, y: 220, r: 9 }, { x: 125, y: 150, r: 9 }, { x: 190, y: 120, r: 9 }], water: [] },
+  // 11 — par 4, 545ft. A true dogleg: the drive is dead straight uphill off the
+  // road (OB right, long and beyond), then the hole ELBOWS 90° LEFT for the
+  // second throw to a green at the far end. A wall of trees rides the left
+  // (cliff-edge) OB line the entire way — down the drive AND along the turn.
+  { par: 4, elev: 1, tee: { x: 240, y: 416 }, basket: { x: 90, y: 218 }, fairway: [{ x: 240, y: 416 }, { x: 241, y: 330 }, { x: 240, y: 240 }, { x: 200, y: 228 }, { x: 150, y: 222 }, { x: 90, y: 218 }], fwWidth: 108, trees: [
+    // Left wall of the straight drive (the cliff edge)
+    { x: 196, y: 390, r: 9 }, { x: 196, y: 345, r: 10 }, { x: 196, y: 300, r: 9 }, { x: 196, y: 258, r: 10 },
+    // ...continuing along the left (now the low side) of the turn to the green
+    { x: 205, y: 248, r: 9 }, { x: 165, y: 250, r: 9 }, { x: 125, y: 252, r: 9 },
+  ], water: [] },
+  // 12 — par 3, 530ft. The fan: a huge triangle of fairway widening off the tee
+  // (divider OB left, long AND short), one lone sentinel tree mid-lane, green
+  // tucked upper-right. Plunges steeply downhill — that's why 530ft is a par 3.
+  { par: 3, elev: -2, tee: TEE, basket: { x: 198, y: 98 }, fairway: [{ x: 160, y: 416 }, { x: 168, y: 320 }, { x: 182, y: 215 }, { x: 198, y: 98 }], fwWidth: 132, trees: [{ x: 178, y: 262, r: 13 }, { x: 230, y: 160, r: 9 }, { x: 158, y: 138, r: 9 }], water: [] },
+  // 13 — par 3, 452ft. Runs diagonally up-LEFT along the divider (OB left and
+  // beyond) from a bottom-right tee — twice as wooded as the rest of the course
+  // (treeMul), so the divider line plus the trunks are the whole test.
+  { par: 3, treeMul: 2.1, tee: { x: 215, y: 416 }, basket: { x: 155, y: 96 }, fairway: [{ x: 215, y: 416 }, { x: 200, y: 330 }, { x: 180, y: 240 }, { x: 162, y: 155 }, { x: 155, y: 96 }], fwWidth: 112, trees: [{ x: 240, y: 290, r: 9 }, { x: 150, y: 240, r: 9 }, { x: 195, y: 150, r: 9 }], water: [] },
+  // 14 — par 4, 764ft. A 400-wide sweeper from a bottom-right tee: the long
+  // fairway bows steadily LEFT along the divider (OB left and beyond) all the
+  // way to a green tucked upper-left.
+  { par: 4, worldW: 400, tee: { x: 300, y: 416 }, basket: { x: 162, y: 90 }, fairway: [{ x: 300, y: 416 }, { x: 285, y: 335 }, { x: 250, y: 265 }, { x: 205, y: 195 }, { x: 172, y: 130 }, { x: 162, y: 90 }], fwWidth: 116, trees: [{ x: 330, y: 320, r: 9 }, { x: 215, y: 260, r: 9 }, { x: 245, y: 190, r: 9 }, { x: 130, y: 140, r: 9 }, { x: 200, y: 105, r: 9 }], water: [] },
+  // 15 — par 5, 962ft. The monster — longest hole on the course, a narrow
+  // downhill chute the entire way, finishing beside a marked cliff pocket right
+  // of the basket.
+  { par: 5, elev: -1, tee: TEE, basket: { x: 162, y: 68 }, fairway: [{ x: 160, y: 416 }, { x: 158, y: 330 }, { x: 162, y: 240 }, { x: 158, y: 150 }, { x: 162, y: 68 }], fwWidth: 106, trees: [{ x: 120, y: 320, r: 10 }, { x: 200, y: 290, r: 9 }, { x: 125, y: 230, r: 9 }, { x: 198, y: 180, r: 9 }, { x: 128, y: 120, r: 9 }, { x: 196, y: 96, r: 9 }], water: [], obZones: [{ x: 198, y: 64, w: 30, h: 22 }] },
+  // 16 — par 4, 695ft. An S through the trees from a bottom-left tee: downhill
+  // out RIGHT, then a long climbing LEFT turn home with the marked cliff edge
+  // waiting left and long of the green.
+  { par: 4, elevZones: [{ to: 0.5, elev: -1 }, { to: 1, elev: 1 }], tee: { x: 130, y: 416 }, basket: { x: 132, y: 88 }, fairway: [{ x: 130, y: 416 }, { x: 155, y: 335 }, { x: 182, y: 260 }, { x: 172, y: 190 }, { x: 145, y: 130 }, { x: 132, y: 88 }], fwWidth: 110, trees: [{ x: 115, y: 310, r: 9 }, { x: 200, y: 270, r: 9 }, { x: 135, y: 195, r: 9 }, { x: 205, y: 150, r: 9 }, { x: 95, y: 105, r: 9 }, { x: 170, y: 95, r: 9 }], water: [] },
+  // 17 — par 4, 550ft. The pond hole, falling downhill off the tee: the drive
+  // curves LEFT, then the hole runs dead straight home. The pond sits in the
+  // MIDDLE of the fairway right where the drive lands — thread past it on
+  // either side or lay up short — and a mando tree pinches the approach.
+  { par: 4, lenMul: 0.85, elev: -1, tee: { x: 200, y: 416 }, basket: { x: 152, y: 92 }, fairway: [{ x: 200, y: 416 }, { x: 190, y: 340 }, { x: 160, y: 270 }, { x: 155, y: 190 }, { x: 152, y: 92 }], fwWidth: 112, trees: [{ x: 225, y: 320, r: 9 }, { x: 120, y: 150, r: 11 }, { x: 185, y: 130, r: 9 }, { x: 115, y: 105, r: 9 }], water: [{ x: 140, y: 240, w: 44, h: 40 }] },
+  // 18 — par 4, 680ft. The signature closer: everything is OB except the marked
+  // safe landing zone off the tee and the ISLAND GREEN — a huge drop off the tee
+  // into the quarry bowl, then a nervy carry back UP across the OB rough to the
+  // island perched above. OB plays from the DZ in the landing zone (+1), just
+  // like the book.
+  { par: 4, worldW: 480, elevZones: [{ to: 0.5, elev: -2 }, { to: 1, elev: 2 }], tee: { x: 380, y: 416 }, basket: { x: 302, y: 122 }, fairway: [{ x: 380, y: 416 }, { x: 330, y: 352 }, { x: 272, y: 296 }, { x: 215, y: 248 }, { x: 172, y: 208 }], fairways: [[{ x: 296, y: 132 }, { x: 306, y: 120 }]], fwWidth: 118, dropZone: { x: 205, y: 252 }, trees: [{ x: 150, y: 252, r: 9 }, { x: 232, y: 292, r: 9 }, { x: 344, y: 118, r: 9 }, { x: 268, y: 88, r: 9 }], water: [] },
+];
+// Sun-baked limestone-quarry ground (the "desert" palette) is Olympus's identity —
+// Glendoveer stays lush classic green, Winthrop is rainy lakeside.
+const OLYMPUS_THEME = "desert";
+const OLYMPUS_HOLES: Hole[] = OLYMPUS_TEMPLATES.map((t) => ({ ...materializeHole(t), theme: OLYMPUS_THEME }));
+const OLYMPUS_PAR = OLYMPUS_HOLES.reduce((s, h) => s + h.par, 0);
+
 // The 18 holes of a playable course, by (mode, seed). Glendoveer + Winthrop are
 // fixed; a tour venue's seed builds its layout. (Daily/ranked aren't fixed
 // courses, so they fall back to Glendoveer.)
 function courseHoles(mode: Mode, seed?: number): Hole[] {
   if (mode === "winthrop") return WINTHROP_HOLES;
+  if (mode === "olympus") return OLYMPUS_HOLES;
   if (mode === "tour") return generateTourCourse(seed ?? 0);
   return HOLES; // "course" = Glendoveer East
 }
@@ -490,7 +590,7 @@ function dailyStarsEarned(seed: number, toPar: number): 0 | 1 | 2 | 3 {
 // Winthrop's personal best lives in its own key (WBEST_KEY, from @/lib/progress).
 // Leaderboards are per course; each daily seed gets its own board.
 function leaderboardCourse(mode: Mode, seed: number): string {
-  return mode === "course" ? "glendoveer" : mode === "winthrop" ? "winthrop" : mode === "ranked" ? `ranked-${seed}` : mode === "tour" ? `tour-${seed}` : `daily-${seed}`;
+  return mode === "course" ? "glendoveer" : mode === "winthrop" ? "winthrop" : mode === "olympus" ? "olympus" : mode === "ranked" ? `ranked-${seed}` : mode === "tour" ? `tour-${seed}` : `daily-${seed}`;
 }
 
 // ── Tournaments: a roster of named events, each 2–3 rounds on one or two of the
@@ -672,7 +772,7 @@ const HOLE_ELEV = [0, -2, 0, 0, -2, -2, 2, -1, 0, 0, -2, -1, 1, -1, 0, 0, 0, 0];
 // "academy" = the procedurally-generated short 9-hole course the early Career
 // (youth/high-school) events play — kept separate so the Daily can use real holes
 // without changing the gentle, beginner-friendly Career layouts.
-type Mode = "daily" | "academy" | "course" | "winthrop" | "tour" | "ranked";
+type Mode = "daily" | "academy" | "course" | "winthrop" | "olympus" | "tour" | "ranked";
 
 // Achievements — evaluated from a finished round's per-hole scores. Each pays a
 // one-time coin bounty (`coins`) the first time it's unlocked, scaled to how
@@ -1645,12 +1745,14 @@ function dailyHolePool(lenScale = 1): Hole[] {
     // values "course" mode applies); Winthrop and the tour venues carry their own.
     HOLES.forEach((h, i) => pool.push({ ...h, elev: HOLE_ELEV[i] ?? 0 }));
     WINTHROP_HOLES.forEach((h) => pool.push({ ...h, weather: "rain" as Weather })); // lakeside drizzle sets it apart from Glendoveer
+    pool.push(...OLYMPUS_HOLES); // quarry theme already stamped on the holes
     for (const c of TOUR_COURSES) pool.push(...generateTourCourse(c.seed));
   } else {
     // The same real holes, re-materialized shorter (exactly how "course",
     // "winthrop" and tour modes shorten a hole for the early Career).
     HOLE_TEMPLATES.forEach((t, i) => pool.push({ ...materializeHole({ ...t, lenMul: (t.lenMul ?? 1) * lenScale }), elev: HOLE_ELEV[i] ?? 0 }));
     WINTHROP_TEMPLATES.forEach((t) => pool.push({ ...materializeHole({ ...t, lenMul: (t.lenMul ?? 1) * lenScale }), weather: "rain" as Weather }));
+    OLYMPUS_TEMPLATES.forEach((t) => pool.push({ ...materializeHole({ ...t, lenMul: (t.lenMul ?? 1) * lenScale }), theme: OLYMPUS_THEME }));
     for (const c of TOUR_COURSES) pool.push(...generateTourCourse(c.seed, lenScale));
   }
   DAILY_POOLS.set(lenScale, pool);
@@ -1692,13 +1794,14 @@ function buildRound(seed: number, mode: Mode, lenScale = 1): Hole[] {
   if (mode === "daily") return generateDailyMix(rng);
   if (mode === "academy") return generateDailyMix(rng, lenScale);
   if (mode === "tour" || mode === "ranked") return generateTourCourse(seed, lenScale);
-  const templates = mode === "winthrop" ? WINTHROP_TEMPLATES : HOLE_TEMPLATES;
-  const full = mode === "winthrop" ? WINTHROP_HOLES : HOLES;
-  const weather: Weather | undefined = mode === "winthrop" ? "rain" : undefined; // Glendoveer stays clear; Winthrop is a wet lakeside
+  const templates = mode === "winthrop" ? WINTHROP_TEMPLATES : mode === "olympus" ? OLYMPUS_TEMPLATES : HOLE_TEMPLATES;
+  const full = mode === "winthrop" ? WINTHROP_HOLES : mode === "olympus" ? OLYMPUS_HOLES : HOLES;
+  const weather: Weather | undefined = mode === "winthrop" ? "rain" : undefined; // Glendoveer stays clear; Winthrop is a wet lakeside; Olympus bakes in the sun
+  const theme = mode === "olympus" ? OLYMPUS_THEME : undefined; // quarry limestone ground travels with re-materialized (early-career) holes too
   return templates.map((t, i) => {
     const h = lenScale === 1 ? full[i] : materializeHole({ ...t, lenMul: (t.lenMul ?? 1) * lenScale });
     const { wind, windMag } = seededWind(rng);
-    return { ...h, wind, windMag, elev: mode === "course" ? HOLE_ELEV[i] ?? 0 : h.elev ?? 0, weather };
+    return { ...h, wind, windMag, elev: mode === "course" ? HOLE_ELEV[i] ?? 0 : h.elev ?? 0, weather, theme: h.theme ?? theme };
   });
 }
 // Elevation acts on the disc DURING flight: a per-frame pull along the hole
@@ -2216,6 +2319,9 @@ export {
   WINTHROP_TEMPLATES,
   WINTHROP_HOLES,
   WINTHROP_PAR,
+  OLYMPUS_TEMPLATES,
+  OLYMPUS_HOLES,
+  OLYMPUS_PAR,
   leaderboardCourse,
   TOURN_KEY,
   TOURN_NAMES,
