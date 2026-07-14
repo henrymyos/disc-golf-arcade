@@ -1121,10 +1121,13 @@ function validDiscIndex(idx: number, bag: string[]): number {
 // Most the flight path may bend over a single throw (~46°) — keeps fade
 // noticeable without ever curving back toward the thrower.
 const MAX_FADE_TURN = 0.8;
-// A hyzer carves at a steady rate for the ENTIRE flight rather than spending a
-// budget, so it gets its own, far larger loop guard (~92°) that real flights
-// never reach — a hard stop well short of curving back toward the thrower.
-const HYZER_MAX_TURN = 1.6;
+// A hyzer carves for the ENTIRE flight, so it gets its own, far larger loop
+// guard (~103°) — a hard stop well short of curving back toward the thrower.
+const HYZER_MAX_TURN = 1.8;
+// Total carve a hyzer flight budgets toward (~77°). The per-step rate spreads
+// whatever remains of this over the steps left before touchdown, so the disc
+// keeps bending all the way down at any throw power and never hits the guard.
+const HYZER_TOTAL_TURN = 1.35;
 // How far an anhyzer banks to the turn-over side before it holds (~41°). It
 // turns over hard and early (the big initial right turn), but stops just shy of
 // MAX_FADE_TURN so it never pins against that cap — pinning would freeze the disc
@@ -1985,15 +1988,17 @@ function stepFlight(f: Flight, disc: Disc, fadeSign: number, path: FlightPath, h
         ? (f.vh > 0 ? -fadeSign * disc.turn : fadeSign * disc.sFade)
         : fadeSign * disc.fade;
     if (release === "hyzer") {
-      // A hyzer holds its angle the WHOLE flight: a steady carve rate from
-      // release to landing, so the arc bends just as visibly at the end as at
-      // the start. HYZER_MAX_TURN is only a loop guard — real flights land well
-      // short of it — and the rate eases off inside the last quarter of that
-      // guard instead of pinning and flying dead straight.
-      const taper = Math.min(1, (HYZER_MAX_TURN - Math.abs(f.fadeTurn)) / (HYZER_MAX_TURN * 0.25));
-      // sqrt compresses the discs' wide fade spread (0.006–0.038) so the most
-      // overstable discs still carve hardest but don't burn to the guard mid-air.
-      a = fadeSign * 0.09 * Math.sqrt(Math.max(disc.fade, disc.sFade)) * Math.max(0, taper);
+      // A hyzer holds its angle the WHOLE flight and ALWAYS out-fades the same
+      // disc thrown flat: 1.25x the disc's own fade rate (flat additionally
+      // caps at MAX_FADE_TURN; hyzer sails past that). The most overstable
+      // discs would loop at that rate, so the budget term rations the carve
+      // left under HYZER_TOTAL_TURN across the steps remaining before
+      // touchdown (ballistic: vh only ever loses GRAVITY per step) — a near-
+      // constant rate that bends to the very end at ANY throw power, instead
+      // of burning out mid-air and straightening.
+      const hang = (f.vh + Math.sqrt(f.vh * f.vh + 2 * GRAVITY * Math.max(0, f.h))) / GRAVITY;
+      const budget = Math.max(0, HYZER_TOTAL_TURN - Math.abs(f.fadeTurn));
+      a = fadeSign * Math.min(Math.max(disc.fade, disc.sFade) * 1.25, budget / Math.max(1, hang));
     }
     else if (release === "anny") {
       // `-fadeSign * fadeTurn` is how far the disc is already banked to the anny
