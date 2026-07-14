@@ -4402,6 +4402,7 @@ export function DiscGolfGame() {
             roundsPlayed={roundsPlayed}
             bestScore={bestScore}
             winthropBest={winthropBest}
+            olympusBest={olympusBest}
             bagCount={bag.length}
             onSave={saveProfile}
             onBuyAvatar={buyAvatar}
@@ -6181,7 +6182,7 @@ function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onStart, o
 }
 
 // Player profile — pick an avatar, set a name, see your level and badges.
-function ProfilePanel({ profile, coins, owned, unlocked, roundsPlayed, bestScore, winthropBest, bagCount, onSave, onBuyAvatar, onBag, onShop, onStats, hasAuth, user, onAccount, onSignOut, onClose }: {
+function ProfilePanel({ profile, coins, owned, unlocked, roundsPlayed, bestScore, winthropBest, olympusBest, bagCount, onSave, onBuyAvatar, onBag, onShop, onStats, hasAuth, user, onAccount, onSignOut, onClose }: {
   profile: PlayerProfile;
   coins: number;
   owned: string[];
@@ -6189,6 +6190,7 @@ function ProfilePanel({ profile, coins, owned, unlocked, roundsPlayed, bestScore
   roundsPlayed: number;
   bestScore: number | null;
   winthropBest: number | null;
+  olympusBest: number | null;
   bagCount: number;
   onSave: (p: PlayerProfile) => void;
   onBuyAvatar: (key: string, price: number) => void;
@@ -6236,11 +6238,12 @@ function ProfilePanel({ profile, coins, owned, unlocked, roundsPlayed, bestScore
         </div>
 
         {/* Lifetime stats */}
-        <div className="grid grid-cols-4 gap-1.5 text-center">
+        <div className="grid grid-cols-5 gap-1.5 text-center">
           {[
             { v: roundsPlayed, l: "Rounds" },
             { v: bestScore != null ? over(bestScore - TOTAL_PAR) : "–", l: "GE Best" },
             { v: winthropBest != null ? over(winthropBest - WINTHROP_PAR) : "–", l: "WL Best" },
+            { v: olympusBest != null ? over(olympusBest - OLYMPUS_PAR) : "–", l: "OLY Best" },
             { v: discsOwned, l: "Discs" },
           ].map((s) => (
             <div key={s.l} className="rounded-lg bg-white/5 border border-white/10 px-1 py-1.5">
