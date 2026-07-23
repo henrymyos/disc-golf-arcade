@@ -1749,6 +1749,28 @@ export function DiscGolfGame() {
         const st = channel.presenceState() as unknown as Record<string, LobbyPlayer[]>;
         const players = Object.values(st).map((arr) => arr[0]).filter(Boolean);
         setLobbyPlayers(players);
+        // Prune the abandoned scorecard/ghosts of a player who left and rejoined
+        // under a new client id: an entry whose id has left presence while a
+        // PRESENT player carries the same name is that player's earlier card, so
+        // drop it rather than showing them twice in the live standings. An absent
+        // id with no present namesake is kept — a finished player's score stays
+        // on the board, and a briefly-disconnected phone isn't wrongly wiped.
+        const present = new Set(players.map((p) => p.id));
+        const nameHolder = new Map(players.map((p) => [p.name, p.id]));
+        const stale = (id: string, name: string) => {
+          if (present.has(id)) return false;
+          const holder = nameHolder.get(name);
+          return holder != null && holder !== id;
+        };
+        const scores = onlineScoresRef.current;
+        const keep = Object.entries(scores).filter(([id, s]) => !stale(id, s.name));
+        if (keep.length !== Object.keys(scores).length) {
+          onlineScoresRef.current = Object.fromEntries(keep);
+          setOnlineScores(onlineScoresRef.current);
+        }
+        for (const [id, g] of Object.entries(onlineGhostsRef.current)) {
+          if (stale(id, g.name)) delete onlineGhostsRef.current[id];
+        }
         // If we're a joiner and the host disappears before the round starts, flag
         // it so the lobby can offer to leave instead of waiting forever. Only after
         // we've actually seen the host, so a join-time sync flash doesn't trip it.
