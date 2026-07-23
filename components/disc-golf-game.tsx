@@ -1766,11 +1766,15 @@ export function DiscGolfGame() {
         beginOnlineRound(payload.seed as number, payload.mode as Mode);
       })
       .on("broadcast", { event: "hello" }, () => {
-        // A peer just joined. If we're the host and a round is already underway,
-        // re-send the start signal so the late joiner catches up (everyone else
-        // ignores it — they've already begun this seed).
+        // A peer just joined. If a round is already underway, ANY in-round peer
+        // re-sends the start signal so the joiner catches up — not just the host,
+        // because a player who left mid-round (including the host themselves) and
+        // rejoins by code re-enters as a plain joiner in a lobby that may have no
+        // host anymore. They start fresh on hole 1 while everyone else plays on.
+        // Duplicate re-sends are harmless: beginOnlineRound ignores a seed it has
+        // already begun.
         const started = onlineStartedRef.current;
-        if (isHost && started) {
+        if (started) {
           void channel.send({ type: "broadcast", event: "start", payload: { seed: started.seed, mode: started.mode } });
         }
       })
