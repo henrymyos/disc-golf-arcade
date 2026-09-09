@@ -5,7 +5,8 @@ import {
   COSMETIC_PREFIX, cosmeticOwnKey, cosmeticUnlocked, cosmeticByKey,
 } from "../lib/discgolf/cosmetics";
 
-const CATEGORIES = [
+// Typed as the common shape so the lists (different item types) can share one loop.
+const CATEGORIES: { list: { key: string; price: number }[]; prefix: string; def: string }[] = [
   { list: DISC_SKINS, prefix: COSMETIC_PREFIX.discSkin, def: DEFAULT_DISC_SKIN },
   { list: BASKET_SKINS, prefix: COSMETIC_PREFIX.basket, def: DEFAULT_BASKET_SKIN },
   { list: AIM_STYLES, prefix: COSMETIC_PREFIX.aim, def: DEFAULT_AIM_STYLE },
