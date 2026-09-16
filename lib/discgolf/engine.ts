@@ -2179,8 +2179,6 @@ function buildRacerGhosts(seed: number, holeIndex: number, hole: Hole, racers: G
   const ghosts = racers.map((rc, gi) => {
     const s = Math.max(1, rc.shots);
     const rng = mulberry32((seed ^ (gi * 2654435761) ^ (holeIndex * 40503) ^ 0x77777) >>> 0);
-    const pts: Vec[] = [{ x: hole.tee.x, y: hole.tee.y }];
-    const nInter = s - 1; // shots before the hole-out (tee and basket are added around this)
     // A point at path fraction `f` down the fairway, shoved `off` px to the side of
     // the corridor (negative/positive = either edge). Used for drives, fairway shots
     // and the trouble spots off in the rough.
@@ -2192,48 +2190,68 @@ function buildRacerGhosts(seed: number, holeIndex: number, hole: Hole, racers: G
       const len = Math.hypot(dx, dy) || 1;
       return { x: base.x + (-dy / len) * off, y: base.y + (dx / len) * off };
     };
-    if (nInter >= 1) {
-      // Throws it takes to REACH the green. On a short hole this is 1, so the drive
-      // flies right at the basket like a real one, rather than dawdling down the
-      // fairway. Bounded by the shots available (a great score can't reach in more
-      // throws than it has).
-      const reach = Math.max(1, Math.min(Math.ceil(distBetween(hole.tee, hole.basket) / GHOST_DRIVE), nInter));
-      // Strokes beyond "reach the green + hole out" are where the variety lives:
-      // sometimes a lag/three-putt, but mostly trouble on the way out — a shot flung
-      // OB into the rough, or a tree kick that comes up short. So a bad score plays
-      // out through misadventure instead of endless taps at the cup.
-      const excess = nInter - reach;
-      let extraPutts = 0, mishaps = 0;
-      for (let e = 0; e < excess; e++) {
-        if (extraPutts < 2 && rng() < 0.4) extraPutts++; // an occasional lag/three-putt
-        else mishaps++;                                  // OB / tree trouble en route
+    const jitter = () => rng() * 2 - 1;
+    // Every step is a throw that lands somewhere, except a `walk`: after an OB
+    // throw the rival carries the disc back to the corridor edge where it went
+    // out (the penalty stroke) and plays on from there.
+    type Step = { to: Vec; walk?: boolean };
+    const steps: Step[] = [];
+    if (s === 1) {
+      steps.push({ to: { x: hole.basket.x, y: hole.basket.y } }); // an ace
+    } else {
+      // Throws it takes to REACH the green (the last of them is the approach). On
+      // a short hole this is 1, so the drive flies right at the basket like a real
+      // one. Bounded by the shots available (a great score can't reach in more
+      // throws than it has, leaving one for the putt).
+      const reach = Math.max(1, Math.min(Math.ceil(distBetween(hole.tee, hole.basket) / GHOST_DRIVE), s - 1));
+      // Strokes beyond "reach + one putt" are spent on trouble that still moves the
+      // disc toward the basket, so a bad hole reads as a struggle down the fairway
+      // rather than a random scatter: an occasional lag/three-putt, a throw flung
+      // OB (costs the throw AND a penalty, then a walk back to the edge), or a
+      // tree kick / squibbed shot that only makes part of the ground.
+      let excess = s - 1 - reach;
+      let extraPutts = 0, obs = 0, shorts = 0;
+      while (excess > 0) {
+        const r = rng();
+        if (extraPutts < 2 && r < 0.3) { extraPutts++; excess--; }
+        else if (excess >= 2 && r < 0.62) { obs++; excess -= 2; }
+        else { shorts++; excess--; }
       }
-      // Interleave the fairway advances (reach−1 of them; the reach-th shot is the
-      // approach onto the green, added after) with the trouble shots, so OB/tree
-      // mishaps can strike anywhere on the way out — even off the tee. Fisher–Yates
-      // with the ghost's own RNG keeps it deterministic per hole.
-      const march: ("fw" | "ob")[] = [];
-      for (let i = 0; i < reach - 1; i++) march.push("fw");
-      for (let i = 0; i < mishaps; i++) march.push("ob");
-      for (let i = march.length - 1; i > 0; i--) {
+      // Order the forward work — reach−1 full advances, the short ones, and the OB
+      // mishaps — with the ghost's own RNG (deterministic per hole), then the
+      // approach onto the green.
+      const kinds: ("fw" | "short" | "ob")[] = [];
+      for (let i = 0; i < reach - 1; i++) kinds.push("fw");
+      for (let i = 0; i < shorts; i++) kinds.push("short");
+      for (let i = 0; i < obs; i++) kinds.push("ob");
+      for (let i = kinds.length - 1; i > 0; i--) {
         const j = Math.floor(rng() * (i + 1));
-        [march[i], march[j]] = [march[j], march[i]];
+        [kinds[i], kinds[j]] = [kinds[j], kinds[i]];
       }
-      let av = 0, lastF = 0; // advances taken, and the fraction of the last good lie
-      for (const step of march) {
-        if (step === "fw") {
-          av++;
-          lastF = av / reach;
-          pts.push(fwPoint(lastF, (rng() * 2 - 1) * hole.fwWidth * 0.22));
-        } else {
-          // Trouble: no forward progress, flung off the corridor. A tree kick drops
-          // it short and to the side; an OB shot sails well out into the rough.
-          const ob = rng() < 0.45;
+      const SHORT_W = 0.45;                          // a tree kick makes ~45% of a full advance
+      const GREEN_F = 0.94;                          // path fraction where the green begins
+      const totalW = (reach - 1) + shorts * SHORT_W + 1; // + the approach, a full throw
+      let cum = 0, lastF = 0;
+      for (const k of kinds) {
+        if (k === "ob") {
+          // Sails ahead but over the line: lands well off the corridor, then a walk
+          // back to the edge just past the lie it was thrown from.
           const side = rng() < 0.5 ? -1 : 1;
-          const off = side * hole.fwWidth * (ob ? 0.7 + rng() * 0.4 : 0.32 + rng() * 0.22);
-          const f = ob ? lastF + rng() * 0.05 : Math.max(0, lastF - (0.1 + rng() * 0.1));
-          pts.push(fwPoint(f, off));
+          const fOut = Math.min(GREEN_F - 0.05, lastF + 0.08 + rng() * 0.12);
+          steps.push({ to: fwPoint(fOut, side * hole.fwWidth * (0.7 + rng() * 0.35)) });
+          const fLie = Math.min(fOut, lastF + 0.03 + rng() * 0.05);
+          steps.push({ to: fwPoint(fLie, side * hole.fwWidth * 0.36), walk: true });
+          lastF = fLie;
+          continue;
         }
+        cum += k === "fw" ? 1 : SHORT_W;
+        // Always further down the fairway than the last lie, never onto the green.
+        const f = Math.min(GREEN_F - 0.03, Math.max(lastF + 0.02, (cum / totalW) * GREEN_F + jitter() * 0.03));
+        const off = k === "fw"
+          ? jitter() * hole.fwWidth * 0.22                                   // a fairway lie
+          : (rng() < 0.5 ? -1 : 1) * hole.fwWidth * (0.28 + rng() * 0.18); // kicked to the tree line
+        steps.push({ to: fwPoint(f, off) });
+        lastF = f;
       }
       // The approach lands on the green a putt out; each extra putt then creeps in
       // toward the cup from one general side, roughly halving the distance, so the
@@ -2241,20 +2259,26 @@ function buildRacerGhosts(seed: number, holeIndex: number, hole: Hole, racers: G
       const puttAng = rng() * Math.PI * 2;
       for (let p = 0; p <= extraPutts; p++) {
         const dist = hole.fwWidth * 0.15 * Math.pow(0.4, p);
-        const ang = puttAng + (rng() * 2 - 1) * 0.55;
-        pts.push({ x: hole.basket.x + Math.cos(ang) * dist, y: hole.basket.y + Math.sin(ang) * dist });
+        const ang = puttAng + jitter() * 0.55;
+        steps.push({ to: { x: hole.basket.x + Math.cos(ang) * dist, y: hole.basket.y + Math.sin(ang) * dist } });
       }
+      steps.push({ to: { x: hole.basket.x, y: hole.basket.y } });
     }
-    pts.push({ x: hole.basket.x, y: hole.basket.y });
-    // One segment per shot: a beat lining up, then a flight whose length scales with
-    // distance (player pace) and that curves around any tree in the way.
+    // One segment per step: a beat lining up, then a flight whose length scales with
+    // distance (player pace) and that curves around any tree in the way. A walk
+    // back from OB is a short, grounded shuffle with no wind-up.
     const segs: GhostSeg[] = [];
-    for (let i = 0; i < pts.length - 1; i++) {
-      const a = pts[i], b = pts[i + 1];
-      const segLen = distBetween(a, b);
-      const fly = Math.max(GHOST_MIN_FLY, Math.min(GHOST_MAX_FLY, segLen / GHOST_FLIGHT_SPEED));
-      const pause = 1500 + rng() * 650; // ~1.5–2.2s lining up before each throw
-      segs.push({ from: a, to: b, ctrl: ghostAvoidTree(a, b, hole.trees), pause, fly, lift: Math.min(14, 4 + segLen * 0.05) });
+    let from: Vec = { x: hole.tee.x, y: hole.tee.y };
+    for (const st of steps) {
+      const segLen = distBetween(from, st.to);
+      if (st.walk) {
+        segs.push({ from, to: st.to, ctrl: null, pause: 600 + rng() * 300, fly: Math.max(250, Math.min(900, segLen / 0.08)), lift: 0 });
+      } else {
+        const fly = Math.max(GHOST_MIN_FLY, Math.min(GHOST_MAX_FLY, segLen / GHOST_FLIGHT_SPEED));
+        const pause = 1500 + rng() * 650; // ~1.5–2.2s lining up before each throw
+        segs.push({ from, to: st.to, ctrl: ghostAvoidTree(from, st.to, hole.trees), pause, fly, lift: Math.min(14, 4 + segLen * 0.05) });
+      }
+      from = st.to;
     }
     return { name: rc.name, color: rc.color, segs, delay: gi * 500 + rng() * 700, holedFired: false };
   });
