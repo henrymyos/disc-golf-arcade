@@ -610,7 +610,7 @@ export function simEvent(c: Career, ev: CareerEvent): { score: number; field: nu
 // top-10 after each hole and an on-course "card" of playing partners, all
 // consistent with the final placement (mirrors the tournament field). The
 // rivals lead the array (in c.rivals order); anonymous pros fill the rest. ──
-export type FieldPlayer = { name: string; isRival: boolean; color: string; holes: number[]; total: number };
+export type FieldPlayer = { name: string; isRival: boolean; color: string; holes: number[]; total: number; rating?: number };
 
 const ANON_FIRST = ["A.", "B.", "C.", "D.", "E.", "G.", "H.", "J.", "K.", "L.", "M.", "N.", "P.", "R.", "S.", "T.", "V.", "W."];
 const ANON_LAST = [
@@ -735,8 +735,9 @@ function buildField(c: Career, ev: CareerEvent, diff?: number[]): FieldPlayer[] 
   // same bump the anonymous field already gets in fieldOpponentRating.
   const proLift = c.stage === "pro" ? (ev.importance === "championship" ? 5 : ev.importance === "major" ? 3 : 0) : 0;
   const field: FieldPlayer[] = c.rivals.map((r) => {
-    const holes = simHoleScores(rivalRating(r) + proLift, ev.par, ev.holes, mulberry32((c.seed ^ hashId(ev.id) ^ hashId(r.id)) >>> 0), diff);
-    return { name: r.name, isRival: true, color: r.color, holes, total: holes.reduce((a, b) => a + b, 0) };
+    const rating = rivalRating(r) + proLift;
+    const holes = simHoleScores(rating, ev.par, ev.holes, mulberry32((c.seed ^ hashId(ev.id) ^ hashId(r.id)) >>> 0), diff);
+    return { name: r.name, isRival: true, color: r.color, holes, total: holes.reduce((a, b) => a + b, 0), rating };
   });
   const anonCount = Math.max(0, ev.fieldSize - c.rivals.length);
   const rng = mulberry32((c.seed ^ hashId(ev.id) ^ 0x9e3779b9) >>> 0);
@@ -747,7 +748,7 @@ function buildField(c: Career, ev: CareerEvent, diff?: number[]): FieldPlayer[] 
     const pro = named && i < named.length ? named[i] : null;
     const rating = pro ? pro.rating + proLift : fieldOpponentRating(ev, rng);
     const holes = simHoleScores(rating, ev.par, ev.holes, rng, diff);
-    field.push({ name: pro ? pro.name : anonName((c.seed ^ hashId(ev.id)) >>> 0, i), isRival: false, color: pro ? PRO_FIELD_COLOR : "#7a808a", holes, total: holes.reduce((a, b) => a + b, 0) });
+    field.push({ name: pro ? pro.name : anonName((c.seed ^ hashId(ev.id)) >>> 0, i), isRival: false, color: pro ? PRO_FIELD_COLOR : "#7a808a", holes, total: holes.reduce((a, b) => a + b, 0), rating });
   }
   return field;
 }
@@ -764,8 +765,13 @@ export function careerCard(field: FieldPlayer[]): FieldPlayer[] {
   return field.filter((p) => p.isRival).sort((a, b) => a.total - b.total).slice(0, 3);
 }
 // The card as ghost racers for one hole (shot count = their score on that hole).
+// Career/ranked ratings run ~40 (weekend player) to ~95 (world #1); map that onto
+// the ghosts' 0–1 skill, which sets how tidy their putting looks.
+export function ratingToSkill(rating: number | undefined): number {
+  return clamp(((rating ?? 60) - 40) / 55, 0, 1);
+}
 export function careerCardRacers(field: FieldPlayer[], holeIndex: number): GhostRacer[] {
-  return careerCard(field).map((p) => ({ name: p.name.split(" ").pop() || p.name, color: p.color, shots: Math.max(1, p.holes[holeIndex] ?? 1) }));
+  return careerCard(field).map((p) => ({ name: p.name.split(" ").pop() || p.name, color: p.color, shots: Math.max(1, p.holes[holeIndex] ?? 1), skill: ratingToSkill(p.rating) }));
 }
 
 // ── Ranked: an AI field for one ranked round. Unlike a Career event (recurring
@@ -785,7 +791,7 @@ export function rankedFieldForRound(seed: number, fieldMean: number, size: numbe
   for (let i = 0; i < size; i++) {
     const rating = clamp(fieldMean + (rng() * 2 - 1) * 14, 20, 99); // spread around the tier mean
     const holes = simHoleScores(rating, par, roundHoles.length, rng, diff, RANKED_EDGE);
-    field.push({ name: anonName(seed, i), isRival: false, color: "#7a808a", holes, total: holes.reduce((a, b) => a + b, 0) });
+    field.push({ name: anonName(seed, i), isRival: false, color: "#7a808a", holes, total: holes.reduce((a, b) => a + b, 0), rating });
   }
   return field;
 }
@@ -806,14 +812,14 @@ export function rankedPlacementField(seed: number, size: number, roundHoles: Hol
     // staircase.
     const rating = clamp(lo + t * (hi - lo) + (rng() * 2 - 1) * 2, 20, 99);
     const holes = simHoleScores(rating, par, roundHoles.length, rng, diff, PLACEMENT_EDGE);
-    field.push({ name: anonName(seed, i), isRival: false, color: "#7a808a", holes, total: holes.reduce((a, b) => a + b, 0) });
+    field.push({ name: anonName(seed, i), isRival: false, color: "#7a808a", holes, total: holes.reduce((a, b) => a + b, 0), rating });
   }
   return field;
 }
 // On-course ghost racers for a ranked hole: the card IS the whole field now (you +
 // 4), so every cardmate races alongside you.
 export function rankedCardRacers(field: FieldPlayer[], holeIndex: number): GhostRacer[] {
-  return [...field].sort((a, b) => a.total - b.total).map((p) => ({ name: p.name.split(" ").pop() || p.name, color: p.color, shots: Math.max(1, p.holes[holeIndex] ?? 1) }));
+  return [...field].sort((a, b) => a.total - b.total).map((p) => ({ name: p.name.split(" ").pop() || p.name, color: p.color, shots: Math.max(1, p.holes[holeIndex] ?? 1), skill: ratingToSkill(p.rating) }));
 }
 
 // Live standings through `holesPlayed` holes (you + the whole field), sorted,

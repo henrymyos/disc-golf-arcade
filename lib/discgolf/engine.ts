@@ -2174,7 +2174,10 @@ function ghostAvoidTree(a: Vec, b: Vec, trees: Tree[]): Vec | null {
 // Generic ghost builder: turn a list of racers (name, color, shot count for THIS
 // hole) into discs that play the hole tee → fairway landings → basket, one shot
 // per node. Shared by tournament play and Career/Ranked events.
-type GhostRacer = { name: string; color: string; shots: number };
+// `skill` (0 = weekend player … 1 = world #1, default 0.5) sets how clean the
+// ghost's putting looks: how close the approach parks, how often a putt misses,
+// how far a miss runs past, and how rare a three-putt is.
+type GhostRacer = { name: string; color: string; shots: number; skill?: number };
 function buildRacerGhosts(seed: number, holeIndex: number, hole: Hole, racers: GhostRacer[], now: number): GhostState {
   const ghosts = racers.map((rc, gi) => {
     const s = Math.max(1, rc.shots);
@@ -2191,6 +2194,7 @@ function buildRacerGhosts(seed: number, holeIndex: number, hole: Hole, racers: G
       return { x: base.x + (-dy / len) * off, y: base.y + (dx / len) * off };
     };
     const jitter = () => rng() * 2 - 1;
+    const skill = Math.max(0, Math.min(1, rc.skill ?? 0.5));
     // Every step is a throw that lands somewhere, except a `walk`: after an OB
     // throw the rival carries the disc back to the corridor edge where it went
     // out (the penalty stroke) and plays on from there.
@@ -2213,8 +2217,12 @@ function buildRacerGhosts(seed: number, holeIndex: number, hole: Hole, racers: G
       let extraPutts = 0, obs = 0, shorts = 0;
       while (excess > 0) {
         const r = rng();
-        if (extraPutts < 2 && r < 0.3) { extraPutts++; excess--; }
-        else if (excess >= 2 && r < 0.62) { obs++; excess -= 2; }
+        // A missed putt is the least likely way to lose a stroke, and a second miss
+        // (the three-putt) rarer still — both scaled by skill, so a top player's
+        // extra strokes almost always come from the tee-to-green fight instead.
+        const pMiss = extraPutts === 0 ? 0.06 + 0.16 * (1 - skill) : 0.01 + 0.06 * (1 - skill);
+        if (extraPutts < 2 && r < pMiss) { extraPutts++; excess--; }
+        else if (excess >= 2 && r < pMiss + 0.35) { obs++; excess -= 2; }
         else { shorts++; excess--; }
       }
       // Order the forward work — reach−1 full advances, the short ones, and the OB
@@ -2253,14 +2261,17 @@ function buildRacerGhosts(seed: number, holeIndex: number, hole: Hole, racers: G
         steps.push({ to: fwPoint(f, off) });
         lastF = f;
       }
-      // The approach lands on the green a putt out; each extra putt then creeps in
-      // toward the cup from one general side, roughly halving the distance, so the
-      // last lie before holing out is a tap-in instead of orbiting the basket.
+      // The approach parks on the green a putt out — closer for better players.
+      const approachD = hole.fwWidth * (0.09 + 0.09 * (1 - skill));
       const puttAng = rng() * Math.PI * 2;
-      for (let p = 0; p <= extraPutts; p++) {
-        const dist = hole.fwWidth * 0.15 * Math.pow(0.4, p);
-        const ang = puttAng + jitter() * 0.55;
-        steps.push({ to: { x: hole.basket.x + Math.cos(ang) * dist, y: hole.basket.y + Math.sin(ang) * dist } });
+      steps.push({ to: { x: hole.basket.x + Math.cos(puttAng) * approachD, y: hole.basket.y + Math.sin(puttAng) * approachD } });
+      // A missed putt only misses by a little: the disc runs through or spits out
+      // just past the basket, a tap-in away (further for weaker players). The rare
+      // second miss stays inside that, so the third putt is a gimme.
+      for (let p = 1; p <= extraPutts; p++) {
+        const run = p === 1 ? CATCH_R + 2 + (1 - skill) * 6 : CATCH_R + 1;
+        const ang = puttAng + Math.PI + jitter() * 0.9; // past the basket, roughly along the putt line
+        steps.push({ to: { x: hole.basket.x + Math.cos(ang) * run, y: hole.basket.y + Math.sin(ang) * run } });
       }
       steps.push({ to: { x: hole.basket.x, y: hole.basket.y } });
     }
@@ -2299,6 +2310,8 @@ function buildTournGhosts(t: Tournament, def: TournDef, holeIndex: number, hole:
   const rivals = [...active].sort((a, b) => skills[a] - skills[b]).slice(0, N_RIVALS);
   const racers: GhostRacer[] = rivals.map((idx, gi) => ({
     name: TOURN_NAMES[idx], color: GHOST_PALETTE[gi % GHOST_PALETTE.length], shots: Math.max(1, fieldHoles[idx]?.[holeIndex] ?? hole.par),
+    // tournSkills runs −25 (best) … +4 (worst) strokes-ish; flip onto 0–1.
+    skill: Math.max(0, Math.min(1, (4 - skills[idx]) / 29)),
   }));
   return buildRacerGhosts((t.seed ^ (roundIdx * 99991)) >>> 0, holeIndex, hole, racers, now);
 }

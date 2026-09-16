@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildRacerGhosts, ghostPosAt, type Hole } from "../lib/discgolf/engine";
+import { buildRacerGhosts, ghostPosAt, CATCH_R, type Hole } from "../lib/discgolf/engine";
 
 // A straight, open hole: tee at the bottom, basket 420px up. Progress along the
 // fairway is just "how much smaller y got", which makes the realism rules easy
@@ -68,5 +68,38 @@ describe("rival ghosts progress toward the basket", () => {
     expect(sawWalk).toBe(true);
     const gh = buildRacerGhosts(3, 0, straight, [{ name: "R", color: "#fff", shots: 9 }], 0).ghosts[0];
     expect(ghostPosAt(gh, 1e9).holed).toBe(true);
+  });
+});
+
+describe("rival putting scales with skill", () => {
+  // shots = reach + 3 on this hole: two strokes to spend beyond drive/approach/putt.
+  const SHOTS = 6;
+  function greenStats(skill: number, seeds = 1500) {
+    let missed = 0, threePutt = 0, firstMissRun = 0, runs = 0;
+    const greenR = straight.fwWidth * 0.2;
+    for (let seed = 1; seed <= seeds; seed++) {
+      const gh = buildRacerGhosts(seed, 1, straight, [{ name: "R", color: "#fff", shots: SHOTS, skill }], 0).ghosts[0];
+      const onGreen = gh.segs.map((sg) => sg.to).filter((p) => Math.hypot(p.x - straight.basket.x, p.y - straight.basket.y) <= greenR);
+      // on-green lies before the hole-out: approach [+ misses]
+      const lies = onGreen.slice(0, -1);
+      if (lies.length >= 2) { missed++; firstMissRun += Math.hypot(lies[1].x - straight.basket.x, lies[1].y - straight.basket.y); runs++; }
+      if (lies.length >= 3) threePutt++;
+    }
+    return { miss: missed / seeds, three: threePutt / seeds, run: runs ? firstMissRun / runs : 0 };
+  }
+  it("a miss only runs a tap-in past the basket, closer for better players", () => {
+    const weak = greenStats(0), elite = greenStats(1);
+    expect(weak.run).toBeLessThanOrEqual(CATCH_R + 8.5);   // a couple of feet past the cage
+    expect(elite.run).toBeLessThanOrEqual(CATCH_R + 2.5);  // barely out
+    expect(elite.run).toBeLessThan(weak.run);
+  });
+  it("misses are uncommon and three-putts rare, both rarer with skill", () => {
+    const weak = greenStats(0), elite = greenStats(1);
+    expect(weak.miss).toBeLessThan(0.5);
+    expect(elite.miss).toBeLessThan(weak.miss);
+    expect(weak.three).toBeLessThan(0.05);
+    expect(elite.three).toBeLessThan(0.01);
+    // given a miss, the second putt goes in the vast majority of the time
+    expect(weak.three / Math.max(weak.miss, 1e-9)).toBeLessThan(0.12);
   });
 });
