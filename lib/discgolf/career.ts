@@ -626,14 +626,17 @@ function anonName(seed: number, i: number): string {
 // Per-hole scores for a rating. `diff[i]` (optional) adds the hole's conditions
 // difficulty so windy/uphill/tight holes cost the field more strokes there too;
 // better players (lower perHoleToPar) shrug some of it off.
-function simHoleScores(rating: number, par: number, holes: number, rng: () => number, diff?: number[], edgeToPar = 0): number[] {
+// `pars[i]` (optional) is each hole's own par, so a par 5 costs the field ~5 and
+// a par 3 ~3 instead of everything averaging out to the course mean — without
+// it a strong field would "eagle" every par 5 and "bogey" every par 3.
+function simHoleScores(rating: number, par: number, holes: number, rng: () => number, diff?: number[], edgeToPar = 0, pars?: number[]): number[] {
   const parPerHole = par / holes;
   // `edgeToPar` sharpens the whole field by that many strokes over the round,
   // spread evenly across the holes (ranked uses it to keep the AI competitive).
   const perHoleToPar = (50 - rating) * 0.28 / 18 - edgeToPar / holes;
   const grit = 1 - (rating - 50) / 140; // skill cushions conditions a little
   return Array.from({ length: holes }, (_, i) =>
-    Math.max(1, Math.round(parPerHole + perHoleToPar + (diff ? diff[i] * Math.max(0.45, grit) : 0) + (rng() * 2 - 1) * 0.65)),
+    Math.max(1, Math.round((pars?.[i] ?? parPerHole) + perHoleToPar + (diff ? diff[i] * Math.max(0.45, grit) : 0) + (rng() * 2 - 1) * 0.65)),
   );
 }
 // ── The pro tour is real. Your first pro season is 2026, and the field is the
@@ -730,13 +733,13 @@ function isProRivals(rivals: Rival[]): boolean {
 
 // `diff` (optional) carries per-hole conditions difficulty for a PLAYED round, so
 // the field (and the ghosts you watch) react to wind/slope/hazards like you do.
-function buildField(c: Career, ev: CareerEvent, diff?: number[]): FieldPlayer[] {
+function buildField(c: Career, ev: CareerEvent, diff?: number[], pars?: number[]): FieldPlayer[] {
   // On the pro tour the field plays a touch better at the marquee events — the
   // same bump the anonymous field already gets in fieldOpponentRating.
   const proLift = c.stage === "pro" ? (ev.importance === "championship" ? 5 : ev.importance === "major" ? 3 : 0) : 0;
   const field: FieldPlayer[] = c.rivals.map((r) => {
     const rating = rivalRating(r) + proLift;
-    const holes = simHoleScores(rating, ev.par, ev.holes, mulberry32((c.seed ^ hashId(ev.id) ^ hashId(r.id)) >>> 0), diff);
+    const holes = simHoleScores(rating, ev.par, ev.holes, mulberry32((c.seed ^ hashId(ev.id) ^ hashId(r.id)) >>> 0), diff, 0, pars);
     return { name: r.name, isRival: true, color: r.color, holes, total: holes.reduce((a, b) => a + b, 0), rating };
   });
   const anonCount = Math.max(0, ev.fieldSize - c.rivals.length);
@@ -747,7 +750,7 @@ function buildField(c: Career, ev: CareerEvent, diff?: number[]): FieldPlayer[] 
   for (let i = 0; i < anonCount; i++) {
     const pro = named && i < named.length ? named[i] : null;
     const rating = pro ? pro.rating + proLift : fieldOpponentRating(ev, rng);
-    const holes = simHoleScores(rating, ev.par, ev.holes, rng, diff);
+    const holes = simHoleScores(rating, ev.par, ev.holes, rng, diff, 0, pars);
     field.push({ name: pro ? pro.name : anonName((c.seed ^ hashId(ev.id)) >>> 0, i), isRival: false, color: pro ? PRO_FIELD_COLOR : "#7a808a", holes, total: holes.reduce((a, b) => a + b, 0), rating });
   }
   return field;
@@ -757,7 +760,7 @@ export function careerFieldHoles(c: Career, ev: CareerEvent): FieldPlayer[] {
 }
 // The field for a PLAYED round, where each hole's wind/slope/hazards bump scores.
 export function careerFieldForRound(c: Career, ev: CareerEvent, roundHoles: Hole[]): FieldPlayer[] {
-  return buildField(c, ev, roundHoles.map(holeDifficulty));
+  return buildField(c, ev, roundHoles.map(holeDifficulty), roundHoles.map((h) => h.par));
 }
 
 // Your on-course "card": the three best-placed rivals you're grouped with.
@@ -790,7 +793,7 @@ export function rankedFieldForRound(seed: number, fieldMean: number, size: numbe
   const field: FieldPlayer[] = [];
   for (let i = 0; i < size; i++) {
     const rating = clamp(fieldMean + (rng() * 2 - 1) * 14, 20, 99); // spread around the tier mean
-    const holes = simHoleScores(rating, par, roundHoles.length, rng, diff, RANKED_EDGE);
+    const holes = simHoleScores(rating, par, roundHoles.length, rng, diff, RANKED_EDGE, roundHoles.map((h) => h.par));
     field.push({ name: anonName(seed, i), isRival: false, color: "#7a808a", holes, total: holes.reduce((a, b) => a + b, 0), rating });
   }
   return field;
@@ -811,7 +814,7 @@ export function rankedPlacementField(seed: number, size: number, roundHoles: Hol
     // Evenly graded across the band, with a hair of jitter so it isn't a perfect
     // staircase.
     const rating = clamp(lo + t * (hi - lo) + (rng() * 2 - 1) * 2, 20, 99);
-    const holes = simHoleScores(rating, par, roundHoles.length, rng, diff, PLACEMENT_EDGE);
+    const holes = simHoleScores(rating, par, roundHoles.length, rng, diff, PLACEMENT_EDGE, roundHoles.map((h) => h.par));
     field.push({ name: anonName(seed, i), isRival: false, color: "#7a808a", holes, total: holes.reduce((a, b) => a + b, 0), rating });
   }
   return field;

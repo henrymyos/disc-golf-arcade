@@ -140,3 +140,24 @@ describe("a putt is any throw from inside putting range", () => {
     expect(d).toBe(0);
   });
 });
+
+describe("rivals respect the course's hazards", () => {
+  it("a throw that comes down in the water is OB: penalty, then a walk back", () => {
+    // A pond across the middle of the straight hole, the width of the fairway.
+    const pond: Hole = { ...straight, water: [{ x: 90, y: 300, w: 140, h: 70 }] } as unknown as Hole;
+    let splashes = 0;
+    for (let seed = 1; seed <= 80; seed++) {
+      for (const shots of [4, 5, 6]) {
+        const gh = buildRacerGhosts(seed, 0, pond, [{ name: "R", color: "#fff", shots, skill: 0.5 }], 0).ghosts[0];
+        const pts = gh.segs.map((sg) => ({ ...sg.to, walk: sg.lift === 0 && sg.pause < 1000 }));
+        pts.forEach((p, i) => {
+          const wet = p.x > 90 && p.x < 230 && p.y > 300 && p.y < 370;
+          if (!wet || p.walk) return;
+          splashes++;
+          expect(pts[i + 1]?.walk, `seed=${seed} shots=${shots}`).toBe(true); // never plays on from the pond
+        });
+      }
+    }
+    expect(splashes).toBeGreaterThan(0);
+  });
+});

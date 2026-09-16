@@ -2238,6 +2238,35 @@ function simulateGhostHole(hole: Hole, skill: number, q: number, rng: () => numb
   let f = 0; // how far down the fairway centerline the lie is (0 tee … 1 basket)
   let missed = false; // a comeback putt after a miss is from close and nearly automatic
   const odds = ghostShotOdds(q, narrow);
+  // Where a throw actually came to rest matters: in the water or past the OB
+  // line it's a penalty and a walk back (to the drop zone if the hole has one);
+  // in the sand (or hazard rough) it's a penalty played where it lies.
+  const settle = (next: Vec, fromF: number, toF: number): "ok" | "ob" => {
+    if (inAnyOB(hole, next.x, next.y)) {
+      strokes += 1; // the penalty on top of the throw
+      steps.push({ to: next });
+      let back: Vec;
+      if (hole.dropZone) back = { x: hole.dropZone.x, y: hole.dropZone.y };
+      else {
+        const base = pointOnPath(hole.fairway, Math.min(1, toF));
+        const ahead = pointOnPath(hole.fairway, Math.min(1, toF + 0.02));
+        const nx = -(ahead.y - base.y), ny = ahead.x - base.x;
+        const side = (next.x - base.x) * nx + (next.y - base.y) * ny >= 0 ? 1 : -1;
+        const fLie = fromF + (toF - fromF) * (0.3 + rng() * 0.4);
+        back = fwPoint(fLie, side * hole.fwWidth * 0.36);
+        if (inAnyOB(hole, back.x, back.y)) back = fwPoint(fLie, 0);
+      }
+      steps.push({ to: back, walk: true });
+      lie = back; f = Math.max(fromF, 1 - distBetween(back, hole.basket) / L);
+      return "ob";
+    }
+    if ((hole.hazard ?? []).some((hz) => inHazard(hz, next.x, next.y)) || (hole.roughIsHazard && offRibbons(hole, next.x, next.y))) {
+      strokes += 1; // sand: play it where it lies, one stroke poorer
+    }
+    steps.push({ to: next });
+    lie = next; f = Math.max(f, toF);
+    return "ok";
+  };
   for (let guard = 0; guard < 40 && strokes < maxStrokes; guard++) {
     const d = distBetween(lie, hole.basket);
     if (d <= PR) {
@@ -2303,8 +2332,7 @@ function simulateGhostHole(hole: Hole, skill: number, q: number, rng: () => numb
       const toward = Math.atan2(lie.y - hole.basket.y, lie.x - hole.basket.x);
       const dir = kind === "clean" ? toward + jitter() * 0.5 : toward + Math.PI + jitter() * 0.6;
       const next = { x: hole.basket.x + Math.cos(dir) * u, y: hole.basket.y + Math.sin(dir) * u };
-      steps.push({ to: next });
-      lie = next; f = Math.max(f, 1 - u / L);
+      settle(next, f, Math.max(f, 1 - u / L));
     } else {
       // Full power down the fairway — or, on a squib/tree kick (from anywhere),
       // a fraction of the intended carry, ending at the tree line.
@@ -2313,9 +2341,7 @@ function simulateGhostHole(hole: Hole, skill: number, q: number, rng: () => numb
       const off = kind === "short"
         ? (rng() < 0.5 ? -1 : 1) * hole.fwWidth * (0.28 + rng() * 0.18) // kicked to the tree line
         : jitter() * hole.fwWidth * 0.22;                               // a fairway lie
-      const next = fwPoint(nf, off);
-      steps.push({ to: next });
-      lie = next; f = nf;
+      settle(fwPoint(nf, off), f, nf);
     }
   }
   return { steps, strokes };
