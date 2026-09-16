@@ -2133,6 +2133,11 @@ const N_RIVALS = 4;
 // a solid throw, so on a short hole they go straight at the basket in one like you
 // would, rather than dribbling down the fairway.
 const GHOST_DRIVE = DRIVE * 0.9;
+// "Putting range": the lie-to-basket distance inside which the auto-caddie hands
+// the player a putter — the shortest full-power carry in the disc set (a putter's).
+// A rival's throw from inside this is a putt and plays out like one (see
+// buildRacerGhosts); anything from further out is a drive or approach.
+const PUTT_RANGE = Math.min(...ADV_DISCS.map((d) => fullPowerRange(d, 0, STRAIGHT_SPEED_MUL, 0)));
 // A rival's disc flies at the SAME pace as yours (measured ~0.2 px/ms airborne for
 // a real throw), so flight time scales with distance — a drive takes ~1.2s, a putt
 // a fraction — instead of every shot zipping over in a fixed ~0.6s (which made long
@@ -2200,78 +2205,93 @@ function buildRacerGhosts(seed: number, holeIndex: number, hole: Hole, racers: G
     // out (the penalty stroke) and plays on from there.
     type Step = { to: Vec; walk?: boolean };
     const steps: Step[] = [];
+    const PR = PUTT_RANGE;
+    const D = distBetween(hole.tee, hole.basket);
+    const L = pathLength(hole.fairway) || D;
     if (s === 1) {
       steps.push({ to: { x: hole.basket.x, y: hole.basket.y } }); // an ace
     } else {
-      // Throws it takes to REACH the green (the last of them is the approach). On
-      // a short hole this is 1, so the drive flies right at the basket like a real
-      // one. Bounded by the shots available (a great score can't reach in more
-      // throws than it has, leaving one for the putt).
-      const reach = Math.max(1, Math.min(Math.ceil(distBetween(hole.tee, hole.basket) / GHOST_DRIVE), s - 1));
-      // Strokes beyond "reach + one putt" are spent on trouble that still moves the
-      // disc toward the basket, so a bad hole reads as a struggle down the fairway
-      // rather than a random scatter: an occasional lag/three-putt, a throw flung
-      // OB (costs the throw AND a penalty, then a walk back to the edge), or a
-      // tree kick / squibbed shot that only makes part of the ground.
-      let excess = s - 1 - reach;
+      // How long the first putt is: the approach parks inside putting range, closer
+      // for better players (elite ≈ 12–45% of the range, weekend ≈ 25–85%). On a
+      // hole shorter than putting range the tee shot IS the first putt.
+      const A = D <= PR ? D : Math.max(CATCH_R + 3, PR * ((0.12 + 0.13 * (1 - skill)) + rng() * (0.33 + 0.4 * (1 - skill))));
+      // Throws from outside putting range to get inside it (the last is the
+      // approach). Bounded by the shots available, leaving at least one putt.
+      const fwd = D <= PR ? 0 : Math.max(1, Math.min(Math.ceil((D - A) / GHOST_DRIVE), s - 1));
+      // Strokes beyond "get inside range + one putt" are spent on trouble that still
+      // moves the disc toward the basket, so a bad hole reads as a struggle down
+      // the fairway rather than a random scatter: a missed putt (least likely, and
+      // likelier the longer the first putt), a throw flung OB (costs the throw AND
+      // a penalty, then a walk back to the edge), or a tree kick / squibbed shot
+      // that only makes part of the ground.
+      let excess = s - fwd - 1;
       let extraPutts = 0, obs = 0, shorts = 0;
+      const lengthFactor = 0.6 + 0.8 * (A / PR); // a long putt misses more than a tap-in
       while (excess > 0) {
+        if (fwd === 0) { extraPutts++; excess--; continue; } // inside range the whole way: only putts can miss
         const r = rng();
-        // A missed putt is the least likely way to lose a stroke, and a second miss
-        // (the three-putt) rarer still — both scaled by skill, so a top player's
-        // extra strokes almost always come from the tee-to-green fight instead.
-        const pMiss = extraPutts === 0 ? 0.06 + 0.16 * (1 - skill) : 0.01 + 0.06 * (1 - skill);
+        const pMiss = Math.min(0.6, (extraPutts === 0 ? 0.06 + 0.16 * (1 - skill) : 0.01 + 0.06 * (1 - skill)) * lengthFactor);
         if (extraPutts < 2 && r < pMiss) { extraPutts++; excess--; }
         else if (excess >= 2 && r < pMiss + 0.35) { obs++; excess -= 2; }
         else { shorts++; excess--; }
       }
-      // Order the forward work — reach−1 full advances, the short ones, and the OB
-      // mishaps — with the ghost's own RNG (deterministic per hole), then the
-      // approach onto the green.
-      const kinds: ("fw" | "short" | "ob")[] = [];
-      for (let i = 0; i < reach - 1; i++) kinds.push("fw");
-      for (let i = 0; i < shorts; i++) kinds.push("short");
-      for (let i = 0; i < obs; i++) kinds.push("ob");
-      for (let i = kinds.length - 1; i > 0; i--) {
-        const j = Math.floor(rng() * (i + 1));
-        [kinds[i], kinds[j]] = [kinds[j], kinds[i]];
-      }
-      const SHORT_W = 0.45;                          // a tree kick makes ~45% of a full advance
-      const GREEN_F = 0.94;                          // path fraction where the green begins
-      const totalW = (reach - 1) + shorts * SHORT_W + 1; // + the approach, a full throw
-      let cum = 0, lastF = 0;
-      for (const k of kinds) {
-        if (k === "ob") {
-          // Sails ahead but over the line: lands well off the corridor, then a walk
-          // back to the edge just past the lie it was thrown from.
-          const side = rng() < 0.5 ? -1 : 1;
-          const fOut = Math.min(GREEN_F - 0.05, lastF + 0.08 + rng() * 0.12);
-          steps.push({ to: fwPoint(fOut, side * hole.fwWidth * (0.7 + rng() * 0.35)) });
-          const fLie = Math.min(fOut, lastF + 0.03 + rng() * 0.05);
-          steps.push({ to: fwPoint(fLie, side * hole.fwWidth * 0.36), walk: true });
-          lastF = fLie;
-          continue;
+      if (fwd > 0) {
+        // Order the forward work — fwd−1 full advances, the short ones, and the OB
+        // mishaps — with the ghost's own RNG (deterministic per hole), then the
+        // approach to the first-putt lie.
+        const kinds: ("fw" | "short" | "ob")[] = [];
+        for (let i = 0; i < fwd - 1; i++) kinds.push("fw");
+        for (let i = 0; i < shorts; i++) kinds.push("short");
+        for (let i = 0; i < obs; i++) kinds.push("ob");
+        for (let i = kinds.length - 1; i > 0; i--) {
+          const j = Math.floor(rng() * (i + 1));
+          [kinds[i], kinds[j]] = [kinds[j], kinds[i]];
         }
-        cum += k === "fw" ? 1 : SHORT_W;
-        // Always further down the fairway than the last lie, never onto the green.
-        const f = Math.min(GREEN_F - 0.03, Math.max(lastF + 0.02, (cum / totalW) * GREEN_F + jitter() * 0.03));
-        const off = k === "fw"
-          ? jitter() * hole.fwWidth * 0.22                                   // a fairway lie
-          : (rng() < 0.5 ? -1 : 1) * hole.fwWidth * (0.28 + rng() * 0.18); // kicked to the tree line
-        steps.push({ to: fwPoint(f, off) });
-        lastF = f;
+        const SHORT_W = 0.45;                                   // a tree kick makes ~45% of a full advance
+        const fA = 1 - A / L;                                   // path fraction of the first-putt lie
+        const capF = Math.min(fA - 0.02, 1 - (PR * 1.05) / L);  // fairway lies stay outside putting range
+        const totalW = (fwd - 1) + shorts * SHORT_W + 1;        // + the approach, a full throw
+        let cum = 0, lastF = 0;
+        for (const k of kinds) {
+          if (k === "ob") {
+            // Sails ahead but over the line: lands well off the corridor, then a walk
+            // back to the edge just past the lie it was thrown from.
+            const side = rng() < 0.5 ? -1 : 1;
+            const fOut = Math.min(capF, lastF + 0.08 + rng() * 0.12);
+            steps.push({ to: fwPoint(fOut, side * hole.fwWidth * (0.7 + rng() * 0.35)) });
+            const fLie = Math.min(fOut, lastF + 0.03 + rng() * 0.05);
+            steps.push({ to: fwPoint(fLie, side * hole.fwWidth * 0.36), walk: true });
+            lastF = fLie;
+            continue;
+          }
+          cum += k === "fw" ? 1 : SHORT_W;
+          // Always further down the fairway than the last lie, never inside range.
+          const f = Math.min(capF, Math.max(Math.min(capF, lastF + 0.02), (cum / totalW) * fA + jitter() * 0.03));
+          const off = k === "fw"
+            ? jitter() * hole.fwWidth * 0.22                                   // a fairway lie
+            : (rng() < 0.5 ? -1 : 1) * hole.fwWidth * (0.28 + rng() * 0.18); // kicked to the tree line
+          steps.push({ to: fwPoint(f, off) });
+          lastF = f;
+        }
+        // The approach: exactly A from the basket, roughly on the line it came in on.
+        const prev = steps.length ? steps[steps.length - 1].to : hole.tee;
+        const back = Math.atan2(prev.y - hole.basket.y, prev.x - hole.basket.x) + jitter() * 0.4;
+        steps.push({ to: { x: hole.basket.x + Math.cos(back) * A, y: hole.basket.y + Math.sin(back) * A } });
       }
-      // The approach parks on the green a putt out — closer for better players.
-      const approachD = hole.fwWidth * (0.09 + 0.09 * (1 - skill));
-      const puttAng = rng() * Math.PI * 2;
-      steps.push({ to: { x: hole.basket.x + Math.cos(puttAng) * approachD, y: hole.basket.y + Math.sin(puttAng) * approachD } });
-      // A missed putt only misses by a little: the disc runs through or spits out
-      // just past the basket, a tap-in away (further for weaker players). The rare
-      // second miss stays inside that, so the third putt is a gimme.
+      // Putts. A miss only misses by a little: the disc runs through or spits out
+      // just past the basket — a touch further for weaker players and for a longer
+      // putt — and the next one drops. The rare second miss stays inside that, so
+      // the third putt is a gimme.
+      let from = steps.length ? steps[steps.length - 1].to : hole.tee;
+      let puttLen = A;
       for (let p = 1; p <= extraPutts; p++) {
-        const run = p === 1 ? CATCH_R + 2 + (1 - skill) * 6 : CATCH_R + 1;
-        const ang = puttAng + Math.PI + jitter() * 0.9; // past the basket, roughly along the putt line
-        steps.push({ to: { x: hole.basket.x + Math.cos(ang) * run, y: hole.basket.y + Math.sin(ang) * run } });
+        // …but never further from the cup than the putt it just missed.
+        const run = Math.min(Math.max(CATCH_R + 1, puttLen * 0.9), p === 1 ? CATCH_R + 2 + (1 - skill) * 6 + (puttLen / PR) * 8 : CATCH_R + 1);
+        const through = Math.atan2(hole.basket.y - from.y, hole.basket.x - from.x) + jitter() * 0.9; // past the basket, along the putt line
+        const lie = { x: hole.basket.x + Math.cos(through) * run, y: hole.basket.y + Math.sin(through) * run };
+        steps.push({ to: lie });
+        from = lie;
+        puttLen = run;
       }
       steps.push({ to: { x: hole.basket.x, y: hole.basket.y } });
     }
@@ -2464,6 +2484,7 @@ export {
   stepFlight,
   buildTournGhosts,
   buildRacerGhosts,
+  PUTT_RANGE,
   ghostPosAt,
 };
 export type {
