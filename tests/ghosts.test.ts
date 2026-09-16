@@ -15,27 +15,19 @@ function landings(shots: number, seed: number) {
 }
 
 describe("rival ghosts progress toward the basket", () => {
-  it("never throws backwards, for any score from an ace to a blow-up", () => {
-    const greenR = PUTT_RANGE; // inside putting range every throw is a putt
-    const distToBasket = (p: { x: number; y: number }) => Math.hypot(p.x - straight.basket.x, p.y - straight.basket.y);
+  const distToBasket = (p: { x: number; y: number }) => Math.hypot(p.x - straight.basket.x, p.y - straight.basket.y);
+  it("every throw finishes closer to the basket than it started, for any score", () => {
     for (let seed = 1; seed <= 60; seed++) {
       for (let shots = 1; shots <= 10; shots++) {
         const pts = landings(shots, seed);
-        // Down the fairway every lie is further along than the last; once on the
-        // green every putt is closer to the cup than the one before.
-        let y = straight.tee.y, onGreen = false, d = Infinity;
-        for (const p of pts) {
-          const tag = `shots=${shots} seed=${seed}`;
-          if (!onGreen && distToBasket(p) <= greenR) onGreen = true;
-          if (p.walk) { y = p.y; continue; } // carrying the disc back from OB is the one allowed retreat
-          if (onGreen) {
-            expect(distToBasket(p), tag).toBeLessThanOrEqual(d + 0.001);
-            d = distToBasket(p);
-          } else {
-            expect(p.y, tag).toBeLessThanOrEqual(y + 0.001);
-            y = p.y;
-          }
-        }
+        let d = distToBasket(straight.tee);
+        pts.forEach((p, i) => {
+          // An OB throw (the one followed by the walk back) is the one allowed
+          // mistake: the disc sails off the corridor, then it's carried back.
+          if (p.walk || pts[i + 1]?.walk) { d = distToBasket(p); return; }
+          expect(distToBasket(p), `shots=${shots} seed=${seed}`).toBeLessThanOrEqual(d + 0.001);
+          d = distToBasket(p);
+        });
         expect(pts[pts.length - 1]).toMatchObject({ x: straight.basket.x, y: straight.basket.y });
       }
     }
@@ -46,7 +38,7 @@ describe("rival ghosts progress toward the basket", () => {
         const pts = landings(shots, seed);
         const throws = pts.filter((p) => !p.walk).length;
         expect(throws).toBeLessThanOrEqual(shots);
-        expect(throws).toBeGreaterThanOrEqual(Math.ceil(shots / 2) + 1);
+        expect(throws).toBeGreaterThanOrEqual(Math.ceil(shots / 2));
       }
     }
   });
@@ -55,14 +47,23 @@ describe("rival ghosts progress toward the basket", () => {
       for (const p of landings(8, seed)) expect(Math.abs(p.x - 160)).toBeLessThanOrEqual(straight.fwWidth * 1.1);
     }
   });
-  it("an ace is one throw straight into the basket; a par-2 is drive + putt", () => {
+  it("an ace is one throw into the basket; an eagle on a long hole is a full drive then a hole-out", () => {
     expect(landings(1, 5)).toHaveLength(1);
     const two = landings(2, 5);
     expect(two).toHaveLength(2);
-    expect(Math.hypot(two[0].x - 160, two[0].y - 140)).toBeLessThan(PUTT_RANGE); // drive lands inside putting range
+    expect(straight.tee.y - two[0].y).toBeGreaterThan(250); // a full-power drive, not a lay-up
+  });
+  it("throws full power whenever the basket is out of reach", () => {
+    for (let seed = 1; seed <= 40; seed++) {
+      const first = landings(4, seed)[0];
+      if (first.walk) continue;
+      const carried = straight.tee.y - first.y;
+      // clean/long drive ≈ 0.9–1.08 of full power; a squib is the only shorter first throw and ends at the tree line
+      const squib = Math.abs(first.x - 160) > straight.fwWidth * 0.25;
+      if (!squib) expect(carried).toBeGreaterThan(250);
+    }
   });
   it("walks back from an OB throw before playing on, and still holes out", () => {
-    // Enough seeds × strokes that at least one path includes an OB + walk.
     let sawWalk = false;
     for (let seed = 1; seed <= 40 && !sawWalk; seed++) sawWalk = landings(9, seed).some((p) => p.walk);
     expect(sawWalk).toBe(true);
@@ -72,16 +73,15 @@ describe("rival ghosts progress toward the basket", () => {
 });
 
 describe("rival putting scales with skill", () => {
-  // shots = reach + 3 on this hole: two strokes to spend beyond drive/approach/putt.
+  // shots = 6 on this par 4: a blow-up hole with strokes to lose somewhere.
   const SHOTS = 6;
   function greenStats(skill: number, seeds = 1500) {
     let missed = 0, threePutt = 0, firstMissRun = 0, runs = 0;
-    const greenR = PUTT_RANGE;
     for (let seed = 1; seed <= seeds; seed++) {
       const gh = buildRacerGhosts(seed, 1, straight, [{ name: "R", color: "#fff", shots: SHOTS, skill }], 0).ghosts[0];
-      const onGreen = gh.segs.map((sg) => sg.to).filter((p) => Math.hypot(p.x - straight.basket.x, p.y - straight.basket.y) <= greenR);
-      // on-green lies before the hole-out: approach [+ misses]
-      const lies = onGreen.slice(0, -1);
+      const pts = gh.segs.map((sg) => sg.to);
+      const first = pts.findIndex((p) => Math.hypot(p.x - straight.basket.x, p.y - straight.basket.y) <= PUTT_RANGE);
+      const lies = first >= 0 ? pts.slice(first, -1) : []; // lies inside putting range before the hole-out
       if (lies.length >= 2) { missed++; firstMissRun += Math.hypot(lies[1].x - straight.basket.x, lies[1].y - straight.basket.y); runs++; }
       if (lies.length >= 3) threePutt++;
     }
@@ -89,18 +89,18 @@ describe("rival putting scales with skill", () => {
   }
   it("a miss only runs a tap-in past the basket, closer for better players", () => {
     const weak = greenStats(0), elite = greenStats(1);
-    expect(weak.run).toBeLessThanOrEqual(CATCH_R + 16);    // a few feet past the cage
-    expect(elite.run).toBeLessThanOrEqual(CATCH_R + 7);    // barely out
+    expect(weak.run).toBeLessThanOrEqual(CATCH_R + 10);   // a few feet past the cage
+    expect(elite.run).toBeLessThanOrEqual(CATCH_R + 7);   // barely out
     expect(elite.run).toBeLessThan(weak.run);
   });
-  it("misses are uncommon and three-putts rare, both rarer with skill", () => {
+  it("on a blow-up hole a weak rival loses strokes on the green, an elite one on the fairway", () => {
     const weak = greenStats(0), elite = greenStats(1);
-    expect(weak.miss).toBeLessThan(0.5);
-    expect(elite.miss).toBeLessThan(weak.miss);
-    expect(weak.three).toBeLessThan(0.05);
-    expect(elite.three).toBeLessThan(0.01);
-    // given a miss, the second putt goes in the vast majority of the time
-    expect(weak.three / Math.max(weak.miss, 1e-9)).toBeLessThan(0.12);
+    expect(weak.miss).toBeLessThan(0.6);
+    expect(elite.miss).toBeLessThan(weak.miss * 0.6);
+    expect(weak.three).toBeLessThan(0.08);
+    expect(elite.three).toBeLessThan(0.02);
+    // given a miss, the comeback putt drops the vast majority of the time
+    expect(weak.three / Math.max(weak.miss, 1e-9)).toBeLessThan(0.15);
   });
 });
 
@@ -109,17 +109,27 @@ describe("a putt is any throw from inside putting range", () => {
     expect(PUTT_RANGE).toBeGreaterThan(50);
     expect(PUTT_RANGE).toBeLessThan(90);
   });
-  it("fairway lies stay outside putting range; the approach lands inside it", () => {
+  it("once a throw lands inside putting range, the rival is putting until it drops", () => {
     for (let seed = 1; seed <= 60; seed++) {
       for (const shots of [3, 5, 8]) {
         const pts = landings(shots, seed).filter((p) => !p.walk);
         const d = pts.map((p) => Math.hypot(p.x - 160, p.y - 140));
         const firstInside = d.findIndex((x) => x <= PUTT_RANGE);
-        expect(firstInside, `shots=${shots} seed=${seed}`).toBeGreaterThan(0);
-        for (let i = 0; i < firstInside; i++) expect(d[i]).toBeGreaterThan(PUTT_RANGE);
+        expect(firstInside, `shots=${shots} seed=${seed}`).toBeGreaterThan(0); // the tee is outside range
         for (let i = firstInside; i < d.length; i++) expect(d[i]).toBeLessThanOrEqual(PUTT_RANGE);
       }
     }
+  });
+  it("a drive can land inside putting range when the hole is short enough", () => {
+    // 330px hole: a full-power drive (~300px) parks inside the 65px range.
+    const short: Hole = { ...straight, tee: { x: 160, y: 470 }, fairway: [{ x: 160, y: 470 }, { x: 160, y: 140 }] } as unknown as Hole;
+    let inside = 0;
+    for (let seed = 1; seed <= 40; seed++) {
+      const gh = buildRacerGhosts(seed, 0, short, [{ name: "R", color: "#fff", shots: 3, skill: 0.7 }], 0).ghosts[0];
+      const first = gh.segs[0].to;
+      if (Math.hypot(first.x - 160, first.y - 140) <= PUTT_RANGE) inside++;
+    }
+    expect(inside).toBeGreaterThan(20);
   });
   it("on a hole shorter than putting range every throw is a putt", () => {
     const tiny: Hole = { ...straight, tee: { x: 160, y: 190 }, fairway: [{ x: 160, y: 190 }, { x: 160, y: 140 }] } as unknown as Hole;

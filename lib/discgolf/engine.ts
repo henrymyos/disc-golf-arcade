@@ -2177,127 +2177,203 @@ function ghostAvoidTree(a: Vec, b: Vec, trees: Tree[]): Vec | null {
 }
 
 // Generic ghost builder: turn a list of racers (name, color, shot count for THIS
-// hole) into discs that play the hole tee → fairway landings → basket, one shot
-// per node. Shared by tournament play and Career/Ranked events.
-// `skill` (0 = weekend player … 1 = world #1, default 0.5) sets how clean the
-// ghost's putting looks: how close the approach parks, how often a putt misses,
-// how far a miss runs past, and how rare a three-putt is.
+// hole) into discs that play the hole tee → fairway landings → basket. Shared by
+// tournament play and Career/Ranked events.
+//
+// Each throw is SIMULATED, one at a time, from the rival's current lie: the disc
+// is thrown at full power whenever the basket is out of reach, aimed at the
+// basket once it's reachable, and putted from inside putting range — and what
+// happens (clean, long, short/tree kick, OB, holed) is drawn from an outcome
+// table that depends on the rival's skill and the distance. Because the score
+// on the card is fixed, the hole is re-simulated with fresh dice until the
+// stroke count matches, leaning on the rival a little harder (or easier) each
+// retry; a last-resort fallback trims or pads the run to fit.
 type GhostRacer = { name: string; color: string; shots: number; skill?: number };
+// Every step is a throw that lands somewhere, except a `walk`: after an OB throw
+// the rival carries the disc back to the corridor edge where it went out (the
+// penalty stroke) and plays on from there.
+type GhostStep = { to: Vec; walk?: boolean };
+
+// Outcome odds for a rival's throw. `q` is effective quality — the rival's skill
+// (0–1) nudged by the retry bias, so it can run below 0 (a rough day) or above 1
+// (a hot one) while the hole is fitted to the card; `narrow` is 0–1 for tight
+// corridors (more trouble).
+function ghostShotOdds(q: number, narrow: number): { clean: number; long: number; short: number; ob: number } {
+  const ob = Math.max(0.005, Math.min(0.3, (0.03 + 0.09 * (1 - q)) * (1 + narrow * 0.8)));
+  const short = Math.max(0.02, Math.min(0.5, (0.08 + 0.22 * (1 - q)) * (1 + narrow * 0.5)));
+  const long = 0.06 + 0.12 * Math.max(0, Math.min(1, q));
+  return { clean: Math.max(0.05, 1 - ob - short - long), long, short, ob };
+}
+// Chance a putt from `d` px drops, by quality. A tap-in is near-certain; a putt
+// from the edge of the range is a coin flip for a weekend player and ~90% for
+// the world #1.
+function ghostPuttMake(d: number, q: number, PR: number): number {
+  const t = Math.max(0, Math.min(1, (d - CATCH_R) / (PR - CATCH_R)));
+  const missAtEdge = 0.12 + 0.48 * (1 - q);
+  return Math.max(0.02, 1 - 0.015 * (1 - q) - missAtEdge * Math.pow(t, 1.3));
+}
+
+// One full simulation of a hole. Returns the steps and how many strokes they
+// cost (an OB throw costs two: the throw and the penalty).
+// `skill` drives the putting; `q` (skill nudged by the retry bias) drives the
+// tee-to-green outcomes — so when a good player has a big number on the card,
+// the strokes went missing on the fairway, not on the green.
+function simulateGhostHole(hole: Hole, skill: number, q: number, rng: () => number, maxStrokes: number): { steps: GhostStep[]; strokes: number } {
+  const PR = PUTT_RANGE;
+  const R = GHOST_DRIVE;                              // a full-power throw's carry
+  const L = pathLength(hole.fairway) || distBetween(hole.tee, hole.basket);
+  const narrow = Math.max(0, Math.min(1, (118 - hole.fwWidth) / 118));
+  const fwPoint = (f: number, off: number): Vec => {
+    const cf = Math.max(0, Math.min(1, f));
+    const base = pointOnPath(hole.fairway, cf);
+    const ahead = pointOnPath(hole.fairway, Math.min(1, cf + 0.02));
+    const dx = ahead.x - base.x, dy = ahead.y - base.y;
+    const len = Math.hypot(dx, dy) || 1;
+    return { x: base.x + (-dy / len) * off, y: base.y + (dx / len) * off };
+  };
+  const jitter = () => rng() * 2 - 1;
+  const steps: GhostStep[] = [];
+  let strokes = 0;
+  let lie: Vec = { x: hole.tee.x, y: hole.tee.y };
+  let f = 0; // how far down the fairway centerline the lie is (0 tee … 1 basket)
+  let missed = false; // a comeback putt after a miss is from close and nearly automatic
+  const odds = ghostShotOdds(q, narrow);
+  for (let guard = 0; guard < 40 && strokes < maxStrokes; guard++) {
+    const d = distBetween(lie, hole.basket);
+    if (d <= PR) {
+      // ── A putt ──
+      strokes++;
+      const pMake = missed ? Math.max(ghostPuttMake(d, skill, PR), 0.96 - 0.06 * (1 - skill)) : ghostPuttMake(d, skill, PR);
+      if (rng() < pMake) { steps.push({ to: { x: hole.basket.x, y: hole.basket.y } }); return { steps, strokes }; }
+      missed = true;
+      // Missed: mostly runs a little past the cage, sometimes (from long range)
+      // comes up short — never further from the cup than the putt it missed.
+      const cameShort = d > PR * 0.45 && rng() < 0.25;
+      const toward = Math.atan2(hole.basket.y - lie.y, hole.basket.x - lie.x);
+      let next: Vec;
+      if (cameShort) {
+        const left = Math.max(CATCH_R + 2, d * (0.25 + rng() * 0.3));
+        next = { x: hole.basket.x - Math.cos(toward) * left + jitter() * 3, y: hole.basket.y - Math.sin(toward) * left + jitter() * 3 };
+      } else {
+        const run = Math.min(Math.max(CATCH_R + 1, d * 0.9), CATCH_R + 1 + (1 - skill) * 4 + (d / PR) * 5);
+        const through = toward + jitter() * 0.9;
+        next = { x: hole.basket.x + Math.cos(through) * run, y: hole.basket.y + Math.sin(through) * run };
+      }
+      steps.push({ to: next });
+      lie = next;
+      continue;
+    }
+    // ── A drive or approach ──
+    // Full power whenever the basket is out of reach; otherwise throw at it.
+    const reachable = d <= R;
+    const intended = reachable ? d : R;
+    const r = rng();
+    // The rare hole-out from the fairway (an ace or a chip-in) — likelier the closer it is.
+    if (reachable && r < (0.003 + 0.012 * q) * Math.min(1, PR / d)) {
+      strokes++;
+      steps.push({ to: { x: hole.basket.x, y: hole.basket.y } });
+      return { steps, strokes };
+    }
+    let kind: "clean" | "long" | "short" | "ob";
+    if (r < odds.ob) kind = "ob";
+    else if (r < odds.ob + odds.short) kind = "short";
+    else if (r < odds.ob + odds.short + odds.long) kind = "long";
+    else kind = "clean";
+    if (kind === "ob") {
+      // Sails off the corridor part-way down; throw + penalty, then a walk back to
+      // the edge where it crossed.
+      strokes += 2;
+      const side = rng() < 0.5 ? -1 : 1;
+      const carry = intended * (0.45 + rng() * 0.4);
+      const fOut = Math.min(0.97, f + carry / L);
+      steps.push({ to: fwPoint(fOut, side * hole.fwWidth * (0.7 + rng() * 0.35)) });
+      const fLie = Math.min(fOut, f + (carry * (0.3 + rng() * 0.4)) / L);
+      const back = fwPoint(fLie, side * hole.fwWidth * 0.36);
+      steps.push({ to: back, walk: true });
+      lie = back; f = fLie;
+      continue;
+    }
+    strokes++;
+    if (reachable && kind !== "short") {
+      // Aimed at the basket: park it (a putt out, closer for better throwers), or
+      // over-cook it and finish beyond the basket on the far side of the range.
+      const u = kind === "clean"
+        ? Math.max(CATCH_R + 3, PR * (0.1 + rng() * (0.25 + 0.3 * (1 - q))))
+        : PR * (0.35 + rng() * 0.5);
+      const toward = Math.atan2(lie.y - hole.basket.y, lie.x - hole.basket.x);
+      const dir = kind === "clean" ? toward + jitter() * 0.5 : toward + Math.PI + jitter() * 0.6;
+      const next = { x: hole.basket.x + Math.cos(dir) * u, y: hole.basket.y + Math.sin(dir) * u };
+      steps.push({ to: next });
+      lie = next; f = Math.max(f, 1 - u / L);
+    } else {
+      // Full power down the fairway — or, on a squib/tree kick (from anywhere),
+      // a fraction of the intended carry, ending at the tree line.
+      const carry = kind === "clean" ? R * (0.9 + rng() * 0.1) : kind === "long" ? R * (1.0 + rng() * 0.08) : intended * (0.35 + rng() * 0.35);
+      const nf = Math.min(0.99, f + carry / L);
+      const off = kind === "short"
+        ? (rng() < 0.5 ? -1 : 1) * hole.fwWidth * (0.28 + rng() * 0.18) // kicked to the tree line
+        : jitter() * hole.fwWidth * 0.22;                               // a fairway lie
+      const next = fwPoint(nf, off);
+      steps.push({ to: next });
+      lie = next; f = nf;
+    }
+  }
+  return { steps, strokes };
+}
+
 function buildRacerGhosts(seed: number, holeIndex: number, hole: Hole, racers: GhostRacer[], now: number): GhostState {
   const ghosts = racers.map((rc, gi) => {
-    const s = Math.max(1, rc.shots);
-    const rng = mulberry32((seed ^ (gi * 2654435761) ^ (holeIndex * 40503) ^ 0x77777) >>> 0);
-    // A point at path fraction `f` down the fairway, shoved `off` px to the side of
-    // the corridor (negative/positive = either edge). Used for drives, fairway shots
-    // and the trouble spots off in the rough.
-    const fwPoint = (f: number, off: number): Vec => {
-      const cf = Math.max(0, Math.min(1, f));
-      const base = pointOnPath(hole.fairway, cf);
-      const ahead = pointOnPath(hole.fairway, Math.min(1, cf + 0.02));
-      const dx = ahead.x - base.x, dy = ahead.y - base.y;
-      const len = Math.hypot(dx, dy) || 1;
-      return { x: base.x + (-dy / len) * off, y: base.y + (dx / len) * off };
-    };
-    const jitter = () => rng() * 2 - 1;
+    const target = Math.max(1, rc.shots);
     const skill = Math.max(0, Math.min(1, rc.skill ?? 0.5));
-    // Every step is a throw that lands somewhere, except a `walk`: after an OB
-    // throw the rival carries the disc back to the corridor edge where it went
-    // out (the penalty stroke) and plays on from there.
-    type Step = { to: Vec; walk?: boolean };
-    const steps: Step[] = [];
-    const PR = PUTT_RANGE;
-    const D = distBetween(hole.tee, hole.basket);
-    const L = pathLength(hole.fairway) || D;
-    if (s === 1) {
-      steps.push({ to: { x: hole.basket.x, y: hole.basket.y } }); // an ace
-    } else {
-      // How long the first putt is: the approach parks inside putting range, closer
-      // for better players (elite ≈ 12–45% of the range, weekend ≈ 25–85%). On a
-      // hole shorter than putting range the tee shot IS the first putt.
-      const A = D <= PR ? D : Math.max(CATCH_R + 3, PR * ((0.12 + 0.13 * (1 - skill)) + rng() * (0.33 + 0.4 * (1 - skill))));
-      // Throws from outside putting range to get inside it (the last is the
-      // approach). Bounded by the shots available, leaving at least one putt.
-      const fwd = D <= PR ? 0 : Math.max(1, Math.min(Math.ceil((D - A) / GHOST_DRIVE), s - 1));
-      // Strokes beyond "get inside range + one putt" are spent on trouble that still
-      // moves the disc toward the basket, so a bad hole reads as a struggle down
-      // the fairway rather than a random scatter: a missed putt (least likely, and
-      // likelier the longer the first putt), a throw flung OB (costs the throw AND
-      // a penalty, then a walk back to the edge), or a tree kick / squibbed shot
-      // that only makes part of the ground.
-      let excess = s - fwd - 1;
-      let extraPutts = 0, obs = 0, shorts = 0;
-      const lengthFactor = 0.6 + 0.8 * (A / PR); // a long putt misses more than a tap-in
-      while (excess > 0) {
-        if (fwd === 0) { extraPutts++; excess--; continue; } // inside range the whole way: only putts can miss
-        const r = rng();
-        const pMiss = Math.min(0.6, (extraPutts === 0 ? 0.06 + 0.16 * (1 - skill) : 0.01 + 0.06 * (1 - skill)) * lengthFactor);
-        if (extraPutts < 2 && r < pMiss) { extraPutts++; excess--; }
-        else if (excess >= 2 && r < pMiss + 0.35) { obs++; excess -= 2; }
-        else { shorts++; excess--; }
+    const base = (seed ^ (gi * 2654435761) ^ (holeIndex * 40503) ^ 0x77777) >>> 0;
+    // Re-roll the hole until the strokes match the card. Each miss nudges the
+    // rival's effective quality toward the target (too many strokes → sharper,
+    // too few → sloppier), so most holes settle within a few tries.
+    let steps: GhostStep[] | null = null;
+    let bias = 0;
+    let best: { steps: GhostStep[]; strokes: number } | null = null;
+    for (let attempt = 0; attempt < 96 && !steps; attempt++) {
+      const rng = mulberry32((base + attempt * 7919) >>> 0);
+      const q = Math.max(-1.5, Math.min(1.5, skill + bias));
+      const run = simulateGhostHole(hole, skill, q, rng, target + 6);
+      const holed = run.steps.length > 0 && run.steps[run.steps.length - 1].to.x === hole.basket.x && run.steps[run.steps.length - 1].to.y === hole.basket.y;
+      if (holed && run.strokes === target) steps = run.steps;
+      else {
+        if (!best || Math.abs(run.strokes - target) < Math.abs(best.strokes - target)) best = run;
+        bias += (run.strokes - target) * 0.12;
       }
-      if (fwd > 0) {
-        // Order the forward work — fwd−1 full advances, the short ones, and the OB
-        // mishaps — with the ghost's own RNG (deterministic per hole), then the
-        // approach to the first-putt lie.
-        const kinds: ("fw" | "short" | "ob")[] = [];
-        for (let i = 0; i < fwd - 1; i++) kinds.push("fw");
-        for (let i = 0; i < shorts; i++) kinds.push("short");
-        for (let i = 0; i < obs; i++) kinds.push("ob");
-        for (let i = kinds.length - 1; i > 0; i--) {
-          const j = Math.floor(rng() * (i + 1));
-          [kinds[i], kinds[j]] = [kinds[j], kinds[i]];
-        }
-        const SHORT_W = 0.45;                                   // a tree kick makes ~45% of a full advance
-        const fA = 1 - A / L;                                   // path fraction of the first-putt lie
-        const capF = Math.min(fA - 0.02, 1 - (PR * 1.05) / L);  // fairway lies stay outside putting range
-        const totalW = (fwd - 1) + shorts * SHORT_W + 1;        // + the approach, a full throw
-        let cum = 0, lastF = 0;
-        for (const k of kinds) {
-          if (k === "ob") {
-            // Sails ahead but over the line: lands well off the corridor, then a walk
-            // back to the edge just past the lie it was thrown from.
-            const side = rng() < 0.5 ? -1 : 1;
-            const fOut = Math.min(capF, lastF + 0.08 + rng() * 0.12);
-            steps.push({ to: fwPoint(fOut, side * hole.fwWidth * (0.7 + rng() * 0.35)) });
-            const fLie = Math.min(fOut, lastF + 0.03 + rng() * 0.05);
-            steps.push({ to: fwPoint(fLie, side * hole.fwWidth * 0.36), walk: true });
-            lastF = fLie;
-            continue;
-          }
-          cum += k === "fw" ? 1 : SHORT_W;
-          // Always further down the fairway than the last lie, never inside range.
-          const f = Math.min(capF, Math.max(Math.min(capF, lastF + 0.02), (cum / totalW) * fA + jitter() * 0.03));
-          const off = k === "fw"
-            ? jitter() * hole.fwWidth * 0.22                                   // a fairway lie
-            : (rng() < 0.5 ? -1 : 1) * hole.fwWidth * (0.28 + rng() * 0.18); // kicked to the tree line
-          steps.push({ to: fwPoint(f, off) });
-          lastF = f;
-        }
-        // The approach: exactly A from the basket, roughly on the line it came in on.
-        const prev = steps.length ? steps[steps.length - 1].to : hole.tee;
-        const back = Math.atan2(prev.y - hole.basket.y, prev.x - hole.basket.x) + jitter() * 0.4;
-        steps.push({ to: { x: hole.basket.x + Math.cos(back) * A, y: hole.basket.y + Math.sin(back) * A } });
+    }
+    if (!steps) {
+      // Fallback: fit the closest run to the card. Too many strokes → hole out
+      // from the last lie that still fits; too few → a lag putt or two first.
+      const rng = mulberry32((base ^ 0xabcdef) >>> 0);
+      const run = best ?? simulateGhostHole(hole, skill, skill, rng, target + 6);
+      const throws: GhostStep[] = [];
+      let used = 0;
+      for (const st of run.steps) {
+        if (st.walk) { throws.push(st); continue; }
+        const isOb = throws.length + 1 < run.steps.length && run.steps[run.steps.indexOf(st) + 1]?.walk;
+        const cost = isOb ? 2 : 1;
+        if (used + cost >= target) break;
+        throws.push(st); used += cost;
       }
-      // Putts. A miss only misses by a little: the disc runs through or spits out
-      // just past the basket — a touch further for weaker players and for a longer
-      // putt — and the next one drops. The rare second miss stays inside that, so
-      // the third putt is a gimme.
-      let from = steps.length ? steps[steps.length - 1].to : hole.tee;
-      let puttLen = A;
-      for (let p = 1; p <= extraPutts; p++) {
-        // …but never further from the cup than the putt it just missed.
-        const run = Math.min(Math.max(CATCH_R + 1, puttLen * 0.9), p === 1 ? CATCH_R + 2 + (1 - skill) * 6 + (puttLen / PR) * 8 : CATCH_R + 1);
-        const through = Math.atan2(hole.basket.y - from.y, hole.basket.x - from.x) + jitter() * 0.9; // past the basket, along the putt line
-        const lie = { x: hole.basket.x + Math.cos(through) * run, y: hole.basket.y + Math.sin(through) * run };
-        steps.push({ to: lie });
-        from = lie;
-        puttLen = run;
+      // pad with short lag putts (one stroke each), each a touch closer than the
+      // lie before it, until one stroke remains
+      let lie = throws.length ? throws[throws.length - 1].to : hole.tee;
+      while (used < target - 1) {
+        const prevD = distBetween(lie, hole.basket);
+        const d = Math.max(CATCH_R + 1, Math.min(prevD - 0.5, CATCH_R + 2 + rng() * 4));
+        const ang = rng() * Math.PI * 2;
+        lie = { x: hole.basket.x + Math.cos(ang) * d, y: hole.basket.y + Math.sin(ang) * d };
+        throws.push({ to: lie }); used++;
       }
-      steps.push({ to: { x: hole.basket.x, y: hole.basket.y } });
+      throws.push({ to: { x: hole.basket.x, y: hole.basket.y } });
+      steps = throws;
     }
     // One segment per step: a beat lining up, then a flight whose length scales with
     // distance (player pace) and that curves around any tree in the way. A walk
     // back from OB is a short, grounded shuffle with no wind-up.
+    const rng = mulberry32((base ^ 0x5151) >>> 0);
     const segs: GhostSeg[] = [];
     let from: Vec = { x: hole.tee.x, y: hole.tee.y };
     for (const st of steps) {
