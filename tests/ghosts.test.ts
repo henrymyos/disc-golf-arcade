@@ -161,3 +161,51 @@ describe("rivals respect the course's hazards", () => {
     expect(splashes).toBeGreaterThan(0);
   });
 });
+
+describe("rivals feel the slope and the wind like the player does", () => {
+  // First-throw stats over many seeds on the straight par 4 (throwing toward −y).
+  // `shots` is a score the hole naturally gives up in those conditions — forcing a
+  // big number onto an easy hole makes the fit-to-card fill it with mishaps.
+  function firstDrive(hole: Hole, skill = 0.6, shots = 4, seeds = 300) {
+    const carries: number[] = [];
+    let x = 0, n = 0;
+    for (let seed = 1; seed <= seeds; seed++) {
+      const gh = buildRacerGhosts(seed, 0, hole, [{ name: "R", color: "#fff", shots, skill }], 0).ghosts[0];
+      const first = gh.segs[0], second = gh.segs[1];
+      const ob = second && second.lift === 0 && second.pause < 1000;
+      const squib = hole.tee.y - first.to.y < 200; // a kicked/squibbed drive (the p85 carry ignores the rest)
+      if (ob || squib) continue; // skip the mishaps
+      carries.push(hole.tee.y - first.to.y); x += first.to.x - 160; n++;
+    }
+    carries.sort((a, b) => a - b);
+    // A clean full-power drive: the upper end of what the rival carried off the
+    // tee (the fit-to-card adds squibs on easy holes, which drag a mean down).
+    return { carry: carries[Math.floor(carries.length * 0.85)], x: x / n, n };
+  }
+  const flat = firstDrive(straight);
+  it("uphill into a headwind a full-power drive comes up shorter; downhill downwind it goes longer", () => {
+    const hard = firstDrive({ ...straight, elev: 1.5, wind: { x: 0, y: 0.014 }, windMag: 0.014 } as unknown as Hole, 0.6, 5);
+    const easy = firstDrive({ ...straight, elev: -1.5, wind: { x: 0, y: -0.014 }, windMag: 0.014 } as unknown as Hole, 0.6, 3);
+    expect(hard.carry).toBeLessThan(flat.carry * 0.93);
+    expect(easy.carry).toBeGreaterThan(flat.carry * 1.05);
+  });
+  it("a crosswind pushes drives downwind, and a better player holds the line better", () => {
+    const blowRight = { ...straight, wind: { x: 0.016, y: 0 }, windMag: 0.016 } as unknown as Hole;
+    const weak = firstDrive(blowRight, 0.1), elite = firstDrive(blowRight, 1);
+    expect(Math.abs(flat.x)).toBeLessThan(6);       // no wind: scatter averages out
+    expect(weak.x).toBeGreaterThan(8);              // shoved right
+    expect(elite.x).toBeLessThan(weak.x * 0.7);     // allows for it
+    expect(elite.x).toBeGreaterThan(0);
+  });
+  it("still holes out in the right number of strokes whatever the conditions", () => {
+    const gale = { ...straight, elev: 2, wind: { x: 0.012, y: 0.012 }, windMag: 0.017 } as unknown as Hole;
+    for (let seed = 1; seed <= 40; seed++) {
+      for (const shots of [3, 4, 6]) {
+        const gh = buildRacerGhosts(seed, 0, gale, [{ name: "R", color: "#fff", shots, skill: 0.5 }], 0).ghosts[0];
+        const last = gh.segs[gh.segs.length - 1].to;
+        expect(last).toMatchObject({ x: gale.basket.x, y: gale.basket.y });
+        expect(gh.segs.filter((sg) => !(sg.lift === 0 && sg.pause < 1000)).length).toBeLessThanOrEqual(shots);
+      }
+    }
+  });
+});

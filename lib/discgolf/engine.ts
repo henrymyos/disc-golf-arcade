@@ -1859,6 +1859,27 @@ function fullPowerRange(disc: Disc, elev: number | undefined, speedMul = 1, alon
   }
   return y;
 }
+// Sideways drift (px) of that same full-power straight throw under a crosswind:
+// the wind shoves the disc every airborne frame, exactly as in stepFlight, and the
+// push bleeds off with the disc's friction. Signed like `crossWind`.
+function fullPowerDrift(disc: Disc, elev: number | undefined, speedMul = 1, alongWind = 0, crossWind = 0): number {
+  let x = 0, vx = 0;
+  let vy = disc.power * (1.2 + 3.35) * speedMul;
+  let h = 0;
+  let vh = disc.arc;
+  for (let i = 0; i < 600; i++) {
+    x += vx;
+    h += vh;
+    vh -= GRAVITY;
+    if (h <= 0) { h = 0; vh = 0; }
+    const airborne = h > AIRBORNE_H;
+    if (airborne) { vy += alongWind - (elev ?? 0) * SLOPE_PULL; vx += crossWind; }
+    const fr = airborne ? disc.friction : elevGroundFriction(elev);
+    vy *= fr; vx *= fr;
+    if (!airborne && vy < STOP_SPEED) break;
+  }
+  return x;
+}
 // The wind's component ALONG the throw (lie → basket), signed: positive is a
 // tailwind that carries the disc on, negative a headwind that knocks it down. Fed
 // to the auto-caddie so it clubs up into the wind and down with it.
@@ -2138,6 +2159,12 @@ const GHOST_DRIVE = DRIVE * 0.9;
 // A rival's throw from inside this is a putt and plays out like one (see
 // buildRacerGhosts); anything from further out is a drive or approach.
 const PUTT_RANGE = Math.min(...ADV_DISCS.map((d) => fullPowerRange(d, 0, STRAIGHT_SPEED_MUL, 0)));
+// The rivals' reference discs: the longest driver and the shortest putter in the
+// set. Their carry under a lie's slope and wind (the same integrator the player's
+// reach line uses) is what stretches or shrinks a rival's throws on that lie.
+const GHOST_DRIVER = ADV_DISCS.reduce((a, b) => (fullPowerRange(b, 0, STRAIGHT_SPEED_MUL, 0) > fullPowerRange(a, 0, STRAIGHT_SPEED_MUL, 0) ? b : a));
+const GHOST_PUTTER = ADV_DISCS.reduce((a, b) => (fullPowerRange(b, 0, STRAIGHT_SPEED_MUL, 0) < fullPowerRange(a, 0, STRAIGHT_SPEED_MUL, 0) ? b : a));
+const GHOST_DRIVER_FLAT = fullPowerRange(GHOST_DRIVER, 0, STRAIGHT_SPEED_MUL, 0);
 // A rival's disc flies at the SAME pace as yours (measured ~0.2 px/ms airborne for
 // a real throw), so flight time scales with distance — a drive takes ~1.2s, a putt
 // a fraction — instead of every shot zipping over in a fixed ~0.6s (which made long
@@ -2219,8 +2246,6 @@ function ghostPuttMake(d: number, q: number, PR: number): number {
 // tee-to-green outcomes — so when a good player has a big number on the card,
 // the strokes went missing on the fairway, not on the green.
 function simulateGhostHole(hole: Hole, skill: number, q: number, rng: () => number, maxStrokes: number): { steps: GhostStep[]; strokes: number } {
-  const PR = PUTT_RANGE;
-  const R = GHOST_DRIVE;                              // a full-power throw's carry
   const L = pathLength(hole.fairway) || distBetween(hole.tee, hole.basket);
   const narrow = Math.max(0, Math.min(1, (118 - hole.fwWidth) / 118));
   const fwPoint = (f: number, off: number): Vec => {
@@ -2269,6 +2294,25 @@ function simulateGhostHole(hole: Hole, skill: number, q: number, rng: () => numb
   };
   for (let guard = 0; guard < 40 && strokes < maxStrokes; guard++) {
     const d = distBetween(lie, hole.basket);
+    // Conditions AT THIS LIE, felt the way the player's disc feels them: the slope
+    // under the throw and the wind along it stretch or shrink both a full-power
+    // drive and putting range (uphill / into the wind plays longer, so the rival
+    // needs more throws and putts from closer; downhill / downwind the reverse),
+    // and the crosswind shoves the landing sideways — less for a better player,
+    // who holds the line.
+    const elev = elevAt(hole, lie.y);
+    const along = windAlong(hole, lie);
+    const ux = (hole.basket.x - lie.x) / (d || 1), uy = (hole.basket.y - lie.y) / (d || 1);
+    const cross = hole.wind ? hole.wind.x * -uy + hole.wind.y * ux : 0;
+    const R = GHOST_DRIVE * Math.max(0.5, Math.min(1.4, fullPowerRange(GHOST_DRIVER, elev, STRAIGHT_SPEED_MUL, along) / GHOST_DRIVER_FLAT));
+    const PR = Math.max(PUTT_RANGE * 0.6, Math.min(PUTT_RANGE * 1.4, fullPowerRange(GHOST_PUTTER, elev, STRAIGHT_SPEED_MUL, along)));
+    const driftFull = cross ? fullPowerDrift(GHOST_DRIVER, elev, STRAIGHT_SPEED_MUL, along, cross) : 0;
+    const hold = 1 - 0.75 * Math.max(0, Math.min(1, q)); // how much of the push a rival fails to allow for
+    const drifted = (p: Vec, carry: number): Vec => {
+      if (!driftFull) return p;
+      const push = driftFull * Math.pow(Math.min(1.2, carry / Math.max(1, R)), 2) * hold;
+      return { x: p.x + -uy * push, y: p.y + ux * push };
+    };
     if (d <= PR) {
       // ── A putt ──
       strokes++;
@@ -2331,7 +2375,7 @@ function simulateGhostHole(hole: Hole, skill: number, q: number, rng: () => numb
         : PR * (0.35 + rng() * 0.5);
       const toward = Math.atan2(lie.y - hole.basket.y, lie.x - hole.basket.x);
       const dir = kind === "clean" ? toward + jitter() * 0.5 : toward + Math.PI + jitter() * 0.6;
-      const next = { x: hole.basket.x + Math.cos(dir) * u, y: hole.basket.y + Math.sin(dir) * u };
+      const next = drifted({ x: hole.basket.x + Math.cos(dir) * u, y: hole.basket.y + Math.sin(dir) * u }, d);
       settle(next, f, Math.max(f, 1 - u / L));
     } else {
       // Full power down the fairway — or, on a squib/tree kick (from anywhere),
@@ -2341,7 +2385,7 @@ function simulateGhostHole(hole: Hole, skill: number, q: number, rng: () => numb
       const off = kind === "short"
         ? (rng() < 0.5 ? -1 : 1) * hole.fwWidth * (0.28 + rng() * 0.18) // kicked to the tree line
         : jitter() * hole.fwWidth * 0.22;                               // a fairway lie
-      settle(fwPoint(nf, off), f, nf);
+      settle(drifted(fwPoint(nf, off), carry), f, nf);
     }
   }
   return { steps, strokes };
