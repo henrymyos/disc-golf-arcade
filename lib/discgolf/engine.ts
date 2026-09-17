@@ -2062,13 +2062,18 @@ function stepFlight(f: Flight, disc: Disc, fadeSign: number, path: FlightPath, h
   f.vx *= friction;
   f.vy *= friction;
 
-  if (f.x < 2 || f.x > (hole.worldW ?? W) - 2 || f.y < 2 || f.y > hole.worldH - 2) return { status: "oob", treeHit: false };
+  // The aim preview (opts.preview) is obstacle-blind: it draws the flight the
+  // throw WOULD have in open air — same power, disc, release, wind and slope — so
+  // the line's length and shape never leak whether the real throw will clip a
+  // tree or wall, find the basket, leave the world, or come down in water/OB.
+  const blind = !!opts.preview;
+  if (!blind && (f.x < 2 || f.x > (hole.worldW ?? W) - 2 || f.y < 2 || f.y > hole.worldH - 2)) return { status: "oob", treeHit: false };
 
   // Trees are tall — they block at ANY height, so you must go around them. The
   // exception: a tree you're stuck right behind is "ghosted" for this throw, so
   // you can throw through the gap past the trunk like you would in real life.
   let treeHit = false;
-  for (const tr of hole.trees) {
+  for (const tr of blind ? [] : hole.trees) {
     if (opts.ghostTrees?.includes(tr)) continue;
     const dist = Math.hypot(f.x - tr.x, f.y - tr.y);
     const min = tr.r + DISC_R;
@@ -2086,7 +2091,7 @@ function stepFlight(f: Flight, disc: Disc, fadeSign: number, path: FlightPath, h
 
   // Wooden walls block at any height (like trees) — thread the gap between
   // segments or bounce off the planks.
-  for (const wl of hole.walls ?? []) {
+  for (const wl of blind ? [] : hole.walls ?? []) {
     if (f.x > wl.x - DISC_R && f.x < wl.x + wl.w + DISC_R && Math.abs(f.y - wl.y) < 4 + DISC_R) {
       f.y = wl.y + Math.sign(f.y - wl.y || 1) * (4 + DISC_R);
       f.vy = -f.vy * 0.45;
@@ -2105,7 +2110,7 @@ function stepFlight(f: Flight, disc: Disc, fadeSign: number, path: FlightPath, h
   // We measure the disc's whole swept path this frame (px,py → f.x,f.y), not just
   // the end point, so a disc can't slide/fly straight through the circle between
   // two frames without registering.
-  if (f.vh <= 0 && f.h <= CATCH_H) {
+  if (!blind && f.vh <= 0 && f.h <= CATCH_H) {
     // A disc screaming at the basket tends to blow through the chains, so the
     // catch radius shrinks with horizontal speed: a controlled approach or putt
     // (slow, sp ≲ 0.45) catches in the full radius, while a full-power bomb has

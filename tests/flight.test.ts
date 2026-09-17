@@ -268,3 +268,49 @@ describe("stepFlight (one-frame flight resolution)", () => {
     expect(f.y).toBeLessThan(420); // and moved up the fairway from the tee
   });
 });
+
+describe("aim preview is obstacle-blind", () => {
+  const disc = ADV_DISCS.find((d) => d.key === "teebird") as Disc;
+  // Trace the preview exactly the way the game draws the aim line.
+  function preview(hole: Hole, power = 0.9, ang = -Math.PI / 2): Vec[] {
+    const speed = disc.power * (1.2 + power * 3.35);
+    const f: Flight = { x: hole.tee.x, y: hole.tee.y, vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed, h: 0, vh: power * disc.arc, fadeTurn: 0 };
+    const out: Vec[] = [{ x: f.x, y: f.y }];
+    for (let i = 0; i < 360; i++) {
+      const r = stepFlight(f, disc, -1, "straight", hole, "flat", { preview: true });
+      out.push({ x: f.x, y: f.y });
+      if (r.status !== "fly") break;
+    }
+    return out;
+  }
+  const open = mkHole();
+  const base = preview(open);
+  const same = (a: Vec[], b: Vec[]) => {
+    expect(a.length).toBe(b.length);
+    expect(a[a.length - 1].x).toBeCloseTo(b[b.length - 1].x, 6);
+    expect(a[a.length - 1].y).toBeCloseTo(b[b.length - 1].y, 6);
+  };
+  it("a tree on the line doesn't shorten or bend it", () => {
+    same(preview(mkHole({ trees: [{ x: open.tee.x, y: open.tee.y - 90, r: 9 }] as Hole["trees"] })), base);
+  });
+  it("a wall across the fairway doesn't stop it", () => {
+    same(preview(mkHole({ walls: [{ x: open.tee.x - 40, y: open.tee.y - 120, w: 80 }] })), base);
+  });
+  it("the basket doesn't end it early", () => {
+    // Put the basket right on the flight line where the disc is coming down.
+    const mid = base[Math.floor(base.length * 0.8)];
+    same(preview(mkHole({ basket: { x: mid.x, y: mid.y } })), base);
+  });
+  it("water and OB under the landing spot don't change it", () => {
+    const end = base[base.length - 1];
+    same(preview(mkHole({ water: [{ x: end.x - 40, y: end.y - 40, w: 80, h: 80 }] })), base);
+  });
+  it("the real throw still hits the tree", () => {
+    const blocked = mkHole({ trees: [{ x: open.tee.x, y: open.tee.y - 90, r: 9 }] as Hole["trees"] });
+    const speed = disc.power * (1.2 + 0.9 * 3.35);
+    const f: Flight = { x: blocked.tee.x, y: blocked.tee.y, vx: 0, vy: -speed, h: 0, vh: 0.9 * disc.arc, fadeTurn: 0 };
+    let hit = false;
+    for (let i = 0; i < 360; i++) { const r = stepFlight(f, disc, -1, "straight", blocked, "flat"); if (r.treeHit) hit = true; if (r.status !== "fly") break; }
+    expect(hit).toBe(true);
+  });
+});
