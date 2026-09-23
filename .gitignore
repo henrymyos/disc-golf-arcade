@@ -42,3 +42,6 @@ next-env.d.ts
 
 # session handoff notes (local only)
 CONTEXT.md
+
+# Claude Code worktrees
+.claude/worktrees/
