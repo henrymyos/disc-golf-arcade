@@ -40,7 +40,9 @@ import {
 import type {
   Vec, Tree, Water, Hole, Mode, Tournament, TournDef, TournLiveRow, Achievement, FlightPath, Release, Flight, GhostState,
 } from "@/lib/discgolf/engine";
-import { parseChallenge, challengeParam } from "@/lib/discgolf/challenge";
+import { parseChallenge, challengeParam, courseLabelFor } from "@/lib/discgolf/challenge";
+import { buildReplay, replayFrame, type Replay } from "@/lib/discgolf/replay";
+import { saveReplay, loadReplay } from "@/actions/replays";
 import {
   newCareer, normalizeCareer, skillMods, momentumAfter, seasonSchedule, simEvent, recordResult, advanceSeason, retire,
   placeLabel, STAGE_LABEL, SKILL_KEYS, SKILL_LABEL, IDENTITY_MODS,
@@ -166,6 +168,13 @@ function thinPath(path: Vec[], max = 24): Vec[] {
   for (let i = 0; i < max; i++) { const p = path[Math.round(i * step)]; out.push({ x: Math.round(p.x), y: Math.round(p.y) }); }
   return out;
 }
+// "Glendoveer East · 54 (−2)" style caption for a replay.
+function replayCaption(r: Replay): { course: string; score: string } {
+  const total = r.scores.reduce((a, b) => a + b, 0);
+  const d = total - r.pars.reduce((a, b) => a + b, 0);
+  const course = r.label ?? (r.mode === "tour" ? "Pro Tour venue" : r.mode === "ranked" ? "Ranked course" : r.mode === "academy" ? "Academy" : courseLabelFor(r.mode));
+  return { course, score: `${total} (${d === 0 ? "E" : d > 0 ? `+${d}` : `−${-d}`})` };
+}
 function sendThrows(o: { channel: RealtimeChannel; myId: string; myName: string }, holeIndex: number, shotPaths: Vec[][]) {
   void o.channel.send({ type: "broadcast", event: "throw", payload: { id: o.myId, name: o.myName, hole: holeIndex, paths: shotPaths.map((p) => thinPath(p)) } });
 }
@@ -246,6 +255,9 @@ type GameState = {
   camX: number; // left of the viewport in world coords (horizontal pan on wide holes)
   introT: number; // frames elapsed in the intro fly-over
   flash: { text: string; at: number } | null; // big centered penalty banner (OB / hazard)
+  lenScale?: number; // career hole-length scale this round was built with (for replays)
+  // Watching a recorded round: the disc follows the saved paths, input is off.
+  replay?: { data: Replay; clock: number; lastT: number; speed: number; lastFlying: number; ended: boolean };
 };
 
 function freshHole(hole: Hole) {
@@ -1002,7 +1014,7 @@ export function DiscGolfGame() {
   // Snapshot / clear the resumable solo round.
   const persistResume = useCallback((g: GameState) => {
     // The Daily is one-and-done: exit it and you start over, so never snapshot it.
-    if (g.mode === "daily" || g.mode === "ranked" || g.practice || g.party || g.online || g.career || tournamentPlayRef.current || challengePlayRef.current || careerPlayRef.current) return;
+    if (g.replay || g.mode === "daily" || g.mode === "ranked" || g.practice || g.party || g.online || g.career || tournamentPlayRef.current || challengePlayRef.current || careerPlayRef.current) return;
     const scores = g.scores.slice(0, g.holeIndex + 1).map((n) => n ?? 0);
     try {
       localStorage.setItem(RESUME_KEY, JSON.stringify({ v: 1, mode: g.mode, seed: g.seed, scores }));
@@ -1488,6 +1500,7 @@ export function DiscGolfGame() {
       holeIndex: 0, scores: [], discIndex, roundPaths: [],
       mode: ev.mode, skill: skillMods(c.skills),
       career: { eventId: ev.id, eventName: ev.name, venue: ev.venue, character: ev.character, emoji: ev.emoji },
+      lenScale: careerHoleLenScale(c),
       seed, roundHoles, ...freshHole(roundHoles[0]),
     };
     ghostRef.current = null;
@@ -1943,6 +1956,94 @@ export function DiscGolfGame() {
     if (stateRef.current) stateRef.current.discIndex = i;
   }, []);
 
+  // ── Round replays (lib/discgolf/replay.ts) ──
+  const [lastReplay, setLastReplay] = useState<Replay | null>(null); // the round just finished
+  const [replayView, setReplayView] = useState<{ data: Replay; ended: boolean; speed: number; fromResults: boolean } | null>(null); // watching one now
+  const [replayLink, setReplayLink] = useState<string | null>(null);
+  const [replayBusy, setReplayBusy] = useState(false);
+  const [pendingReplay, setPendingReplay] = useState<Replay | null>(null); // opened from a ?rp= link
+  const [replayLoadErr, setReplayLoadErr] = useState<string | null>(null);
+
+  const startReplay = useCallback((r: Replay, fromResults = false) => {
+    const roundHoles = buildRound(r.seed, r.mode, r.scale ?? 1);
+    if (roundHoles.length !== r.paths.length) { setReplayLoadErr("This replay is from a different version of the course."); return; }
+    audioRef.current?.resume();
+    challengePlayRef.current = false;
+    tournamentPlayRef.current = false;
+    careerPlayRef.current = false;
+    rankedPlayRef.current = false;
+    ghostRef.current = null;
+    ghostsRef.current = null;
+    stateRef.current = {
+      holeIndex: 0, scores: [], discIndex: discIndexRef.current, roundPaths: [],
+      mode: r.mode, skill: IDENTITY_MODS, seed: r.seed, roundHoles, ...freshHole(roundHoles[0]),
+      replay: { data: r, clock: 0, lastT: 0, speed: 1, lastFlying: -1, ended: false },
+    };
+    setReplayView({ data: r, ended: false, speed: 1, fromResults });
+    setPendingReplay(null);
+    setPauseMenu(null);
+    setScreen("playing");
+    syncHud();
+  }, [syncHud]);
+
+  const setReplaySpeed = useCallback((speed: number) => {
+    const rp = stateRef.current?.replay;
+    if (rp) rp.speed = speed;
+    setReplayView((v) => (v ? { ...v, speed } : v));
+  }, []);
+  const skipReplayHole = useCallback(() => {
+    const g = stateRef.current;
+    if (!g?.replay) return;
+    if (g.phase === "intro") g.introT = 1e6; // jump past the fly-over
+    else g.replay.clock = 1e9;             // finish the hole on the next frame
+  }, []);
+  const endReplay = useCallback(() => {
+    const back = replayView?.fromResults;
+    setReplayView(null);
+    stateRef.current = null;
+    audioRef.current?.stopMusic();
+    if (!back) try { window.history.replaceState(null, "", location.pathname); } catch { /* ignore */ }
+    setScreen(back ? "gameComplete" : "title");
+  }, [replayView]);
+
+  const shareReplay = useCallback(async () => {
+    if (!lastReplay || replayBusy) return;
+    setReplayBusy(true);
+    try {
+      let link = replayLink;
+      if (!link) {
+        const res = await saveReplay(lastReplay);
+        if ("error" in res) { setShareMsg(res.error); window.setTimeout(() => setShareMsg(null), 4000); return; }
+        link = `${location.origin}${location.pathname}?rp=${res.id}`;
+        setReplayLink(link);
+      }
+      const total = lastReplay.scores.reduce((a, b) => a + b, 0);
+      const par = lastReplay.pars.reduce((a, b) => a + b, 0);
+      const d = total - par;
+      const text = `Watch my ${total} (${d === 0 ? "E" : d > 0 ? `+${d}` : d}) on Disc Golf Arcade`;
+      const nav = navigator as Navigator & { share?: (d: { title?: string; text?: string; url?: string }) => Promise<void> };
+      if (nav.share) { try { await nav.share({ title: "Disc Golf Arcade replay", text, url: link }); return; } catch { /* cancelled → copy instead */ } }
+      let copied = false;
+      try { if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(link); copied = true; } } catch { /* not allowed → show it */ }
+      setShareMsg(copied ? "Replay link copied" : link);
+      window.setTimeout(() => setShareMsg(null), copied ? 2600 : 15000);
+    } finally {
+      setReplayBusy(false);
+    }
+  }, [lastReplay, replayBusy, replayLink]);
+
+  // ?rp=<id> opens a shared replay (after a tap, so audio + fullscreen behave).
+  useEffect(() => {
+    const id = new URLSearchParams(location.search).get("rp");
+    if (!id) return;
+    let alive = true;
+    loadReplay(id).then((r) => {
+      if (!alive) return;
+      if (r) setPendingReplay(r); else setReplayLoadErr("That replay link has expired or is broken.");
+    }).catch(() => { if (alive) setReplayLoadErr("Couldn't load that replay."); });
+    return () => { alive = false; };
+  }, []);
+
   const throwDisc = useCallback(() => {
     const g = stateRef.current;
     if (!g || g.phase !== "aim") return;
@@ -1983,6 +2084,22 @@ export function DiscGolfGame() {
 
   const finishGame = useCallback((scores: number[]) => {
     const g = stateRef.current;
+    // Every solo round can be watched back (and shared) from the results screen.
+    if (g && !g.practice && !g.party && !g.online && !g.mini && !g.replay && scores.length === g.roundHoles.length) {
+      setLastReplay(buildReplay({
+        mode: g.mode, seed: g.seed, scale: g.lenScale, name: profileRef.current.name || "A friend",
+        label: g.career?.eventName, scores, pars: g.roundHoles.map((h) => h.par),
+        // A resumed round only recorded the holes played since resuming — the
+        // earlier ones play back as an empty fly-over.
+        paths: (() => {
+          const rec = [...g.roundPaths, g.shotPaths];
+          return [...Array.from({ length: Math.max(0, g.roundHoles.length - rec.length) }, () => []), ...rec].slice(-g.roundHoles.length);
+        })(),
+      }));
+    } else {
+      setLastReplay(null);
+    }
+    setReplayLink(null);
     setCoinReward(0);
     setRankedResult(null);
     // A played Career event: record the result against the career and pop back
@@ -2274,6 +2391,7 @@ export function DiscGolfGame() {
   const restartRound = useCallback(() => {
     const g = stateRef.current;
     if (!g) return;
+    if (g.replay) { startReplay(g.replay.data, replayView?.fromResults ?? false); return; }
     audioRef.current?.resume();
     stateRef.current = {
       ...g,
@@ -2291,10 +2409,11 @@ export function DiscGolfGame() {
     setPauseMenu(null);
     setScreen("playing");
     syncHud();
-  }, [syncHud]);
+  }, [syncHud, startReplay, replayView]);
 
   const exitToHome = useCallback(() => {
     audioRef.current?.stopMusic();
+    if (stateRef.current?.replay) { setReplayView(null); stateRef.current = null; setPauseMenu(null); setScreen("title"); return; }
     if (stateRef.current?.online) leaveLobby();
     tournamentPlayRef.current = false;
     rankedPlayRef.current = false;
@@ -2580,6 +2699,41 @@ export function DiscGolfGame() {
       g.camY += (camTarget - g.camY) * 0.16;
       g.camX += (camXFor(hole, g.disc.x) - g.camX) * 0.16;
       camRef.current = { x: g.camX, y: g.camY };
+
+      // Replay: fly the disc along the recorded paths instead of the physics.
+      if (g.replay) {
+        const rp = g.replay;
+        const now = performance.now();
+        if (!rp.ended) rp.clock += (rp.lastT ? Math.min(100, now - rp.lastT) : 0) * rp.speed;
+        rp.lastT = now;
+        const shots = rp.data.paths[g.holeIndex] ?? [];
+        const fr = replayFrame(shots, rp.clock);
+        g.phase = "fly"; // hides the aim line; draws the disc (and live trail) in flight
+        g.disc.x = fr.x; g.disc.y = fr.y; g.disc.vx = 0; g.disc.vy = 0;
+        g.h = fr.lift;
+        g.shotPaths = shots.filter((p) => p.length).slice(0, fr.done);
+        g.trailBuf = fr.trail;
+        const throws = fr.done + (fr.flying >= 0 ? 1 : 0);
+        if (fr.flying >= 0 && fr.flying !== rp.lastFlying) { audioRef.current?.sfx("throw"); }
+        if (fr.flying < 0 && rp.lastFlying >= 0 && fr.done === shots.filter((p) => p.length).length) audioRef.current?.sfx("chains");
+        rp.lastFlying = fr.flying;
+        if (throws !== g.throws) { g.throws = throws; syncHud(); }
+        if (fr.finished && !rp.ended) {
+          if (g.holeIndex + 1 < g.roundHoles.length) {
+            // Like normal play: a hole's score joins the card as you walk off it
+            // (the last hole stays live on the HUD via g.throws).
+            g.scores[g.holeIndex] = rp.data.scores[g.holeIndex];
+            g.holeIndex += 1;
+            Object.assign(g, freshHole(g.roundHoles[g.holeIndex]));
+            rp.clock = 0; rp.lastT = 0; rp.lastFlying = -1;
+          } else {
+            rp.ended = true;
+            setReplayView((v) => (v ? { ...v, ended: true } : v));
+          }
+          syncHud();
+        }
+        return;
+      }
 
       if (g.phase === "aim") {
         // Aim + power are driven by the pointer drag handlers; nothing to do here.
@@ -3783,7 +3937,7 @@ export function DiscGolfGame() {
   function onCanvasDown(e: React.PointerEvent<HTMLCanvasElement>) {
     if (screenRef.current !== "playing" || pausedRef.current) return;
     const g = stateRef.current;
-    if (!g || g.phase !== "aim") return;
+    if (!g || g.phase !== "aim" || g.replay) return;
     const p = clientToCanvas(e.clientX, e.clientY);
     dragRef.current = { active: true, ax: p.x, ay: p.y, cx: p.x, cy: p.y };
     applyDrag(g, p.x, p.y);
@@ -4537,8 +4691,55 @@ export function DiscGolfGame() {
         )}
       </div>
 
+      {/* Replay controls replace the disc rack while watching a recorded round */}
+      {screen === "playing" && replayView && (() => {
+        const cap = replayCaption(replayView.data);
+        const onHole = replayView.data.scores[hud.hole - 1];
+        return (
+          <div className="shrink-0 w-full border-t border-white/10 bg-[#13161b]">
+            <div className="mx-auto w-full max-w-[480px] px-3 pt-2.5 pb-[max(calc(env(safe-area-inset-bottom)+0.4rem),1.25rem)] flex flex-col gap-2">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#36D7B7]">▶ Replay</span>
+                <span className="text-[11px] text-gray-400 truncate min-w-0">{replayView.data.name} · {cap.course} · {cap.score}</span>
+              </div>
+              <div className="text-white text-sm font-bold">
+                {replayView.ended ? "Round complete" : `Hole ${hud.hole} of ${hud.holes} · par ${hud.par}${onHole ? ` · scored ${onHole}` : ""}`}
+              </div>
+              <div className="flex gap-2">
+                {replayView.ended ? (<>
+                  <button type="button" onClick={() => startReplay(replayView.data, replayView.fromResults)} className="flex-1 bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white font-bold py-2.5 rounded-lg transition text-sm">↻ Watch again</button>
+                  <button type="button" onClick={endReplay} className={`${btn} flex-1 !mt-0 !py-2.5 text-sm`}>Done</button>
+                </>) : (<>
+                  <button type="button" onClick={() => setReplaySpeed(replayView.speed === 1 ? 2 : 1)} className="flex-1 bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white font-bold py-2.5 rounded-lg transition text-sm">{replayView.speed === 1 ? "2× speed" : "1× speed"}</button>
+                  <button type="button" onClick={skipReplayHole} className="flex-1 bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white font-bold py-2.5 rounded-lg transition text-sm">Skip hole ›</button>
+                  <button type="button" onClick={endReplay} className="flex-1 bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white font-bold py-2.5 rounded-lg transition text-sm">Exit</button>
+                </>)}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* A shared replay link (?rp=) waits for a tap so audio can start. */}
+      {(pendingReplay || replayLoadErr) && screen !== "playing" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0f1117]/85 backdrop-blur-sm px-6">
+          <div className="w-full max-w-[300px] bg-[#1a1d23] border border-white/15 rounded-xl p-5 flex flex-col gap-3 text-center">
+            {pendingReplay ? (<>
+              <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#36D7B7]">Shared replay</div>
+              <div className="text-white font-black text-xl">{pendingReplay.name}</div>
+              <div className="text-gray-300 text-sm">{replayCaption(pendingReplay).course} · {replayCaption(pendingReplay).score}</div>
+              <button type="button" onClick={() => startReplay(pendingReplay)} className={`${btn} w-full !mt-1`}>▶ Watch round</button>
+              <button type="button" onClick={() => { setPendingReplay(null); try { window.history.replaceState(null, "", location.pathname); } catch { /* ignore */ } }} className="text-gray-400 text-xs hover:text-white">Not now</button>
+            </>) : (<>
+              <div className="text-white font-bold">{replayLoadErr}</div>
+              <button type="button" onClick={() => { setReplayLoadErr(null); try { window.history.replaceState(null, "", location.pathname); } catch { /* ignore */ } }} className={`${btn} w-full !mt-1`}>OK</button>
+            </>)}
+          </div>
+        </div>
+      )}
+
       {/* Control panel: disc rack + flight/stance/mute — only while in a round */}
-      {(screen === "playing" || screen === "holeComplete") && (
+      {(screen === "playing" || screen === "holeComplete") && !replayView && (
         <div className="shrink-0 w-full border-t border-white/10 bg-[#13161b]">
           <div className="mx-auto w-full max-w-[480px] px-3 pt-2 pb-[max(calc(env(safe-area-inset-bottom)+0.4rem),1.25rem)] flex flex-col gap-2">
             {/* Disc selector — only the discs in your bag (no bag-editing or
@@ -4991,7 +5192,19 @@ export function DiscGolfGame() {
                   <path d="M12 2v13" />
                 </svg>
               </button>
-              {shareMsg && <p className="text-[#36D7B7] text-[11px] text-center -mt-0.5">{shareMsg}</p>}
+              {lastReplay && (
+                <div className="w-full flex justify-center gap-2">
+                  <button type="button" onClick={() => startReplay(lastReplay, true)}
+                    className="mt-1 bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white font-bold px-4 py-2.5 rounded-lg transition text-sm">
+                    ▶ Watch replay
+                  </button>
+                  <button type="button" onClick={() => void shareReplay()} disabled={replayBusy}
+                    className="mt-1 bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white font-bold px-4 py-2.5 rounded-lg transition text-sm disabled:opacity-50">
+                    {replayBusy ? "Saving…" : "🔗 Share replay"}
+                  </button>
+                </div>
+              )}
+              {shareMsg && <p className="text-[#36D7B7] text-[11px] text-center -mt-0.5 break-all select-all">{shareMsg}</p>}
               {finalMode !== "ranked" && (
                 <button
                   type="button"
