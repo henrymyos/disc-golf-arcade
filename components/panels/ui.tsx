@@ -14,7 +14,7 @@ export const titleCardSm =
 // Big primary hub card — the three main actions, made large so they're clearly
 // the buttons to press.
 export const hubCard =
-  "w-full flex items-center justify-center rounded-xl border border-[#36D7B7]/55 bg-[#1a1d23] hover:border-[#36D7B7] hover:bg-[#20262f] active:scale-[0.99] text-white py-6 transition";
+  "w-full flex items-center justify-center rounded-xl border border-[#36D7B7]/55 bg-[#1a1d23] hover:border-[#36D7B7] hover:bg-[#20262f] active:scale-[0.99] text-white py-3 transition";
 
 // A Daily-Challenge goal star with the to-par score it takes printed inside —
 // gold when earned, dim when still up for grabs. Drawn as an SVG rather than

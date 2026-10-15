@@ -3842,32 +3842,24 @@ export function DiscGolfGame() {
             ⚙
           </button>
           <div className="absolute inset-0 overflow-y-auto rounded-lg bg-gradient-to-b from-[#1c2233] via-[#141926] to-[#0f1117]">
-            <AttractBackdrop />
             <div
               className="relative min-h-full flex items-start justify-center px-5"
               style={{ paddingTop: "max(env(safe-area-inset-top), 1.5rem)", paddingBottom: "max(env(safe-area-inset-bottom), 0.75rem)" }}
             >
             <div className="w-full max-w-[300px] flex flex-col items-center text-center pt-1 pb-4">
-              {/* Logo */}
-              <div className="flex flex-col items-center gap-2.5">
-                <svg width="56" height="56" viewBox="0 0 32 32" aria-hidden className="drop-shadow">
-                  <g stroke="#2a7d70" strokeWidth="2" strokeLinecap="round">
-                    <line x1="2" y1="12.5" x2="8" y2="12.5" /><line x1="1" y1="18" x2="7" y2="18" />
-                  </g>
-                  <ellipse cx="18.5" cy="16.5" rx="11" ry="5" fill="#1f9e8c" />
-                  <ellipse cx="18.5" cy="14.8" rx="11" ry="5" fill="#36D7B7" />
-                  <ellipse cx="18.5" cy="14" rx="6.5" ry="2.4" fill="#5fe6d2" />
-                </svg>
+              {/* Title + the hero: the demo hole looping on its side (tee → basket) */}
+              <div className="w-full flex flex-col items-center gap-2">
                 <h1 className="text-white font-black text-[30px] leading-none tracking-tight">
                   Disc Golf <span className="text-[#36D7B7]">Arcade</span>
                 </h1>
+                <AttractBackdrop />
               </div>
 
               {/* Player profile chip — avatar, name, level + xp-to-next bar */}
               {(() => {
                 const lvl = levelFromXp(playerXp(roundsPlayed, unlocked.length, discsOwned));
                 return (
-                  <div className="w-full mt-7 flex items-stretch gap-2">
+                  <div className="w-full mt-3 flex items-stretch gap-2">
                   <button
                     type="button"
                     onClick={() => setProfileOpen(true)}
