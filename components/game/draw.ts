@@ -181,3 +181,25 @@ export function drawBasket(ctx: CanvasRenderingContext2D, x: number, y: number, 
   ctx.fillStyle = s.chains;
   for (let i = -3; i <= 3; i += 3) ctx.fillRect(Math.round(x) + i, Math.round(y) - 5, 1, 5);
 }
+
+// Throw-power ring around the disc while dragging: a thin track plus an arc that
+// sweeps clockwise from 12 o'clock to `power` (0–1) of a full turn, going
+// teal → yellow → red like the How to Play demo. It only shows how hard you're
+// pulling, never where the throw will land.
+export function drawPowerRing(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, power: number) {
+  const p = Math.max(0, Math.min(1, power));
+  ctx.save();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = "rgba(0,0,0,0.35)";
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.stroke();
+  if (p > 0) {
+    ctx.strokeStyle = p < 0.5 ? "#36D7B7" : p < 0.85 ? "#f5d24a" : "#e23b3b";
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.arc(x, y, r, -Math.PI / 2, -Math.PI / 2 + p * Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}

@@ -101,3 +101,10 @@ export function targetHole(station: number): Hole {
   const basket: Vec = { x: Math.max(44, Math.min(276, 160 + side)), y: Math.max(58, MINI_TEE_Y - distPx) };
   return { par: 1, worldH: H, tee, basket, fairway: [tee, basket], fwWidth: 640, trees: [], water: [], hazard: [], elev: 0 };
 }
+
+// What the React side shows about the round in progress (the canvas draws its
+// own HUD).
+export type HudInfo = {
+  hole: number; par: number; throws: number; holes: number; player?: string;
+  scores: (number | null)[]; pars: number[];
+};

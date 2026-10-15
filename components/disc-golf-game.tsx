@@ -32,7 +32,7 @@ import {
   dailyChallenges, weeklyChallenges, roundsThisDay, roundsThisWeek, challengeDone, dailyClaimKey, eventClaimKey, type EventRound,
 } from "@/lib/discgolf/events";
 import {
-  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, leaderboardCourse, TOURN_KEY, TOURNAMENTS, tournDef, tournRoundPlayHoles, tournPlace, tournFieldRound, tournLiveStandings, ACHIEVEMENTS, earnedAchievements, achievementReward, scoreLabel, STRAIGHT_SPEED_MUL, releaseSpeedMul, ADV_DISCS, levelUpChoices, validDiscIndex, DEFAULT_DISC_INDEX, BAG_MAX, discByKey, discIndexByKey, unlockedDiscKeys, reconcileBag, tourVenue, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, dailySeed, dailyStarThresholds, dailyStarsEarned, buildRound, elevAt, vibrate, pxToFeet, distBetween, autoDiscIndex, windAlong, resolvePenalty, treesAtLie, stepFlight, type Vec, type Water, type Hole, type Mode, type Tournament, type TournLiveRow, type Achievement, type FlightPath, type Release, type Flight, type GhostState,
+  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, leaderboardCourse, TOURN_KEY, TOURNAMENTS, tournDef, tournRoundPlayHoles, tournPlace, tournFieldRound, tournLiveStandings, ACHIEVEMENTS, earnedAchievements, achievementReward, scoreLabel, STRAIGHT_SPEED_MUL, releaseSpeedMul, ADV_DISCS, levelUpChoices, validDiscIndex, DEFAULT_DISC_INDEX, BAG_MAX, discIndexByKey, unlockedDiscKeys, reconcileBag, tourVenue, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, dailySeed, dailyStarThresholds, dailyStarsEarned, buildRound, elevAt, vibrate, pxToFeet, distBetween, autoDiscIndex, windAlong, resolvePenalty, treesAtLie, stepFlight, type Vec, type Water, type Hole, type Mode, type Tournament, type TournLiveRow, type Achievement, type FlightPath, type Release, type Flight, type GhostState,
 } from "@/lib/discgolf/engine";
 import { parseChallenge, challengeParam } from "@/lib/discgolf/challenge";
 import { buildReplay, replayFrame, type Replay } from "@/lib/discgolf/replay";
@@ -41,7 +41,7 @@ import {
   newCareer, normalizeCareer, skillMods, momentumAfter, simEvent, recordResult, advanceSeason, retire, IDENTITY_MODS, signSponsor, unsignSponsor, buyTrainingPoint, spendSkillPoint, careerCoins as coinsForFinish, buyCareerDisc, toggleCareerBag, buyCareerCosmetic, equipCareerLook, DEFAULT_CAREER_LOOK, type CareerLook, careerFieldForRound, careerCardRacers, careerLiveStandings, careerHoleLenScale, rankedFieldForRound, rankedPlacementField, rankedCardRacers, type Career, type CareerEvent, type EventResult, type CareerSkills, type FieldPlayer,
 } from "@/lib/discgolf/career";
 import {
-  freshHole, puttHole, targetHole, puttFeet, targetRadiusPx, type GameState, type Screen,
+  freshHole, puttHole, targetHole, puttFeet, targetRadiusPx, type GameState, type Screen, type HudInfo,
 } from "./game/state";
 import {
   readResume, readPlaceMarks, PLACEMARKS_KEY, TOURBEST_KEY, TOURNBEST_KEY, RESUME_KEY, ENTRY_KEY, PLACEMENT_START_RP, writeLobbySession, clearLobbySession, readLobbySession, type ResumeSnap,
@@ -52,7 +52,7 @@ import {
 import {
   CHALLENGE_COURSES, challengeKey, FIXED_COURSES, TOUR_COURSE_INFOS, type CourseInfo,
 } from "./game/courses";
-import { themeInk, treeStyleFor, drawBasket, drawTree, drawTrail, drawWeather } from "./game/draw";
+import { themeInk, treeStyleFor, drawBasket, drawTree, drawTrail, drawWeather, drawPowerRing } from "./game/draw";
 import { Coin, hubCard, titleCardSm, GoalStar, Overlay, btn, ordinal } from "./panels/ui";
 import { ChallengePanel, PartyPanel, LobbyPanel } from "./panels/OnlinePanels";
 import { HolePracticePicker } from "./panels/HolePracticePicker";
@@ -72,6 +72,7 @@ import { AuthPanel } from "./panels/AuthPanel";
 import { AttractBackdrop } from "./menu/AttractBackdrop";
 import { DailyButton } from "./menu/DailyButton";
 import { BoardNamePrompt } from "./menu/BoardNamePrompt";
+import { ControlPanel } from "./play/ControlPanel";
 import { postMiniResult, postRoundResult, readBoardChoice, writeBoardChoice, type BoardChoice, type PostOutcome } from "@/lib/leaderboard/post";
 
 
@@ -89,6 +90,16 @@ export function DiscGolfGame() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const stateRef = useRef<GameState | null>(null);
   const keysRef = useRef<Set<string>>(new Set());
+  const playAreaRef = useRef<HTMLDivElement | null>(null); // the board's container (sizing + letterbox colour)
+  // Dev-only probe: the power the ring was last drawn at (headless checks read it).
+  const powerRingDebugRef = useRef<{ drawn: number; at: number } | null>(null);
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production") return;
+    (window as unknown as { __dga?: unknown }).__dga = {
+      power: () => stateRef.current?.power ?? null,
+      ring: () => powerRingDebugRef.current,
+    };
+  }, []);
   // Drag-to-throw (Wii-golf style): pull back to set power + aim, release to throw.
   // ax/ay: where the press started (the anchor); cx/cy: the current pointer.
   // Pull is measured anchor→pointer so you can grab anywhere on screen.
@@ -116,7 +127,7 @@ export function DiscGolfGame() {
   const [muted, setMuted] = useState(false);
   const [discIndex, setDiscIndex] = useState(DEFAULT_DISC_INDEX); // Buzzz (core mid) by default
   const [throwStyle, setThrowStyle] = useState<"BH" | "FH">("BH");
-  const [hud, setHud] = useState<{ hole: number; par: number; throws: number; holes: number; player?: string; scores: (number | null)[]; pars: number[] }>({ hole: 1, par: 3, throws: 0, holes: 18, scores: [], pars: [] });
+  const [hud, setHud] = useState<HudInfo>({ hole: 1, par: 3, throws: 0, holes: 18, scores: [], pars: [] });
 
   // An interrupted solo round to offer "Resume" on the title screen.
   const [resumeRound, setResumeRound] = useState<ResumeSnap | null>(null);
@@ -965,8 +976,9 @@ export function DiscGolfGame() {
   const syncHud = useCallback(() => {
     const g = stateRef.current;
     if (!g) return;
+    const hole = g.roundHoles[g.holeIndex];
     setHud({
-      hole: g.holeIndex + 1, par: g.roundHoles[g.holeIndex].par, throws: g.throws, holes: g.roundHoles.length,
+      hole: g.holeIndex + 1, par: hole.par, throws: g.throws, holes: g.roundHoles.length,
       player: g.party ? g.party.names[g.party.current] : undefined,
       scores: g.roundHoles.map((_, i) => (typeof g.scores[i] === "number" ? g.scores[i] : null)),
       pars: g.roundHoles.map((h) => h.par),
@@ -2692,6 +2704,9 @@ export function DiscGolfGame() {
       // olive-tinted hazard ground on rope-lined holes (+1, play where it lies).
       ctx.fillStyle = hole.roughIsHazard ? "#535426" : ground.rough;
       ctx.fillRect(0, 0, W, H);
+      // Letterbox the spare space around the board in the same colour.
+      const area = playAreaRef.current;
+      if (area && area.dataset.letterbox !== ctx.fillStyle) { area.dataset.letterbox = String(ctx.fillStyle); area.style.backgroundColor = String(ctx.fillStyle); }
       // Darker rough mowing bands for a little texture.
       const startY = Math.floor(cam / 16) * 16;
       ctx.fillStyle = hole.roughIsHazard ? "#4b4c22" : ground.roughBand;
@@ -3184,6 +3199,11 @@ export function DiscGolfGame() {
         ctx.strokeStyle = "rgba(0,0,0,0.55)";
         ctx.stroke();
         ctx.lineWidth = 1;
+        // Power ring (0–100% of a full pull) just outside the cancel circle.
+        if (dr.active && !inCancel) {
+          drawPowerRing(ctx, dsx, dsy, CANCEL_R + 5, g.power);
+          if (process.env.NODE_ENV !== "production") powerRingDebugRef.current = { drawn: g.power, at: performance.now() };
+        }
       }
 
       // Cosmetic flight trail, drawn under the disc so the disc rides its head.
@@ -3628,7 +3648,6 @@ export function DiscGolfGame() {
   // ── Canvas display size ───────────────────────────────────────────────────
   // Contain-fit the canvas to the play area: without this it sits at its native
   // 320×448 CSS size (max-w/max-h only shrink), which looks tiny on desktop.
-  const playAreaRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const area = playAreaRef.current;
     const canvas = canvasRef.current;
@@ -3719,10 +3738,13 @@ export function DiscGolfGame() {
 
   return (
     <div className="app-root w-full bg-[#0f1117] flex flex-col select-none overflow-hidden">
-      {/* Play area — canvas fills the available space, keeping its aspect ratio */}
+      {/* Play area — canvas fills the available space, keeping its aspect ratio.
+          Phones: the board sits flush on the controls and full width; any spare
+          height above it is letterboxed in the course's own rough colour (set
+          from the render loop), not the page background. */}
       <div
         ref={playAreaRef}
-        className="relative flex-1 min-h-0 flex items-center justify-center px-2 pb-1"
+        className="relative flex-1 min-h-0 min-w-0 flex items-end justify-center lg:items-center lg:p-2"
         // Keep the board (and its top status pill) clear of the notch / Dynamic
         // Island in a home-screen PWA — pad down past the top safe area.
         style={{ paddingTop: "max(env(safe-area-inset-top), 0.5rem)" }}
@@ -3732,7 +3754,7 @@ export function DiscGolfGame() {
           width={W}
           height={H}
           onPointerDown={onCanvasDown}
-          className="max-h-full max-w-full rounded-lg border border-white/10 bg-[#4a8a3a]"
+          className="max-h-full max-w-full bg-[#4a8a3a] lg:rounded-lg lg:border lg:border-white/10"
           style={{ imageRendering: "pixelated", touchAction: "none" }}
         />
 
@@ -4459,94 +4481,16 @@ export function DiscGolfGame() {
 
       {/* Control panel: disc rack + flight/stance/mute — only while in a round */}
       {(screen === "playing" || screen === "holeComplete") && !replayView && (
-        <div className="shrink-0 w-full border-t border-white/10 bg-[#13161b]">
-          <div className="mx-auto w-full max-w-[480px] px-3 pt-2 pb-[max(calc(env(safe-area-inset-bottom)+0.4rem),1.25rem)] flex flex-col gap-2">
-            {/* Disc selector — only the discs in your bag (no bag-editing or
-                shopping mid-round; both live on the home screen between rounds). */}
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-gray-500">Bag · {activeBag.length}/{BAG_MAX}</span>
-              <span className="text-[10px] text-gray-400 font-medium truncate ml-2 min-w-0">
-                {`${ADV_DISCS[discIndex]?.brand ?? ""} ${ADV_DISCS[discIndex]?.name ?? ""}`}
-              </span>
-            </div>
-            <div className="flex gap-1.5 -mx-1 px-1">
-              {activeBag.map((key) => {
-                const d = discByKey(key);
-                if (!d) return null;
-                const i = discIndexByKey(key);
-                return (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => selectDisc(i)}
-                  title={`${d.brand} ${d.name}`}
-                  className={`flex-1 min-w-0 rounded-lg border px-1.5 py-2 flex items-center justify-center gap-1 transition ${
-                    i === discIndex ? "border-[#36D7B7]/70 bg-[#36D7B7]/10" : "border-white/10 hover:border-white/25 bg-white/[0.02]"
-                  }`}
-                >
-                  <span className="w-2 h-2 rounded-full shrink-0" style={{ background: d.color }} />
-                  <span className={`min-w-0 truncate text-[11px] font-bold ${i === discIndex ? "text-white" : "text-gray-300"}`}>{d.name}</span>
-                </button>
-                );
-              })}
-            </div>
-
-            {/* Release angle */}
-            <div className="flex items-center gap-2">
-              <span className="w-12 shrink-0 text-[10px] font-bold uppercase tracking-[0.1em] text-gray-500">Angle</span>
-              <div className="flex-1 flex gap-1 bg-[#0f1117] border border-white/10 rounded-lg p-1">
-                {([
-                  { key: "hyzer", label: "Hyzer ⤸" },
-                  { key: "flat", label: "Flat" },
-                  { key: "anny", label: "⤹ Anny" },
-                ] as const).map((r) => (
-                  <button
-                    key={r.key}
-                    type="button"
-                    onClick={() => setRelease(r.key)}
-                    aria-pressed={release === r.key}
-                    className={`flex-1 rounded-md px-2 py-1.5 text-xs font-bold transition ${
-                      release === r.key ? "bg-[#e0923b] text-[#0f1117] shadow" : "text-gray-400 hover:text-white"
-                    }`}
-                  >
-                    {r.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Stance + mute */}
-            <div className="flex items-center gap-2">
-              <span className="w-12 shrink-0 text-[10px] font-bold uppercase tracking-[0.1em] text-gray-500">Stance</span>
-              <div className="flex-1 flex gap-1 bg-[#0f1117] border border-white/10 rounded-lg p-1">
-                {([
-                  { key: "BH", label: "Backhand ◄" },
-                  { key: "FH", label: "► Forehand" },
-                ] as const).map((s) => (
-                  <button
-                    key={s.key}
-                    type="button"
-                    onClick={() => setThrowStyle(s.key)}
-                    aria-pressed={throwStyle === s.key}
-                    className={`flex-1 rounded-md px-2 py-1.5 text-xs font-bold transition ${
-                      throwStyle === s.key ? "bg-[#36D7B7] text-[#0f1117] shadow" : "text-gray-400 hover:text-white"
-                    }`}
-                  >
-                    {s.label}
-                  </button>
-                ))}
-              </div>
-              <button
-                type="button"
-                onClick={() => { const g = stateRef.current; setPauseMenu({ canRestart: !!g && !g.online && !g.mini && !tournamentPlayRef.current && !careerPlayRef.current, isCareer: careerPlayRef.current }); }}
-                aria-label="Menu"
-                className="shrink-0 w-10 h-[34px] flex items-center justify-center bg-[#0f1117] border border-white/10 hover:border-white/25 text-white rounded-lg active:bg-white/10 transition"
-              >
-                ☰
-              </button>
-            </div>
-          </div>
-        </div>
+        <ControlPanel
+          activeBag={activeBag}
+          discIndex={discIndex}
+          onSelectDisc={selectDisc}
+          release={release}
+          onRelease={setRelease}
+          throwStyle={throwStyle}
+          onThrowStyle={setThrowStyle}
+          onMenu={() => { const g = stateRef.current; setPauseMenu({ canRestart: !!g && !g.online && !g.mini && !tournamentPlayRef.current && !careerPlayRef.current, isCareer: careerPlayRef.current }); }}
+        />
       )}
 
       {/* Results: scorecard + save + leaderboard */}
