@@ -88,3 +88,34 @@ describe("achievementProgress", () => {
     expect(achievementProgress("evenpar", p)).toEqual({ progress: 0.9, detail: "Best round +1, need E" });
   });
 });
+
+import { dailyResetLabel, weeklyResetLabel, centralWeek } from "../lib/discgolf/time";
+import { powerRingColor } from "../lib/discgolf/ring";
+
+describe("reset labels (player's own clock)", () => {
+  const winterDay = dayNumber(az(2026, 1, 15, 12));
+  const summerDay = dayNumber(az(2026, 7, 15, 12));
+  it("Arizona sees the Daily reset at 11 PM in winter and 10 PM in summer", () => {
+    expect(dailyResetLabel(winterDay, { timeZone: "America/Phoenix" })).toBe("resets 11 PM your time");
+    expect(dailyResetLabel(summerDay, { timeZone: "America/Phoenix" })).toBe("resets 10 PM your time");
+  });
+  it("New York sees 1 AM", () => {
+    expect(dailyResetLabel(winterDay, { timeZone: "America/New_York" })).toBe("resets 1 AM your time");
+  });
+  it("the weekly reset lands on Saturday night in Arizona (Sunday 00:00 Central)", () => {
+    expect(weeklyResetLabel(centralWeek(az(2026, 1, 14, 12)), { timeZone: "America/Phoenix" })).toBe("resets Sat 11 PM your time");
+  });
+  it("the Next goal card carries the label", () => {
+    const g = nextGoal({ ...base, resetLabel: "resets 10 PM your time" })!;
+    expect(g.detail).toBe("0/3 stars · resets 10 PM your time");
+  });
+});
+
+describe("power ring colour", () => {
+  it("goes teal → yellow → orange and never uses the cancel red", () => {
+    expect(powerRingColor(0.2)).toBe("#36D7B7");
+    expect(powerRingColor(0.6)).toBe("#f5d24a");
+    expect(powerRingColor(1)).toBe("#e08a3b");
+    for (let p = 0; p <= 1; p += 0.05) expect(powerRingColor(p)).not.toBe("#e23b3b");
+  });
+});

@@ -92,3 +92,23 @@ export function centralMonthLabel(month: number): string {
   const y = Math.floor(month / 12), m = ((month % 12) + 12) % 12;
   return new Date(Date.UTC(y, m, 1)).toLocaleString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
 }
+
+// "10 PM" / "10:30 PM" — when a reset instant falls on the player's own clock
+// (or `timeZone` for tests). With `weekday`, prefixes the short day ("Sat 10 PM").
+export function localResetLabel(instant: number, opts: { weekday?: boolean; timeZone?: string; locale?: string } = {}): string {
+  const fmt = new Intl.DateTimeFormat(opts.locale ?? "en-US", {
+    hour: "numeric", minute: "2-digit", timeZone: opts.timeZone,
+    ...(opts.weekday ? { weekday: "short" as const } : {}),
+  });
+  return fmt.format(new Date(instant)).replace(/:00(?=\s?[AP]M|$)/, "").replace(/,/, "");
+}
+
+// When today's Daily (Central day `day`) resets, on the player's clock.
+export function dailyResetLabel(day: number, opts: { timeZone?: string; locale?: string } = {}): string {
+  return `resets ${localResetLabel(centralDayRange(day).end, opts)} your time`;
+}
+
+// When this week's challenges (Central week `week`) reset, on the player's clock.
+export function weeklyResetLabel(week: number, opts: { timeZone?: string; locale?: string } = {}): string {
+  return `resets ${localResetLabel(centralWeekRange(week).end, { ...opts, weekday: true })} your time`;
+}

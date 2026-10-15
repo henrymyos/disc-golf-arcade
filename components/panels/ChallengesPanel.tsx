@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { fmtCoins } from "@/lib/discgolf/wallet";
 import { weekSeed } from "@/lib/discgolf/ranked";
+import { dailyResetLabel, weeklyResetLabel } from "@/lib/discgolf/time";
 import {
   dailyChallenges, weeklyChallenges, roundsThisDay, roundsThisWeek, dailyClaimKey, eventClaimKey, type Challenge, type EventRound,
 } from "@/lib/discgolf/events";
@@ -69,11 +70,11 @@ export function ChallengesPanel({ history, owned, coins, today, onClaim, onClose
         </div>
 
         {/* Daily — light objectives, reset every day */}
-        <p className="text-gray-400 text-[10px] font-semibold uppercase tracking-wide">Daily · resets at midnight</p>
+        <p className="text-gray-400 text-[10px] font-semibold uppercase tracking-wide">Daily · {dailyResetLabel(today)}</p>
         {dailyChallenges(today).map((c) => row(c, dayRows, dailyClaimKey(today, c.id)))}
 
         {/* Weekly — harder objectives, reset every week */}
-        <p className="text-gray-400 text-[10px] font-semibold uppercase tracking-wide pt-0.5">Weekly · resets Monday</p>
+        <p className="text-gray-400 text-[10px] font-semibold uppercase tracking-wide pt-0.5">Weekly · {weeklyResetLabel(week)}</p>
         {weeklyChallenges(week).map((c) => row(c, weekRows, eventClaimKey(week, c.id)))}
 
       </div>

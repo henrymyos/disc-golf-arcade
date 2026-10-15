@@ -39,6 +39,7 @@ export type GoalProgress = {
   rounds: GoalRound[];         // recorded full rounds (history)
   roundsPlayed: number;
   todayStars: number;          // 0–3 stars banked on today's Daily
+  resetLabel?: string;         // e.g. "resets 10 PM your time"
 };
 
 export type Goal = {
@@ -95,7 +96,7 @@ export function nextGoal(p: GoalProgress): Goal | null {
     cands.push({
       id: `daily-stars-${p.todayStars}`, kind: "daily", emoji: "⭐",
       title: p.todayStars === 0 ? "Earn today's Daily stars" : `${left} more Daily star${left === 1 ? "" : "s"} today`,
-      detail: `${p.todayStars}/3 stars · resets at midnight Central`,
+      detail: `${p.todayStars}/3 stars · ${p.resetLabel ?? "resets tonight"}`,
       progress: p.todayStars / 3,
     });
   }

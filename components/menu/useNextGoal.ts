@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { levelFromXp, playerXp } from "@/lib/discgolf/profile";
 import { levelUpChoices } from "@/lib/discgolf/engine";
 import type { EventRound } from "@/lib/discgolf/events";
+import { dailyResetLabel } from "@/lib/discgolf/time";
 import { nextGoal, goalComplete, dailyStreak, finishedDailyDays, type Goal, type GoalProgress } from "@/lib/discgolf/goals";
 
 // The menu's Next goal, the Daily streak, and a toast when a finished round
@@ -32,8 +33,9 @@ export function useNextGoal({ roundsPlayed, unlocked, owned, discsOwned, history
       rounds: history,
       roundsPlayed,
       todayStars,
+      resetLabel: today ? dailyResetLabel(today) : undefined,
     };
-  }, [roundsPlayed, unlocked, discsOwned, owned, history, todayStars]);
+  }, [roundsPlayed, unlocked, discsOwned, owned, history, todayStars, today]);
   const goal = useMemo(() => (today ? nextGoal(progress) : null), [progress, today]);
   const streak = useMemo(() => (today ? dailyStreak(finishedDailyDays(dayBests, dayStars), today) : 0), [dayBests, dayStars, today]);
 
