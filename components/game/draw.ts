@@ -1,4 +1,5 @@
 import type { Trail } from "@/lib/discgolf/trails";
+import { powerRingColor } from "@/lib/discgolf/ring";
 import { BASKET_SKINS, type BasketSkin } from "@/lib/discgolf/cosmetics";
 import { W, H, CATCH_R, type Vec, type Tree } from "@/lib/discgolf/engine";
 
@@ -184,18 +185,18 @@ export function drawBasket(ctx: CanvasRenderingContext2D, x: number, y: number, 
 
 // Throw-power ring around the disc while dragging: a thin track plus an arc that
 // sweeps clockwise from 12 o'clock to `power` (0–1) of a full turn, going
-// teal → yellow → red like the How to Play demo. It only shows how hard you're
-// pulling, never where the throw will land.
-export function drawPowerRing(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, power: number) {
+// teal → yellow → orange. (Red stays reserved for the cancel zone.) It only shows
+// how hard you're pulling, never where the throw will land.
+export function drawPowerRing(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, power: number, width = 2) {
   const p = Math.max(0, Math.min(1, power));
   ctx.save();
-  ctx.lineWidth = 2;
+  ctx.lineWidth = width;
   ctx.strokeStyle = "rgba(0,0,0,0.35)";
   ctx.beginPath();
   ctx.arc(x, y, r, 0, Math.PI * 2);
   ctx.stroke();
   if (p > 0) {
-    ctx.strokeStyle = p < 0.5 ? "#36D7B7" : p < 0.85 ? "#f5d24a" : "#e23b3b";
+    ctx.strokeStyle = powerRingColor(p);
     ctx.lineCap = "round";
     ctx.beginPath();
     ctx.arc(x, y, r, -Math.PI / 2, -Math.PI / 2 + p * Math.PI * 2);

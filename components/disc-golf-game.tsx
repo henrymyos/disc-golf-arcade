@@ -3231,7 +3231,8 @@ export function DiscGolfGame() {
         ctx.lineWidth = 1;
         // Power ring (0–100% of a full pull) just outside the cancel circle.
         if (dr.active && !inCancel) {
-          drawPowerRing(ctx, dsx, dsy, CANCEL_R + 5, g.power);
+          // 3 canvas px on phone-sized boards (2 px reads thin there), 2 px on desktop.
+          drawPowerRing(ctx, dsx, dsy, CANCEL_R + 5, g.power, (canvasRef.current?.clientWidth ?? W * 2) < 500 ? 3 : 2);
           if (process.env.NODE_ENV !== "production") powerRingDebugRef.current = { drawn: g.power, at: performance.now() };
         }
       }
