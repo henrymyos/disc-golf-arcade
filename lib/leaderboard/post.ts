@@ -17,6 +17,7 @@ export type PostOutcome =
   | { status: "posted"; as: string }
   | { status: "ask" }
   | { status: "skipped" }
+  | { status: "empty" }             // nothing worth posting (a 0 on a minigame)
   | { status: "error"; error: string; reserved: boolean };
 
 type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;
@@ -67,12 +68,14 @@ type Who = { signedIn: boolean; accountName: string; choice: BoardChoice | null;
 type SendResult = Promise<{ ok: boolean; error?: string; name?: string }>;
 
 // A finished Putting / Accuracy run → its mini board (putts made / points).
+// A 0 posts nothing and never asks for a name.
 export function postMiniResult(
   result: { kind: "putt" | "target"; makes: number; points: number },
   who: Who,
   submitMini: (name: string, score: number, kind: string, token: string | null) => SendResult,
 ): Promise<PostOutcome> {
   const score = result.kind === "putt" ? result.makes : result.points;
+  if (score <= 0) return Promise.resolve({ status: "empty" });
   return postScore({ ...who, send: (name, token) => submitMini(name, score, result.kind, token) });
 }
 

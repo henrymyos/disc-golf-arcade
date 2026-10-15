@@ -2192,6 +2192,7 @@ export function DiscGolfGame() {
       }
       if (out.status === "skipped") { setPostStatus("skipped"); return; }
       if (out.status === "error") { setSaveErr(out.error); return; }
+      if (out.status === "empty") return; // (minigames only; rounds always have a score)
       setPostedAs(out.as);
       setSaved(true);
       if (!isRanked) {

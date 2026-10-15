@@ -48,8 +48,16 @@ describe("postScore (client)", () => {
 describe("finished minigames and rounds", () => {
   it("a finished guest Putting run without a name makes no server call", async () => {
     const submitMini = vi.fn(async () => ({ ok: true }));
-    const out = await postMiniResult({ kind: "putt", makes: 0, points: 0 }, guest(null), submitMini);
+    const out = await postMiniResult({ kind: "putt", makes: 3, points: 0 }, guest(null), submitMini);
     expect(out.status).toBe("ask");
+    expect(submitMini).not.toHaveBeenCalled();
+  });
+
+  it("a 0 on a minigame posts nothing and doesn't ask, even with a name or signed in", async () => {
+    const submitMini = vi.fn(async () => ({ ok: true }));
+    expect((await postMiniResult({ kind: "putt", makes: 0, points: 0 }, guest(null), submitMini)).status).toBe("empty");
+    expect((await postMiniResult({ kind: "target", makes: 0, points: 0 }, guest({ kind: "name", name: "Ace" }), submitMini)).status).toBe("empty");
+    expect((await postMiniResult({ kind: "putt", makes: 0, points: 0 }, { signedIn: true, accountName: "H", choice: null, getToken: async () => "jwt" }, submitMini)).status).toBe("empty");
     expect(submitMini).not.toHaveBeenCalled();
   });
 
