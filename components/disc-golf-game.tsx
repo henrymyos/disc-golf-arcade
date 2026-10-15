@@ -73,6 +73,7 @@ import { AttractBackdrop } from "./menu/AttractBackdrop";
 import { DailyButton } from "./menu/DailyButton";
 import { BoardNamePrompt } from "./menu/BoardNamePrompt";
 import { ControlPanel } from "./play/ControlPanel";
+import { RoundSidebar } from "./play/RoundSidebar";
 import { postMiniResult, postRoundResult, readBoardChoice, writeBoardChoice, type BoardChoice, type PostOutcome } from "@/lib/leaderboard/post";
 
 
@@ -98,6 +99,13 @@ export function DiscGolfGame() {
     (window as unknown as { __dga?: unknown }).__dga = {
       power: () => stateRef.current?.power ?? null,
       ring: () => powerRingDebugRef.current,
+      // Where the disc and basket are (canvas units), for headless play-throughs.
+      lie: () => {
+        const g = stateRef.current;
+        if (!g) return null;
+        const hole = g.roundHoles[g.holeIndex];
+        return { phase: g.phase, hole: g.holeIndex, disc: g.disc, basket: hole.basket, camX: g.camX, camY: g.camY, W, H, maxDrag: MAX_DRAG, feet: pxToFeet(distBetween(g.disc, hole.basket)) };
+      },
     };
   }, []);
   // Drag-to-throw (Wii-golf style): pull back to set power + aim, release to throw.
@@ -982,6 +990,11 @@ export function DiscGolfGame() {
       player: g.party ? g.party.names[g.party.current] : undefined,
       scores: g.roundHoles.map((_, i) => (typeof g.scores[i] === "number" ? g.scores[i] : null)),
       pars: g.roundHoles.map((h) => h.par),
+      // For the desktop side column (same numbers the canvas HUD draws).
+      pinFt: pxToFeet(distBetween(g.rest, hole.basket)),
+      holeFt: pxToFeet(distBetween(hole.tee, hole.basket)),
+      windMph: Math.round(((hole.windMag ?? 0) / 0.018) * 15),
+      windAng: Math.atan2(hole.wind?.y ?? 0, hole.wind?.x ?? 0),
     });
   }, []);
 
@@ -3734,10 +3747,14 @@ export function DiscGolfGame() {
   // stars already banked today — for the Daily Challenge menu card. Deferred to
   // the Single Player page so the daily hole pool isn't built on first paint.
   const todayStars = today ? (dayStars[today] ?? 0) : 0;
+  // In a round (not a replay): the desktop three-column layout applies.
+  const inRoundLayout = (screen === "playing" || screen === "holeComplete") && !replayView;
   const todayGoals = useMemo(() => (hub === "solo" && today ? dailyStarThresholds(today) : null), [hub, today]);
 
   return (
-    <div className="app-root w-full bg-[#0f1117] flex flex-col select-none overflow-hidden">
+    <div className={`app-root w-full bg-[#0f1117] flex flex-col select-none overflow-hidden ${inRoundLayout ? "lg:flex-row" : ""}`}>
+      {/* Desktop (1024px+): live scorecard + wind in a left column during a round */}
+      {inRoundLayout && <RoundSidebar hud={hud} />}
       {/* Play area — canvas fills the available space, keeping its aspect ratio.
           Phones: the board sits flush on the controls and full width; any spare
           height above it is letterboxed in the course's own rough colour (set

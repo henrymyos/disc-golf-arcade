@@ -3,7 +3,9 @@
 import { ADV_DISCS, BAG_MAX, discByKey, discIndexByKey, type Release } from "@/lib/discgolf/engine";
 
 // The in-round control panel: the disc rack (your bag), release angle, stance
-// and the round menu, as a bar under the board.
+// and the round menu. Phones and tablets get it as a bar under the board; at
+// 1024px+ it becomes the right-hand column, with a legend of the keyboard
+// shortcuts the game really supports.
 export function ControlPanel({ activeBag, discIndex, onSelectDisc, release, onRelease, throwStyle, onThrowStyle, onMenu }: {
   activeBag: string[];
   discIndex: number;
@@ -16,7 +18,7 @@ export function ControlPanel({ activeBag, discIndex, onSelectDisc, release, onRe
 }) {
   const selectDisc = onSelectDisc, setRelease = onRelease, setThrowStyle = onThrowStyle;
   return (
-    <div className="shrink-0 w-full border-t border-white/10 bg-[#13161b]">
+    <div className="shrink-0 w-full border-t border-white/10 bg-[#13161b] lg:w-[330px] lg:border-t-0 lg:border-l lg:flex lg:flex-col lg:justify-center lg:overflow-y-auto">
       <div className="mx-auto w-full max-w-[480px] px-3 pt-2 pb-[max(calc(env(safe-area-inset-bottom)+0.4rem),1.25rem)] flex flex-col gap-2">
         {/* Disc selector — only the discs in your bag (no bag-editing or
             shopping mid-round; both live on the home screen between rounds). */}
@@ -103,7 +105,21 @@ export function ControlPanel({ activeBag, discIndex, onSelectDisc, release, onRe
           </button>
         </div>
 
+        {/* Keyboard shortcuts (desktop only). Only keys the game handles. */}
+        <div className="hidden lg:block mt-3 rounded-lg border border-white/10 bg-[#0f1117] px-3 py-2.5">
+          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-gray-500 mb-1.5">Keyboard</p>
+          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+            <dt><Kbd>1</Kbd>–<Kbd>{Math.max(1, Math.min(9, activeBag.length))}</Kbd></dt><dd className="text-gray-300">Pick a disc from your bag</dd>
+            <dt><Kbd>B</Kbd> <Kbd>F</Kbd></dt><dd className="text-gray-300">Backhand / forehand</dd>
+            <dt><Kbd>Space</Kbd> <Kbd>Enter</Kbd></dt><dd className="text-gray-300">Next hole (after you hole out)</dd>
+            <dt className="text-gray-500">Mouse</dt><dd className="text-gray-300">Drag back from anywhere to aim and throw</dd>
+          </dl>
+        </div>
       </div>
     </div>
   );
+}
+
+function Kbd({ children }: { children: React.ReactNode }) {
+  return <kbd className="inline-block min-w-[1.4rem] rounded border border-white/20 bg-white/5 px-1 py-px text-center font-mono text-[11px] text-white">{children}</kbd>;
 }
