@@ -4230,7 +4230,9 @@ export function DiscGolfGame() {
 
         {goalToast && <GoalToast goal={goalToast} />}
 
-        {namePrompt && (
+        {/* Mounted only once the level-up disc pick is closed, so the two never
+            stack (and the name field's autofocus doesn't land behind the picker). */}
+        {namePrompt && !levelUp && (
           <BoardNamePrompt
             initialName={profile.name.trim()}
             error={namePrompt.error}
