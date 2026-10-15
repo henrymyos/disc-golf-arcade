@@ -3517,10 +3517,9 @@ export function DiscGolfGame() {
       ctx.textBaseline = "middle";
       ctx.textAlign = "left";
       const hcy = 4 + hudH / 2 + 0.5;
-      // Live "to par": completed holes plus the current hole once you've thrown.
-      const holesIn = g.holeIndex + (g.throws > 0 ? 1 : 0);
-      const strokesIn = g.scores.reduce((s, n) => s + (n ?? 0), 0) + (g.throws > 0 ? g.throws : 0);
-      const over = strokesIn - g.roundHoles.slice(0, holesIn).reduce((s, h) => s + h.par, 0);
+      // Round "to par": finished holes only (each counted once, against its own
+      // par). The hole in progress joins once its score is recorded.
+      const over = g.scores.reduce<number>((sum, n, i) => (typeof n === "number" ? sum + n - (g.roundHoles[i]?.par ?? 0) : sum), 0);
       const overStr = over === 0 ? "E" : over > 0 ? `+${over}` : `${over}`;
       let hx = 11;
       const hudItem = (label: string, value: string, valColor: string) => {
