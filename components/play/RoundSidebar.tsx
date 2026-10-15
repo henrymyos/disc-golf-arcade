@@ -4,14 +4,14 @@ import type { HudInfo } from "../game/state";
 
 const fmtToPar = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
 
-// Desktop-only (1024px+) left column during a round: the live scorecard and
+// Desktop left column during a round (three-column layout only): the live scorecard and
 // the wind, so the wide screen isn't empty space either side of the board.
-export function RoundSidebar({ hud }: { hud: HudInfo }) {
+export function RoundSidebar({ hud, width }: { hud: HudInfo; width: number }) {
   const played = hud.scores.filter((s): s is number => s != null).length;
   const toPar = hud.scores.reduce<number>((sum, s, i) => (s == null ? sum : sum + s - (hud.pars[i] ?? 0)), 0);
   const rows = hud.pars.length > 9 ? [[0, 9], [9, hud.pars.length]] : [[0, hud.pars.length]];
   return (
-    <aside className="hidden lg:flex w-[300px] shrink-0 flex-col justify-center gap-3 overflow-y-auto border-r border-white/10 bg-[#13161b] px-4 py-4 text-left" aria-label="Round scorecard">
+    <aside style={{ width }} className="flex shrink-0 flex-col justify-center gap-3 overflow-y-auto border-r border-white/10 bg-[#13161b] px-4 py-4 text-left" aria-label="Round scorecard">
       <div className="rounded-xl border border-white/10 bg-[#0f1117] px-3 py-3">
         <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-gray-500">{hud.player ? `${hud.player} · ` : ""}Hole {hud.hole} of {hud.holes}</p>
         <p className="mt-1 text-white text-2xl font-black leading-none">

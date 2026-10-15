@@ -3,10 +3,11 @@
 import { ADV_DISCS, BAG_MAX, discByKey, discIndexByKey, type Release } from "@/lib/discgolf/engine";
 
 // The in-round control panel: the disc rack (your bag), release angle, stance
-// and the round menu. Phones and tablets get it as a bar under the board; at
-// 1024px+ it becomes the right-hand column, with a legend of the keyboard
-// shortcuts the game really supports.
-export function ControlPanel({ activeBag, discIndex, onSelectDisc, release, onRelease, throwStyle, onThrowStyle, onMenu }: {
+// and the round menu. Normally a bar under the board; in the three-column
+// desktop layout (`side` = the column's width, see lib/discgolf/layout) it's the
+// right-hand column, with a legend of the keyboard shortcuts the game supports.
+export function ControlPanel({ side, activeBag, discIndex, onSelectDisc, release, onRelease, throwStyle, onThrowStyle, onMenu }: {
+  side?: number;
   activeBag: string[];
   discIndex: number;
   onSelectDisc: (i: number) => void;
@@ -18,7 +19,10 @@ export function ControlPanel({ activeBag, discIndex, onSelectDisc, release, onRe
 }) {
   const selectDisc = onSelectDisc, setRelease = onRelease, setThrowStyle = onThrowStyle;
   return (
-    <div className="shrink-0 w-full border-t border-white/10 bg-[#13161b] lg:w-[330px] lg:border-t-0 lg:border-l lg:flex lg:flex-col lg:justify-center lg:overflow-y-auto">
+    <div
+      className={`shrink-0 bg-[#13161b] ${side ? "border-l border-white/10 flex flex-col justify-center overflow-y-auto" : "w-full border-t border-white/10"}`}
+      style={side ? { width: side } : undefined}
+    >
       <div className="mx-auto w-full max-w-[480px] px-3 pt-2 pb-[max(calc(env(safe-area-inset-bottom)+0.4rem),1.25rem)] flex flex-col gap-2">
         {/* Disc selector — only the discs in your bag (no bag-editing or
             shopping mid-round; both live on the home screen between rounds). */}
@@ -51,8 +55,8 @@ export function ControlPanel({ activeBag, discIndex, onSelectDisc, release, onRe
         </div>
 
         {/* Release angle */}
-        <div className="flex items-center gap-2">
-          <span className="w-12 shrink-0 text-[10px] font-bold uppercase tracking-[0.1em] text-gray-500">Angle</span>
+        <div className={side ? "flex flex-wrap items-center gap-x-2 gap-y-1" : "flex items-center gap-2"}>
+          <span className={`${side ? "w-full" : "w-12 shrink-0"} text-[10px] font-bold uppercase tracking-[0.1em] text-gray-500`}>Angle</span>
           <div className="flex-1 flex gap-1 bg-[#0f1117] border border-white/10 rounded-lg p-1">
             {([
               { key: "hyzer", label: "Hyzer ⤸" },
@@ -64,7 +68,7 @@ export function ControlPanel({ activeBag, discIndex, onSelectDisc, release, onRe
                 type="button"
                 onClick={() => setRelease(r.key)}
                 aria-pressed={release === r.key}
-                className={`flex-1 rounded-md px-2 py-1.5 text-xs font-bold transition ${
+                className={`flex-1 rounded-md ${side ? "px-1 whitespace-nowrap" : "px-2"} py-1.5 text-xs font-bold transition ${
                   release === r.key ? "bg-[#e0923b] text-[#0f1117] shadow" : "text-gray-400 hover:text-white"
                 }`}
               >
@@ -75,8 +79,8 @@ export function ControlPanel({ activeBag, discIndex, onSelectDisc, release, onRe
         </div>
 
         {/* Stance + mute */}
-        <div className="flex items-center gap-2">
-          <span className="w-12 shrink-0 text-[10px] font-bold uppercase tracking-[0.1em] text-gray-500">Stance</span>
+        <div className={side ? "flex flex-wrap items-center gap-x-2 gap-y-1" : "flex items-center gap-2"}>
+          <span className={`${side ? "w-full" : "w-12 shrink-0"} text-[10px] font-bold uppercase tracking-[0.1em] text-gray-500`}>Stance</span>
           <div className="flex-1 flex gap-1 bg-[#0f1117] border border-white/10 rounded-lg p-1">
             {([
               { key: "BH", label: "Backhand ◄" },
@@ -87,7 +91,7 @@ export function ControlPanel({ activeBag, discIndex, onSelectDisc, release, onRe
                 type="button"
                 onClick={() => setThrowStyle(s.key)}
                 aria-pressed={throwStyle === s.key}
-                className={`flex-1 rounded-md px-2 py-1.5 text-xs font-bold transition ${
+                className={`flex-1 rounded-md ${side ? "px-1 whitespace-nowrap" : "px-2"} py-1.5 text-xs font-bold transition ${
                   throwStyle === s.key ? "bg-[#36D7B7] text-[#0f1117] shadow" : "text-gray-400 hover:text-white"
                 }`}
               >
@@ -105,8 +109,8 @@ export function ControlPanel({ activeBag, discIndex, onSelectDisc, release, onRe
           </button>
         </div>
 
-        {/* Keyboard shortcuts (desktop only). Only keys the game handles. */}
-        <div className="hidden lg:block mt-3 rounded-lg border border-white/10 bg-[#0f1117] px-3 py-2.5">
+        {/* Keyboard shortcuts (desktop column only). Only keys the game handles. */}
+        {side && <div className="mt-3 rounded-lg border border-white/10 bg-[#0f1117] px-3 py-2.5">
           <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-gray-500 mb-1.5">Keyboard</p>
           <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
             <dt><Kbd>1</Kbd>–<Kbd>{Math.max(1, Math.min(9, activeBag.length))}</Kbd></dt><dd className="text-gray-300">Pick a disc from your bag</dd>
@@ -114,7 +118,7 @@ export function ControlPanel({ activeBag, discIndex, onSelectDisc, release, onRe
             <dt><Kbd>Space</Kbd> <Kbd>Enter</Kbd></dt><dd className="text-gray-300">Next hole (after you hole out)</dd>
             <dt className="text-gray-500">Mouse</dt><dd className="text-gray-300">Drag back from anywhere to aim and throw</dd>
           </dl>
-        </div>
+        </div>}
       </div>
     </div>
   );

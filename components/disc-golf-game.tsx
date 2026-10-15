@@ -76,6 +76,7 @@ import { useNextGoal } from "./menu/useNextGoal";
 import { BoardNamePrompt } from "./menu/BoardNamePrompt";
 import { ControlPanel } from "./play/ControlPanel";
 import { RoundSidebar } from "./play/RoundSidebar";
+import { roundLayout, type RoundLayout } from "@/lib/discgolf/layout";
 import { postMiniResult, postRoundResult, readBoardChoice, writeBoardChoice, type BoardChoice, type PostOutcome } from "@/lib/leaderboard/post";
 
 
@@ -95,6 +96,16 @@ export function DiscGolfGame() {
   const keysRef = useRef<Set<string>>(new Set());
   const [roundSerial, setRoundSerial] = useState(0); // +1 per recorded full round (goal toasts)
   const playAreaRef = useRef<HTMLDivElement | null>(null); // the board's container (sizing + letterbox colour)
+  // Which in-round layout this viewport gets (null until mounted). Dev builds
+  // accept ?layout=single to measure the single-column board for comparison.
+  const [viewportLayout, setViewportLayout] = useState<RoundLayout | null>(null);
+  useEffect(() => {
+    const forceSingle = process.env.NODE_ENV !== "production" && new URLSearchParams(location.search).get("layout") === "single";
+    const update = () => { const l = roundLayout(window.innerWidth, window.innerHeight); setViewportLayout(forceSingle ? { ...l, sides: false } : l); };
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
   // Dev-only probe: the power the ring was last drawn at (headless checks read it).
   const powerRingDebugRef = useRef<{ drawn: number; at: number } | null>(null);
   useEffect(() => {
@@ -3758,21 +3769,23 @@ export function DiscGolfGame() {
     onComplete: playGoalSound,
   });
 
-  // In a round (not a replay): the desktop three-column layout applies.
+  // In a round (not a replay), on a screen where three columns give a bigger
+  // board than one (lib/discgolf/layout), the desktop layout applies.
   const inRoundLayout = (screen === "playing" || screen === "holeComplete") && !replayView;
+  const sideLayout = inRoundLayout && viewportLayout?.sides ? viewportLayout : null;
   const todayGoals = useMemo(() => (hub === "solo" && today ? dailyStarThresholds(today) : null), [hub, today]);
 
   return (
-    <div className={`app-root w-full bg-[#0f1117] flex flex-col select-none overflow-hidden ${inRoundLayout ? "lg:flex-row" : ""}`}>
-      {/* Desktop (1024px+): live scorecard + wind in a left column during a round */}
-      {inRoundLayout && <RoundSidebar hud={hud} />}
+    <div className={`app-root w-full bg-[#0f1117] flex select-none overflow-hidden ${sideLayout ? "flex-row" : "flex-col"}`}>
+      {/* Desktop: live scorecard + wind in a left column during a round */}
+      {sideLayout && <RoundSidebar hud={hud} width={sideLayout.left} />}
       {/* Play area — canvas fills the available space, keeping its aspect ratio.
           Phones: the board sits flush on the controls and full width; any spare
           height above it is letterboxed in the course's own rough colour (set
           from the render loop), not the page background. */}
       <div
         ref={playAreaRef}
-        className="relative flex-1 min-h-0 min-w-0 flex items-end justify-center lg:items-center lg:p-2"
+        className={`relative flex-1 min-h-0 min-w-0 flex justify-center ${sideLayout ? "items-center p-2" : "items-end"}`}
         // Keep the board (and its top status pill) clear of the notch / Dynamic
         // Island in a home-screen PWA — pad down past the top safe area.
         style={{ paddingTop: "max(env(safe-area-inset-top), 0.5rem)" }}
@@ -3782,7 +3795,7 @@ export function DiscGolfGame() {
           width={W}
           height={H}
           onPointerDown={onCanvasDown}
-          className="max-h-full max-w-full bg-[#4a8a3a] lg:rounded-lg lg:border lg:border-white/10"
+          className={`max-h-full max-w-full bg-[#4a8a3a] ${sideLayout ? "rounded-lg border border-white/10" : ""}`}
           style={{ imageRendering: "pixelated", touchAction: "none" }}
         />
 
@@ -4513,6 +4526,7 @@ export function DiscGolfGame() {
       {/* Control panel: disc rack + flight/stance/mute — only while in a round */}
       {(screen === "playing" || screen === "holeComplete") && !replayView && (
         <ControlPanel
+          side={sideLayout?.right}
           activeBag={activeBag}
           discIndex={discIndex}
           onSelectDisc={selectDisc}
