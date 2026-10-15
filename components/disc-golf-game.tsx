@@ -71,6 +71,8 @@ import { SettingsPanel } from "./panels/SettingsPanel";
 import { AuthPanel } from "./panels/AuthPanel";
 import { AttractBackdrop } from "./menu/AttractBackdrop";
 import { DailyButton } from "./menu/DailyButton";
+import { BoardNamePrompt } from "./menu/BoardNamePrompt";
+import { postMiniResult, postRoundResult, readBoardChoice, writeBoardChoice, type BoardChoice, type PostOutcome } from "@/lib/leaderboard/post";
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -261,6 +263,16 @@ export function DiscGolfGame() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveErr, setSaveErr] = useState<string | null>(null);
+  // Leaderboard identity: a guest's remembered choice (a name, or Skip), the
+  // open "post under which name?" prompt, and how the last result was handled.
+  const [boardChoice, setBoardChoice] = useState<BoardChoice | null>(null);
+  const [namePrompt, setNamePrompt] = useState<{ error: string | null; resume: (c: BoardChoice) => void } | null>(null);
+  const [postStatus, setPostStatus] = useState<"asking" | "skipped" | null>(null); // round results
+  const [postedAs, setPostedAs] = useState<string | null>(null);
+  const [miniPost, setMiniPost] = useState<PostOutcome | null>(null);
+  // Re-entry points for the name prompt (the posting callbacks resume through these).
+  const saveScoreRef = useRef<(c?: BoardChoice) => Promise<void>>(async () => {});
+  const runMiniPostRef = useRef<(res: { kind: "putt" | "target"; makes: number; best: number; points: number; coins: number }, c: BoardChoice | null, isActive: () => boolean) => Promise<void>>(async () => {});
   const [shareMsg, setShareMsg] = useState<string | null>(null); // transient share/copy confirmation
 
   const screenRef = useRef<Screen>("title");
@@ -637,6 +649,7 @@ export function DiscGolfGame() {
       setDayStars(ds && typeof ds === "object" ? ds : {});
       const dbs = JSON.parse(localStorage.getItem(DAILYBEST_KEY) || "{}");
       setDayBests(dbs && typeof dbs === "object" ? dbs : {});
+      setBoardChoice(readBoardChoice(localStorage));
       const ow = JSON.parse(localStorage.getItem(OWNED_KEY) || "[]");
       ownedRef.current = Array.isArray(ow) ? ow : []; setOwned(ownedRef.current);
       const prof = JSON.parse(localStorage.getItem(PROFILE_KEY) || "null");
@@ -711,6 +724,12 @@ export function DiscGolfGame() {
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
   const [user, setUser] = useState<{ email: string } | null>(null);
+  const userRef = useRef<{ email: string } | null>(null);
+  useEffect(() => { userRef.current = user; }, [user]);
+  // The signed-in session's access token, for posting scores under the account.
+  const sessionToken = useCallback(async () => {
+    try { return (await supa?.auth.getSession())?.data.session?.access_token ?? null; } catch { return null; }
+  }, [supa]);
   const [authOpen, setAuthOpen] = useState(false);
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
@@ -1013,7 +1032,7 @@ export function DiscGolfGame() {
     try {
       ghostRef.current = m === "course" || m === "winthrop" || m === "olympus" ? JSON.parse(localStorage.getItem(`discgolf.ghost.${m}`) || "null") : null;
     } catch { ghostRef.current = null; }
-    setSaved(false);
+    setSaved(false); setPostStatus(null);
     setSaveErr(null);
     setIsNewBest(false);
     setNewAchievements([]);
@@ -1105,7 +1124,7 @@ export function DiscGolfGame() {
       mode: "ranked", skill: IDENTITY_MODS, seed, roundHoles, ...freshHole(roundHoles[0]),
     };
     ghostRef.current = null;
-    setSaved(false);
+    setSaved(false); setPostStatus(null);
     setSaveErr(null);
     setIsNewBest(false);
     setNewAchievements([]);
@@ -1166,7 +1185,7 @@ export function DiscGolfGame() {
       seed, roundHoles, ...freshHole(roundHoles[0]),
     };
     ghostRef.current = null;
-    setSaved(false);
+    setSaved(false); setPostStatus(null);
     setSaveErr(null);
     setIsNewBest(false);
     setNewAchievements([]);
@@ -1229,7 +1248,7 @@ export function DiscGolfGame() {
     try {
       ghostRef.current = snap.mode === "course" || snap.mode === "winthrop" || snap.mode === "olympus" ? JSON.parse(localStorage.getItem(`discgolf.ghost.${snap.mode}`) || "null") : null;
     } catch { ghostRef.current = null; }
-    setSaved(false);
+    setSaved(false); setPostStatus(null);
     setSaveErr(null);
     setIsNewBest(false);
     setNewAchievements([]);
@@ -1265,7 +1284,7 @@ export function DiscGolfGame() {
       mode: m, skill: IDENTITY_MODS, seed, roundHoles, practice: true, practiceHole: holeIdx + 1, ...freshHole(roundHoles[0]),
     };
     ghostRef.current = null;
-    setSaved(false);
+    setSaved(false); setPostStatus(null);
     setSaveErr(null);
     setIsNewBest(false);
     setNewAchievements([]);
@@ -1305,25 +1324,36 @@ export function DiscGolfGame() {
   }, [muted, musicVolume, syncHud, equipForMini]);
 
   // When a practice mini ends, post the result to its global board (putts made /
-  // accuracy points) under the profile name, then load that board to show it on
-  // the results card. Re-runs each time a new result appears.
+  // accuracy points), then load that board for the results card. Guests are
+  // asked once for a name (or Skip, which posts nothing); signed-in players post
+  // under their account. Re-runs each time a new result appears.
+  const runMiniPost = useCallback(async (res: NonNullable<typeof miniResult>, choice: BoardChoice | null, isActive: () => boolean) => {
+    setMiniSaving(true);
+    let out: PostOutcome;
+    try {
+      out = await postMiniResult(res, { signedIn: !!userRef.current, accountName: profileRef.current?.name ?? "", choice, getToken: sessionToken }, submitMiniScore);
+    } catch { out = { status: "error", error: "Couldn't save the score — please try again.", reserved: false }; }
+    if (!isActive()) return;
+    setMiniPost(out);
+    if (out.status === "ask" || (out.status === "error" && out.reserved)) {
+      if (out.status === "error") { writeBoardChoice(localStorage, null); setBoardChoice(null); }
+      setNamePrompt({ error: out.status === "error" ? out.error : null, resume: (c) => void runMiniPostRef.current(res, c, isActive) });
+    }
+    const lb = await getMiniLeaderboard(res.kind).catch(() => [] as ArcadeScore[]);
+    if (!isActive()) return;
+    setMiniBoard(lb);
+    setMiniSaving(false);
+  }, [sessionToken]);
+  useEffect(() => { runMiniPostRef.current = runMiniPost; }, [runMiniPost]);
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    if (!miniResult) { setMiniBoard([]); setMiniSaving(false); return; }
+    if (!miniResult) { setMiniBoard([]); setMiniSaving(false); setMiniPost(null); return; }
     let active = true;
-    const kind = miniResult.kind;
-    const score = kind === "putt" ? miniResult.makes : miniResult.points;
     setMiniBoard([]);
-    setMiniSaving(true);
-    (async () => {
-      try { await submitMiniScore(profileRef.current?.name?.trim() || "Player", score, kind); } catch { /* leave it; still show the board */ }
-      const lb = await getMiniLeaderboard(kind).catch(() => [] as ArcadeScore[]);
-      if (!active) return;
-      setMiniBoard(lb);
-      setMiniSaving(false);
-    })();
+    setMiniPost(null);
+    void runMiniPost(miniResult, readBoardChoice(localStorage), () => active);
     return () => { active = false; };
-  }, [miniResult]);
+  }, [miniResult, runMiniPost]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   // Hot-seat pass-and-play: 2-4 players take turns playing each hole on one
@@ -1351,7 +1381,7 @@ export function DiscGolfGame() {
       ...freshHole(roundHoles[0]),
     };
     ghostRef.current = null;
-    setSaved(false);
+    setSaved(false); setPostStatus(null);
     setSaveErr(null);
     setIsNewBest(false);
     setNewAchievements([]);
@@ -1400,7 +1430,7 @@ export function DiscGolfGame() {
       ...freshHole(roundHoles[0]),
     };
     ghostRef.current = null;
-    setSaved(false);
+    setSaved(false); setPostStatus(null);
     setSaveErr(null);
     setIsNewBest(false);
     setNewAchievements([]);
@@ -2096,9 +2126,10 @@ export function DiscGolfGame() {
     setScreen("title");
   }, [leaveLobby, applyAccountLook]);
 
-  // Submit the finished round to the per-course leaderboard under the player's
-  // profile name (auto-triggered when the results screen shows).
-  const saveScore = useCallback(async () => {
+  // Submit the finished round to its leaderboard (auto-triggered when the
+  // results screen shows). Signed-in players post under their account; guests
+  // post under their chosen name, are asked once, or skipped.
+  const saveScore = useCallback(async (choiceOverride?: BoardChoice) => {
     if (saving || saved) return;
     setSaving(true);
     setSaveErr(null);
@@ -2108,11 +2139,20 @@ export function DiscGolfGame() {
       const isRanked = finalMode === "ranked";
       const course = isRanked ? RANKED_BOARD_KEY : leaderboardCourse(finalMode, finalSeed);
       const strokes = isRanked ? encodeToParScore(finalTotal - finalPars.reduce((s, n) => s + n, 0)) : finalTotal;
-      const res = await submitArcadeScore(profile.name.trim() || "Player", strokes, course);
-      if (!res.ok) {
-        setSaveErr(res.error ?? "Save failed");
+      const out = await postRoundResult(
+        { strokes, course },
+        { signedIn: !!user, accountName: profile.name, choice: choiceOverride ?? readBoardChoice(localStorage), getToken: sessionToken },
+        submitArcadeScore,
+      );
+      if (out.status === "ask" || (out.status === "error" && out.reserved)) {
+        if (out.status === "error") { writeBoardChoice(localStorage, null); setBoardChoice(null); }
+        setPostStatus("asking");
+        setNamePrompt({ error: out.status === "error" ? out.error : null, resume: (c) => { setPostStatus(null); void saveScoreRef.current(c); } });
         return;
       }
+      if (out.status === "skipped") { setPostStatus("skipped"); return; }
+      if (out.status === "error") { setSaveErr(out.error); return; }
+      setPostedAs(out.as);
       setSaved(true);
       if (!isRanked) {
         const lb = await getArcadeLeaderboard(course);
@@ -2123,16 +2163,34 @@ export function DiscGolfGame() {
     } finally {
       setSaving(false);
     }
-  }, [saving, saved, profile.name, finalTotal, finalMode, finalSeed, finalPars]);
+  }, [saving, saved, user, profile.name, finalTotal, finalMode, finalSeed, finalPars, sessionToken]);
+  useEffect(() => { saveScoreRef.current = saveScore; }, [saveScore]);
 
   // Auto-save the round to the leaderboard when the results screen appears
-  // (skips practice / pass-&-play / online matches).
+  // (skips practice / pass-&-play / online matches, and a pending or skipped ask).
   useEffect(() => {
     if (screen !== "gameComplete") return;
     if (finalPracticeHole != null || finalParty || finalOnline) return;
-    if (saved || saving) return;
+    if (saved || saving || postStatus) return;
     void saveScore();
-  }, [screen, finalPracticeHole, finalParty, finalOnline, saved, saving, saveScore]);
+  }, [screen, finalPracticeHole, finalParty, finalOnline, saved, saving, postStatus, saveScore]);
+
+  // The guest answered the name prompt: remember it and carry on posting.
+  const answerNamePrompt = useCallback((c: BoardChoice) => {
+    writeBoardChoice(localStorage, c);
+    setBoardChoice(c);
+    const p = namePrompt;
+    setNamePrompt(null);
+    p?.resume(c);
+  }, [namePrompt]);
+  // "Post my scores" after an earlier Skip: forget the Skip and ask again.
+  const reaskBoardName = useCallback((resume: (c: BoardChoice) => void) => {
+    writeBoardChoice(localStorage, null);
+    setBoardChoice(null);
+    setNamePrompt({ error: null, resume });
+  }, []);
+  // The name the boards show for this player (highlights "my" row).
+  const myBoardName = user ? (profile.name.trim() || "Player") : boardChoice?.kind === "name" ? boardChoice.name : null;
 
   // Share a challenge link that replays this exact round (mode + seed).
   // Render the finished round to an image and share it (or download as fallback).
@@ -4111,6 +4169,17 @@ export function DiscGolfGame() {
 
         {tutorialOpen && <TutorialPanel onClose={() => setTutorialOpen(false)} />}
 
+        {namePrompt && (
+          <BoardNamePrompt
+            initialName={profile.name.trim()}
+            error={namePrompt.error}
+            canSignIn={!!supa && !user}
+            onPost={(name) => answerNamePrompt({ kind: "name", name })}
+            onSkip={() => answerNamePrompt({ kind: "skip" })}
+            onSignIn={() => { setNamePrompt(null); setPostStatus(null); openSignIn(); }}
+          />
+        )}
+
         {statsOpen && <StatsPanel onClose={() => setStatsOpen(false)} />}
 
         {boardsOpen && <LeaderboardPanel onClose={() => setBoardsOpen(false)} />}
@@ -4509,7 +4578,7 @@ export function DiscGolfGame() {
               ) : (
                 <ol>
                   {miniBoard.slice(0, 8).map((row, i) => {
-                    const mine = row.name === (profile.name.trim() || "Player");
+                    const mine = myBoardName != null && row.name === myBoardName;
                     return (
                       <li
                         key={`${row.name}-${row.created_at}`}
@@ -4524,6 +4593,14 @@ export function DiscGolfGame() {
                 </ol>
               )}
             </div>
+            {miniPost?.status === "posted" && <p className="text-center text-[#36D7B7] text-xs font-semibold">Posted as {miniPost.as} ✓</p>}
+            {miniPost?.status === "skipped" && (
+              <p className="text-center text-gray-400 text-xs">
+                Not posted (you chose Skip).{" "}
+                <button type="button" onClick={() => reaskBoardName((c) => void runMiniPost(miniResult, c, () => true))} className="text-[#36D7B7] font-semibold hover:underline">Post my scores</button>
+              </p>
+            )}
+            {miniPost?.status === "error" && !miniPost.reserved && <p className="text-center text-red-400 text-xs">{miniPost.error}</p>}
             <div className="flex flex-col gap-2 pt-1">
               <button type="button" onClick={() => startMini(miniResult.kind)} className={`${btn} w-full`}>↻ Play again</button>
               <button type="button" onClick={() => { audioRef.current?.stopMusic(); setMiniResult(null); }} className="w-full bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white font-bold py-3 rounded-lg transition">🏠 Done</button>
@@ -4753,9 +4830,16 @@ export function DiscGolfGame() {
                 practice rounds skip all of it. */}
             {finalPracticeHole == null && !finalParty && !finalOnline && (<>
             {saved ? (
-              <p className="text-center text-[#36D7B7] text-sm font-semibold">Saved to the leaderboard as {profile.name.trim() || "Player"} ✓</p>
+              <p className="text-center text-[#36D7B7] text-sm font-semibold">Saved to the leaderboard as {postedAs ?? myBoardName} ✓</p>
+            ) : postStatus === "skipped" ? (
+              <p className="text-center text-gray-400 text-sm">
+                Not posted (you chose Skip).{" "}
+                <button type="button" onClick={() => reaskBoardName((c) => { setPostStatus(null); void saveScore(c); })} className="text-[#36D7B7] font-semibold hover:underline">Post my scores</button>
+              </p>
+            ) : postStatus === "asking" ? (
+              <p className="text-center text-gray-400 text-sm">Choose a leaderboard name to post this round.</p>
             ) : saveErr ? (
-              <button type="button" onClick={saveScore} disabled={saving}
+              <button type="button" onClick={() => void saveScore()} disabled={saving}
                 className="w-full bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white text-sm font-semibold py-2 rounded-lg transition disabled:opacity-50">
                 {saving ? "Saving…" : "Retry save"}
               </button>
@@ -4791,7 +4875,7 @@ export function DiscGolfGame() {
               ) : (
                 <ol>
                   {leaderboard.slice(0, 10).map((row, i) => {
-                    const mine = row.name === (profile.name.trim() || "Player");
+                    const mine = myBoardName != null && row.name === myBoardName;
                     return (
                       <li
                         key={`${row.name}-${row.created_at}`}
