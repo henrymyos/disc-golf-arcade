@@ -8,7 +8,7 @@ import {
 import type { ArcadeScore } from "@/lib/arcade-types";
 import { getSupabase } from "@/lib/supabase/browser";
 import {
-  BEST_KEY, WBEST_KEY, OBEST_KEY, HOLEBEST_KEY, SETTINGS_KEY, ACH_KEY, HIST_KEY, CAREER_KEY, CAREERS_KEY, CAREER_SLOTS, COINS_KEY, DAILY_KEY, OWNED_KEY, PROFILE_KEY, RANKED_KEY, BAG_KEY, BAGSEEN_KEY, LEVELREWARD_KEY, DAILYSTARS_KEY, COINSEARNED_KEY, COINSSPENT_KEY, UPDATEDAT_KEY, readLocalProgress, applyProgress, mergeProgress, clearLocalProgress, trimDailyStars, type Progress,
+  BEST_KEY, WBEST_KEY, OBEST_KEY, HOLEBEST_KEY, SETTINGS_KEY, ACH_KEY, HIST_KEY, CAREER_KEY, CAREERS_KEY, CAREER_SLOTS, COINS_KEY, DAILY_KEY, OWNED_KEY, PROFILE_KEY, RANKED_KEY, BAG_KEY, BAGSEEN_KEY, LEVELREWARD_KEY, DAILYSTARS_KEY, DAILYBEST_KEY, COINSEARNED_KEY, COINSSPENT_KEY, UPDATEDAT_KEY, readLocalProgress, applyProgress, mergeProgress, clearLocalProgress, trimDailyStars, trimDailyBests, type Progress,
 } from "@/lib/progress";
 import {
   dayNumber, claimDailyReward, dailyAvailable, coinsForRound, modeCoinMult, fmtCoins, dailyStarCoins, type DailyReward,
@@ -53,7 +53,7 @@ import {
   CHALLENGE_COURSES, challengeKey, FIXED_COURSES, TOUR_COURSE_INFOS, type CourseInfo,
 } from "./game/courses";
 import { themeInk, treeStyleFor, drawBasket, drawTree, drawTrail, drawWeather } from "./game/draw";
-import { titleCard, Coin, hubCard, titleCardSm, GoalStar, Overlay, btn, ordinal } from "./panels/ui";
+import { Coin, hubCard, titleCardSm, GoalStar, Overlay, btn, ordinal } from "./panels/ui";
 import { ChallengePanel, PartyPanel, LobbyPanel } from "./panels/OnlinePanels";
 import { HolePracticePicker } from "./panels/HolePracticePicker";
 import { TutorialPanel } from "./panels/TutorialPanel";
@@ -69,6 +69,8 @@ import { RankedPanel, PlacementReveal, PlacementDots } from "./panels/RankedPane
 import { ChallengesPanel } from "./panels/ChallengesPanel";
 import { SettingsPanel } from "./panels/SettingsPanel";
 import { AuthPanel } from "./panels/AuthPanel";
+import { AttractBackdrop } from "./menu/AttractBackdrop";
+import { DailyButton } from "./menu/DailyButton";
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -103,12 +105,10 @@ export function DiscGolfGame() {
   const audioRef = useRef<AudioEngine | null>(null);
   const rafRef = useRef<number>(0);
 
-  // First load shows a "landing" front door (Play offline / Log in). An effect
-  // skips it for returning visitors (and when auth isn't even configured). The
-  // static initial value keeps SSR/CSR markup identical — the flag is read in an
-  // effect, never during render. Until that effect resolves which door to open,
-  // `entryResolved` stays false and we paint a neutral splash (logo only) instead
-  // of the landing buttons, so returning players never flash past the login page.
+  // Everyone starts on the menu as a guest; signing in is optional (the "Sign in
+  // to sync" chip and the profile panel). The static initial value keeps SSR/CSR
+  // markup identical; an effect moves to the title after mount, and until then
+  // `entryResolved` is false and we paint a neutral splash (logo only).
   const [screen, setScreen] = useState<Screen>("landing");
   const [entryResolved, setEntryResolved] = useState(false);
   const [muted, setMuted] = useState(false);
@@ -252,6 +252,7 @@ export function DiscGolfGame() {
   const [finalDailyStars, setFinalDailyStars] = useState<{ earned: number; best: number; thresholds: [number, number, number]; coins: number } | null>(null);
   // Daily-Challenge stars by day index (persisted; per-day best of 1–3).
   const [dayStars, setDayStars] = useState<Record<string, number>>({});
+  const [dayBests, setDayBests] = useState<Record<string, number>>({}); // day → best to-par on that day's own Daily
   const [bestScore, setBestScore] = useState<number | null>(null);
   const [winthropBest, setWinthropBest] = useState<number | null>(null);
   const [olympusBest, setOlympusBest] = useState<number | null>(null);
@@ -634,6 +635,8 @@ export function DiscGolfGame() {
       setToday(dayNumber(Date.now()));
       const ds = JSON.parse(localStorage.getItem(DAILYSTARS_KEY) || "{}");
       setDayStars(ds && typeof ds === "object" ? ds : {});
+      const dbs = JSON.parse(localStorage.getItem(DAILYBEST_KEY) || "{}");
+      setDayBests(dbs && typeof dbs === "object" ? dbs : {});
       const ow = JSON.parse(localStorage.getItem(OWNED_KEY) || "[]");
       ownedRef.current = Array.isArray(ow) ? ow : []; setOwned(ownedRef.current);
       const prof = JSON.parse(localStorage.getItem(PROFILE_KEY) || "null");
@@ -700,18 +703,12 @@ export function DiscGolfGame() {
 
   // ── Optional login + cloud progress (Supabase, the arcade_progress table) ──
   const supa = getSupabase();
-  // Skip the landing front door for returning visitors, or when auth isn't
-  // configured (then there's no "log in" choice to offer).
+  // Guest-first: open straight to the title menu (no login gate).
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    let skip = !supa;
-    try { if (localStorage.getItem(ENTRY_KEY)) skip = true; } catch { /* ignore */ }
-    // Returning visitors (or builds without auth) open straight to the title;
-    // only genuine newcomers see the landing choice. Marking the entry resolved
-    // swaps the splash out for whichever door we picked.
-    if (skip) setScreen((s) => (s === "landing" ? "title" : s));
+    setScreen((s) => (s === "landing" ? "title" : s));
     setEntryResolved(true);
-  }, [supa]);
+  }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
   const [user, setUser] = useState<{ email: string } | null>(null);
   const [authOpen, setAuthOpen] = useState(false);
@@ -894,10 +891,10 @@ export function DiscGolfGame() {
     if (!supa) return;
     await supa.auth.signOut();
     setUser(null);
-    // Leaving the account wipes THIS DEVICE'S copy so the next "Play offline" or
+    // Leaving the account wipes THIS DEVICE'S copy so the next guest session or
     // sign-up starts a fresh account (the cloud keeps the signed-out account's
     // data — logging back in restores it). Device settings are kept. Reload so
-    // every in-memory value resets cleanly and we land on the front door.
+    // every in-memory value resets cleanly and we land on the menu as a guest.
     try {
       localStorage.removeItem(ENTRY_KEY);
       [RESUME_KEY, TOURN_KEY, TOURBEST_KEY, TOURNBEST_KEY].forEach((k) => localStorage.removeItem(k));
@@ -906,12 +903,9 @@ export function DiscGolfGame() {
     if (typeof location !== "undefined") location.reload();
   }, [supa]);
 
-  // Front-door choice: remember it and enter the game (opening the login panel
-  // when they picked "Log in / Sign up").
-  const chooseEntry = useCallback((choice: "offline" | "auth") => {
-    try { localStorage.setItem(ENTRY_KEY, choice); } catch { /* ignore */ }
-    setScreen("title");
-    if (choice === "auth") { setAuthErr(null); setAuthMsg(null); setAuthOpen(true); }
+  // Open the sign-in panel (from the "Sign in to sync" chip or the profile).
+  const openSignIn = useCallback(() => {
+    setAuthErr(null); setAuthMsg(null); setAuthOpen(true);
   }, []);
 
   // Persist settings + push the music volume to the live engine.
@@ -1911,6 +1905,14 @@ export function DiscGolfGame() {
         try { localStorage.setItem(DAILYSTARS_KEY, JSON.stringify(map)); } catch { /* ignore */ }
       }
       setDayStars(map);
+      // Today's best to-par (also what the Daily streak counts).
+      let bests: Record<string, number> = {};
+      try { bests = JSON.parse(localStorage.getItem(DAILYBEST_KEY) || "{}") ?? {}; } catch { /* ignore */ }
+      if (bests[g.seed] == null || toPar < bests[g.seed]) {
+        bests = trimDailyBests({ ...bests, [g.seed]: toPar });
+        try { localStorage.setItem(DAILYBEST_KEY, JSON.stringify(bests)); } catch { /* ignore */ }
+      }
+      setDayBests(bests);
       setFinalDailyStars({ earned, best: Math.max(earned, prev), thresholds, coins: starBonus });
     } else {
       setFinalDailyStars(null);
@@ -3702,46 +3704,6 @@ export function DiscGolfGame() {
           </div>
         )}
 
-        {entryResolved && screen === "landing" && (
-          <div className="absolute inset-0 overflow-y-auto rounded-lg bg-gradient-to-b from-[#1c2233] via-[#141926] to-[#0f1117]">
-            <div
-              className="min-h-full flex items-center justify-center px-5"
-              style={{ paddingTop: "max(env(safe-area-inset-top), 0.75rem)", paddingBottom: "max(env(safe-area-inset-bottom), 0.75rem)" }}
-            >
-              <div className="w-full max-w-[290px] flex flex-col items-center text-center py-6">
-                <svg width="56" height="56" viewBox="0 0 32 32" aria-hidden className="drop-shadow">
-                  <g stroke="#2a7d70" strokeWidth="2" strokeLinecap="round">
-                    <line x1="2" y1="12.5" x2="8" y2="12.5" /><line x1="1" y1="18" x2="7" y2="18" />
-                  </g>
-                  <ellipse cx="18.5" cy="16.5" rx="11" ry="5" fill="#1f9e8c" />
-                  <ellipse cx="18.5" cy="14.8" rx="11" ry="5" fill="#36D7B7" />
-                  <ellipse cx="18.5" cy="14" rx="6.5" ry="2.4" fill="#5fe6d2" />
-                </svg>
-                <h1 className="text-white font-black text-[28px] leading-tight tracking-tight mt-3">
-                  Disc Golf <span className="text-[#36D7B7]">Arcade</span>
-                </h1>
-                <p className="text-gray-300 text-sm mt-2 font-medium">How do you want to play?</p>
-
-                <div className="w-full flex flex-col gap-2.5 mt-6">
-                  <button type="button" onClick={() => chooseEntry("offline")} className={titleCard}>
-                    Play offline
-                  </button>
-                  {supa && (
-                    <button type="button" onClick={() => chooseEntry("auth")} className={titleCard}>
-                      👤 Log in / Sign up
-                    </button>
-                  )}
-                </div>
-                <p className="text-gray-500 text-[11px] mt-4 leading-snug">
-                  {supa
-                    ? "Offline saves to this device. Log in to sync your bag, coins and bests across devices — you can switch anytime from the menu."
-                    : "Your scores save right here on this device."}
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
         {screen === "title" && (
           <>
           {/* Settings gear — top-right on every title hub (wherever the logo + profile show) */}
@@ -3759,8 +3721,9 @@ export function DiscGolfGame() {
             ⚙
           </button>
           <div className="absolute inset-0 overflow-y-auto rounded-lg bg-gradient-to-b from-[#1c2233] via-[#141926] to-[#0f1117]">
+            <AttractBackdrop />
             <div
-              className="min-h-full flex items-start justify-center px-5"
+              className="relative min-h-full flex items-start justify-center px-5"
               style={{ paddingTop: "max(env(safe-area-inset-top), 1.5rem)", paddingBottom: "max(env(safe-area-inset-bottom), 0.75rem)" }}
             >
             <div className="w-full max-w-[300px] flex flex-col items-center text-center pt-1 pb-4">
@@ -3783,10 +3746,11 @@ export function DiscGolfGame() {
               {(() => {
                 const lvl = levelFromXp(playerXp(roundsPlayed, unlocked.length, discsOwned));
                 return (
+                  <div className="w-full mt-7 flex items-stretch gap-2">
                   <button
                     type="button"
                     onClick={() => setProfileOpen(true)}
-                    className="w-full mt-7 flex items-center gap-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 px-3 py-2 transition text-left"
+                    className="min-w-0 flex-1 flex items-center gap-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 px-3 py-2 transition text-left"
                   >
                     <span className="text-2xl leading-none shrink-0">{profile.avatar || DEFAULT_AVATAR}</span>
                     <div className="min-w-0 flex-1">
@@ -3799,6 +3763,18 @@ export function DiscGolfGame() {
                       </div>
                     </div>
                   </button>
+                  {/* Optional account: sign in to sync across devices. Guests play
+                      everything; this is the only place the menu asks. */}
+                  {supa && !user && (
+                    <button
+                      type="button"
+                      onClick={openSignIn}
+                      className="shrink-0 rounded-xl border border-[#36D7B7]/40 bg-[#36D7B7]/10 hover:bg-[#36D7B7]/20 px-2.5 text-[11px] font-bold leading-tight text-[#36D7B7] transition"
+                    >
+                      ☁ Sign in<br />to sync
+                    </button>
+                  )}
+                  </div>
                 );
               })()}
 
@@ -3840,7 +3816,7 @@ export function DiscGolfGame() {
                   onClick={() => startResume(resumeBanner)}
                   className="w-full rounded-xl border border-[#36D7B7]/60 bg-[#36D7B7]/15 hover:bg-[#36D7B7]/25 text-white font-bold py-3 px-3 mt-4 transition text-sm"
                 >
-                  ↻ Resume {resumeBanner.mode === "course" ? "Glendoveer" : resumeBanner.mode === "winthrop" ? "Winthrop Lake" : resumeBanner.mode === "olympus" ? "Olympus" : resumeBanner.mode === "tour" ? tourVenue(resumeBanner.seed) : resumeBanner.mode === "ranked" ? "Ranked" : "round"} · hole {resumeBanner.scores.length + 1}
+                  ↻ Continue round · {resumeBanner.mode === "course" ? "Glendoveer" : resumeBanner.mode === "winthrop" ? "Winthrop Lake" : resumeBanner.mode === "olympus" ? "Olympus" : resumeBanner.mode === "tour" ? tourVenue(resumeBanner.seed) : resumeBanner.mode === "ranked" ? "Ranked" : "round"} · hole {resumeBanner.scores.length + 1}
                 </button>
               )}
 
@@ -3872,6 +3848,12 @@ export function DiscGolfGame() {
               {hub === "home" && (
                 <>
                   <div className={`w-full flex flex-col gap-3 ${menuTopMargin}`}>
+                    <DailyButton
+                      stars={todayStars}
+                      best={today ? (dayBests[today] ?? null) : null}
+                      streak={0}
+                      onPlay={() => startGame("daily")}
+                    />
                     <button type="button" onClick={() => setHub("solo")} className={hubCard}>
                       <span className="font-black text-lg">Single Player</span>
                     </button>

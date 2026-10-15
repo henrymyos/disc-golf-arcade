@@ -129,6 +129,27 @@ describe("mergeProgress — Daily Challenge stars", () => {
   });
 });
 
+describe("mergeProgress — Daily bests (streak source)", () => {
+  it("keeps each day's lowest to-par and the union of days", () => {
+    const a: Progress = { ...base, dailyBests: { "20600": 2, "20601": -1 } };
+    const b: Progress = { ...base, dailyBests: { "20600": -3, "20602": 0 } };
+    expect(mergeProgress(a, b).dailyBests).toEqual({ "20600": -3, "20601": -1, "20602": 0 });
+  });
+
+  it("keeps a 0 (even par) rather than treating it as missing", () => {
+    const m = mergeProgress({ ...base, dailyBests: { "20600": 0 } }, { ...base, dailyBests: { "20600": 4 } });
+    expect(m.dailyBests).toEqual({ "20600": 0 });
+  });
+
+  it("trims to the most recent 400 days", () => {
+    const many: Record<string, number> = {};
+    for (let d = 20000; d < 20500; d++) many[d] = 1;
+    const days = Object.keys(mergeProgress({ ...base, dailyBests: many }, base).dailyBests ?? {}).map(Number);
+    expect(days).toHaveLength(400);
+    expect(Math.min(...days)).toBe(20100);
+  });
+});
+
 describe("mergeProgress — career slots", () => {
   const car = (season: number) => ({ season, results: [], careerPoints: 0 }) as unknown as NonNullable<Progress["career"]>;
 
