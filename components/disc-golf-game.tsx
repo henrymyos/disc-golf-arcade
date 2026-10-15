@@ -71,6 +71,8 @@ import { SettingsPanel } from "./panels/SettingsPanel";
 import { AuthPanel } from "./panels/AuthPanel";
 import { AttractBackdrop } from "./menu/AttractBackdrop";
 import { DailyButton } from "./menu/DailyButton";
+import { NextGoalCard, GoalToast } from "./menu/NextGoal";
+import { useNextGoal } from "./menu/useNextGoal";
 import { BoardNamePrompt } from "./menu/BoardNamePrompt";
 import { ControlPanel } from "./play/ControlPanel";
 import { RoundSidebar } from "./play/RoundSidebar";
@@ -91,6 +93,7 @@ export function DiscGolfGame() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const stateRef = useRef<GameState | null>(null);
   const keysRef = useRef<Set<string>>(new Set());
+  const [roundSerial, setRoundSerial] = useState(0); // +1 per recorded full round (goal toasts)
   const playAreaRef = useRef<HTMLDivElement | null>(null); // the board's container (sizing + letterbox colour)
   // Dev-only probe: the power the ring was last drawn at (headless checks read it).
   const powerRingDebugRef = useRef<{ drawn: number; at: number } | null>(null);
@@ -1924,6 +1927,7 @@ export function DiscGolfGame() {
       roundsPlayedRef.current = hist.length;
       setRoundsPlayed(hist.length);
       setHistory(trimmed);
+      setRoundSerial((n) => n + 1); // a finished round may complete the menu's Next goal
 
       const earned = earnedAchievements(scores, pars, mode, hist.length);
       const fresh = earned.filter((id) => !unlockedRef.current.includes(id));
@@ -3747,6 +3751,13 @@ export function DiscGolfGame() {
   // stars already banked today — for the Daily Challenge menu card. Deferred to
   // the Single Player page so the daily hole pool isn't built on first paint.
   const todayStars = today ? (dayStars[today] ?? 0) : 0;
+  // ── Next goal + Daily streak (components/menu/useNextGoal) ──
+  const playGoalSound = useCallback(() => { audioRef.current?.sfx("win"); vibrate([15, 30, 15]); }, []);
+  const { goal, streak, toast: goalToast } = useNextGoal({
+    roundsPlayed, unlocked, owned, discsOwned, history, todayStars, today, dayBests, dayStars, roundSerial,
+    onComplete: playGoalSound,
+  });
+
   // In a round (not a replay): the desktop three-column layout applies.
   const inRoundLayout = (screen === "playing" || screen === "holeComplete") && !replayView;
   const todayGoals = useMemo(() => (hub === "solo" && today ? dailyStarThresholds(today) : null), [hub, today]);
@@ -3948,9 +3959,10 @@ export function DiscGolfGame() {
                     <DailyButton
                       stars={todayStars}
                       best={today ? (dayBests[today] ?? null) : null}
-                      streak={0}
+                      streak={streak}
                       onPlay={() => startGame("daily")}
                     />
+                    {goal && <NextGoalCard goal={goal} />}
                     <button type="button" onClick={() => setHub("solo")} className={hubCard}>
                       <span className="font-black text-lg">Single Player</span>
                     </button>
@@ -4207,6 +4219,8 @@ export function DiscGolfGame() {
         })()}
 
         {tutorialOpen && <TutorialPanel onClose={() => setTutorialOpen(false)} />}
+
+        {goalToast && <GoalToast goal={goalToast} />}
 
         {namePrompt && (
           <BoardNamePrompt
