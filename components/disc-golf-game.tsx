@@ -1005,7 +1005,7 @@ export function DiscGolfGame() {
       scores: g.roundHoles.map((_, i) => (typeof g.scores[i] === "number" ? g.scores[i] : null)),
       pars: g.roundHoles.map((h) => h.par),
       // For the desktop side column (same numbers the canvas HUD draws).
-      pinFt: pxToFeet(distBetween(g.rest, hole.basket)),
+      pinFt: g.phase === "holed" ? 0 : pxToFeet(distBetween(g.rest, hole.basket)),
       holeFt: pxToFeet(distBetween(hole.tee, hole.basket)),
       windMph: Math.round(((hole.windMag ?? 0) / 0.018) * 15),
       windAng: Math.atan2(hole.wind?.y ?? 0, hole.wind?.x ?? 0),
@@ -2572,6 +2572,7 @@ export function DiscGolfGame() {
           audioRef.current?.sfx("basket");
           vibrate([15, 30, 15]);
           rattleRef.current = performance.now();
+          syncHud(); // in the basket: 0 ft to the pin
           const under = g.throws < hole.par;
           // Equipped hole-out celebration: a bigger pop when you're under par.
           const cel = cosmeticByKey(CELEBRATIONS, celebrationRef.current) ?? CELEBRATIONS[0];
@@ -2638,6 +2639,7 @@ export function DiscGolfGame() {
           g.angle = aimAt(g.rest, hole.basket); // auto-aim at the basket
           g.phase = "aim";
           equipForLie(); // re-club for the new lie
+          syncHud(); // the new lie: distance to the pin for the side column
         }
       } else if (g.phase === "holed") {
         if (g.holedAt && performance.now() - g.holedAt > 850) {
@@ -3542,7 +3544,7 @@ export function DiscGolfGame() {
         if (g.party) hudItem("UP", g.party.names[g.party.current].slice(0, 8), "#f5d24a");
         hudItem("HOLE", g.party ? `${g.holeIndex + 1}/${g.roundHoles.length}` : g.practice ? `P${g.practiceHole}` : `${g.holeIndex + 1}/${g.roundHoles.length}`, "#ffffff");
         hudItem("PAR", `${hole.par}`, "#ffffff");
-        hudItem("PIN", `${pxToFeet(distBetween(g.rest, hole.basket))}ft`, "#9cc4e8");
+        hudItem("PIN", `${g.phase === "holed" ? 0 : pxToFeet(distBetween(g.rest, hole.basket))}ft`, "#9cc4e8");
         hudItem("THR", `${g.throws}`, "#ffffff");
         hudItem("TO PAR", overStr, over < 0 ? "#36D7B7" : over > 0 ? "#e08a3b" : "#cbd5e1");
       }
