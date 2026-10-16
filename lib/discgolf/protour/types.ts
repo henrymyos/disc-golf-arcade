@@ -27,6 +27,9 @@ export type ProHole = {
   dropZone?: FtPt; // the book's main DZ only (one per hole)
   walls?: { x: number; y: number; w: number }[]; // fences / gates that block at any height
   keyTrees?: { x: number; y: number; r: number }[]; // only trees the book makes matter
+  // Approach trees added to balance scoring against the existing tour courses
+  // (not from the book; kept apart from keyTrees so the two never get confused).
+  balanceTrees?: { x: number; y: number; r: number }[];
   trees: "open" | "mixed" | "wooded"; // tree density → treeMul 0.6 / 1 / 1.5
   elev?: number; // −2..+2 (uphill +)
   elevZones?: { to: number; elev: number }[]; // slope that changes along the hole

@@ -563,7 +563,7 @@ function proHoleToHole(h: ProHole): Hole {
     fairway: line,
     fairways: h.islands?.map((f) => f.map(px)),
     fwWidth: h.widthFt / FEET_PER_PX,
-    trees: (h.keyTrees ?? []).map((t) => ({ ...px(t), r: t.r / FEET_PER_PX })),
+    trees: [...(h.keyTrees ?? []), ...(h.balanceTrees ?? [])].map((t) => ({ ...px(t), r: t.r / FEET_PER_PX })),
     water: (h.water ?? []).map(rect),
     hazard: (h.hazard ?? []).map((z) => { const c = px(z), d = z.d / FEET_PER_PX; return { x: c.x - d / 2, y: c.y - d / 2, w: d, h: d }; }),
     obZones: h.obZones?.map(rect),

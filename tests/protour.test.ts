@@ -111,7 +111,7 @@ describe.each(COURSES.map((c) => [c.id, c] as const))("%s data matches its caddi
         ...h.line.flatMap((p) => [p.x, p.y]),
         ...[...(h.water ?? []), ...(h.obZones ?? [])].flatMap((r) => [r.x, r.y, r.w, r.h]),
         ...(h.walls ?? []).flatMap((w) => [w.x, w.y, w.w]),
-        ...(h.keyTrees ?? []).flatMap((t) => [t.x, t.y, t.r]),
+        ...[...(h.keyTrees ?? []), ...(h.balanceTrees ?? [])].flatMap((t) => [t.x, t.y, t.r]),
         ...(h.dropZone ? [h.dropZone.x, h.dropZone.y] : []),
       ];
       for (const v of nums) expect(Math.abs(v % 10), `hole ${h.n}: ${v} is not rounded to 10 ft`).toBe(0);
@@ -127,7 +127,7 @@ describe.each(COURSES.map((c) => [c.id, c] as const))("%s data matches its caddi
         expect(inX(r.x) && inX(r.x + r.w) && inY(r.y) && inY(r.y + r.h), `hole ${h.n} rect ${JSON.stringify(r)}`).toBe(true);
       }
       for (const w of h.walls ?? []) expect(inX(w.x) && inX(w.x + w.w) && inY(w.y), `hole ${h.n} wall`).toBe(true);
-      for (const p of [...(h.keyTrees ?? []), ...(h.dropZone ? [h.dropZone] : [])]) expect(inX(p.x) && inY(p.y), `hole ${h.n} point`).toBe(true);
+      for (const p of [...(h.keyTrees ?? []), ...(h.balanceTrees ?? []), ...(h.dropZone ? [h.dropZone] : [])]) expect(inX(p.x) && inY(p.y), `hole ${h.n} point`).toBe(true);
       // …and once converted, everything sits inside worldW × worldH.
       const g = proHoleToHole(h);
       const inside = (x: number, y: number) => x >= 0 && x <= (g.worldW ?? W) && y >= 0 && y <= g.worldH;
