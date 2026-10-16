@@ -26,12 +26,13 @@ import { SEASON_2026, BUILT_COURSE_IDS } from "../lib/discgolf/protour/season202
 import { MAPLE_HILL } from "../lib/discgolf/protour/maple-hill";
 import { BREWSTER_RIDGE } from "../lib/discgolf/protour/brewster-ridge";
 import { IDLEWILD } from "../lib/discgolf/protour/idlewild";
+import { WINTHROP_ARENA } from "../lib/discgolf/protour/winthrop-arena";
 
 const FT = 1.8; // FEET_PER_PX
 
 // The MPO scorecards from the three 2026 caddie books (spec §6), typed in by
 // hand so a data edit can never silently drift from the books.
-const CARDS: Record<string, { par: number[]; ft: number[]; totalPar: number; totalFt: number }> = {
+const CARDS: Record<string, { par: number[]; ft: number[]; pages?: number[]; totalPar: number; totalFt: number }> = {
   "maple-hill": {
     par: [4, 3, 3, 3, 3, 3, 3, 3, 5, 3, 4, 4, 3, 3, 3, 3, 4, 4],
     ft: [868, 381, 407, 277, 262, 385, 422, 364, 950, 327, 855, 710, 472, 445, 322, 476, 730, 640],
@@ -47,8 +48,18 @@ const CARDS: Record<string, { par: number[]; ft: number[]; totalPar: number; tot
     ft: [638, 601, 656, 722, 432, 555, 484, 576, 258, 368, 242, 564, 584, 556, 487, 969, 287, 650],
     totalPar: 68, totalFt: 9629,
   },
+  // Wave 1 (spec addendum disc-golf-arcade-pro-tour-wave1.md).
+  // Winthrop Arena (USDGC), MPO A pins. The holes add up to 9,727 ft; the book's
+  // TOT cell prints 9,728, a rounding artefact of its metre source.
+  "winthrop-arena": {
+    par: [3, 3, 4, 3, 5, 3, 3, 4, 3, 4, 4, 4, 4, 3, 4, 3, 3, 4],
+    ft: [282, 410, 833, 299, 1024, 371, 285, 696, 394, 548, 735, 902, 712, 413, 538, 390, 249, 646],
+    pages: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20],
+    totalPar: 64, totalFt: 9727,
+  },
 };
-const COURSES = [MAPLE_HILL, BREWSTER_RIDGE, IDLEWILD];
+const COURSES = [MAPLE_HILL, BREWSTER_RIDGE, IDLEWILD, WINTHROP_ARENA];
+const PILOT_IDS = ["maple-hill", "brewster-ridge", "idlewild"];
 const lineFt = (h: ProHole) => h.line.reduce((s, p, i) => (i ? s + Math.hypot(p.x - h.line[i - 1].x, p.y - h.line[i - 1].y) : 0), 0);
 
 describe("2026 season list", () => {
@@ -66,8 +77,13 @@ describe("2026 season list", () => {
     expect(SEASON_2026.filter((s) => s.tier === "Major")).toHaveLength(5);
   });
 
-  it("marks exactly the three pilot courses as built", () => {
-    expect([...BUILT_COURSE_IDS].sort()).toEqual(["brewster-ridge", "idlewild", "maple-hill"]);
+  it("marks exactly the built courses (pilot + wave 1) as built", () => {
+    expect([...BUILT_COURSE_IDS].sort()).toEqual(COURSES.map((c) => c.id).sort());
+  });
+
+  it("names the USDGC course Winthrop Arena, as the book and event page do", () => {
+    const usdgc = SEASON_2026.find((s) => s.stop === 22)!;
+    expect(usdgc.courses).toEqual([{ id: "winthrop-arena", name: "Winthrop Arena", built: true }]);
   });
 
   it("never shows a sponsor prefix or a tour mark in an event name", () => {
@@ -93,6 +109,22 @@ describe.each(COURSES.map((c) => [c.id, c] as const))("%s data matches its caddi
       expect(Math.abs(len - h.lengthFt) / h.lengthFt, `hole ${h.n}`).toBeLessThanOrEqual(0.05);
       const b = h.line[h.line.length - 1];
       expect(Math.hypot(b.x, b.y), `hole ${h.n} straight line`).toBeLessThanOrEqual(h.lengthFt);
+    }
+  });
+
+  it("cites the book page for every hole (where the scorecard maps pages) and keeps slopes in range", () => {
+    if (card.pages) expect(course.holes.map((h) => h.ref.page)).toEqual(card.pages);
+    for (const h of course.holes) {
+      if (h.elev != null) expect(Math.abs(h.elev), `hole ${h.n}`).toBeLessThanOrEqual(2);
+      if (h.elevZones) {
+        let prev = 0;
+        for (const z of h.elevZones) {
+          expect(z.to, `hole ${h.n}`).toBeGreaterThan(prev);
+          expect(Math.abs(z.elev), `hole ${h.n}`).toBeLessThanOrEqual(2);
+          prev = z.to;
+        }
+        expect(prev, `hole ${h.n}`).toBe(1);
+      }
     }
   });
 
@@ -143,6 +175,20 @@ describe.each(COURSES.map((c) => [c.id, c] as const))("%s data matches its caddi
       const dz = g.dropZone!;
       for (const r of [...g.water, ...(g.obZones ?? [])]) expect(dz.x > r.x && dz.x < r.x + r.w && dz.y > r.y && dz.y < r.y + r.h, `hole ${h.n}`).toBe(false);
     }
+  });
+});
+
+describe("wave 1 course specifics", () => {
+  it("Winthrop Arena plays the A pins where the book has two, with no drop zone on the island 17", () => {
+    expect(WINTHROP_ARENA.holes.filter((h) => h.layout).map((h) => [h.n, h.layout])).toEqual([[3, "A"], [5, "A"], [13, "A"], [17, "A"]]);
+    const h17 = WINTHROP_ARENA.holes[16];
+    expect(h17.islandGreen).toBe(true);
+    expect(h17.dropZone).toBeUndefined();
+    // the book limits every OB throw to the DZ on these holes
+    expect(WINTHROP_ARENA.holes.filter((h) => h.dropZone).map((h) => h.n)).toEqual([2, 6, 9, 10, 12]);
+    // flat park; hazard rough only on 16, where the yellow lines are the edge
+    for (const h of WINTHROP_ARENA.holes) expect(h.elev ?? 0).toBe(0);
+    expect(WINTHROP_ARENA.holes.filter((h) => h.rough === "hazard").map((h) => h.n)).toEqual([16]);
   });
 });
 
@@ -216,8 +262,19 @@ describe("proHoleToHole (feet → world)", () => {
 });
 
 describe("pro tour courses plug into the tour seed space", () => {
+  it("keeps the pilot courses on their original seeds (saved bests are keyed by seed)", () => {
+    expect(PROTOUR_COURSES.slice(0, 3).map((c) => [c.course.id, c.seed])).toEqual([
+      ["maple-hill", 0x2026c001],
+      ["brewster-ridge", 0x2026c002],
+      ["idlewild", 0x2026c003],
+    ]);
+    expect(PROTOUR_COURSES.slice(0, 3).map((c) => c.course.id)).toEqual(PILOT_IDS);
+    // new courses are appended after the pilot, each on the next seed
+    PROTOUR_COURSES.forEach((c, i) => expect(c.seed).toBe((0x2026c000 + i + 1) >>> 0));
+  });
+
   it("each built course has a reserved seed that resolves to its 18 real holes", () => {
-    expect(PROTOUR_COURSES.map((c) => c.course.id).sort()).toEqual(["brewster-ridge", "idlewild", "maple-hill"]);
+    expect(PROTOUR_COURSES.map((c) => c.course.id).sort()).toEqual(COURSES.map((c) => c.id).sort());
     for (const c of PROTOUR_COURSES) {
       expect(isProTourSeed(c.seed)).toBe(true);
       expect(tourVenue(c.seed)).toBe(c.course.name);
@@ -321,7 +378,10 @@ function botPlay(hole: Hole, maxThrows: number, weak = false): { strokes: number
 // Forced carries a weak arm can't make, exactly as on the real course:
 // Idlewild 4's 240 ft tee pond has no drop zone (re-tee), and Maple Hill 1's
 // pond fills the corridor, so a miss re-throws the ~180 ft carry from the DZ.
-const FORCED_CARRY: Record<string, number[]> = { "maple-hill": [1], idlewild: [4] };
+// Winthrop Arena 9 flies an OB field to a shelf green; the book's walk-around
+// to the right exists (the bot below holes out), but this greedy weak bot only
+// measures progress along the centerline, so it never takes the detour.
+const FORCED_CARRY: Record<string, number[]> = { "maple-hill": [1], idlewild: [4], "winthrop-arena": [9] };
 
 describe.each(PROTOUR_COURSES.map((c) => [c.course.id, c] as const))("%s is playable end to end", (_id, c) => {
   it("a bot holes out on all 18 holes (real physics and wind)", () => {
