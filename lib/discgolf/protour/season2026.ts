@@ -40,7 +40,7 @@ export const SEASON_2026: ProStop[] = [
   { stop: 15, event: "Ledgestone Open", tier: "Elite+", dates: "Jul 30–Aug 2", city: "Peoria, IL", pdgaEventUrl: pdga(96414), courses: [c("eureka-lake", "Eureka Lake"), c("sunset-hills", "Sunset Hills"), c("northwood-black", "Northwood Black")] },
   { stop: 16, event: "Discmania Challenge", tier: "Elite", dates: "Aug 7–9", city: "Indianola, IA", pdgaEventUrl: pdga(96415), courses: [c("pickard-park", "Pickard Park")] },
   { stop: 17, event: "Doubles Championship at the Preserve", tier: "Elite", dates: "Aug 14–16", city: "Clearwater, MN", pdgaEventUrl: pdga(96416), courses: [c("the-preserve", "The Preserve")] },
-  { stop: 18, event: "Pro World Championships", tier: "Major", dates: "Aug 26–30", city: "Milford, MI", pdgaEventUrl: pdga(97344), courses: [c("black-locust-south", "Black Locust South"), c("kensington-toboggan", "Kensington Toboggan")] },
+  { stop: 18, event: "Pro World Championships", tier: "Major", dates: "Aug 26–30", city: "Milford, MI", pdgaEventUrl: pdga(97344), courses: [c("black-locust-south", "Black Locust South"), c("kensington-toboggan", "Kensington Toboggan", true)] },
   { stop: 19, event: "LWS Open at Idlewild", tier: "Elite", dates: "Sep 4–6", city: "Burlington, KY", pdgaEventUrl: pdga(96417), courses: [c("idlewild", "Idlewild", true)] },
   { stop: 20, event: "Green Mountain Championship", tier: "Playoffs", dates: "Sep 17–20", city: "Smugglers' Notch, VT", pdgaEventUrl: pdga(96418), courses: [c("brewster-ridge", "Brewster Ridge", true), c("fox-run-meadows", "Fox Run Meadows")] },
   { stop: 21, event: "MVP Open", tier: "Playoffs", dates: "Sep 24–27", city: "Leicester, MA", pdgaEventUrl: pdga(96419), courses: [c("maple-hill", "Maple Hill", true)] },

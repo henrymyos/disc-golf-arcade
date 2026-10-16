@@ -27,6 +27,7 @@ import { MAPLE_HILL } from "../lib/discgolf/protour/maple-hill";
 import { BREWSTER_RIDGE } from "../lib/discgolf/protour/brewster-ridge";
 import { IDLEWILD } from "../lib/discgolf/protour/idlewild";
 import { WINTHROP_ARENA } from "../lib/discgolf/protour/winthrop-arena";
+import { KENSINGTON_TOBOGGAN } from "../lib/discgolf/protour/kensington-toboggan";
 
 const FT = 1.8; // FEET_PER_PX
 
@@ -57,8 +58,15 @@ const CARDS: Record<string, { par: number[]; ft: number[]; pages?: number[]; tot
     pages: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20],
     totalPar: 64, totalFt: 9727,
   },
+  // Kensington Toboggan (Pro Worlds final round), MPO.
+  "kensington-toboggan": {
+    par: [3, 4, 4, 4, 3, 4, 4, 4, 3, 4, 3, 3, 3, 4, 5, 3, 4, 4],
+    ft: [528, 686, 892, 587, 463, 518, 682, 499, 489, 610, 472, 348, 528, 804, 1129, 394, 846, 650],
+    pages: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19],
+    totalPar: 66, totalFt: 11125,
+  },
 };
-const COURSES = [MAPLE_HILL, BREWSTER_RIDGE, IDLEWILD, WINTHROP_ARENA];
+const COURSES = [MAPLE_HILL, BREWSTER_RIDGE, IDLEWILD, WINTHROP_ARENA, KENSINGTON_TOBOGGAN];
 const PILOT_IDS = ["maple-hill", "brewster-ridge", "idlewild"];
 const lineFt = (h: ProHole) => h.line.reduce((s, p, i) => (i ? s + Math.hypot(p.x - h.line[i - 1].x, p.y - h.line[i - 1].y) : 0), 0);
 
@@ -189,6 +197,26 @@ describe("wave 1 course specifics", () => {
     // flat park; hazard rough only on 16, where the yellow lines are the edge
     for (const h of WINTHROP_ARENA.holes) expect(h.elev ?? 0).toBe(0);
     expect(WINTHROP_ARENA.holes.filter((h) => h.rough === "hazard").map((h) => h.n)).toEqual([16]);
+  });
+
+  it("Kensington Toboggan is the hill course: no water, slope on most holes, the book's DZs", () => {
+    expect(KENSINGTON_TOBOGGAN.holes.every((h) => !h.water?.length)).toBe(true);
+    const peak = (h: ProHole) => Math.max(Math.abs(h.elev ?? 0), ...(h.elevZones ?? []).map((z) => Math.abs(z.elev)));
+    expect(KENSINGTON_TOBOGGAN.holes.filter((h) => peak(h) === 2).length).toBeGreaterThanOrEqual(12);
+    expect(KENSINGTON_TOBOGGAN.holes.filter((h) => h.dropZone).map((h) => h.n)).toEqual([8, 9, 16]);
+    expect(KENSINGTON_TOBOGGAN.holes[15].islandGreen).toBe(true);
+    // 15 is OB right only: one-sided strips, the left plays as hazard
+    const h15 = KENSINGTON_TOBOGGAN.holes[14];
+    expect(h15.rough).toBe("hazard");
+    expect((h15.obZones ?? []).every((r) => r.x > 0)).toBe(true);
+    // 2, 5 and 12 have OB only long of the basket
+    for (const n of [2, 5, 12]) {
+      const h = KENSINGTON_TOBOGGAN.holes[n - 1];
+      const b = h.line[h.line.length - 1];
+      expect(h.rough, `hole ${n}`).toBe("hazard");
+      expect((h.obZones ?? []).every((r) => r.y > b.y), `hole ${n}`).toBe(true);
+    }
+    expect(KENSINGTON_TOBOGGAN.holes.reduce((s, h) => s + h.lengthFt, 0)).toBeGreaterThan(Math.max(...[MAPLE_HILL, BREWSTER_RIDGE, IDLEWILD, WINTHROP_ARENA].map((c) => c.holes.reduce((s, h) => s + h.lengthFt, 0))));
   });
 });
 
