@@ -63,7 +63,7 @@ type Water = { x: number; y: number; w: number; h: number };
 // GROUND_THEMES palette key (grass/fairway tint), `weather` an optional falling
 // overlay. Stamped per hole so the look travels with the hole into the Daily mix.
 export type Weather = "rain" | "snow";
-type Hole = { par: number; worldH: number; worldW?: number; lenMul?: number; tee: Vec; basket: Vec; fairway: Vec[]; fairways?: Vec[][]; fwWidth: number; trees: Tree[]; water: Water[]; hazard?: Water[]; obZones?: Water[]; dropZone?: Vec; walls?: { x: number; y: number; w: number }[]; roughIsHazard?: boolean; wind?: Vec; windMag?: number; elev?: number; elevZones?: { to: number; elev: number }[]; treeMul?: number; theme?: string; weather?: Weather; bookFt?: number };
+type Hole = { par: number; worldH: number; worldW?: number; lenMul?: number; tee: Vec; basket: Vec; fairway: Vec[]; fairways?: Vec[][]; fwWidth: number; trees: Tree[]; water: Water[]; hazard?: Water[]; obZones?: Water[]; dropZone?: Vec; walls?: { x: number; y: number; w: number }[]; roughIsHazard?: boolean; wind?: Vec; windMag?: number; elev?: number; elevZones?: { to: number; elev: number }[]; treeMul?: number; theme?: string; weather?: Weather; bookFt?: number; obRects?: boolean };
 
 // Holes are authored in this old 448-tall frame, then stretched to a length
 // that scales with par (below).
@@ -574,6 +574,7 @@ function proHoleToHole(h: ProHole): Hole {
     elevZones: h.elevZones,
     treeMul: PRO_TREE_MUL[h.trees],
     bookFt: h.lengthFt,
+    obRects: true,
   };
   return { ...hole, trees: populateTrees(hole) };
 }

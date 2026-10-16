@@ -286,7 +286,14 @@ export function drawHoleFeatures(ctx: CanvasRenderingContext2D, hole: Hole, grou
       }
       return p;
     };
-    const ovalOf = (ob: Water) => { ctx.beginPath(); ctx.ellipse(ob.x + ob.w / 2, ob.y - cam + ob.h / 2, ob.w / 2, ob.h / 2, 0, 0, Math.PI * 2); };
+    // Pro Tour holes (obRects) draw their roped OB as the exact rectangle the
+    // landing test uses — they mark long OB lines and walls, where an oval would
+    // show fairway that actually plays OB. Older courses keep their ovals.
+    const ovalOf = (ob: Water) => {
+      ctx.beginPath();
+      if (hole.obRects) ctx.rect(ob.x, ob.y - cam, ob.w, ob.h);
+      else ctx.ellipse(ob.x + ob.w / 2, ob.y - cam + ob.h / 2, ob.w / 2, ob.h / 2, 0, 0, Math.PI * 2);
+    };
 
     // Pass 1 — rough fill + mowing bands, spilling just past the boundary.
     ctx.save();

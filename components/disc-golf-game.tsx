@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import {
   submitArcadeScore, getArcadeLeaderboard, submitMiniScore, getMiniLeaderboard,
@@ -90,6 +91,11 @@ import { postMiniResult, postRoundResult, readBoardChoice, writeBoardChoice, typ
 // pixelated for the crunchy old-school look.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Dev-only hole sheet (/?holesheet=<course-id>): every Pro Tour hole drawn whole
+// at one scale. The constant folds to null in production, so the sheet's module
+// is never bundled there.
+const HoleSheet = process.env.NODE_ENV !== "production" ? dynamic(() => import("./dev/HoleSheet"), { ssr: false }) : null;
+
 export function DiscGolfGame() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const stateRef = useRef<GameState | null>(null);
@@ -105,6 +111,14 @@ export function DiscGolfGame() {
     update();
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
+  }, []);
+  // Dev-only: ?holesheet=<course-id> swaps the game for the hole sheet.
+  const [holeSheetId, setHoleSheetId] = useState<string | null>(null);
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production") return;
+    const id = new URLSearchParams(location.search).get("holesheet");
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- read once from the URL after mount
+    if (id) setHoleSheetId(id);
   }, []);
   // Dev-only probe: the power the ring was last drawn at (headless checks read it).
   const powerRingDebugRef = useRef<{ drawn: number; at: number } | null>(null);
@@ -3592,6 +3606,7 @@ export function DiscGolfGame() {
   const sideLayout = inRoundLayout && viewportLayout?.sides ? viewportLayout : null;
   const todayGoals = useMemo(() => (hub === "solo" && today ? dailyStarThresholds(today) : null), [hub, today]);
 
+  if (HoleSheet && holeSheetId) return <HoleSheet courseId={holeSheetId} />;
   return (
     <div className={`app-root w-full bg-[#0f1117] flex select-none overflow-hidden ${sideLayout ? "flex-row" : "flex-col"}`}>
       {/* Desktop: live scorecard + wind in a left column during a round */}
