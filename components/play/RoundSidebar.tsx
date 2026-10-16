@@ -13,7 +13,7 @@ export function RoundSidebar({ hud, width }: { hud: HudInfo; width: number }) {
   return (
     <aside style={{ width }} className="flex shrink-0 flex-col justify-center gap-3 overflow-y-auto border-r border-white/10 bg-[#13161b] px-4 py-4 text-left" aria-label="Round scorecard">
       <div className="rounded-xl border border-white/10 bg-[#0f1117] px-3 py-3">
-        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-gray-500">{hud.player ? `${hud.player} · ` : ""}Hole {hud.hole} of {hud.holes}</p>
+        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-gray-500">{hud.player ? `${hud.player} · ` : ""}{hud.course ? `${hud.course} · ` : ""}Hole {hud.hole} of {hud.holes}</p>
         <p className="mt-1 text-white text-2xl font-black leading-none">
           Par {hud.par}
           {hud.holeFt != null && <span className="ml-2 text-base font-bold text-gray-400">{hud.holeFt} ft</span>}

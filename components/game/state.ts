@@ -105,7 +105,7 @@ export function targetHole(station: number): Hole {
 // What the React side shows about the round in progress (the canvas draws its
 // own HUD). Distances in feet; wind in mph and screen-space angle (radians).
 export type HudInfo = {
-  hole: number; par: number; throws: number; holes: number; player?: string;
+  hole: number; par: number; throws: number; holes: number; player?: string; course?: string;
   scores: (number | null)[]; pars: number[];
   pinFt?: number; holeFt?: number; windMph?: number; windAng?: number;
 };

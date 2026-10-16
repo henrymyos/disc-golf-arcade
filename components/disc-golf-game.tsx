@@ -33,7 +33,7 @@ import {
   dailyChallenges, weeklyChallenges, roundsThisDay, roundsThisWeek, challengeDone, dailyClaimKey, eventClaimKey, type EventRound,
 } from "@/lib/discgolf/events";
 import {
-  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, leaderboardCourse, TOURN_KEY, TOURNAMENTS, tournDef, tournRoundPlayHoles, tournPlace, tournFieldRound, tournLiveStandings, ACHIEVEMENTS, earnedAchievements, achievementReward, scoreLabel, STRAIGHT_SPEED_MUL, releaseSpeedMul, ADV_DISCS, levelUpChoices, validDiscIndex, DEFAULT_DISC_INDEX, BAG_MAX, discIndexByKey, unlockedDiscKeys, reconcileBag, tourVenue, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, dailySeed, dailyStarThresholds, dailyStarsEarned, buildRound, elevAt, vibrate, pxToFeet, distBetween, autoDiscIndex, windAlong, resolvePenalty, treesAtLie, stepFlight, type Vec, type Hole, type Mode, type Tournament, type TournLiveRow, type Achievement, type FlightPath, type Release, type Flight, type GhostState,
+  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, leaderboardCourse, TOURN_KEY, TOURNAMENTS, tournDef, tournRoundPlayHoles, tournPlace, tournFieldRound, tournLiveStandings, ACHIEVEMENTS, earnedAchievements, achievementReward, scoreLabel, STRAIGHT_SPEED_MUL, releaseSpeedMul, ADV_DISCS, levelUpChoices, validDiscIndex, DEFAULT_DISC_INDEX, BAG_MAX, discIndexByKey, unlockedDiscKeys, reconcileBag, tourVenue, isProTourSeed, proTourCourseBySeed, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, dailySeed, dailyStarThresholds, dailyStarsEarned, buildRound, elevAt, vibrate, pxToFeet, distBetween, autoDiscIndex, windAlong, resolvePenalty, treesAtLie, stepFlight, type Vec, type Hole, type Mode, type Tournament, type TournLiveRow, type Achievement, type FlightPath, type Release, type Flight, type GhostState,
 } from "@/lib/discgolf/engine";
 import { parseChallenge, challengeParam } from "@/lib/discgolf/challenge";
 import { buildReplay, replayFrame, type Replay } from "@/lib/discgolf/replay";
@@ -63,6 +63,8 @@ import { LeaderboardPanel } from "./panels/LeaderboardPanel";
 import { TournamentPanel } from "./panels/TournamentPanel";
 import { CareerSlots, CareerPanel } from "./panels/CareerPanel";
 import { CoursesPanel } from "./panels/CoursesPanel";
+import { ProTourPanel, PRO_STOPS_BUILT } from "./panels/ProTourPanel";
+import { SEASON_2026 } from "@/lib/discgolf/protour/season2026";
 import { ShopPanel } from "./panels/ShopPanel";
 import { BagPanel, LevelUpPanel } from "./panels/BagPanels";
 import { ProfilePanel } from "./panels/ProfilePanel";
@@ -176,6 +178,7 @@ export function DiscGolfGame() {
   const [statsOpen, setStatsOpen] = useState(false);
   const [boardsOpen, setBoardsOpen] = useState(false);
   const [coursesOpen, setCoursesOpen] = useState(false);
+  const [proTourOpen, setProTourOpen] = useState(false);
   const [pauseMenu, setPauseMenu] = useState<{ canRestart: boolean; isCareer: boolean } | null>(null); // in-round menu (restart / sim / home / continue)
   const [tournamentOpen, setTournamentOpen] = useState(false);
   const [tournament, setTournament] = useState<Tournament | null>(null);
@@ -1020,7 +1023,8 @@ export function DiscGolfGame() {
       pars: g.roundHoles.map((h) => h.par),
       // For the desktop side column (same numbers the canvas HUD draws).
       pinFt: g.phase === "holed" ? 0 : pxToFeet(distBetween(g.rest, hole.basket)),
-      holeFt: pxToFeet(distBetween(hole.tee, hole.basket)),
+      holeFt: hole.bookFt ?? pxToFeet(distBetween(hole.tee, hole.basket)), // real courses show the book length
+      course: g.mode === "tour" ? proTourCourseBySeed(g.seed)?.course.name : undefined,
       windMph: Math.round(((hole.windMag ?? 0) / 0.018) * 15),
       windAng: Math.atan2(hole.wind?.y ?? 0, hole.wind?.x ?? 0),
     });
@@ -2061,7 +2065,7 @@ export function DiscGolfGame() {
     setLeaderboard([]);
     // Ranked posts to a single global all-time board (handled in saveScore), not a
     // per-round course board — so skip the per-seed fetch and show the field instead.
-    if (!practice && mode !== "ranked") void getArcadeLeaderboard(leaderboardCourse(mode, g?.seed ?? 0)).then(setLeaderboard).catch(() => {});
+    if (!practice && mode !== "ranked" && !(mode === "tour" && isProTourSeed(g?.seed))) void getArcadeLeaderboard(leaderboardCourse(mode, g?.seed ?? 0)).then(setLeaderboard).catch(() => {});
     // Ranked round: place against the AI field → RP (placement + streak bonus), so
     // you climb or fall the tiers. Your best to-par still posts to the global board.
     if (!practice && mode === "ranked" && rankedFieldRef.current) {
@@ -2226,9 +2230,10 @@ export function DiscGolfGame() {
   useEffect(() => {
     if (screen !== "gameComplete") return;
     if (finalPracticeHole != null || finalParty || finalOnline) return;
+    if (finalMode === "tour" && isProTourSeed(finalSeed)) return; // no boards for the real 2026 courses (v1)
     if (saved || saving || postStatus) return;
     void saveScore();
-  }, [screen, finalPracticeHole, finalParty, finalOnline, saved, saving, postStatus, saveScore]);
+  }, [screen, finalPracticeHole, finalParty, finalOnline, finalMode, finalSeed, saved, saving, postStatus, saveScore]);
 
   // The guest answered the name prompt: remember it and carry on posting.
   const answerNamePrompt = useCallback((c: BoardChoice) => {
@@ -3377,6 +3382,19 @@ export function DiscGolfGame() {
         hudItem("THR", `${g.throws}`, "#ffffff");
         hudItem("TO PAR", overStr, over < 0 ? "#36D7B7" : over > 0 ? "#e08a3b" : "#cbd5e1");
       }
+      // Real 2026 Pro Tour course: its name + hole number under the status pill.
+      const proC = g.mode === "tour" && !g.mini ? proTourCourseBySeed(g.seed) : undefined;
+      if (proC) {
+        const label = `${proC.course.name} · ${g.practiceHole ?? g.holeIndex + 1}`;
+        ctx.font = "bold 7px ui-monospace, monospace";
+        const lw = ctx.measureText(label).width + 8;
+        ctx.fillStyle = "rgba(13,15,20,0.72)";
+        ctx.beginPath();
+        ctx.roundRect(6, 4 + hudH + 3, lw, 11, 3);
+        ctx.fill();
+        ctx.fillStyle = "#f5d24a";
+        ctx.fillText(label, 10, 4 + hudH + 3 + 6);
+      }
       if (g.mode === "daily") {
         ctx.font = "bold 7px ui-monospace, monospace";
         const dw = ctx.measureText("DAILY").width + 8;
@@ -3394,7 +3412,12 @@ export function DiscGolfGame() {
       // Intro caption — hole, par, and the slope (so elevation is read up front).
       if (g.phase === "intro") {
         const elev = hole.elev ?? 0;
-        const venue = g.career?.venue;
+        // Career venues and the real 2026 courses get a venue line; a real
+        // course shows "Maple Hill · 8" with the hole's one-line note under it.
+        const proIntro = g.mode === "tour" ? proTourCourseBySeed(g.seed) : undefined;
+        const proHole = proIntro?.course.holes[(g.practiceHole ?? g.holeIndex + 1) - 1];
+        const venue = proIntro ? `${proIntro.course.name} · ${proHole?.n ?? g.holeIndex + 1}` : g.career?.venue;
+        const venueSub = proIntro ? `${hole.bookFt ?? ""} ft · ${proHole?.note ?? ""}` : g.career?.character;
         ctx.fillStyle = "rgba(0,0,0,0.55)";
         ctx.fillRect(0, H / 2 - (venue ? 32 : 20), W, venue ? 52 : 40);
         ctx.textAlign = "center";
@@ -3402,11 +3425,11 @@ export function DiscGolfGame() {
           // Career venue + its character (wooded, water-laden, links, …).
           ctx.fillStyle = "#f5d24a";
           ctx.font = "bold 9px monospace";
-          ctx.fillText(`${g.career?.emoji ?? ""} ${venue}`.trim().toUpperCase(), W / 2, H / 2 - 21);
-          if (g.career?.character) {
+          ctx.fillText(`${proIntro ? "" : g.career?.emoji ?? ""} ${venue}`.trim().toUpperCase(), W / 2, H / 2 - 21);
+          if (venueSub) {
             ctx.fillStyle = "#9ab";
-            ctx.font = "8px monospace";
-            ctx.fillText(g.career.character, W / 2, H / 2 - 12);
+            ctx.font = proIntro ? "7px monospace" : "8px monospace";
+            ctx.fillText(venueSub.length > 62 ? `${venueSub.slice(0, 61)}…` : venueSub, W / 2, H / 2 - 12);
           }
         }
         ctx.fillStyle = "#fff";
@@ -3586,6 +3609,7 @@ export function DiscGolfGame() {
   const finalParTotal = finalPars.reduce((s, n) => s + n, 0);
   const finalOver = finalTotal - finalParTotal;
   const finalIsDaily = finalMode === "daily";
+  const finalIsProTour = finalMode === "tour" && isProTourSeed(finalSeed);
   // The personal best for the course just played (null for the daily).
   const finalBest = finalMode === "course" ? bestScore : finalMode === "winthrop" ? winthropBest : finalMode === "olympus" ? olympusBest : finalMode === "tour" ? (tourBests[finalSeed] ?? null) : null;
   const overStr = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
@@ -3841,6 +3865,13 @@ export function DiscGolfGame() {
                   </button>
                   <button type="button" onClick={() => setCoursesOpen(true)} className={hubCard}>
                     <span className="font-black text-lg">Challenge the Arcade</span>
+                  </button>
+                  <button type="button" onClick={() => setProTourOpen(true)} className={`${hubCard} !flex-col gap-0.5`} data-testid="hub-protour">
+                    <span className="flex items-center gap-2">
+                      <span className="font-black text-lg">2026 Pro Tour</span>
+                      <span className="rounded-full bg-[#36D7B7] text-[#0f1117] text-[9px] font-black px-1.5 py-px tracking-wide">NEW</span>
+                    </span>
+                    <span className="text-gray-400 text-[11px]">Real courses · {PRO_STOPS_BUILT} of {SEASON_2026.length} stops</span>
                   </button>
                   <button type="button" onClick={() => { setCareerLastResult(null); setCareerNotes([]); leaveCareer(); setCareerOpen(true); }} className={hubCard}>
                     <span className="font-black text-lg">Career</span>
@@ -4189,6 +4220,15 @@ export function DiscGolfGame() {
           />
         )}
 
+        {proTourOpen && (
+          <ProTourPanel
+            bests={tourBests}
+            onClose={() => setProTourOpen(false)}
+            onPlay={(seed) => { setProTourOpen(false); startGame("tour", seed); }}
+            onPractice={(seed, i) => { setProTourOpen(false); startPractice("tour", i, seed); }}
+          />
+        )}
+
         {shopOpen && (
           <ShopPanel coins={coins} unlocked={unlocked} owned={owned} level={playerLevel} profile={profile} onBuy={buyItem} onEquip={(field, key) => saveProfile({ ...profile, [field]: key })} onClose={() => setShopOpen(false)} />
         )}
@@ -4447,7 +4487,7 @@ export function DiscGolfGame() {
                   just one player's card). */}
               {!finalParty && !finalOnline && (<>
                 <p className="text-[#36D7B7] font-bold text-lg mt-1">
-                  {finalTotal} throws · {finalOver === 0 ? "Even par" : overStr(finalOver)}
+                  {finalTotal} throws · {finalIsProTour && finalPracticeHole == null ? `${overStr(finalOver)} vs real par ${finalParTotal}` : finalOver === 0 ? "Even par" : overStr(finalOver)}
                   {isNewBest && <span className="ml-2 text-[#f5d24a]">★ New best!</span>}
                 </p>
                 {finalBest != null && !isNewBest && (
@@ -4643,7 +4683,11 @@ export function DiscGolfGame() {
 
             {/* Save + per-course leaderboard (the daily board resets each day);
                 practice rounds skip all of it. */}
-            {finalPracticeHole == null && !finalParty && !finalOnline && (<>
+            {/* Real 2026 Pro Tour courses have no leaderboards in v1 (Henry's call). */}
+            {finalPracticeHole == null && !finalParty && !finalOnline && finalIsProTour && (
+              <p className="text-center text-gray-500 text-xs">Leaderboards for the real 2026 courses are off for now. Your best is saved on this device.</p>
+            )}
+            {finalPracticeHole == null && !finalParty && !finalOnline && !finalIsProTour && (<>
             {saved ? (
               <p className="text-center text-[#36D7B7] text-sm font-semibold">Saved to the leaderboard as {postedAs ?? myBoardName} ✓</p>
             ) : postStatus === "skipped" ? (

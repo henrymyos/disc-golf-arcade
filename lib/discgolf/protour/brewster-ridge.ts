@@ -33,7 +33,7 @@ export const BREWSTER_RIDGE: ProCourse = {
   id: "brewster-ridge",
   name: "Brewster Ridge",
   city: "Smugglers' Notch, VT",
-  layoutLabel: "MPO · rounds 1–2",
+  layoutLabel: "MPO · the rounds 1–2 course",
   theme: "classic",
   book: BOOK,
   holes: HOLES,

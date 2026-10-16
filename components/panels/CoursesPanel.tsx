@@ -67,7 +67,7 @@ export function CoursesPanel({ courses, tourCourses, bests, tourBests, onClose, 
         </div>
         <div className="flex gap-1 bg-[#1a1d23] border border-white/10 rounded-lg p-1 mt-3 shrink-0">
           <button type="button" onClick={() => setTab("championship")} className={seg(tab === "championship")}>Championship</button>
-          <button type="button" onClick={() => setTab("tour")} className={seg(tab === "tour")}>🏆 Pro Tour</button>
+          <button type="button" onClick={() => setTab("tour")} className={seg(tab === "tour")}>🏆 Tour Venues</button>
         </div>
         <div ref={scrollRef} className="flex-1 overflow-y-auto mt-2 space-y-2.5 pr-0.5 -mr-0.5">
           {list.map(({ c }) => card({ c }))}

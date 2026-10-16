@@ -22,6 +22,7 @@ export type ProHole = {
   water?: FtRect[]; // ≤ 6 per hole
   obZones?: FtRect[]; // marked OB inside the corridor
   islands?: FtPt[][]; // extra in-bounds ribbons (island / peninsula greens)
+  islandGreen?: boolean; // the book's green is an island (ringed by water/OB); shown on chips + glyphs
   hazard?: { x: number; y: number; d: number }[]; // round bunkers (center + diameter)
   dropZone?: FtPt; // the book's main DZ only (one per hole)
   walls?: { x: number; y: number; w: number }[]; // fences / gates that block at any height
@@ -38,7 +39,7 @@ export type ProCourse = {
   id: string; // e.g. "maple-hill"
   name: string;
   city: string;
-  layoutLabel: string; // e.g. "MPO Gold · A pins (final rounds)"
+  layoutLabel: string; // e.g. "MPO Gold · A layout · final-round pins"
   theme: string; // GROUND_THEMES key the course is drawn in
   book: string; // the public caddie book the facts came from
   holes: ProHole[];
