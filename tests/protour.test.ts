@@ -36,6 +36,9 @@ import { IDLEWILD } from "../lib/discgolf/protour/idlewild";
 import { WINTHROP_GOLD } from "../lib/discgolf/protour/winthrop-gold";
 import { KENSINGTON_TOBOGGAN } from "../lib/discgolf/protour/kensington-toboggan";
 import { FOX_RUN_MEADOWS } from "../lib/discgolf/protour/fox-run-meadows";
+import { IVY_HILL } from "../lib/discgolf/protour/ivy-hill";
+import { NORTHWOOD_BLACK } from "../lib/discgolf/protour/northwood-black";
+import { HARVEY_PENICK } from "../lib/discgolf/protour/harvey-penick";
 import { stopSummary } from "../lib/discgolf/protour/stopSummary";
 
 const FT = 1.8; // FEET_PER_PX
@@ -81,8 +84,30 @@ const CARDS: Record<string, { par: number[]; ft: number[]; pages?: number[]; tot
     pages: [8, 9, 10, 12, 14, 16, 18, 19, 21, 22, 24, 26, 27, 29, 30, 31, 32, 34],
     totalPar: 64, totalFt: 10025,
   },
+  // Wave 2 (spec addendum disc-golf-arcade-pro-tour-wave2.md).
+  // Ivy Hill (Powerball Cup), MPO A layout (6A, 14A).
+  "ivy-hill": {
+    par: [4, 3, 4, 3, 4, 3, 3, 4, 4, 4, 3, 3, 4, 4, 5, 4, 3, 5],
+    ft: [758, 327, 765, 392, 762, 517, 403, 671, 834, 908, 327, 491, 768, 840, 755, 998, 366, 1078],
+    pages: [7, 8, 9, 10, 11, 13, 15, 16, 17, 18, 19, 20, 22, 23, 25, 26, 27, 29],
+    totalPar: 67, totalFt: 11960,
+  },
+  // Northwood Black (Ledgestone Open), MPO pages only.
+  "northwood-black": {
+    par: [3, 4, 4, 4, 4, 5, 3, 3, 4, 3, 3, 5, 4, 5, 4, 3, 3, 4],
+    ft: [455, 580, 604, 637, 451, 947, 325, 389, 732, 400, 380, 1050, 653, 893, 650, 330, 320, 703],
+    pages: [7, 9, 11, 13, 14, 16, 17, 18, 20, 22, 24, 26, 28, 30, 32, 33, 34, 36],
+    totalPar: 68, totalFt: 10499,
+  },
+  // Harvey Penick (Open at Austin), MPO.
+  "harvey-penick": {
+    par: [3, 4, 3, 3, 4, 4, 3, 4, 4, 3, 5, 3, 3, 4, 3, 3, 3, 4],
+    ft: [410, 740, 360, 460, 650, 535, 305, 580, 755, 310, 1020, 375, 415, 560, 430, 340, 415, 685],
+    pages: [12, 13, 14, 16, 18, 19, 20, 22, 24, 25, 27, 28, 30, 31, 33, 34, 36, 38],
+    totalPar: 63, totalFt: 9345,
+  },
 };
-const COURSES = [MAPLE_HILL, BREWSTER_RIDGE, IDLEWILD, WINTHROP_GOLD, KENSINGTON_TOBOGGAN, FOX_RUN_MEADOWS];
+const COURSES = [MAPLE_HILL, BREWSTER_RIDGE, IDLEWILD, WINTHROP_GOLD, KENSINGTON_TOBOGGAN, FOX_RUN_MEADOWS, IVY_HILL, NORTHWOOD_BLACK, HARVEY_PENICK];
 const PILOT_IDS = ["maple-hill", "brewster-ridge", "idlewild"];
 const lineFt = (h: ProHole) => h.line.reduce((s, p, i) => (i ? s + Math.hypot(p.x - h.line[i - 1].x, p.y - h.line[i - 1].y) : 0), 0);
 
@@ -209,8 +234,8 @@ describe("Henry's Oct 16 rules for Pro Tour holes: tee-shot catch radius and dri
     ...TOUR_COURSES.flatMap((t) => buildRound(t.seed, "tour")),
   ];
 
-  it("every one of the 108 Pro Tour holes carries the 0.85 tee catch, and no hand-authored hole does", () => {
-    expect(proHoles).toHaveLength(108);
+  it("every one of the 162 Pro Tour holes carries the 0.85 tee catch, and no hand-authored hole does", () => {
+    expect(proHoles).toHaveLength(162);
     expect(PROTOUR_TEE_CATCH_MUL).toBe(0.85);
     for (const { id, n, h } of proHoles) expect(h.teeCatchMul, `${id} ${n}`).toBe(0.85);
     for (const h of handAuthored) expect(h.teeCatchMul).toBeUndefined();
@@ -225,12 +250,19 @@ describe("Henry's Oct 16 rules for Pro Tour holes: tee-shot catch radius and dri
     expect(catchRFor(handAuthored[0], handAuthored[0].tee, CATCH_R)).toBe(CATCH_R);
   });
 
-  it("only Winthrop Gold 6, 9, 10 and 12 send every OB to the DZ; every other Pro Tour DZ is drive-only", () => {
-    expect(proHoles.filter((x) => x.ph.dzAll).map((x) => `${x.id} ${x.n}`)).toEqual(["winthrop-gold 6", "winthrop-gold 9", "winthrop-gold 10", "winthrop-gold 12"]);
+  it("dzAll only where the book sends every OB to the DZ; every other Pro Tour DZ is drive-only", () => {
+    expect(proHoles.filter((x) => x.ph.dzAll).map((x) => `${x.id} ${x.n}`)).toEqual([
+      "winthrop-gold 6", "winthrop-gold 9", "winthrop-gold 10", "winthrop-gold 12",
+      "ivy-hill 1", "ivy-hill 5", "ivy-hill 9", "ivy-hill 12", "ivy-hill 13",
+      "northwood-black 8", "northwood-black 17",
+      "harvey-penick 13",
+    ]);
     expect(proHoles.filter((x) => x.h.dzDriveOnly).map((x) => `${x.id} ${x.n}`)).toEqual([
       "maple-hill 1", "maple-hill 8", "maple-hill 14",
       "kensington-toboggan 8", "kensington-toboggan 9", "kensington-toboggan 16",
       "fox-run-meadows 1",
+      "ivy-hill 4", "ivy-hill 6", "ivy-hill 7", "ivy-hill 14", "ivy-hill 17",
+      "harvey-penick 2", "harvey-penick 5", "harvey-penick 9", "harvey-penick 10",
     ]);
     for (const x of proHoles) if (x.h.dropZone) expect(!!x.h.dzDriveOnly, `${x.id} ${x.n}`).toBe(!x.ph.dzAll);
   });
@@ -269,6 +301,26 @@ describe("Henry's Oct 16 rules for Pro Tour holes: tee-shot catch radius and dri
     const a = game.indexOf("  const throwDisc = useCallback(");
     const b = game.indexOf("\n", game.indexOf("\n  }, [", a) + 1);
     expect(sha(game.slice(a, b))).toBe("c4684f7dd31faec63b61bbc41b7bfbe5c12fb6b0363a4fee4342235995beb868");
+  });
+});
+
+describe("wave 2 course specifics", () => {
+  it("Ivy Hill plays the A layouts on 6 and 14, with island greens on 6, 7, 14 and 17", () => {
+    expect(IVY_HILL.holes.filter((h) => h.layout).map((h) => [h.n, h.layout])).toEqual([[6, "A"], [14, "A"]]);
+    expect(IVY_HILL.holes.filter((h) => h.islandGreen).map((h) => h.n)).toEqual([6, 7, 14, 17]);
+    expect(IVY_HILL.holes.every((h) => h.rough === "ob")).toBe(true);
+  });
+
+  it("Northwood Black plays the woods as hazard rough with OB only on the named side", () => {
+    expect(NORTHWOOD_BLACK.holes.every((h) => h.rough === "hazard")).toBe(true);
+    expect(NORTHWOOD_BLACK.holes.filter((h) => h.obZones?.length).map((h) => h.n)).toEqual([1, 7, 8, 10, 12, 14, 15, 17, 18]);
+    for (const h of NORTHWOOD_BLACK.holes) expect(h.elev ?? 0).toBe(0);
+  });
+
+  it("Harvey Penick's slopes follow the book's profiles and its island green is 10", () => {
+    const slope = (h: ProHole) => h.elev ?? h.elevZones?.at(-1)?.elev ?? 0;
+    expect(HARVEY_PENICK.holes.map(slope)).toEqual([0, 0, 1, -2, 0, 0, 0, 0, 1, -1, -1, 0, 0, 0, 0, 0, 0, 0]);
+    expect(HARVEY_PENICK.holes.filter((h) => h.islandGreen).map((h) => h.n)).toEqual([10]);
   });
 });
 
@@ -426,6 +478,12 @@ describe("pro tour courses plug into the tour seed space", () => {
     // Winthrop Gold kept its slot when it was renamed from Winthrop Arena, so its
     // seed (and any best saved under it) didn't move.
     expect(proTourCourseById("winthrop-gold")!.seed).toBe(0x2026c004);
+    // every course in schedule-of-building order, appended: wave 1 then wave 2
+    expect(PROTOUR_COURSES.map((c) => [c.course.id, c.seed])).toEqual([
+      ["maple-hill", 0x2026c001], ["brewster-ridge", 0x2026c002], ["idlewild", 0x2026c003],
+      ["winthrop-gold", 0x2026c004], ["kensington-toboggan", 0x2026c005], ["fox-run-meadows", 0x2026c006],
+      ["ivy-hill", 0x2026c007], ["northwood-black", 0x2026c008], ["harvey-penick", 0x2026c009],
+    ]);
     expect(PROTOUR_COURSES.slice(0, 3).map((c) => c.course.id)).toEqual(PILOT_IDS);
     // new courses are appended after the pilot, each on the next seed
     PROTOUR_COURSES.forEach((c, i) => expect(c.seed).toBe((0x2026c000 + i + 1) >>> 0));
@@ -543,7 +601,9 @@ function botPlay(hole: Hole, maxThrows: number, weak = false): { strokes: number
 // no drop zone that takes every OB throw there, so a miss re-tees (as on ID4).
 // Maple Hill 8's DZ is for tee shots only (book p5): a weak bot that lays up off
 // the tee and then splashes plays again from the pond's edge, 290 ft of carry.
-const FORCED_CARRY: Record<string, number[]> = { "maple-hill": [1, 8], idlewild: [4], "winthrop-gold": [9], "fox-run-meadows": [12] };
+// Harvey Penick 13: the OB creek splits the fairway and its DZ (the FPO tee) is
+// still a ~200 ft carry, so a weak arm can't get over it, as on the real course.
+const FORCED_CARRY: Record<string, number[]> = { "maple-hill": [1, 8], idlewild: [4], "winthrop-gold": [9], "fox-run-meadows": [12], "harvey-penick": [13] };
 
 describe.each(PROTOUR_COURSES.map((c) => [c.course.id, c] as const))("%s is playable end to end", (_id, c) => {
   it("a bot holes out on all 18 holes (real physics and wind)", () => {
