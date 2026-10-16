@@ -1,7 +1,7 @@
 import type { Trail } from "@/lib/discgolf/trails";
 import { powerRingColor } from "@/lib/discgolf/ring";
-import { BASKET_SKINS, type BasketSkin } from "@/lib/discgolf/cosmetics";
-import { W, H, CATCH_R, type Vec, type Tree } from "@/lib/discgolf/engine";
+import { BASKET_SKINS, type BasketSkin, type GroundTheme } from "@/lib/discgolf/cosmetics";
+import { W, H, CATCH_R, type Vec, type Tree, type Hole, type Water } from "@/lib/discgolf/engine";
 
 
 // Falling-weather overlay (screen space): light rain streaks or drifting snow,
@@ -203,4 +203,209 @@ export function drawPowerRing(ctx: CanvasRenderingContext2D, x: number, y: numbe
     ctx.stroke();
   }
   ctx.restore();
+}
+
+// ── The hole itself, shared by play and the dev hole sheet so both draw a hole
+// with exactly the same code. `cam` is the vertical camera (screen y = world y −
+// cam); the caller sets any horizontal camera translate first.
+
+// Everything outside the fairway is rough (screen space, viewport w × h): OB
+// rough normally, olive hazard ground on rope-lined holes, with mowing bands.
+export function drawRough(ctx: CanvasRenderingContext2D, hole: Hole, ground: GroundTheme, cam: number, w: number, h: number) {
+  ctx.fillStyle = hole.roughIsHazard ? "#535426" : ground.rough;
+  ctx.fillRect(0, 0, w, h);
+  // Darker rough mowing bands for a little texture.
+  const startY = Math.floor(cam / 16) * 16;
+  ctx.fillStyle = hole.roughIsHazard ? "#4b4c22" : ground.roughBand;
+  for (let y = startY; y < cam + h; y += 32) ctx.fillRect(0, y - cam, w, 16);
+}
+
+// The fairway ribbon (its edge is the OB line), water, roped OB zones, sand,
+// wooden walls, the drop zone and the tee pad, in world space.
+export function drawHoleFeatures(ctx: CanvasRenderingContext2D, hole: Hole, ground: GroundTheme, cam: number) {
+  // The curved fairway, drawn as a thick ribbon along the centerline. The
+  // outer (white) stroke is the OB line; the green stroke inside is the
+  // fairway — so doglegs and bends give curved OB edges that follow the
+  // hole. Extra ribbons (e.g. hole 13's island tee pad) draw the same way.
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  for (const fw of [hole.fairway, ...(hole.fairways ?? [])]) {
+    ctx.beginPath();
+    ctx.moveTo(fw[0].x, fw[0].y - cam);
+    for (let i = 1; i < fw.length; i++) ctx.lineTo(fw[i].x, fw[i].y - cam);
+    // Ribbon edge: white OB line, or hazard-yellow rope on hazard-rough holes.
+    ctx.strokeStyle = hole.roughIsHazard ? "#e0c25a" : "#eef1e6";
+    ctx.lineWidth = hole.fwWidth;
+    ctx.stroke();
+    ctx.strokeStyle = ground.fairway; // fairway
+    ctx.lineWidth = hole.fwWidth - 3;
+    ctx.stroke();
+    // Mowing stripes inside the fairway.
+    ctx.strokeStyle = ground.stripe;
+    ctx.lineWidth = hole.fwWidth - 3;
+    ctx.setLineDash([10, 10]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  ctx.lineJoin = "miter";
+  ctx.lineCap = "butt";
+  ctx.lineWidth = 1;
+
+  for (const wt of hole.water) {
+    const wy = wt.y - cam;
+    ctx.fillStyle = "#3a6ea5";
+    ctx.fillRect(wt.x, wy, wt.w, wt.h);
+    ctx.fillStyle = "#5b8fc4";
+    for (let i = 0; i < wt.h; i += 6) ctx.fillRect(wt.x + 2, wy + 3 + i, wt.w - 6, 1);
+  }
+
+  // Grass OB islands — ovals of ROUGH inside the fairway, colored exactly
+  // like the out-of-bounds rough beyond the ribbon (same ground color, same
+  // mowing bands, same white OB line) so they read as the side OB reaching
+  // in. Land in one and it plays exactly like water OB.
+  // Everything is clipped to the fairway corridor, so an oval that overlaps
+  // the ribbon edge merges seamlessly with the side OB. Two clips at
+  // slightly different radii make the junction clean: the rough FILL clips
+  // a hair OUTSIDE the boundary so it swallows the ribbon's white edge line
+  // (and its antialiased seam) where the oval crosses it, while the white
+  // OUTLINE clips a hair INSIDE so it terminates flush against the side OB
+  // line instead of drawing a bubble on top of the rough.
+  if (hole.obZones?.length) {
+    const corridorAt = (rad: number) => {
+      const p = new Path2D();
+      for (const fw of [hole.fairway, ...(hole.fairways ?? [])]) {
+        for (let i = 0; i < fw.length - 1; i++) {
+          const ax = fw[i].x, ay = fw[i].y, bx = fw[i + 1].x, by = fw[i + 1].y;
+          const steps = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / 8));
+          for (let s = 0; s <= steps; s++) {
+            const x = ax + ((bx - ax) * s) / steps, y = ay + ((by - ay) * s) / steps - cam;
+            p.moveTo(x + rad, y);
+            p.arc(x, y, rad, 0, Math.PI * 2);
+          }
+        }
+      }
+      return p;
+    };
+    const ovalOf = (ob: Water) => { ctx.beginPath(); ctx.ellipse(ob.x + ob.w / 2, ob.y - cam + ob.h / 2, ob.w / 2, ob.h / 2, 0, 0, Math.PI * 2); };
+
+    // Pass 1 — rough fill + mowing bands, spilling just past the boundary.
+    ctx.save();
+    ctx.clip(corridorAt(hole.fwWidth / 2 + 4));
+    for (const ob of hole.obZones) {
+      ovalOf(ob);
+      ctx.fillStyle = ground.rough;
+      ctx.fill();
+      // Bands phase-locked to the outer rough's world-space bands.
+      ctx.save();
+      ovalOf(ob);
+      ctx.clip();
+      ctx.fillStyle = ground.roughBand;
+      for (let y = Math.floor(ob.y / 32) * 32; y < ob.y + ob.h; y += 32) {
+        ctx.fillRect(ob.x, y - cam, ob.w, 16);
+      }
+      ctx.restore();
+    }
+    ctx.restore();
+
+    // Pass 2 — white OB outline + tag, stopping just inside the boundary.
+    ctx.save();
+    ctx.clip(corridorAt(hole.fwWidth / 2 - 1));
+    for (const ob of hole.obZones) {
+      ovalOf(ob);
+      ctx.strokeStyle = "#eef1e6"; // the same white OB line as the ribbon edge
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.lineWidth = 1;
+      ctx.fillStyle = "rgba(238,241,230,0.9)";
+      ctx.font = "bold 6px ui-monospace, monospace";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("OB", ob.x + ob.w / 2, ob.y - cam + ob.h / 2 + 0.5);
+      ctx.textAlign = "left";
+      ctx.textBaseline = "alphabetic";
+    }
+    ctx.restore();
+  }
+
+  // Hazards (sand) — sandy ovals ringed in caddie-book orange with an HZ
+  // tag, so they read as "+1 stroke" at a glance (unlike plain fairway).
+  for (const hz of hole.hazard ?? []) {
+    const hx = hz.x + hz.w / 2;
+    const hy = hz.y - cam + hz.h / 2;
+    ctx.fillStyle = "#d9c089";
+    ctx.beginPath();
+    ctx.ellipse(hx, hy, hz.w / 2, hz.h / 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#c4a96b";
+    ctx.beginPath();
+    ctx.ellipse(hx, hy, hz.w / 2 - 2, hz.h / 2 - 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#e0923b";
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([3, 2]);
+    ctx.beginPath();
+    ctx.ellipse(hx, hy, hz.w / 2, hz.h / 2, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.lineWidth = 1;
+    ctx.fillStyle = "#a8651f";
+    ctx.font = "bold 6px ui-monospace, monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("HZ", hx, hy + 0.5);
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
+  }
+
+  // Wooden walls (mando fences): plank rails with posts; consecutive
+  // segments at the same height get an orange arch framing the gap.
+  const walls = hole.walls ?? [];
+  for (const wl of walls) {
+    const wy = wl.y - cam;
+    ctx.fillStyle = "#8a6a3a";
+    ctx.fillRect(wl.x, wy - 3, wl.w, 6);
+    ctx.fillStyle = "#5f451f";
+    for (let px = wl.x; px <= wl.x + wl.w - 2; px += 12) ctx.fillRect(px, wy - 4, 2, 8);
+    ctx.fillRect(wl.x + wl.w - 2, wy - 4, 2, 8);
+  }
+  for (let i = 0; i + 1 < walls.length; i++) {
+    if (walls[i].y !== walls[i + 1].y) continue;
+    const wy = walls[i].y - cam;
+    const gx1 = walls[i].x + walls[i].w;
+    const gx2 = walls[i + 1].x;
+    ctx.strokeStyle = "#e0923b";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(gx1, wy + 4);
+    ctx.lineTo(gx1, wy - 10);
+    ctx.lineTo(gx2, wy - 10);
+    ctx.lineTo(gx2, wy + 4);
+    ctx.stroke();
+    ctx.lineWidth = 1;
+  }
+
+  // Drop zone — where OB throws play from on holes that have one.
+  if (hole.dropZone) {
+    const dzy = hole.dropZone.y - cam;
+    ctx.fillStyle = "#e0923b";
+    ctx.beginPath();
+    ctx.arc(hole.dropZone.x, dzy, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = "#0f1117";
+    ctx.font = "bold 5px ui-monospace, monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("DZ", hole.dropZone.x, dzy + 0.5);
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
+  }
+
+  // Tee pad
+  ctx.fillStyle = "#caa46a";
+  ctx.fillRect(hole.tee.x - 7, hole.tee.y - cam - 5, 14, 10);
+  ctx.fillStyle = "#8a6a3a";
+  ctx.fillRect(hole.tee.x - 7, hole.tee.y - cam - 5, 14, 2);
 }
