@@ -1867,7 +1867,10 @@ export function DiscGolfGame() {
         let st = "fly";
         for (let i = 0; i < 1500 && st === "fly"; i++) { st = stepFlight(f, disc, fadeSign, "straight", hole, releaseRef.current, { catchR: g.skill.catchR, windMul: g.skill.windMul, ghostTrees: g.ghostTrees }).status; trail.push({ x: f.x, y: f.y }); }
         const pen = resolvePenalty(st as "stop", hole, { x: f.x, y: f.y }, trail, lie);
-        const score = st === "hole" ? -1e9 : pen.strokes * 600 + toGo(pen.lie ?? { x: f.x, y: f.y });
+        // A penalty stroke costs about one short throw (100px ≈ 180 ft), so a
+        // bag that can't carry an island green takes the drop zone instead of
+        // creeping forward on the tee pad forever.
+        const score = st === "hole" ? -1e9 : pen.strokes * 100 + toGo(pen.lie ?? { x: f.x, y: f.y });
         if (score < bestScore) { bestScore = score; out = { angle: a0 + da, power: pw }; }
       }
       return out;
