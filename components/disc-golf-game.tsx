@@ -1831,6 +1831,51 @@ export function DiscGolfGame() {
     syncHud();
   }, [syncHud]);
 
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production") return;
+    // Headless play-throughs: search a fan of aims and powers with the real
+    // flight step (same disc, stance, release, wind and trees as the next
+    // throw) and return the drag that leaves the shortest way home. Dev only.
+    const plan = () => {
+      const g = stateRef.current;
+      if (!g || g.phase !== "aim") return null;
+      const hole = g.roundHoles[g.holeIndex];
+      const disc = ADV_DISCS[g.discIndex];
+      const fadeSign = (throwStyleRef.current === "BH" ? -1 : 1) * (leftHandedRef.current ? -1 : 1);
+      const mul = STRAIGHT_SPEED_MUL * releaseSpeedMul(releaseRef.current) * g.skill.speedMul;
+      const lie = { x: g.disc.x, y: g.disc.y };
+      const toGo = (p: Vec) => {
+        let best = Infinity, rem = 0, acc = 0;
+        const pts = hole.fairway, segs = pts.slice(1).map((q, i) => Math.hypot(q.x - pts[i].x, q.y - pts[i].y));
+        const total = segs.reduce((a2, b2) => a2 + b2, 0);
+        for (let i = 0; i < segs.length; i++) {
+          const a2 = pts[i], b2 = pts[i + 1], dx = b2.x - a2.x, dy = b2.y - a2.y, l2 = dx * dx + dy * dy || 1;
+          const t = Math.max(0, Math.min(1, ((p.x - a2.x) * dx + (p.y - a2.y) * dy) / l2));
+          const d = Math.hypot(p.x - (a2.x + t * dx), p.y - (a2.y + t * dy));
+          if (d < best) { best = d; rem = total - acc - t * segs[i]; }
+          acc += segs[i];
+        }
+        return Math.min(rem + best * 0.5, distBetween(p, hole.basket) * 1.3);
+      };
+      const base = Math.atan2(hole.basket.y - lie.y, hole.basket.x - lie.x);
+      const aims = [base, ...hole.fairway.map((q) => Math.atan2(q.y - lie.y, q.x - lie.x))];
+      let bestScore = Infinity, out = { angle: base, power: 0.5 };
+      for (const a0 of aims) for (const da of [-0.2, -0.1, -0.04, 0, 0.04, 0.1, 0.2]) for (const pw of [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]) {
+        const speed = disc.power * (1.2 + pw * 3.35) * mul;
+        const f: Flight = { x: lie.x, y: lie.y, vx: Math.cos(a0 + da) * speed, vy: Math.sin(a0 + da) * speed, h: 0, vh: pw * disc.arc, fadeTurn: 0 };
+        const trail: Vec[] = [{ ...lie }];
+        let st = "fly";
+        for (let i = 0; i < 1500 && st === "fly"; i++) { st = stepFlight(f, disc, fadeSign, "straight", hole, releaseRef.current, { catchR: g.skill.catchR, windMul: g.skill.windMul, ghostTrees: g.ghostTrees }).status; trail.push({ x: f.x, y: f.y }); }
+        const pen = resolvePenalty(st as "stop", hole, { x: f.x, y: f.y }, trail, lie);
+        const score = st === "hole" ? -1e9 : pen.strokes * 600 + toGo(pen.lie ?? { x: f.x, y: f.y });
+        if (score < bestScore) { bestScore = score; out = { angle: a0 + da, power: pw }; }
+      }
+      return out;
+    };
+    const dga = (window as unknown as { __dga?: Record<string, unknown> }).__dga;
+    if (dga) dga.plan = plan;
+  }, []);
+
   const finishGame = useCallback((scores: number[]) => {
     const g = stateRef.current;
     // Every solo round can be watched back (and shared) from the results screen.
