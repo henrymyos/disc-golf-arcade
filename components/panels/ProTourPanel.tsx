@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { courseStars, proTourCourseById, type ProTourCourse } from "@/lib/discgolf/engine";
+import { courseStars, proTourCourseById } from "@/lib/discgolf/engine";
+import { builtCourses, stopSummary } from "@/lib/discgolf/protour/stopSummary";
 import { SEASON_2026, type ProStop, type ProTier } from "@/lib/discgolf/protour/season2026";
 import type { ProHole } from "@/lib/discgolf/protour/types";
 import { roundLayout } from "@/lib/discgolf/layout";
@@ -13,10 +14,8 @@ export const FAN_NOTE = "Fan-made. Not affiliated with the DGPT, PDGA or the cou
 
 const fmtFt = (n: number) => n.toLocaleString("en-US");
 const over = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
-// The course a stop opens on: the first built one (multi-course events list the
+// A stop opens on its first built course (multi-course events list the
 // final-round course last, but only built courses can be opened).
-const builtCourses = (s: ProStop): ProTourCourse[] =>
-  s.courses.filter((c) => c.built).map((c) => proTourCourseById(c.id)).filter((c): c is ProTourCourse => !!c);
 export const PRO_STOPS_BUILT = SEASON_2026.filter((s) => builtCourses(s).length > 0).length;
 
 function TierBadge({ tier }: { tier: ProTier }) {
@@ -65,9 +64,8 @@ export function HoleGlyph({ h, w = 24, hgt = 36 }: { h: ProHole; w?: number; hgt
 }
 
 function StopCard({ s, bests, active, onOpen }: { s: ProStop; bests: Record<number, number>; active: boolean; onOpen: (s: ProStop) => void }) {
-  const built = builtCourses(s);
-  const c = built[0];
-  const best = c ? bests[c.seed] ?? null : null;
+  const sum = stopSummary(s, bests);
+  const c = sum.built[0];
   const where = s.courses.map((x) => x.name).join(" + ");
   const body = (
     <>
@@ -76,7 +74,7 @@ function StopCard({ s, bests, active, onOpen }: { s: ProStop; bests: Record<numb
           <span className="text-gray-400 font-bold text-[10px] uppercase tracking-wide">Stop {s.stop} · {s.dates}</span>
           <TierBadge tier={s.tier} />
         </span>
-        {c ? <span className="shrink-0 text-gray-400 text-[10px] font-mono">par {c.par} · {fmtFt(c.lengthFt)} ft</span> : <span className="shrink-0 text-gray-500 text-[10px] font-semibold">Coming later</span>}
+        {c ? <span className="shrink-0 text-gray-400 text-[10px] font-mono">{sum.courseLabel}</span> : <span className="shrink-0 text-gray-500 text-[10px] font-semibold">Coming later</span>}
       </div>
       <div className="flex items-end justify-between gap-2 mt-0.5">
         <div className="min-w-0">
@@ -85,8 +83,8 @@ function StopCard({ s, bests, active, onOpen }: { s: ProStop; bests: Record<numb
         </div>
         {c && (
           <div className="shrink-0 text-right">
-            <Stars n={courseStars(best, c.par)} />
-            <span className="block text-[10px] text-gray-500 mt-0.5">{best != null ? <>Best <b className="text-[#36D7B7]">{best}</b> ({over(best - c.par)})</> : "Not played"}</span>
+            <Stars n={sum.best?.stars ?? 0} />
+            <span className="block text-[10px] text-gray-500 mt-0.5">{sum.best ? <>Best <b className="text-[#36D7B7]">{sum.best.best}</b> ({over(sum.best.best - sum.best.course.par)}){sum.bestNamed ? ` · ${sum.best.course.course.name}` : ""}</> : "Not played"}</span>
           </div>
         )}
       </div>

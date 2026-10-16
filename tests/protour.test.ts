@@ -29,6 +29,7 @@ import { IDLEWILD } from "../lib/discgolf/protour/idlewild";
 import { WINTHROP_ARENA } from "../lib/discgolf/protour/winthrop-arena";
 import { KENSINGTON_TOBOGGAN } from "../lib/discgolf/protour/kensington-toboggan";
 import { FOX_RUN_MEADOWS } from "../lib/discgolf/protour/fox-run-meadows";
+import { stopSummary } from "../lib/discgolf/protour/stopSummary";
 
 const FT = 1.8; // FEET_PER_PX
 
@@ -194,6 +195,36 @@ describe.each(COURSES.map((c) => [c.id, c] as const))("%s data matches its caddi
   });
 });
 
+describe("season stop cards", () => {
+  const gmc = SEASON_2026.find((s) => s.stop === 20)!;
+  const usdgc = SEASON_2026.find((s) => s.stop === 22)!;
+  const seed = (id: string) => proTourCourseById(id)!.seed;
+
+  it("a one-course stop shows its par and length and its own best", () => {
+    expect(stopSummary(usdgc, {}).courseLabel).toBe("par 64 · 9,727 ft");
+    const sum = stopSummary(usdgc, { [seed("winthrop-arena")]: 49 });
+    expect(sum.best?.best).toBe(49);
+    expect(sum.best?.stars).toBe(2);
+    expect(sum.bestNamed).toBe(false);
+  });
+
+  it("a two-course stop says \"2 courses\" and shows a Fox Run best, not \"Not played\"", () => {
+    expect(stopSummary(gmc, {}).courseLabel).toBe("2 courses");
+    expect(stopSummary(gmc, {}).best).toBeNull();
+    const fr = stopSummary(gmc, { [seed("fox-run-meadows")]: 47 });
+    expect(fr.best?.course.course.id).toBe("fox-run-meadows");
+    expect(fr.best?.best).toBe(47);
+    expect(fr.bestNamed).toBe(true);
+  });
+
+  it("takes the course with the most stars, then the lower score vs par", () => {
+    // Brewster 60 (−2, 1 star) vs Fox Run 54 (−10, 2 stars) → Fox Run
+    expect(stopSummary(gmc, { [seed("brewster-ridge")]: 60, [seed("fox-run-meadows")]: 54 }).best?.course.course.id).toBe("fox-run-meadows");
+    // both 2 stars: Brewster 50 (−12) beats Fox Run 54 (−10)
+    expect(stopSummary(gmc, { [seed("brewster-ridge")]: 50, [seed("fox-run-meadows")]: 54 }).best?.course.course.id).toBe("brewster-ridge");
+  });
+});
+
 describe("wave 1 course specifics", () => {
   it("Winthrop Arena plays the A pins where the book has two, with no drop zone on the island 17", () => {
     expect(WINTHROP_ARENA.holes.filter((h) => h.layout).map((h) => [h.n, h.layout])).toEqual([[3, "A"], [5, "A"], [13, "A"], [17, "A"]]);
@@ -201,18 +232,18 @@ describe("wave 1 course specifics", () => {
     expect(h17.islandGreen).toBe(true);
     expect(h17.dropZone).toBeUndefined();
     // the book limits every OB throw to the DZ on these holes
-    expect(WINTHROP_ARENA.holes.filter((h) => h.dropZone).map((h) => h.n)).toEqual([2, 6, 9, 10, 12]);
+    expect(WINTHROP_ARENA.holes.filter((h) => h.dropZone).map((h) => h.n)).toEqual([6, 9, 10, 12]);
     // flat park; hazard rough only on 16, where the yellow lines are the edge
     for (const h of WINTHROP_ARENA.holes) expect(h.elev ?? 0).toBe(0);
     expect(WINTHROP_ARENA.holes.filter((h) => h.rough === "hazard").map((h) => h.n)).toEqual([16]);
   });
 
-  it("Fox Run Meadows: out 5,115 / in 4,910, island 1 with its DZ, the river on 7 and 12, no mando DZs", () => {
+  it("Fox Run Meadows: out 5,115 / in 4,910, island 1 with its DZ (the only one), the river on 7 and 12", () => {
     const ft = FOX_RUN_MEADOWS.holes.map((h) => h.lengthFt);
     expect(ft.slice(0, 9).reduce((a, b) => a + b, 0)).toBe(5115);
     expect(ft.slice(9).reduce((a, b) => a + b, 0)).toBe(4910);
     expect(FOX_RUN_MEADOWS.holes[0].islandGreen).toBe(true);
-    expect(FOX_RUN_MEADOWS.holes.filter((h) => h.dropZone).map((h) => h.n)).toEqual([1, 12]);
+    expect(FOX_RUN_MEADOWS.holes.filter((h) => h.dropZone).map((h) => h.n)).toEqual([1]);
     expect(FOX_RUN_MEADOWS.holes[3].islands).toHaveLength(1); // 4's safe island landing zone
     for (const n of [7, 12, 16]) expect(FOX_RUN_MEADOWS.holes[n - 1].water?.length, `hole ${n}`).toBeGreaterThan(0);
     for (const h of FOX_RUN_MEADOWS.holes) expect(h.elev ?? 0).toBe(0);
@@ -428,7 +459,9 @@ function botPlay(hole: Hole, maxThrows: number, weak = false): { strokes: number
 // Winthrop Arena 9 flies an OB field to a shelf green; the book's walk-around
 // to the right exists (the bot below holes out), but this greedy weak bot only
 // measures progress along the centerline, so it never takes the detour.
-const FORCED_CARRY: Record<string, number[]> = { "maple-hill": [1], idlewild: [4], "winthrop-arena": [9] };
+// Fox Run 12's tee shot must carry ~310 ft of OB to the dirt road; the book names
+// no drop zone that takes every OB throw there, so a miss re-tees (as on ID4).
+const FORCED_CARRY: Record<string, number[]> = { "maple-hill": [1], idlewild: [4], "winthrop-arena": [9], "fox-run-meadows": [12] };
 
 describe.each(PROTOUR_COURSES.map((c) => [c.course.id, c] as const))("%s is playable end to end", (_id, c) => {
   it("a bot holes out on all 18 holes (real physics and wind)", () => {

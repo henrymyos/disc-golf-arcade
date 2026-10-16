@@ -11,8 +11,9 @@
 // yellow hazard lines are the outer edge. Yellow hazard lines inside the OB are
 // round hazard disks. Flat park ground: no elevation.
 // Balance (Oct 2026): approach-tree pairs 45 ft short (30 ft either side) on the
-// short park par 3s 1, 2, 4, 14 and 16, plus 7 (beside the bamboo gate, 40 and
-// 70 ft short) and a second pair 90 ft short on 14, so scores track the existing
+// short park par 3s 1, 4, 14 and 16, a single tree on 2 (the right one would sit
+// in OB), two pairs on 7 (beside the bamboo gate, 40 and 70 ft short) and a
+// second pair 90 ft short on 14, so scores track the existing
 // tour courses (tests/protour-balance.test.ts). balanceTrees are ours, not the
 // book's; signature holes (3, 5, 6, 12, 17, 18) get none, and none stand in OB.
 import type { ProCourse, ProHole } from "./types";
@@ -21,7 +22,7 @@ const BOOK = "https://parkdly.com/caddie-books/8d9aea10-75a5-4d8a-801c-3a08ec9cd
 
 const HOLES: ProHole[] = [
   { n: 1, par: 3, lengthFt: 282, line: [{ x: 0, y: 0 }, { x: 0, y: 140 }, { x: 0, y: 280 }], widthFt: 170, rough: "ob", obZones: [{ x: -120, y: 0, w: 60, h: 330 }], balanceTrees: [{ x: -30, y: 240, r: 20 }, { x: 30, y: 240, r: 20 }], trees: "mixed", mando: "Between the two marked trees at the dropzone line", note: "Short opener down a park lane; OB rope tight on the left", ref: { url: BOOK, page: 3 } },
-  { n: 2, par: 3, lengthFt: 410, line: [{ x: 0, y: 0 }, { x: 0, y: 160 }, { x: 0, y: 330 }, { x: -10, y: 400 }], widthFt: 170, rough: "ob", obZones: [{ x: -130, y: 310, w: 80, h: 140 }, { x: 50, y: 170, w: 70, h: 130 }, { x: 20, y: 300, w: 100, h: 150 }, { x: -130, y: 450, w: 250, h: 70 }], dropZone: { x: -40, y: 300 }, balanceTrees: [{ x: -20, y: 340, r: 20 }], trees: "mixed", mando: "Right of the marked trees off the tee and at the green", note: "Up a roped lane that pinches to a narrow green past the building", ref: { url: BOOK, page: 4 } },
+  { n: 2, par: 3, lengthFt: 410, line: [{ x: 0, y: 0 }, { x: 0, y: 160 }, { x: 0, y: 330 }, { x: -10, y: 400 }], widthFt: 170, rough: "ob", obZones: [{ x: -130, y: 310, w: 80, h: 140 }, { x: 50, y: 170, w: 70, h: 130 }, { x: 20, y: 300, w: 100, h: 150 }, { x: -130, y: 450, w: 250, h: 70 }], balanceTrees: [{ x: -20, y: 340, r: 20 }], trees: "mixed", mando: "Right of the marked trees off the tee and at the green", note: "Up a roped lane that pinches to a narrow green past the building", ref: { url: BOOK, page: 4 } },
   { n: 3, par: 4, lengthFt: 833, layout: "A", line: [{ x: 0, y: 0 }, { x: -20, y: 320 }, { x: -30, y: 480 }, { x: -30, y: 600 }, { x: -10, y: 690 }, { x: 30, y: 730 }, { x: 80, y: 750 }, { x: 100, y: 750 }], widthFt: 180, rough: "ob", obZones: [{ x: -10, y: 320, w: 50, h: 50 }, { x: -20, y: 430, w: 40, h: 110 }, { x: 150, y: 660, w: 80, h: 180 }, { x: -20, y: 810, w: 170, h: 40 }], trees: "mixed", mando: "Under the marked trees into the green", note: "Long climb past two rock-island OB patches, then right under the trees", ref: { url: BOOK, page: 5 } },
   { n: 4, par: 3, lengthFt: 299, line: [{ x: 0, y: 0 }, { x: 0, y: 150 }, { x: -10, y: 290 }], widthFt: 160, rough: "ob", balanceTrees: [{ x: -40, y: 240, r: 20 }, { x: 20, y: 250, r: 20 }], trees: "wooded", mando: "Right of the marked tree at 125 ft", note: "Straight wooded tunnel; OB lies beyond the trees on the left", ref: { url: BOOK, page: 6 } },
   { n: 5, par: 5, lengthFt: 1024, layout: "A", line: [{ x: 0, y: 0 }, { x: -20, y: 190 }, { x: -50, y: 370 }, { x: -20, y: 530 }, { x: 10, y: 670 }, { x: -10, y: 770 }, { x: -110, y: 870 }, { x: -200, y: 960 }], widthFt: 160, rough: "ob", water: [{ x: -300, y: 0, w: 160, h: 380 }, { x: -140, y: 380, w: 50, h: 120 }, { x: -120, y: 500, w: 60, h: 100 }, { x: -100, y: 600, w: 60, h: 160 }, { x: -320, y: 780, w: 170, h: 150 }, { x: -150, y: 780, w: 120, h: 130 }], obZones: [{ x: -310, y: 1010, w: 240, h: 60 }, { x: -310, y: 930, w: 80, h: 80 }], trees: "open", mando: "Left of the flagpole in the fairway", note: "1,024 ft along the lake, then over the corner of the water to the A green", ref: { url: BOOK, page: 7 } },
