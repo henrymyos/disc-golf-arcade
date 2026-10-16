@@ -318,9 +318,10 @@ function botPlay(hole: Hole, maxThrows: number, weak = false): { strokes: number
   return { strokes, holed: false, penalties };
 }
 
-// Holes whose tee shot is a forced carry with no drop zone in the book: a weak
-// arm that can't make it re-tees, exactly as on the real course.
-const FORCED_CARRY: Record<string, number[]> = { idlewild: [4] };
+// Forced carries a weak arm can't make, exactly as on the real course:
+// Idlewild 4's 240 ft tee pond has no drop zone (re-tee), and Maple Hill 1's
+// pond fills the corridor, so a miss re-throws the ~180 ft carry from the DZ.
+const FORCED_CARRY: Record<string, number[]> = { "maple-hill": [1], idlewild: [4] };
 
 describe.each(PROTOUR_COURSES.map((c) => [c.course.id, c] as const))("%s is playable end to end", (_id, c) => {
   it("a bot holes out on all 18 holes (real physics and wind)", () => {
