@@ -4,6 +4,10 @@
 // Imported by components/disc-golf-game.tsx.
 import { centralDay } from "./time";
 import { TIERS, type Tier } from "./ranked";
+import type { ProHole, ProCourse } from "./protour/types";
+import { MAPLE_HILL } from "./protour/maple-hill";
+import { BREWSTER_RIDGE } from "./protour/brewster-ridge";
+import { IDLEWILD } from "./protour/idlewild";
 
 const W = 320;
 const H = 448;
@@ -59,7 +63,7 @@ type Water = { x: number; y: number; w: number; h: number };
 // GROUND_THEMES palette key (grass/fairway tint), `weather` an optional falling
 // overlay. Stamped per hole so the look travels with the hole into the Daily mix.
 export type Weather = "rain" | "snow";
-type Hole = { par: number; worldH: number; worldW?: number; lenMul?: number; tee: Vec; basket: Vec; fairway: Vec[]; fairways?: Vec[][]; fwWidth: number; trees: Tree[]; water: Water[]; hazard?: Water[]; obZones?: Water[]; dropZone?: Vec; walls?: { x: number; y: number; w: number }[]; roughIsHazard?: boolean; wind?: Vec; windMag?: number; elev?: number; elevZones?: { to: number; elev: number }[]; treeMul?: number; theme?: string; weather?: Weather };
+type Hole = { par: number; worldH: number; worldW?: number; lenMul?: number; tee: Vec; basket: Vec; fairway: Vec[]; fairways?: Vec[][]; fwWidth: number; trees: Tree[]; water: Water[]; hazard?: Water[]; obZones?: Water[]; dropZone?: Vec; walls?: { x: number; y: number; w: number }[]; roughIsHazard?: boolean; wind?: Vec; windMag?: number; elev?: number; elevZones?: { to: number; elev: number }[]; treeMul?: number; theme?: string; weather?: Weather; bookFt?: number };
 
 // Holes are authored in this old 448-tall frame, then stretched to a length
 // that scales with par (below).
@@ -513,6 +517,93 @@ const OLYMPUS_TEMPLATES: Omit<Hole, "worldH">[] = [
 const OLYMPUS_THEME = "desert";
 const OLYMPUS_HOLES: Hole[] = OLYMPUS_TEMPLATES.map((t) => ({ ...materializeHole(t), theme: OLYMPUS_THEME }));
 const OLYMPUS_PAR = OLYMPUS_HOLES.reduce((s, h) => s + h.par, 0);
+
+// ════ 2026 Pro Tour: real courses from the public caddie books ════
+// Pro holes are authored in FEET (origin = MPO tee, +y toward the basket, +x to
+// the right from the tee; see protour/types) and converted here. They skip
+// materializeHole on purpose: its vertical-only stretch would squash doglegs,
+// while a real hole needs x and y scaled by the same FEET_PER_PX.
+const PRO_MARGIN_FT = 40; // world margin past the corridor edge, each side and long
+const PRO_TREE_MUL: Record<ProHole["trees"], number> = { open: 0.6, mixed: 1, wooded: 1.5 };
+// The hole's extent in feet: the corridor (line ± half width) plus a margin, and
+// TEE_BEHIND of pull-back room behind the tee. Every feature must sit inside it.
+function proHoleBoundsFt(h: ProHole): { x0: number; x1: number; y0: number; y1: number } {
+  const half = h.widthFt / 2;
+  const xs = h.line.map((p) => p.x), ys = h.line.map((p) => p.y);
+  return {
+    x0: Math.min(...xs) - half - PRO_MARGIN_FT,
+    x1: Math.max(...xs) + half + PRO_MARGIN_FT,
+    y0: -TEE_BEHIND * FEET_PER_PX,
+    y1: Math.max(...ys) + half + PRO_MARGIN_FT,
+  };
+}
+// Pure: one ProHole (feet) → one playable Hole (world px). The world is at least
+// the viewport wide, centred on the hole; the tee keeps the usual TEE_BEHIND of
+// room under it. Fill trees come from populateTrees, which keeps the key trees.
+function proHoleToHole(h: ProHole): Hole {
+  const b = proHoleBoundsFt(h);
+  const spanX = (b.x1 - b.x0) / FEET_PER_PX;
+  const worldW = Math.max(W, Math.ceil(spanX));
+  const worldH = Math.ceil((b.y1 - b.y0) / FEET_PER_PX);
+  const padX = (worldW - spanX) / 2;
+  const teeY = worldH - TEE_BEHIND;
+  const px = (p: { x: number; y: number }): Vec => ({ x: padX + (p.x - b.x0) / FEET_PER_PX, y: teeY - p.y / FEET_PER_PX });
+  // A feet rect (x..x+w across, y..y+h along the hole) → a world rect (y grows down).
+  const rect = (r: { x: number; y: number; w: number; h: number }): Water => {
+    const tl = px({ x: r.x, y: r.y + r.h });
+    return { x: tl.x, y: tl.y, w: r.w / FEET_PER_PX, h: r.h / FEET_PER_PX };
+  };
+  const line = h.line.map(px);
+  const hole: Hole = {
+    par: h.par,
+    worldH,
+    worldW,
+    tee: line[0],
+    basket: line[line.length - 1],
+    fairway: line,
+    fairways: h.islands?.map((f) => f.map(px)),
+    fwWidth: h.widthFt / FEET_PER_PX,
+    trees: (h.keyTrees ?? []).map((t) => ({ ...px(t), r: t.r / FEET_PER_PX })),
+    water: (h.water ?? []).map(rect),
+    hazard: (h.hazard ?? []).map((z) => { const c = px(z), d = z.d / FEET_PER_PX; return { x: c.x - d / 2, y: c.y - d / 2, w: d, h: d }; }),
+    obZones: h.obZones?.map(rect),
+    dropZone: h.dropZone ? px(h.dropZone) : undefined,
+    walls: h.walls?.map((wl) => { const a = px(wl); return { x: a.x, y: a.y, w: wl.w / FEET_PER_PX }; }),
+    roughIsHazard: h.rough === "hazard" ? true : undefined,
+    elev: h.elev,
+    elevZones: h.elevZones,
+    treeMul: PRO_TREE_MUL[h.trees],
+    bookFt: h.lengthFt,
+  };
+  return { ...hole, trees: populateTrees(hole) };
+}
+// Built courses get reserved seeds in the "tour" seed space, so bests, resume,
+// practice and the HUD all work through the existing (mode "tour", seed) path.
+// generateTourCourse / tourVenue / tourCharacter intercept these seeds first.
+const PRO_COURSES: ProCourse[] = [MAPLE_HILL, BREWSTER_RIDGE, IDLEWILD];
+const PROTOUR_SEED_BASE = 0x2026c000 >>> 0;
+type ProTourCourse = { seed: number; course: ProCourse; holes: Hole[]; par: number; lengthFt: number };
+const PROTOUR_COURSES: ProTourCourse[] = PRO_COURSES.map((course, i) => {
+  const holes = course.holes.map((h) => ({ ...proHoleToHole(h), theme: course.theme }));
+  return {
+    seed: (PROTOUR_SEED_BASE + i + 1) >>> 0,
+    course,
+    holes,
+    par: course.holes.reduce((s, h) => s + h.par, 0),
+    lengthFt: course.holes.reduce((s, h) => s + h.lengthFt, 0),
+  };
+});
+const PROTOUR_BY_SEED = new Map<number, ProTourCourse>(PROTOUR_COURSES.map((c) => [c.seed, c]));
+const PROTOUR_BY_ID = new Map<string, ProTourCourse>(PROTOUR_COURSES.map((c) => [c.course.id, c]));
+function isProTourSeed(seed: number | undefined): boolean {
+  return seed != null && PROTOUR_BY_SEED.has(seed >>> 0);
+}
+function proTourCourseBySeed(seed: number | undefined): ProTourCourse | undefined {
+  return seed == null ? undefined : PROTOUR_BY_SEED.get(seed >>> 0);
+}
+function proTourCourseById(id: string): ProTourCourse | undefined {
+  return PROTOUR_BY_ID.get(id);
+}
 
 // The 18 holes of a playable course, by (mode, seed). Glendoveer + Winthrop are
 // fixed; a tour venue's seed builds its layout. (Daily/ranked aren't fixed
@@ -1524,12 +1615,21 @@ function tourStyle(seed: number): TourStyle {
 }
 // A short character tag for a venue (shown in the Career schedule + HUD).
 function tourCharacter(seed: number): { character: string; emoji: string } {
+  if (PROTOUR_BY_SEED.has(seed >>> 0)) return { character: "2026 Pro Tour", emoji: "🗓" };
   const s = tourStyle(seed);
   return { character: s.character, emoji: s.emoji };
 }
 // A procedurally-generated 18-hole pro "tour" course with a venue character,
 // using the pars from tourPars(seed). Deterministic.
 function generateTourCourse(seed: number, lenScale = 1): Hole[] {
+  // A real 2026 course: fixed holes, plus the same seeded per-hole wind every
+  // tour venue gets (lenScale only shrinks early-career courses, which never
+  // visit these seeds).
+  const pro = PROTOUR_BY_SEED.get(seed >>> 0);
+  if (pro) {
+    const wrng = mulberry32((seed ^ 0x2545f491) >>> 0);
+    return pro.holes.map((h) => ({ ...h, ...seededWind(wrng) }));
+  }
   const pars = tourPars(seed);
   const style = tourStyle(seed);
   const scene = tourScene(seed);
@@ -1550,6 +1650,8 @@ const VENUE_NAMES = [
   "Heron Marsh", "Oakmont Acres", "Sunset Dunes", "Wolf Ridge", "Aspen Glade", "Stonebriar",
 ];
 function tourVenue(seed: number): string {
+  const pro = PROTOUR_BY_SEED.get(seed >>> 0);
+  if (pro) return pro.course.name;
   return VENUE_NAMES[seed % VENUE_NAMES.length];
 }
 // A fixed roster of pro-tour venues, playable standalone from "Challenge the Arcade"
@@ -2520,6 +2622,13 @@ function ghostPosAt(gh: TournGhost, elapsed: number): { x: number; y: number; li
 }
 
 export {
+  proHoleToHole,
+  proHoleBoundsFt,
+  pathLength as pathLengthPx,
+  PROTOUR_COURSES,
+  isProTourSeed,
+  proTourCourseBySeed,
+  proTourCourseById,
   W,
   H,
   DISC_R,
@@ -2639,6 +2748,7 @@ export {
   ghostPosAt,
 };
 export type {
+  ProTourCourse,
   Vec,
   Tree,
   Water,
