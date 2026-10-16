@@ -19,14 +19,21 @@ import {
   STRAIGHT_SPEED_MUL,
   W,
   TEE_BEHIND,
+  buildRound,
+  isTeeLie,
+  catchRFor,
+  CATCH_R,
+  PROTOUR_TEE_CATCH_MUL,
 } from "../lib/discgolf/engine";
+import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import type { Hole, Vec, Flight, Disc } from "../lib/discgolf/engine";
 import type { ProHole } from "../lib/discgolf/protour/types";
 import { SEASON_2026, BUILT_COURSE_IDS } from "../lib/discgolf/protour/season2026";
 import { MAPLE_HILL } from "../lib/discgolf/protour/maple-hill";
 import { BREWSTER_RIDGE } from "../lib/discgolf/protour/brewster-ridge";
 import { IDLEWILD } from "../lib/discgolf/protour/idlewild";
-import { WINTHROP_ARENA } from "../lib/discgolf/protour/winthrop-arena";
+import { WINTHROP_GOLD } from "../lib/discgolf/protour/winthrop-gold";
 import { KENSINGTON_TOBOGGAN } from "../lib/discgolf/protour/kensington-toboggan";
 import { FOX_RUN_MEADOWS } from "../lib/discgolf/protour/fox-run-meadows";
 import { stopSummary } from "../lib/discgolf/protour/stopSummary";
@@ -52,9 +59,9 @@ const CARDS: Record<string, { par: number[]; ft: number[]; pages?: number[]; tot
     totalPar: 68, totalFt: 9629,
   },
   // Wave 1 (spec addendum disc-golf-arcade-pro-tour-wave1.md).
-  // Winthrop Arena (USDGC), MPO A pins. The holes add up to 9,727 ft; the book's
+  // Winthrop Gold (USDGC), MPO A pins. The holes add up to 9,727 ft; the book's
   // TOT cell prints 9,728, a rounding artefact of its metre source.
-  "winthrop-arena": {
+  "winthrop-gold": {
     par: [3, 3, 4, 3, 5, 3, 3, 4, 3, 4, 4, 4, 4, 3, 4, 3, 3, 4],
     ft: [282, 410, 833, 299, 1024, 371, 285, 696, 394, 548, 735, 902, 712, 413, 538, 390, 249, 646],
     pages: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20],
@@ -75,7 +82,7 @@ const CARDS: Record<string, { par: number[]; ft: number[]; pages?: number[]; tot
     totalPar: 64, totalFt: 10025,
   },
 };
-const COURSES = [MAPLE_HILL, BREWSTER_RIDGE, IDLEWILD, WINTHROP_ARENA, KENSINGTON_TOBOGGAN, FOX_RUN_MEADOWS];
+const COURSES = [MAPLE_HILL, BREWSTER_RIDGE, IDLEWILD, WINTHROP_GOLD, KENSINGTON_TOBOGGAN, FOX_RUN_MEADOWS];
 const PILOT_IDS = ["maple-hill", "brewster-ridge", "idlewild"];
 const lineFt = (h: ProHole) => h.line.reduce((s, p, i) => (i ? s + Math.hypot(p.x - h.line[i - 1].x, p.y - h.line[i - 1].y) : 0), 0);
 
@@ -98,9 +105,9 @@ describe("2026 season list", () => {
     expect([...BUILT_COURSE_IDS].sort()).toEqual(COURSES.map((c) => c.id).sort());
   });
 
-  it("names the USDGC course Winthrop Arena, as the book and event page do", () => {
+  it("names the USDGC course Winthrop Gold (Henry's call; the book says 'Winthrop Arena')", () => {
     const usdgc = SEASON_2026.find((s) => s.stop === 22)!;
-    expect(usdgc.courses).toEqual([{ id: "winthrop-arena", name: "Winthrop Arena", built: true }]);
+    expect(usdgc.courses).toEqual([{ id: "winthrop-gold", name: "Winthrop Gold", built: true }]);
   });
 
   it("never shows a sponsor prefix or a tour mark in an event name", () => {
@@ -195,6 +202,76 @@ describe.each(COURSES.map((c) => [c.id, c] as const))("%s data matches its caddi
   });
 });
 
+describe("Henry's Oct 16 rules for Pro Tour holes: tee-shot catch radius and drive-only drop zones", () => {
+  const proHoles = PROTOUR_COURSES.flatMap((c) => c.holes.map((h, i) => ({ id: c.course.id, n: i + 1, h, ph: c.course.holes[i] })));
+  const handAuthored: Hole[] = [
+    ...buildRound(1, "course"), ...buildRound(1, "winthrop"), ...buildRound(1, "olympus"),
+    ...TOUR_COURSES.flatMap((t) => buildRound(t.seed, "tour")),
+  ];
+
+  it("every one of the 108 Pro Tour holes carries the 0.85 tee catch, and no hand-authored hole does", () => {
+    expect(proHoles).toHaveLength(108);
+    expect(PROTOUR_TEE_CATCH_MUL).toBe(0.85);
+    for (const { id, n, h } of proHoles) expect(h.teeCatchMul, `${id} ${n}`).toBe(0.85);
+    for (const h of handAuthored) expect(h.teeCatchMul).toBeUndefined();
+    for (const h of handAuthored) expect(h.dzDriveOnly).toBeUndefined();
+  });
+
+  it("tightens the catch only for a throw from the tee", () => {
+    const h = proHoles[0].h;
+    expect(isTeeLie(h, h.tee)).toBe(true);
+    expect(catchRFor(h, h.tee, CATCH_R)).toBeCloseTo(CATCH_R * 0.85, 9);
+    expect(catchRFor(h, { x: h.tee.x, y: h.tee.y - 40 }, CATCH_R)).toBe(CATCH_R);
+    expect(catchRFor(handAuthored[0], handAuthored[0].tee, CATCH_R)).toBe(CATCH_R);
+  });
+
+  it("only Winthrop Gold 6, 9, 10 and 12 send every OB to the DZ; every other Pro Tour DZ is drive-only", () => {
+    expect(proHoles.filter((x) => x.ph.dzAll).map((x) => `${x.id} ${x.n}`)).toEqual(["winthrop-gold 6", "winthrop-gold 9", "winthrop-gold 10", "winthrop-gold 12"]);
+    expect(proHoles.filter((x) => x.h.dzDriveOnly).map((x) => `${x.id} ${x.n}`)).toEqual([
+      "maple-hill 1", "maple-hill 8", "maple-hill 14",
+      "kensington-toboggan 8", "kensington-toboggan 9", "kensington-toboggan 16",
+      "fox-run-meadows 1",
+    ]);
+    for (const x of proHoles) if (x.h.dropZone) expect(!!x.h.dzDriveOnly, `${x.id} ${x.n}`).toBe(!x.ph.dzAll);
+  });
+
+  it("resolvePenalty: drive-only DZ for a tee OB, last in-bounds lie later; dzAll and hand-authored DZs take every OB", () => {
+    const tb16 = proTourCourseById("kensington-toboggan")!.holes[15];
+    const later = { x: tb16.tee.x, y: tb16.tee.y - 160 }; // a lie up the fairway
+    const trail = [later, { x: later.x, y: later.y - 10 }];
+    const off = { x: 1, y: later.y - 20 };
+    const tee = resolvePenalty("oob", tb16, off, [tb16.tee], tb16.tee, isTeeLie(tb16, tb16.tee));
+    expect(tee.lie).toEqual(tb16.dropZone);
+    expect(tee.dz).toBe(true);
+    const second = resolvePenalty("oob", tb16, off, trail, later, isTeeLie(tb16, later));
+    expect(second.lie).not.toEqual(tb16.dropZone);
+    expect(second.lie).toEqual({ x: trail[1].x, y: trail[1].y });
+    expect(second.dz).toBeUndefined();
+    const wg10 = proTourCourseById("winthrop-gold")!.holes[9];
+    const wLater = { x: wg10.tee.x, y: wg10.tee.y - 50 };
+    expect(resolvePenalty("oob", wg10, { x: 1, y: wLater.y }, [wLater], wLater, false).lie).toEqual(wg10.dropZone);
+    expect(resolvePenalty("oob", wg10, { x: 1, y: wLater.y }, [wg10.tee], wg10.tee, true).lie).toEqual(wg10.dropZone);
+    // a hand-authored drop zone still takes every OB (default fromTee = true, no flag)
+    const hand = handAuthored.find((h) => h.dropZone)!;
+    const hLater = { x: hand.tee.x, y: hand.tee.y - 30 };
+    expect(resolvePenalty("oob", hand, { x: 1, y: hLater.y }, [hLater], hLater, false).lie).toEqual(hand.dropZone);
+    expect(resolvePenalty("oob", hand, { x: 1, y: hLater.y }, [hLater], hLater).lie).toEqual(hand.dropZone);
+  });
+
+  it("stepFlight and throwDisc are byte-identical to improvements-round1 (sha256 of their source)", () => {
+    const sha = (t: string) => createHash("sha256").update(t).digest("hex");
+    const eng = readFileSync(new URL("../lib/discgolf/engine.ts", import.meta.url), "utf8");
+    const i = eng.indexOf("\nfunction stepFlight(") + 1;
+    const rest = eng.slice(i + 1);
+    const m = /\n(function |const [A-Za-z_]+ = |export |\/\/ ═)/.exec(rest)!;
+    expect(sha(eng.slice(i, i + 1 + m.index))).toBe("f30074039a30389662c66c4b0a28771a46e9aa4417a792ed8c9cbc594275b1c0");
+    const game = readFileSync(new URL("../components/disc-golf-game.tsx", import.meta.url), "utf8");
+    const a = game.indexOf("  const throwDisc = useCallback(");
+    const b = game.indexOf("\n", game.indexOf("\n  }, [", a) + 1);
+    expect(sha(game.slice(a, b))).toBe("c4684f7dd31faec63b61bbc41b7bfbe5c12fb6b0363a4fee4342235995beb868");
+  });
+});
+
 describe("season stop cards", () => {
   const gmc = SEASON_2026.find((s) => s.stop === 20)!;
   const usdgc = SEASON_2026.find((s) => s.stop === 22)!;
@@ -202,7 +279,7 @@ describe("season stop cards", () => {
 
   it("a one-course stop shows its par and length and its own best", () => {
     expect(stopSummary(usdgc, {}).courseLabel).toBe("par 64 · 9,727 ft");
-    const sum = stopSummary(usdgc, { [seed("winthrop-arena")]: 49 });
+    const sum = stopSummary(usdgc, { [seed("winthrop-gold")]: 49 });
     expect(sum.best?.best).toBe(49);
     expect(sum.best?.stars).toBe(2);
     expect(sum.bestNamed).toBe(false);
@@ -226,16 +303,16 @@ describe("season stop cards", () => {
 });
 
 describe("wave 1 course specifics", () => {
-  it("Winthrop Arena plays the A pins where the book has two, with no drop zone on the island 17", () => {
-    expect(WINTHROP_ARENA.holes.filter((h) => h.layout).map((h) => [h.n, h.layout])).toEqual([[3, "A"], [5, "A"], [13, "A"], [17, "A"]]);
-    const h17 = WINTHROP_ARENA.holes[16];
+  it("Winthrop Gold plays the A pins where the book has two, with no drop zone on the island 17", () => {
+    expect(WINTHROP_GOLD.holes.filter((h) => h.layout).map((h) => [h.n, h.layout])).toEqual([[3, "A"], [5, "A"], [13, "A"], [17, "A"]]);
+    const h17 = WINTHROP_GOLD.holes[16];
     expect(h17.islandGreen).toBe(true);
     expect(h17.dropZone).toBeUndefined();
     // the book limits every OB throw to the DZ on these holes
-    expect(WINTHROP_ARENA.holes.filter((h) => h.dropZone).map((h) => h.n)).toEqual([6, 9, 10, 12]);
+    expect(WINTHROP_GOLD.holes.filter((h) => h.dropZone).map((h) => h.n)).toEqual([6, 9, 10, 12]);
     // flat park; hazard rough only on 16, where the yellow lines are the edge
-    for (const h of WINTHROP_ARENA.holes) expect(h.elev ?? 0).toBe(0);
-    expect(WINTHROP_ARENA.holes.filter((h) => h.rough === "hazard").map((h) => h.n)).toEqual([16]);
+    for (const h of WINTHROP_GOLD.holes) expect(h.elev ?? 0).toBe(0);
+    expect(WINTHROP_GOLD.holes.filter((h) => h.rough === "hazard").map((h) => h.n)).toEqual([16]);
   });
 
   it("Fox Run Meadows: out 5,115 / in 4,910, island 1 with its DZ (the only one), the river on 7 and 12", () => {
@@ -266,7 +343,7 @@ describe("wave 1 course specifics", () => {
       expect(h.rough, `hole ${n}`).toBe("hazard");
       expect((h.obZones ?? []).every((r) => r.y > b.y), `hole ${n}`).toBe(true);
     }
-    expect(KENSINGTON_TOBOGGAN.holes.reduce((s, h) => s + h.lengthFt, 0)).toBeGreaterThan(Math.max(...[MAPLE_HILL, BREWSTER_RIDGE, IDLEWILD, WINTHROP_ARENA].map((c) => c.holes.reduce((s, h) => s + h.lengthFt, 0))));
+    expect(KENSINGTON_TOBOGGAN.holes.reduce((s, h) => s + h.lengthFt, 0)).toBeGreaterThan(Math.max(...[MAPLE_HILL, BREWSTER_RIDGE, IDLEWILD, WINTHROP_GOLD].map((c) => c.holes.reduce((s, h) => s + h.lengthFt, 0))));
   });
 });
 
@@ -346,6 +423,9 @@ describe("pro tour courses plug into the tour seed space", () => {
       ["brewster-ridge", 0x2026c002],
       ["idlewild", 0x2026c003],
     ]);
+    // Winthrop Gold kept its slot when it was renamed from Winthrop Arena, so its
+    // seed (and any best saved under it) didn't move.
+    expect(proTourCourseById("winthrop-gold")!.seed).toBe(0x2026c004);
     expect(PROTOUR_COURSES.slice(0, 3).map((c) => c.course.id)).toEqual(PILOT_IDS);
     // new courses are appended after the pilot, each on the next seed
     PROTOUR_COURSES.forEach((c, i) => expect(c.seed).toBe((0x2026c000 + i + 1) >>> 0));
@@ -405,10 +485,10 @@ function sim(hole: Hole, lie: Vec, disc: Disc, angle: number, power: number) {
   const ghostTrees = treesAtLie(hole, lie.x, lie.y);
   const trail: Vec[] = [{ x: f.x, y: f.y }];
   for (let i = 0; i < 1200; i++) {
-    const r = stepFlight(f, disc, -1, "straight", hole, "flat", { ghostTrees });
+    const r = stepFlight(f, disc, -1, "straight", hole, "flat", { ghostTrees, catchR: catchRFor(hole, lie, CATCH_R) });
     trail.push({ x: f.x, y: f.y });
     if (r.status !== "fly") {
-      const pen = resolvePenalty(r.status, hole, { x: f.x, y: f.y }, trail, lie);
+      const pen = resolvePenalty(r.status, hole, { x: f.x, y: f.y }, trail, lie, isTeeLie(hole, lie));
       return { status: r.status, lie: pen.lie ?? { x: f.x, y: f.y }, strokes: 1 + pen.strokes };
     }
   }
@@ -456,12 +536,14 @@ function botPlay(hole: Hole, maxThrows: number, weak = false): { strokes: number
 // Forced carries a weak arm can't make, exactly as on the real course:
 // Idlewild 4's 240 ft tee pond has no drop zone (re-tee), and Maple Hill 1's
 // pond fills the corridor, so a miss re-throws the ~180 ft carry from the DZ.
-// Winthrop Arena 9 flies an OB field to a shelf green; the book's walk-around
+// Winthrop Gold 9 flies an OB field to a shelf green; the book's walk-around
 // to the right exists (the bot below holes out), but this greedy weak bot only
 // measures progress along the centerline, so it never takes the detour.
 // Fox Run 12's tee shot must carry ~310 ft of OB to the dirt road; the book names
 // no drop zone that takes every OB throw there, so a miss re-tees (as on ID4).
-const FORCED_CARRY: Record<string, number[]> = { "maple-hill": [1], idlewild: [4], "winthrop-arena": [9], "fox-run-meadows": [12] };
+// Maple Hill 8's DZ is for tee shots only (book p5): a weak bot that lays up off
+// the tee and then splashes plays again from the pond's edge, 290 ft of carry.
+const FORCED_CARRY: Record<string, number[]> = { "maple-hill": [1, 8], idlewild: [4], "winthrop-gold": [9], "fox-run-meadows": [12] };
 
 describe.each(PROTOUR_COURSES.map((c) => [c.course.id, c] as const))("%s is playable end to end", (_id, c) => {
   it("a bot holes out on all 18 holes (real physics and wind)", () => {

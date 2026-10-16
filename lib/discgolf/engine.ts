@@ -8,7 +8,7 @@ import type { ProHole, ProCourse } from "./protour/types";
 import { MAPLE_HILL } from "./protour/maple-hill";
 import { BREWSTER_RIDGE } from "./protour/brewster-ridge";
 import { IDLEWILD } from "./protour/idlewild";
-import { WINTHROP_ARENA } from "./protour/winthrop-arena";
+import { WINTHROP_GOLD } from "./protour/winthrop-gold";
 import { KENSINGTON_TOBOGGAN } from "./protour/kensington-toboggan";
 import { FOX_RUN_MEADOWS } from "./protour/fox-run-meadows";
 
@@ -66,7 +66,7 @@ type Water = { x: number; y: number; w: number; h: number };
 // GROUND_THEMES palette key (grass/fairway tint), `weather` an optional falling
 // overlay. Stamped per hole so the look travels with the hole into the Daily mix.
 export type Weather = "rain" | "snow";
-type Hole = { par: number; worldH: number; worldW?: number; lenMul?: number; tee: Vec; basket: Vec; fairway: Vec[]; fairways?: Vec[][]; fwWidth: number; trees: Tree[]; water: Water[]; hazard?: Water[]; obZones?: Water[]; dropZone?: Vec; walls?: { x: number; y: number; w: number }[]; roughIsHazard?: boolean; wind?: Vec; windMag?: number; elev?: number; elevZones?: { to: number; elev: number }[]; treeMul?: number; theme?: string; weather?: Weather; bookFt?: number; obRects?: boolean };
+type Hole = { par: number; worldH: number; worldW?: number; lenMul?: number; tee: Vec; basket: Vec; fairway: Vec[]; fairways?: Vec[][]; fwWidth: number; trees: Tree[]; water: Water[]; hazard?: Water[]; obZones?: Water[]; dropZone?: Vec; walls?: { x: number; y: number; w: number }[]; roughIsHazard?: boolean; wind?: Vec; windMag?: number; elev?: number; elevZones?: { to: number; elev: number }[]; treeMul?: number; theme?: string; weather?: Weather; bookFt?: number; obRects?: boolean; teeCatchMul?: number; dzDriveOnly?: boolean };
 
 // Holes are authored in this old 448-tall frame, then stretched to a length
 // that scales with par (below).
@@ -527,6 +527,11 @@ const OLYMPUS_PAR = OLYMPUS_HOLES.reduce((s, h) => s + h.par, 0);
 // materializeHole on purpose: its vertical-only stretch would squash doglegs,
 // while a real hole needs x and y scaled by the same FEET_PER_PX.
 const PRO_MARGIN_FT = 40; // world margin past the corridor edge, each side and long
+// Henry's Oct 16 call: tee shots on Pro Tour holes catch with a 15% tighter
+// basket (real MPO ace rates are a few percent). Only tee shots, so approaches
+// and putts play exactly as on every other course; applied at the stepFlight call
+// sites via catchRFor, so stepFlight itself is unchanged.
+const PROTOUR_TEE_CATCH_MUL = 0.85;
 const PRO_TREE_MUL: Record<ProHole["trees"], number> = { open: 0.6, mixed: 1, wooded: 1.5 };
 // The hole's extent in feet: the corridor (line ± half width) plus a margin, and
 // TEE_BEHIND of pull-back room behind the tee. Every feature must sit inside it.
@@ -578,6 +583,10 @@ function proHoleToHole(h: ProHole): Hole {
     treeMul: PRO_TREE_MUL[h.trees],
     bookFt: h.lengthFt,
     obRects: true,
+    teeCatchMul: PROTOUR_TEE_CATCH_MUL,
+    // The books limit most drop zones to tee shots; `dzAll` marks the holes
+    // whose book sends every OB throw to the DZ.
+    dzDriveOnly: h.dropZone && !h.dzAll ? true : undefined,
   };
   return { ...hole, trees: populateTrees(hole) };
 }
@@ -586,7 +595,7 @@ function proHoleToHole(h: ProHole): Hole {
 // generateTourCourse / tourVenue / tourCharacter intercept these seeds first.
 // Append only: seeds are PROTOUR_SEED_BASE + index + 1 and saved bests are keyed
 // by seed, so inserting a course would orphan the bests of every course after it.
-const PRO_COURSES: ProCourse[] = [MAPLE_HILL, BREWSTER_RIDGE, IDLEWILD, WINTHROP_ARENA, KENSINGTON_TOBOGGAN, FOX_RUN_MEADOWS];
+const PRO_COURSES: ProCourse[] = [MAPLE_HILL, BREWSTER_RIDGE, IDLEWILD, WINTHROP_GOLD, KENSINGTON_TOBOGGAN, FOX_RUN_MEADOWS];
 const PROTOUR_SEED_BASE = 0x2026c000 >>> 0;
 type ProTourCourse = { seed: number; course: ProCourse; holes: Hole[]; par: number; lengthFt: number };
 const PROTOUR_COURSES: ProTourCourse[] = PRO_COURSES.map((course, i) => {
@@ -2050,12 +2059,26 @@ function lastInBoundsLie(trail: Vec[], hole: Hole, fallback: Vec): Vec {
 // a stop); `trail` is the recorded flight curve; `rest` is the prior lie, a
 // final fallback for the OB walk-back. Pure, so it's unit-tested directly.
 type PenaltyKind = "none" | "ob" | "water" | "sand";
-type Penalty = { kind: PenaltyKind; strokes: number; lie: Vec | null };
-function resolvePenalty(status: StepStatus, hole: Hole, pos: Vec, trail: Vec[], rest: Vec): Penalty {
+type Penalty = { kind: PenaltyKind; strokes: number; lie: Vec | null; dz?: true };
+// Is this lie the hole's tee (a tee shot, including a re-tee)?
+function isTeeLie(hole: Hole, lie: Vec): boolean {
+  return Math.hypot(lie.x - hole.tee.x, lie.y - hole.tee.y) < 0.5;
+}
+// The catch radius to hand stepFlight for a throw from `lie`: tighter off the tee
+// on holes with a teeCatchMul (the Pro Tour holes), unchanged otherwise.
+function catchRFor(hole: Hole, lie: Vec, catchR: number): number {
+  return catchR * (hole.teeCatchMul != null && isTeeLie(hole, lie) ? hole.teeCatchMul : 1);
+}
+// `fromTee`: the throw was a tee shot. On a `dzDriveOnly` hole (Pro Tour holes
+// whose book limits the DZ to tee shots) only a tee shot goes to the drop zone;
+// a later OB plays from the last in-bounds lie. Everywhere else the DZ takes
+// every OB throw, as before. `dz` is set when the drop zone was used.
+function resolvePenalty(status: StepStatus, hole: Hole, pos: Vec, trail: Vec[], rest: Vec, fromTee = true): Penalty {
   if (status === "ob" || status === "oob") {
     const water = hole.water.some((w) => inRect(w, pos.x, pos.y));
-    const lie = hole.dropZone ?? lastInBoundsLie(trail, hole, rest);
-    return { kind: water ? "water" : "ob", strokes: 1, lie };
+    const useDz = !!hole.dropZone && (fromTee || !hole.dzDriveOnly);
+    const lie = useDz ? hole.dropZone! : lastInBoundsLie(trail, hole, rest);
+    return useDz ? { kind: water ? "water" : "ob", strokes: 1, lie, dz: true } : { kind: water ? "water" : "ob", strokes: 1, lie };
   }
   if (status === "stop") {
     const sand =
@@ -2384,7 +2407,7 @@ function simulateGhostHole(hole: Hole, skill: number, q: number, rng: () => numb
       strokes += 1; // the penalty on top of the throw
       steps.push({ to: next });
       let back: Vec;
-      if (hole.dropZone) back = { x: hole.dropZone.x, y: hole.dropZone.y };
+      if (hole.dropZone && (!hole.dzDriveOnly || isTeeLie(hole, lie))) back = { x: hole.dropZone.x, y: hole.dropZone.y };
       else {
         const base = pointOnPath(hole.fairway, Math.min(1, toF));
         const ahead = pointOnPath(hole.fairway, Math.min(1, toF + 0.02));
@@ -2746,6 +2769,9 @@ export {
   autoDiscIndex,
   lastInBoundsLie,
   resolvePenalty,
+  isTeeLie,
+  catchRFor,
+  PROTOUR_TEE_CATCH_MUL,
   treesAtLie,
   stepFlight,
   buildTournGhosts,

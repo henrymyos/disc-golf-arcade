@@ -20,6 +20,9 @@ import {
   buildRound,
   stepFlight,
   resolvePenalty,
+  catchRFor,
+  isTeeLie,
+  CATCH_R,
   treesAtLie,
   fullPowerRange,
   distBetween,
@@ -67,10 +70,10 @@ function sim(hole: Hole, lie: Vec, disc: Disc, angle: number, power: number) {
   const ghostTrees = treesAtLie(hole, lie.x, lie.y);
   const trail: Vec[] = [{ x: f.x, y: f.y }];
   for (let i = 0; i < 1200; i++) {
-    const r = stepFlight(f, disc, -1, "straight", hole, "flat", { ghostTrees });
+    const r = stepFlight(f, disc, -1, "straight", hole, "flat", { ghostTrees, catchR: catchRFor(hole, lie, CATCH_R) });
     trail.push({ x: f.x, y: f.y });
     if (r.status !== "fly") {
-      const pen = resolvePenalty(r.status, hole, { x: f.x, y: f.y }, trail, lie);
+      const pen = resolvePenalty(r.status, hole, { x: f.x, y: f.y }, trail, lie, isTeeLie(hole, lie));
       return { status: r.status, lie: pen.lie ?? { x: f.x, y: f.y }, strokes: 1 + pen.strokes };
     }
   }

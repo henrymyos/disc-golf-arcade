@@ -44,7 +44,7 @@ export const SEASON_2026: ProStop[] = [
   { stop: 19, event: "LWS Open at Idlewild", tier: "Elite", dates: "Sep 4–6", city: "Burlington, KY", pdgaEventUrl: pdga(96417), courses: [c("idlewild", "Idlewild", true)] },
   { stop: 20, event: "Green Mountain Championship", tier: "Playoffs", dates: "Sep 17–20", city: "Smugglers' Notch, VT", pdgaEventUrl: pdga(96418), courses: [c("brewster-ridge", "Brewster Ridge", true), c("fox-run-meadows", "Fox Run Meadows", true)] },
   { stop: 21, event: "MVP Open", tier: "Playoffs", dates: "Sep 24–27", city: "Leicester, MA", pdgaEventUrl: pdga(96419), courses: [c("maple-hill", "Maple Hill", true)] },
-  { stop: 22, event: "United States Disc Golf Championship", tier: "Major", dates: "Oct 8–11", city: "Rock Hill, SC", pdgaEventUrl: pdga(97346), courses: [c("winthrop-arena", "Winthrop Arena", true)] },
+  { stop: 22, event: "United States Disc Golf Championship", tier: "Major", dates: "Oct 8–11", city: "Rock Hill, SC", pdgaEventUrl: pdga(97346), courses: [c("winthrop-gold", "Winthrop Gold", true)] },
   // The tour championship's DGPT page lists no PDGA event page, so this links the DGPT event page.
   { stop: 23, event: "Powerball Cup", tier: "Playoffs", dates: "Oct 15–18", city: "Lynchburg, VA", pdgaEventUrl: "https://www.dgpt.com/event/2026-powerball-cup/", courses: [c("ivy-hill", "Ivy Hill")] },
 ];

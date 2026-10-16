@@ -10,11 +10,11 @@
 // and woods on the other (2, 3, 13, 14, 16), the woods play as hazard rough and
 // the named side gets stepped OB strips; 15 lists no OB at all. The book shows
 // no slope, so elev stays 0.
-// Balance (Oct 2026): a pair 40 ft short on 3 (it was aced about half the time),
-// one tree 45 ft short and left on 10, and 13 widened to 170 ft on the woods side
-// (its OB strips stay put) to pay the pair back (tests/protour-balance.test.ts).
-// 2 and 10 get no pair: with the OB line 40 ft right, a pair can't keep a 20 ft
-// gap without standing on the line. balanceTrees are ours, not the book's;
+// Balance (Oct 2026): one approach tree on 3 (90 ft short, left) and on 10 (45 ft
+// short, left), and 13 widened to 170 ft on the woods side (its OB strips stay
+// put) (tests/protour-balance.test.ts). A pair on 3 blocked the green, and on 2
+// and 10 a pair can't keep a 20 ft gap beside the OB line; the tee-shot catch
+// radius (engine PROTOUR_TEE_CATCH_MUL) trims the short par 3 aces instead. balanceTrees are ours, not the book's;
 // signature holes get none.
 // Drop zones: only 1's (the book sends every OB tee shot there). 12's DZ appears
 // on the map, but neither its hole notes nor the general rules send all OB to it,
@@ -26,7 +26,7 @@ const BOOK = "https://drive.google.com/file/d/1h7scc4zN5JfehXxMev2WyuAt6jT4IDlk/
 const HOLES: ProHole[] = [
   { n: 1, par: 4, lengthFt: 595, line: [{ x: 0, y: 0 }, { x: 10, y: 190 }, { x: -40, y: 290 }, { x: -100, y: 380 }, { x: -130, y: 460 }, { x: -120, y: 520 }, { x: -100, y: 560 }], widthFt: 150, rough: "ob", obZones: [{ x: -120, y: 20, w: 230, h: 170 }, { x: 40, y: 190, w: 70, h: 80 }, { x: -240, y: 620, w: 350, h: 50 }], islandGreen: true, dropZone: { x: 10, y: 210 }, trees: "mixed", note: "Carry the tall grass to an island fairway and green; a missed drive plays from the DZ", ref: { url: BOOK, page: 8 } },
   { n: 2, par: 3, lengthFt: 250, line: [{ x: 0, y: 0 }, { x: 0, y: 120 }, { x: 0, y: 250 }], widthFt: 150, rough: "hazard", obZones: [{ x: 40, y: 90, w: 70, h: 180 }, { x: -110, y: 270, w: 220, h: 90 }], trees: "wooded", note: "Short wooded par 3; OB right and just past the pin", ref: { url: BOOK, page: 9 } },
-  { n: 3, par: 3, lengthFt: 300, line: [{ x: 0, y: 0 }, { x: 0, y: 150 }, { x: 10, y: 290 }], widthFt: 150, rough: "hazard", obZones: [{ x: 40, y: 0, w: 70, h: 120 }, { x: 40, y: 120, w: 70, h: 110 }, { x: 50, y: 230, w: 60, h: 100 }, { x: -110, y: 330, w: 230, h: 70 }], balanceTrees: [{ x: -40, y: 250, r: 20 }, { x: 20, y: 250, r: 20 }], trees: "wooded", mando: "Left of the marked tree", note: "Straight up a wooded lane with the OB line tight right and long", ref: { url: BOOK, page: 10 } },
+  { n: 3, par: 3, lengthFt: 300, line: [{ x: 0, y: 0 }, { x: 0, y: 150 }, { x: 10, y: 290 }], widthFt: 150, rough: "hazard", obZones: [{ x: 40, y: 0, w: 70, h: 120 }, { x: 40, y: 120, w: 70, h: 110 }, { x: 50, y: 230, w: 60, h: 100 }, { x: -110, y: 330, w: 230, h: 70 }], balanceTrees: [{ x: -30, y: 200, r: 20 }], trees: "wooded", mando: "Left of the marked tree", note: "Straight up a wooded lane with the OB line tight right and long", ref: { url: BOOK, page: 10 } },
   { n: 4, par: 4, lengthFt: 630, line: [{ x: 0, y: 0 }, { x: -60, y: 190 }, { x: -130, y: 350 }, { x: -160, y: 460 }, { x: -150, y: 560 }, { x: -130, y: 610 }], widthFt: 150, rough: "ob", obZones: [{ x: -90, y: 190, w: 140, h: 60 }, { x: -110, y: 250, w: 20, h: 200 }, { x: -90, y: 450, w: 140, h: 70 }, { x: -270, y: 650, w: 380, h: 70 }], islands: [[{ x: -30, y: 270 }, { x: -30, y: 440 }]], trees: "wooded", note: "A narrow OB-ringed fairway up and left, with a safe island landing zone right", ref: { url: BOOK, page: 12 } },
   { n: 5, par: 3, lengthFt: 455, line: [{ x: 0, y: 0 }, { x: 0, y: 180 }, { x: -10, y: 340 }, { x: -10, y: 450 }], widthFt: 150, rough: "ob", water: [{ x: -120, y: 370, w: 80, h: 190 }], obZones: [{ x: -120, y: 0, w: 70, h: 240 }, { x: -120, y: 240, w: 90, h: 130 }, { x: 60, y: 0, w: 50, h: 340 }, { x: 50, y: 340, w: 60, h: 150 }, { x: -120, y: 490, w: 230, h: 70 }], trees: "open", note: "Meadow lane between tall-grass OB; the pond creeps in left of the green", ref: { url: BOOK, page: 14 } },
   { n: 6, par: 3, lengthFt: 365, line: [{ x: 0, y: 0 }, { x: -30, y: 110 }, { x: -60, y: 220 }, { x: -50, y: 300 }, { x: -20, y: 360 }], widthFt: 180, rough: "ob", obZones: [{ x: -90, y: 120, w: 200, h: 190 }, { x: 20, y: 0, w: 90, h: 120 }, { x: 10, y: 310, w: 100, h: 100 }, { x: -190, y: 250, w: 60, h: 50 }, { x: -190, y: 300, w: 80, h: 50 }, { x: -190, y: 350, w: 130, h: 70 }, { x: -190, y: 420, w: 300, h: 70 }], trees: "wooded", mando: "Left of the marked tree", note: "Hyzer up and left past an OB tree block to a pocket green", ref: { url: BOOK, page: 16 } },

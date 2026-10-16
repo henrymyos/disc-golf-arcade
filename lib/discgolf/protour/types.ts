@@ -25,6 +25,7 @@ export type ProHole = {
   islandGreen?: boolean; // the book's green is an island (ringed by water/OB); shown on chips + glyphs
   hazard?: { x: number; y: number; d: number }[]; // round bunkers (center + diameter)
   dropZone?: FtPt; // the book's main DZ only (one per hole)
+  dzAll?: true; // the book sends EVERY OB throw to the DZ (default: tee shots only)
   walls?: { x: number; y: number; w: number }[]; // fences / gates that block at any height
   keyTrees?: { x: number; y: number; r: number }[]; // only trees the book makes matter
   // Approach trees added to balance scoring against the existing tour courses

@@ -78,13 +78,14 @@ function StopCard({ s, bests, active, onOpen }: { s: ProStop; bests: Record<numb
       </div>
       <div className="flex items-end justify-between gap-2 mt-0.5">
         <div className="min-w-0">
-          <span className="block text-white font-bold text-sm truncate">{s.event}</span>
+          <span className="block text-white font-bold text-sm truncate" data-testid="pt-event">{s.event}</span>
           <span className="block text-gray-400 text-[11px] truncate">{where} · {s.city}</span>
         </div>
         {c && (
           <div className="shrink-0 text-right">
             <Stars n={sum.best?.stars ?? 0} />
-            <span className="block text-[10px] text-gray-500 mt-0.5">{sum.best ? <>Best <b className="text-[#36D7B7]">{sum.best.best}</b> ({over(sum.best.best - sum.best.course.par)}){sum.bestNamed ? ` · ${sum.best.course.course.name}` : ""}</> : "Not played"}</span>
+            <span className="block text-[10px] text-gray-500 mt-0.5">{sum.best ? <>Best <b className="text-[#36D7B7]">{sum.best.best}</b> ({over(sum.best.best - sum.best.course.par)})</> : "Not played"}</span>
+            {sum.best && sum.bestNamed && <span className="block text-[10px] text-gray-500 truncate max-w-[9rem]" data-testid="pt-best-course">{sum.best.course.course.name}</span>}
           </div>
         )}
       </div>

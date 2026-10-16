@@ -33,7 +33,7 @@ import {
   dailyChallenges, weeklyChallenges, roundsThisDay, roundsThisWeek, challengeDone, dailyClaimKey, eventClaimKey, type EventRound,
 } from "@/lib/discgolf/events";
 import {
-  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, leaderboardCourse, TOURN_KEY, TOURNAMENTS, tournDef, tournRoundPlayHoles, tournPlace, tournFieldRound, tournLiveStandings, ACHIEVEMENTS, earnedAchievements, achievementReward, scoreLabel, STRAIGHT_SPEED_MUL, releaseSpeedMul, ADV_DISCS, levelUpChoices, validDiscIndex, DEFAULT_DISC_INDEX, BAG_MAX, discIndexByKey, unlockedDiscKeys, reconcileBag, tourVenue, isProTourSeed, proTourCourseBySeed, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, dailySeed, dailyStarThresholds, dailyStarsEarned, buildRound, elevAt, vibrate, pxToFeet, distBetween, autoDiscIndex, windAlong, resolvePenalty, treesAtLie, stepFlight, type Vec, type Hole, type Mode, type Tournament, type TournLiveRow, type Achievement, type FlightPath, type Release, type Flight, type GhostState,
+  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, leaderboardCourse, TOURN_KEY, TOURNAMENTS, tournDef, tournRoundPlayHoles, tournPlace, tournFieldRound, tournLiveStandings, ACHIEVEMENTS, earnedAchievements, achievementReward, scoreLabel, STRAIGHT_SPEED_MUL, releaseSpeedMul, ADV_DISCS, levelUpChoices, validDiscIndex, DEFAULT_DISC_INDEX, BAG_MAX, discIndexByKey, unlockedDiscKeys, reconcileBag, tourVenue, isProTourSeed, proTourCourseBySeed, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, dailySeed, dailyStarThresholds, dailyStarsEarned, buildRound, elevAt, vibrate, pxToFeet, distBetween, autoDiscIndex, windAlong, resolvePenalty, isTeeLie, catchRFor, treesAtLie, stepFlight, type Vec, type Hole, type Mode, type Tournament, type TournLiveRow, type Achievement, type FlightPath, type Release, type Flight, type GhostState,
 } from "@/lib/discgolf/engine";
 import { parseChallenge, challengeParam } from "@/lib/discgolf/challenge";
 import { buildReplay, replayFrame, type Replay } from "@/lib/discgolf/replay";
@@ -1865,8 +1865,8 @@ export function DiscGolfGame() {
         const f: Flight = { x: lie.x, y: lie.y, vx: Math.cos(a0 + da) * speed, vy: Math.sin(a0 + da) * speed, h: 0, vh: pw * disc.arc, fadeTurn: 0 };
         const trail: Vec[] = [{ ...lie }];
         let st = "fly";
-        for (let i = 0; i < 1500 && st === "fly"; i++) { st = stepFlight(f, disc, fadeSign, "straight", hole, releaseRef.current, { catchR: g.skill.catchR, windMul: g.skill.windMul, ghostTrees: g.ghostTrees }).status; trail.push({ x: f.x, y: f.y }); }
-        const pen = resolvePenalty(st as "stop", hole, { x: f.x, y: f.y }, trail, lie);
+        for (let i = 0; i < 1500 && st === "fly"; i++) { st = stepFlight(f, disc, fadeSign, "straight", hole, releaseRef.current, { catchR: catchRFor(hole, lie, g.skill.catchR), windMul: g.skill.windMul, ghostTrees: g.ghostTrees }).status; trail.push({ x: f.x, y: f.y }); }
+        const pen = resolvePenalty(st as "stop", hole, { x: f.x, y: f.y }, trail, lie, isTeeLie(hole, lie));
         // A penalty stroke costs about one short throw (100px ≈ 180 ft), so a
         // bag that can't carry an island green takes the drop zone instead of
         // creeping forward on the tee pad forever.
@@ -2577,7 +2577,7 @@ export function DiscGolfGame() {
         const d = g.disc;
         const disc = ADV_DISCS[g.discIndex];
         const f: Flight = { x: d.x, y: d.y, vx: d.vx, vy: d.vy, h: g.h, vh: g.vh, fadeTurn: g.fadeTurn };
-        const res = stepFlight(f, disc, g.fadeSign, g.path, hole, g.release, { catchR: g.skill.catchR * (g.momentum ?? 1), windMul: g.skill.windMul, ghostTrees: g.ghostTrees });
+        const res = stepFlight(f, disc, g.fadeSign, g.path, hole, g.release, { catchR: catchRFor(hole, g.rest, g.skill.catchR * (g.momentum ?? 1)), windMul: g.skill.windMul, ghostTrees: g.ghostTrees });
         d.x = f.x;
         d.y = f.y;
         d.vx = f.vx;
@@ -2654,7 +2654,7 @@ export function DiscGolfGame() {
           // OUT OF BOUNDS: +1 and play from where it crossed the line.
           // resolvePenalty encapsulates the rule (water/ob kind, +1 stroke, and
           // the new lie: drop zone if any, else the last in-bounds point).
-          const pen = resolvePenalty(res.status, hole, { x: f.x, y: f.y }, g.trailBuf, g.rest);
+          const pen = resolvePenalty(res.status, hole, { x: f.x, y: f.y }, g.trailBuf, g.rest, isTeeLie(hole, g.rest));
           const inWater = pen.kind === "water";
           audioRef.current?.sfx(inWater ? "water" : "tree");
           vibrate(60);
@@ -2666,7 +2666,7 @@ export function DiscGolfGame() {
           shake(inWater ? 3 : 2);
           const lie = pen.lie ?? g.rest;
           g.throws += pen.strokes;
-          g.flash = { text: hole.dropZone ? "OB — DROP ZONE" : "OUT OF BOUNDS", at: performance.now() };
+          g.flash = { text: pen.dz ? "OB — DROP ZONE" : "OUT OF BOUNDS", at: performance.now() };
           d.x = lie.x;
           d.y = lie.y;
           d.vx = 0;
@@ -3031,7 +3031,7 @@ export function DiscGolfGame() {
           const mo = g.momentum ?? 1;
           const speed = aimDisc.power * (1.2 + power * 3.35) * pathMul * g.skill.speedMul * mo;
           const spread = (g.skill.aimSpread ?? 0) / mo;
-          const eCatchR = g.skill.catchR * mo;
+          const eCatchR = catchRFor(hole, g.disc, g.skill.catchR * mo);
           // Trace a full flight from a given launch angle.
           const trace = (ang: number) => {
             const f: Flight = { x: g.disc.x, y: g.disc.y, vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed, h: 0, vh: power * aimDisc.arc, fadeTurn: 0 };
