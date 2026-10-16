@@ -28,6 +28,7 @@ import { BREWSTER_RIDGE } from "../lib/discgolf/protour/brewster-ridge";
 import { IDLEWILD } from "../lib/discgolf/protour/idlewild";
 import { WINTHROP_ARENA } from "../lib/discgolf/protour/winthrop-arena";
 import { KENSINGTON_TOBOGGAN } from "../lib/discgolf/protour/kensington-toboggan";
+import { FOX_RUN_MEADOWS } from "../lib/discgolf/protour/fox-run-meadows";
 
 const FT = 1.8; // FEET_PER_PX
 
@@ -65,8 +66,15 @@ const CARDS: Record<string, { par: number[]; ft: number[]; pages?: number[]; tot
     pages: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19],
     totalPar: 66, totalFt: 11125,
   },
+  // Fox Run Meadows (Green Mountain Championship rounds 3–4), MPO pages only.
+  "fox-run-meadows": {
+    par: [4, 3, 3, 4, 3, 3, 5, 4, 3, 3, 4, 5, 3, 3, 3, 4, 3, 4],
+    ft: [595, 250, 300, 630, 455, 365, 1295, 745, 480, 315, 595, 1055, 405, 345, 320, 710, 390, 775],
+    pages: [8, 9, 10, 12, 14, 16, 18, 19, 21, 22, 24, 26, 27, 29, 30, 31, 32, 34],
+    totalPar: 64, totalFt: 10025,
+  },
 };
-const COURSES = [MAPLE_HILL, BREWSTER_RIDGE, IDLEWILD, WINTHROP_ARENA, KENSINGTON_TOBOGGAN];
+const COURSES = [MAPLE_HILL, BREWSTER_RIDGE, IDLEWILD, WINTHROP_ARENA, KENSINGTON_TOBOGGAN, FOX_RUN_MEADOWS];
 const PILOT_IDS = ["maple-hill", "brewster-ridge", "idlewild"];
 const lineFt = (h: ProHole) => h.line.reduce((s, p, i) => (i ? s + Math.hypot(p.x - h.line[i - 1].x, p.y - h.line[i - 1].y) : 0), 0);
 
@@ -197,6 +205,17 @@ describe("wave 1 course specifics", () => {
     // flat park; hazard rough only on 16, where the yellow lines are the edge
     for (const h of WINTHROP_ARENA.holes) expect(h.elev ?? 0).toBe(0);
     expect(WINTHROP_ARENA.holes.filter((h) => h.rough === "hazard").map((h) => h.n)).toEqual([16]);
+  });
+
+  it("Fox Run Meadows: out 5,115 / in 4,910, island 1 with its DZ, the river on 7 and 12, no mando DZs", () => {
+    const ft = FOX_RUN_MEADOWS.holes.map((h) => h.lengthFt);
+    expect(ft.slice(0, 9).reduce((a, b) => a + b, 0)).toBe(5115);
+    expect(ft.slice(9).reduce((a, b) => a + b, 0)).toBe(4910);
+    expect(FOX_RUN_MEADOWS.holes[0].islandGreen).toBe(true);
+    expect(FOX_RUN_MEADOWS.holes.filter((h) => h.dropZone).map((h) => h.n)).toEqual([1, 12]);
+    expect(FOX_RUN_MEADOWS.holes[3].islands).toHaveLength(1); // 4's safe island landing zone
+    for (const n of [7, 12, 16]) expect(FOX_RUN_MEADOWS.holes[n - 1].water?.length, `hole ${n}`).toBeGreaterThan(0);
+    for (const h of FOX_RUN_MEADOWS.holes) expect(h.elev ?? 0).toBe(0);
   });
 
   it("Kensington Toboggan is the hill course: no water, slope on most holes, the book's DZs", () => {

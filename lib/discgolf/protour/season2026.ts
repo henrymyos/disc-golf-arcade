@@ -42,7 +42,7 @@ export const SEASON_2026: ProStop[] = [
   { stop: 17, event: "Doubles Championship at the Preserve", tier: "Elite", dates: "Aug 14–16", city: "Clearwater, MN", pdgaEventUrl: pdga(96416), courses: [c("the-preserve", "The Preserve")] },
   { stop: 18, event: "Pro World Championships", tier: "Major", dates: "Aug 26–30", city: "Milford, MI", pdgaEventUrl: pdga(97344), courses: [c("black-locust-south", "Black Locust South"), c("kensington-toboggan", "Kensington Toboggan", true)] },
   { stop: 19, event: "LWS Open at Idlewild", tier: "Elite", dates: "Sep 4–6", city: "Burlington, KY", pdgaEventUrl: pdga(96417), courses: [c("idlewild", "Idlewild", true)] },
-  { stop: 20, event: "Green Mountain Championship", tier: "Playoffs", dates: "Sep 17–20", city: "Smugglers' Notch, VT", pdgaEventUrl: pdga(96418), courses: [c("brewster-ridge", "Brewster Ridge", true), c("fox-run-meadows", "Fox Run Meadows")] },
+  { stop: 20, event: "Green Mountain Championship", tier: "Playoffs", dates: "Sep 17–20", city: "Smugglers' Notch, VT", pdgaEventUrl: pdga(96418), courses: [c("brewster-ridge", "Brewster Ridge", true), c("fox-run-meadows", "Fox Run Meadows", true)] },
   { stop: 21, event: "MVP Open", tier: "Playoffs", dates: "Sep 24–27", city: "Leicester, MA", pdgaEventUrl: pdga(96419), courses: [c("maple-hill", "Maple Hill", true)] },
   { stop: 22, event: "United States Disc Golf Championship", tier: "Major", dates: "Oct 8–11", city: "Rock Hill, SC", pdgaEventUrl: pdga(97346), courses: [c("winthrop-arena", "Winthrop Arena", true)] },
   // The tour championship's DGPT page lists no PDGA event page, so this links the DGPT event page.

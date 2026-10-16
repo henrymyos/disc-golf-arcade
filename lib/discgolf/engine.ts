@@ -10,6 +10,7 @@ import { BREWSTER_RIDGE } from "./protour/brewster-ridge";
 import { IDLEWILD } from "./protour/idlewild";
 import { WINTHROP_ARENA } from "./protour/winthrop-arena";
 import { KENSINGTON_TOBOGGAN } from "./protour/kensington-toboggan";
+import { FOX_RUN_MEADOWS } from "./protour/fox-run-meadows";
 
 const W = 320;
 const H = 448;
@@ -585,7 +586,7 @@ function proHoleToHole(h: ProHole): Hole {
 // generateTourCourse / tourVenue / tourCharacter intercept these seeds first.
 // Append only: seeds are PROTOUR_SEED_BASE + index + 1 and saved bests are keyed
 // by seed, so inserting a course would orphan the bests of every course after it.
-const PRO_COURSES: ProCourse[] = [MAPLE_HILL, BREWSTER_RIDGE, IDLEWILD, WINTHROP_ARENA, KENSINGTON_TOBOGGAN];
+const PRO_COURSES: ProCourse[] = [MAPLE_HILL, BREWSTER_RIDGE, IDLEWILD, WINTHROP_ARENA, KENSINGTON_TOBOGGAN, FOX_RUN_MEADOWS];
 const PROTOUR_SEED_BASE = 0x2026c000 >>> 0;
 type ProTourCourse = { seed: number; course: ProCourse; holes: Hole[]; par: number; lengthFt: number };
 const PROTOUR_COURSES: ProTourCourse[] = PRO_COURSES.map((course, i) => {
