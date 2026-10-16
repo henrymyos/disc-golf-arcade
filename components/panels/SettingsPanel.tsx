@@ -1,6 +1,7 @@
 "use client";
 
 import type { Release } from "@/lib/discgolf/engine";
+import { SupportPromptsToggle } from "@/components/support/Support";
 
 
 export function SettingsPanel(props: {
@@ -81,6 +82,8 @@ export function SettingsPanel(props: {
             {!muted ? "ON" : "OFF"}
           </span>
         </button>
+
+        <SupportPromptsToggle />
 
         <div>
           <p className="text-gray-400 text-xs font-semibold mb-1">Music volume</p>

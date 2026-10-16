@@ -74,6 +74,7 @@ import { SettingsPanel } from "./panels/SettingsPanel";
 import { AuthPanel } from "./panels/AuthPanel";
 import { AttractBackdrop } from "./menu/AttractBackdrop";
 import { DailyButton } from "./menu/DailyButton";
+import { SupportLink, SupportNudge } from "./support/Support";
 import { NextGoalCard, GoalToast } from "./menu/NextGoal";
 import { useNextGoal } from "./menu/useNextGoal";
 import { BoardNamePrompt } from "./menu/BoardNamePrompt";
@@ -3894,6 +3895,7 @@ export function DiscGolfGame() {
                     </button>
                     <button type="button" onClick={() => setBoardsOpen(true)} className={titleCardSm}>Leaderboards</button>
                   </div>
+                  <SupportLink />
                 </>
               )}
 
@@ -4543,6 +4545,10 @@ export function DiscGolfGame() {
                 )}
                 {coinReward > 0 && (
                   <p className="text-[#f5d24a] text-sm font-bold mt-1">+{coinReward} <Coin /></p>
+                )}
+                {/* Tip-jar nudge: finished 18-hole rounds only — never minigames, Pro Tour or practice. */}
+                {finalPracticeHole == null && !finalIsProTour && finalPars.length === 18 && (
+                  <div className="mt-2.5"><SupportNudge /></div>
                 )}
                 {/* Daily stars — the day's three to-par goals, lit as earned. */}
                 {finalDailyStars && (
