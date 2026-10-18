@@ -144,8 +144,8 @@ describe("2026 season list", () => {
     expect(SEASON_2026.filter((s) => s.tier === "Major")).toHaveLength(5);
   });
 
-  it("marks exactly the built courses (pilot + wave 1) as built", () => {
-    expect([...BUILT_COURSE_IDS].sort()).toEqual(COURSES.map((c) => c.id).sort());
+  it("marks exactly the built courses as built (Brighton is held: data kept, shown as later)", () => {
+    expect([...BUILT_COURSE_IDS].sort()).toEqual(COURSES.map((c) => c.id).filter((id) => id !== "brighton-majestic").sort());
   });
 
   it("names the USDGC course Winthrop Gold (Henry's call; the book says 'Winthrop Arena')", () => {

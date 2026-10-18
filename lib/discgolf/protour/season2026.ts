@@ -36,7 +36,8 @@ export const SEASON_2026: ProStop[] = [
   { stop: 11, event: "Swedish Open", tier: "Elite", dates: "Jun 26–28", city: "Borås, Sweden", pdgaEventUrl: pdga(96411), courses: [c("ymergarden", "Ymergården")] },
   { stop: 12, event: "Ale Open", tier: "Elite", dates: "Jul 3–5", city: "Nol, Sweden", pdgaEventUrl: pdga(96412), courses: [c("ale-dgc", "Ale Disc Golf Center")] },
   { stop: 13, event: "Heinola Open", tier: "Elite", dates: "Jul 10–12", city: "Heinola, Finland", pdgaEventUrl: pdga(96413), courses: [c("kippasuo", "Kippasuo")] },
-  { stop: 14, event: "US Women's Disc Golf Championship", tier: "Major", dates: "Jul 16–19", city: "Lehi, UT", pdgaEventUrl: pdga(97341), courses: [c("brighton-majestic", "Brighton \"Majestic\"", true), c("dragonfly", "Dragonfly")] },
+  // Brighton held (Henry, Oct 18): its FPO-only layout plays ~14 strokes too easy; course data stays in PRO_COURSES.
+  { stop: 14, event: "US Women's Disc Golf Championship", tier: "Major", dates: "Jul 16–19", city: "Lehi, UT", pdgaEventUrl: pdga(97341), courses: [c("brighton-majestic", "Brighton \"Majestic\""), c("dragonfly", "Dragonfly")] },
   { stop: 15, event: "Ledgestone Open", tier: "Elite+", dates: "Jul 30–Aug 2", city: "Peoria, IL", pdgaEventUrl: pdga(96414), courses: [c("eureka-lake", "Eureka Lake"), c("sunset-hills", "Sunset Hills"), c("northwood-black", "Northwood Black", true)] },
   { stop: 16, event: "Discmania Challenge", tier: "Elite", dates: "Aug 7–9", city: "Indianola, IA", pdgaEventUrl: pdga(96415), courses: [c("pickard-park", "Pickard Park")] },
   { stop: 17, event: "Doubles Championship at the Preserve", tier: "Elite", dates: "Aug 14–16", city: "Clearwater, MN", pdgaEventUrl: pdga(96416), courses: [c("the-preserve", "The Preserve")] },
