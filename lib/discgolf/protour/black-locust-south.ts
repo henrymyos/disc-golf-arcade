@@ -10,8 +10,9 @@
 // Drop zones: tee shots only on 7 (moved just inside the box) and 12 (the FPO
 // tee inside the box). The mando re-tees on 13 and 16 and the conditional DZ on
 // 15 are left to the engine's last-in-bounds default.
-// Balance: widths 160–200 on the OB-heavy holes (1, 2, 6, 7, 9, 10, 11, 13, 17,
-// 18) so the big-arm bag isn't punished far past the tour; balanceTrees (r 20,
+// Balance: widths 160–200 on the OB-heavy holes (1, 2, 6, 7, 9, 10, 11, 13, 17)
+// so the big-arm bag isn't punished far past the tour (18 stays a 160 ft chute,
+// near the book's 120–140 ft strings); balanceTrees (r 20,
 // not in the book) on 1, 3, 4, 5, 6, 8, 9, 16 and 17.
 import type { ProCourse, ProHole } from "./types";
 
@@ -35,7 +36,7 @@ const HOLES: ProHole[] = [
   { n: 15, par: 4, lengthFt: 610, line: [{ x: 0, y: 0 }, { x: 80, y: 230 }, { x: 40, y: 360 }, { x: -100, y: 540 }], widthFt: 150, rough: "ob", water: [{ x: -110, y: 380, w: 200, h: 110 }], obZones: [{ x: -180, y: 600, w: 160, h: 40 }], islandGreen: true, trees: "mixed", note: "Up an OB-strung lane, then over the lake to an island green", ref: { url: BOOK, page: 16 } },
   { n: 16, par: 3, lengthFt: 341, line: [{ x: 0, y: 0 }, { x: -10, y: 340 }], widthFt: 150, rough: "hazard", obZones: [{ x: 40, y: 20, w: 60, h: 180 }, { x: 60, y: 200, w: 50, h: 80 }], balanceTrees: [{ x: -40, y: 300, r: 20 }, { x: 20, y: 300, r: 20 }], trees: "mixed", mando: "Stay left of the marked tree", note: "Straight par 3 with the OB string right off the tee", ref: { url: BOOK, page: 17 } },
   { n: 17, par: 4, lengthFt: 673, line: [{ x: 0, y: 0 }, { x: -20, y: 190 }, { x: -10, y: 370 }, { x: -30, y: 500 }, { x: -100, y: 650 }], widthFt: 180, rough: "ob", balanceTrees: [{ x: -110, y: 590, r: 20 }, { x: -50, y: 620, r: 20 }], trees: "mixed", note: "Up a lane strung OB left, right and long, drifting left at the end", ref: { url: BOOK, page: 18 } },
-  { n: 18, par: 4, lengthFt: 784, line: [{ x: 0, y: 0 }, { x: 20, y: 240 }, { x: -30, y: 500 }, { x: -40, y: 690 }, { x: -40, y: 780 }], widthFt: 200, rough: "ob", water: [{ x: 110, y: 300, w: 40, h: 400 }], trees: "mixed", note: "Lakeside finisher strung with OB, the lake just past it on the right", ref: { url: BOOK, page: 19 } },
+  { n: 18, par: 4, lengthFt: 784, line: [{ x: 0, y: 0 }, { x: 20, y: 240 }, { x: -30, y: 500 }, { x: -40, y: 690 }, { x: -40, y: 780 }], widthFt: 160, rough: "ob", water: [{ x: 90, y: 300, w: 40, h: 400 }], trees: "mixed", note: "Lakeside finisher strung with OB, the lake just past it on the right", ref: { url: BOOK, page: 19 } },
 ];
 
 export const BLACK_LOCUST_SOUTH: ProCourse = {
