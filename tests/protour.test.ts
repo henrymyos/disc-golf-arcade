@@ -39,6 +39,8 @@ import { FOX_RUN_MEADOWS } from "../lib/discgolf/protour/fox-run-meadows";
 import { IVY_HILL } from "../lib/discgolf/protour/ivy-hill";
 import { NORTHWOOD_BLACK } from "../lib/discgolf/protour/northwood-black";
 import { HARVEY_PENICK } from "../lib/discgolf/protour/harvey-penick";
+import { BRIGHTON_MAJESTIC } from "../lib/discgolf/protour/brighton-majestic";
+import { BLACK_LOCUST_SOUTH } from "../lib/discgolf/protour/black-locust-south";
 import { stopSummary } from "../lib/discgolf/protour/stopSummary";
 
 const FT = 1.8; // FEET_PER_PX
@@ -106,8 +108,24 @@ const CARDS: Record<string, { par: number[]; ft: number[]; pages?: number[]; tot
     pages: [12, 13, 14, 16, 18, 19, 20, 22, 24, 25, 27, 28, 30, 31, 33, 34, 36, 38],
     totalPar: 63, totalFt: 9345,
   },
+  // Wave 3 (spec addendum disc-golf-arcade-pro-tour-wave3.md).
+  // Brighton "Majestic" (US Women's DGC), FPO: the event's only layout.
+  "brighton-majestic": {
+    par: [4, 3, 3, 3, 4, 3, 5, 3, 4, 3, 3, 3, 4, 3, 3, 4, 3, 4],
+    ft: [659, 344, 269, 269, 472, 282, 696, 256, 338, 341, 285, 384, 545, 292, 302, 640, 456, 545],
+    pages: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20],
+    totalPar: 62, totalFt: 7375,
+  },
+  // Black Locust South (Pro Worlds), MPO. The holes add up to 10,859 ft; the
+  // card prints 10,860 (metric rounding).
+  "black-locust-south": {
+    par: [3, 4, 3, 3, 3, 5, 3, 3, 3, 4, 4, 4, 5, 3, 4, 3, 4, 4],
+    ft: [463, 774, 400, 390, 427, 1007, 420, 387, 423, 866, 676, 722, 1165, 331, 610, 341, 673, 784],
+    pages: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19],
+    totalPar: 65, totalFt: 10859,
+  },
 };
-const COURSES = [MAPLE_HILL, BREWSTER_RIDGE, IDLEWILD, WINTHROP_GOLD, KENSINGTON_TOBOGGAN, FOX_RUN_MEADOWS, IVY_HILL, NORTHWOOD_BLACK, HARVEY_PENICK];
+const COURSES = [MAPLE_HILL, BREWSTER_RIDGE, IDLEWILD, WINTHROP_GOLD, KENSINGTON_TOBOGGAN, FOX_RUN_MEADOWS, IVY_HILL, NORTHWOOD_BLACK, HARVEY_PENICK, BRIGHTON_MAJESTIC, BLACK_LOCUST_SOUTH];
 const PILOT_IDS = ["maple-hill", "brewster-ridge", "idlewild"];
 const lineFt = (h: ProHole) => h.line.reduce((s, p, i) => (i ? s + Math.hypot(p.x - h.line[i - 1].x, p.y - h.line[i - 1].y) : 0), 0);
 
@@ -234,8 +252,8 @@ describe("Henry's Oct 16 rules for Pro Tour holes: tee-shot catch radius and dri
     ...TOUR_COURSES.flatMap((t) => buildRound(t.seed, "tour")),
   ];
 
-  it("every one of the 162 Pro Tour holes carries the 0.85 tee catch, and no hand-authored hole does", () => {
-    expect(proHoles).toHaveLength(162);
+  it("every one of the 198 Pro Tour holes carries the 0.85 tee catch, and no hand-authored hole does", () => {
+    expect(proHoles).toHaveLength(198);
     expect(PROTOUR_TEE_CATCH_MUL).toBe(0.85);
     for (const { id, n, h } of proHoles) expect(h.teeCatchMul, `${id} ${n}`).toBe(0.85);
     for (const h of handAuthored) expect(h.teeCatchMul).toBeUndefined();
@@ -256,6 +274,7 @@ describe("Henry's Oct 16 rules for Pro Tour holes: tee-shot catch radius and dri
       "ivy-hill 1", "ivy-hill 5", "ivy-hill 9", "ivy-hill 12", "ivy-hill 13",
       "northwood-black 8", "northwood-black 17",
       "harvey-penick 13",
+      "brighton-majestic 6",
     ]);
     expect(proHoles.filter((x) => x.h.dzDriveOnly).map((x) => `${x.id} ${x.n}`)).toEqual([
       "maple-hill 1", "maple-hill 8", "maple-hill 14",
@@ -263,6 +282,8 @@ describe("Henry's Oct 16 rules for Pro Tour holes: tee-shot catch radius and dri
       "fox-run-meadows 1",
       "ivy-hill 4", "ivy-hill 6", "ivy-hill 7", "ivy-hill 14", "ivy-hill 17",
       "harvey-penick 2", "harvey-penick 5", "harvey-penick 9", "harvey-penick 10",
+      "brighton-majestic 7", "brighton-majestic 14", "brighton-majestic 18",
+      "black-locust-south 7", "black-locust-south 12",
     ]);
     for (const x of proHoles) if (x.h.dropZone) expect(!!x.h.dzDriveOnly, `${x.id} ${x.n}`).toBe(!x.ph.dzAll);
   });
@@ -321,6 +342,31 @@ describe("wave 2 course specifics", () => {
     const slope = (h: ProHole) => h.elev ?? h.elevZones?.at(-1)?.elev ?? 0;
     expect(HARVEY_PENICK.holes.map(slope)).toEqual([0, 0, 1, -2, 0, 0, 0, 0, 1, -1, -1, 0, 0, 0, 0, 0, 0, 0]);
     expect(HARVEY_PENICK.holes.filter((h) => h.islandGreen).map((h) => h.n)).toEqual([10]);
+  });
+});
+
+describe("wave 3 course specifics", () => {
+  const slope = (h: ProHole) => h.elev ?? h.elevZones?.at(-1)?.elev ?? 0;
+
+  it("Brighton is the FPO mountain course: the book's elevation on every hole, strung lanes on 10, 12 and 18, the island on 14", () => {
+    expect(BRIGHTON_MAJESTIC.layoutLabel).toBe("FPO");
+    expect(BRIGHTON_MAJESTIC.holes.map(slope)).toEqual([-1, 0, 0, 0, 0, 0, 0, -1, 2, -2, 0, -1, -2, 0, -2, -1, -2, 0]);
+    expect(BRIGHTON_MAJESTIC.holes.filter((h) => h.rough === "ob").map((h) => h.n)).toEqual([10, 12, 14, 18]);
+    expect(BRIGHTON_MAJESTIC.holes.filter((h) => h.islandGreen).map((h) => h.n)).toEqual([14]);
+    expect(BRIGHTON_MAJESTIC.holes.filter((h) => !h.obZones?.length && h.rough === "hazard").map((h) => h.n)).toEqual([5, 11, 13, 16]);
+    expect(BRIGHTON_MAJESTIC.holes.filter((h) => h.mando).map((h) => h.n)).toEqual([7, 11, 13, 17, 18]);
+    expect(BRIGHTON_MAJESTIC.holes[0].water ?? []).toEqual([]); // the creek on 1 is a relief area: hazard, not water
+    expect(BRIGHTON_MAJESTIC.holes[0].hazard?.length).toBeGreaterThan(0);
+  });
+
+  it("Black Locust South: wooded tunnels 2–11, strung OB on 1, 13, 17, 18, the lake island on 15, flat throughout", () => {
+    const bl = BLACK_LOCUST_SOUTH.holes;
+    expect(bl.filter((h) => h.rough === "ob").map((h) => h.n)).toEqual([1, 7, 12, 13, 15, 17, 18]);
+    expect(bl.filter((h) => h.n >= 2 && h.n <= 11).every((h) => h.trees === "wooded")).toBe(true);
+    expect(bl.filter((h) => h.islandGreen).map((h) => h.n)).toEqual([7, 15]);
+    expect(bl[14].water?.length).toBeGreaterThan(0);
+    expect(bl.filter((h) => h.mando).map((h) => h.n)).toEqual([13, 16]);
+    for (const h of bl) expect(slope(h)).toBe(0);
   });
 });
 
@@ -478,11 +524,12 @@ describe("pro tour courses plug into the tour seed space", () => {
     // Winthrop Gold kept its slot when it was renamed from Winthrop Arena, so its
     // seed (and any best saved under it) didn't move.
     expect(proTourCourseById("winthrop-gold")!.seed).toBe(0x2026c004);
-    // every course in schedule-of-building order, appended: wave 1 then wave 2
+    // every course in schedule-of-building order, appended: waves 1, 2, then 3
     expect(PROTOUR_COURSES.map((c) => [c.course.id, c.seed])).toEqual([
       ["maple-hill", 0x2026c001], ["brewster-ridge", 0x2026c002], ["idlewild", 0x2026c003],
       ["winthrop-gold", 0x2026c004], ["kensington-toboggan", 0x2026c005], ["fox-run-meadows", 0x2026c006],
       ["ivy-hill", 0x2026c007], ["northwood-black", 0x2026c008], ["harvey-penick", 0x2026c009],
+      ["brighton-majestic", 0x2026c00a], ["black-locust-south", 0x2026c00b],
     ]);
     expect(PROTOUR_COURSES.slice(0, 3).map((c) => c.course.id)).toEqual(PILOT_IDS);
     // new courses are appended after the pilot, each on the next seed

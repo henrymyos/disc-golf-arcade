@@ -5,7 +5,7 @@
 // were copied from each event's DGPT page (nothing is fetched from pdga.com).
 //
 // `built` marks a course that's playable in the game: the pilot courses plus
-// wave 1 so far; the rest list as "Coming later".
+// waves 1–3 so far; the rest list as "Coming later".
 
 export type ProTier = "Elite" | "Elite+" | "Playoffs" | "Major";
 export type ProStopCourse = { id: string; name: string; built: boolean };
@@ -36,11 +36,11 @@ export const SEASON_2026: ProStop[] = [
   { stop: 11, event: "Swedish Open", tier: "Elite", dates: "Jun 26–28", city: "Borås, Sweden", pdgaEventUrl: pdga(96411), courses: [c("ymergarden", "Ymergården")] },
   { stop: 12, event: "Ale Open", tier: "Elite", dates: "Jul 3–5", city: "Nol, Sweden", pdgaEventUrl: pdga(96412), courses: [c("ale-dgc", "Ale Disc Golf Center")] },
   { stop: 13, event: "Heinola Open", tier: "Elite", dates: "Jul 10–12", city: "Heinola, Finland", pdgaEventUrl: pdga(96413), courses: [c("kippasuo", "Kippasuo")] },
-  { stop: 14, event: "US Women's Disc Golf Championship", tier: "Major", dates: "Jul 16–19", city: "Lehi, UT", pdgaEventUrl: pdga(97341), courses: [c("brighton-majestic", "Brighton \"Majestic\""), c("dragonfly", "Dragonfly")] },
+  { stop: 14, event: "US Women's Disc Golf Championship", tier: "Major", dates: "Jul 16–19", city: "Lehi, UT", pdgaEventUrl: pdga(97341), courses: [c("brighton-majestic", "Brighton \"Majestic\"", true), c("dragonfly", "Dragonfly")] },
   { stop: 15, event: "Ledgestone Open", tier: "Elite+", dates: "Jul 30–Aug 2", city: "Peoria, IL", pdgaEventUrl: pdga(96414), courses: [c("eureka-lake", "Eureka Lake"), c("sunset-hills", "Sunset Hills"), c("northwood-black", "Northwood Black", true)] },
   { stop: 16, event: "Discmania Challenge", tier: "Elite", dates: "Aug 7–9", city: "Indianola, IA", pdgaEventUrl: pdga(96415), courses: [c("pickard-park", "Pickard Park")] },
   { stop: 17, event: "Doubles Championship at the Preserve", tier: "Elite", dates: "Aug 14–16", city: "Clearwater, MN", pdgaEventUrl: pdga(96416), courses: [c("the-preserve", "The Preserve")] },
-  { stop: 18, event: "Pro World Championships", tier: "Major", dates: "Aug 26–30", city: "Milford, MI", pdgaEventUrl: pdga(97344), courses: [c("black-locust-south", "Black Locust South"), c("kensington-toboggan", "Kensington Toboggan", true)] },
+  { stop: 18, event: "Pro World Championships", tier: "Major", dates: "Aug 26–30", city: "Milford, MI", pdgaEventUrl: pdga(97344), courses: [c("black-locust-south", "Black Locust South", true), c("kensington-toboggan", "Kensington Toboggan", true)] },
   { stop: 19, event: "LWS Open at Idlewild", tier: "Elite", dates: "Sep 4–6", city: "Burlington, KY", pdgaEventUrl: pdga(96417), courses: [c("idlewild", "Idlewild", true)] },
   { stop: 20, event: "Green Mountain Championship", tier: "Playoffs", dates: "Sep 17–20", city: "Smugglers' Notch, VT", pdgaEventUrl: pdga(96418), courses: [c("brewster-ridge", "Brewster Ridge", true), c("fox-run-meadows", "Fox Run Meadows", true)] },
   { stop: 21, event: "MVP Open", tier: "Playoffs", dates: "Sep 24–27", city: "Leicester, MA", pdgaEventUrl: pdga(96419), courses: [c("maple-hill", "Maple Hill", true)] },
