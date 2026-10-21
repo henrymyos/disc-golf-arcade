@@ -212,6 +212,7 @@ export function DiscGolfGame() {
   const rankedFieldRef = useRef<FieldPlayer[] | null>(null); // the ranked AI field's per-hole scores
   const rankedPlaceSpanRef = useRef<[number, number]>([PLACEMENT_MIN_RATING, PLACEMENT_MAX_RATING]); // rating band of the current placement field (for the estimate)
   const [careerLastResult, setCareerLastResult] = useState<EventResult | null>(null);
+  const [careerNotes, setCareerNotes] = useState<string[]>([]);
   const [careerCoins, setCareerCoins] = useState(0); // account coins paid by the last PLAYED career round (0 when simmed)
   // Write the active career into its slot and persist all slots. A null `c` clears
   // the open slot (abandon). The whole array is saved under CAREERS_KEY; the cloud
@@ -910,7 +911,7 @@ export function DiscGolfGame() {
     if (error) setAuthErr(error.message);
     else { setAuthOpen(false); setAuthPassword(""); }
     setAuthBusy(false);
-  }, [supa, authEmail, authPassword]);
+  }, [supa, authEmail, authPassword, setAuthErr, setAuthMsg, setAuthOpen, setAuthPassword]); // setters listed so the React Compiler can keep this memo (stable at runtime)
 
   const signUp = useCallback(async () => {
     if (!supa) return;
@@ -929,7 +930,7 @@ export function DiscGolfGame() {
     else if (!data.session) setAuthMsg("Account created! Check your email for a confirmation link to finish signing in.");
     else { setAuthOpen(false); setAuthPassword(""); }
     setAuthBusy(false);
-  }, [supa, authEmail, authPassword]);
+  }, [supa, authEmail, authPassword, setAuthErr, setAuthMsg, setAuthOpen, setAuthPassword]); // setters listed so the React Compiler can keep this memo (stable at runtime)
 
   // Send a password-reset link to the entered email.
   const resetPassword = useCallback(async () => {
@@ -944,7 +945,7 @@ export function DiscGolfGame() {
     // sends people hunting for an email that will never come.
     else setAuthMsg(`If an account exists for ${email}, a reset link is on its way. No email? Check spam, and make sure that's the address you signed up with.`);
     setAuthBusy(false);
-  }, [supa, authEmail]);
+  }, [supa, authEmail, setAuthErr, setAuthMsg]); // setters listed so the React Compiler can keep this memo (stable at runtime)
 
   // Set a new password (after following the reset link → PASSWORD_RECOVERY).
   const updatePassword = useCallback(async () => {
@@ -955,7 +956,7 @@ export function DiscGolfGame() {
     if (error) setAuthErr(error.message);
     else { setRecovering(false); setAuthPassword(""); setAuthOpen(false); }
     setAuthBusy(false);
-  }, [supa, authPassword]);
+  }, [supa, authPassword, setAuthErr, setAuthMsg, setRecovering, setAuthPassword, setAuthOpen]); // setters listed so the React Compiler can keep this memo (stable at runtime)
 
   const signOut = useCallback(async () => {
     if (!supa) return;
@@ -976,7 +977,7 @@ export function DiscGolfGame() {
   // Open the sign-in panel (from the "Sign in to sync" chip or the profile).
   const openSignIn = useCallback(() => {
     setAuthErr(null); setAuthMsg(null); setAuthOpen(true);
-  }, []);
+  }, [setAuthErr, setAuthMsg, setAuthOpen]); // setters listed so the React Compiler can keep this memo (stable at runtime)
 
   // Persist settings + push the music volume to the live engine.
   useEffect(() => {
@@ -1198,7 +1199,6 @@ export function DiscGolfGame() {
   }, [muted, musicVolume, syncHud, clearResume]);
 
   // ── Career handlers ──
-  const [careerNotes, setCareerNotes] = useState<string[]>([]);
 
   // Play a Career event as a real round, with your skills bending the flight.
   const startCareerEvent = useCallback((c: Career, ev: CareerEvent) => {
@@ -1734,7 +1734,7 @@ export function DiscGolfGame() {
     setPauseMenu(null);
     setScreen("playing");
     syncHud();
-  }, [syncHud]);
+  }, [syncHud, setReplayLoadErr, setPendingReplay]); // setters listed so the React Compiler can keep this memo (stable at runtime)
 
   const setReplaySpeed = useCallback((speed: number) => {
     const rp = stateRef.current?.replay;
