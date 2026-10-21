@@ -2283,6 +2283,7 @@ export function DiscGolfGame() {
     if (finalPracticeHole != null || finalParty || finalOnline) return;
     if (finalMode === "tour" && isProTourSeed(finalSeed)) return; // no boards for the real 2026 courses (v1)
     if (saved || saving || postStatus) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- genuine effect: posts to the leaderboard once the results screen is committed
     void saveScore();
   }, [screen, finalPracticeHole, finalParty, finalOnline, finalMode, finalSeed, saved, saving, postStatus, saveScore]);
 

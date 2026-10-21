@@ -58,7 +58,7 @@ export function PlacementReveal({ result, marks, onClose }: { result: PlacementR
         <div className="my-5"><PlacementDots marks={marks} done={result.rounds} total={result.rounds} animate /></div>
         <div style={{ animation: "place-reveal 0.5s ease-out both", animationDelay: "1.25s" }}>
           <p className="text-7xl leading-none my-1">{result.tier.emoji}</p>
-          <p className="text-gray-300 text-sm mt-2">You've been placed in</p>
+          <p className="text-gray-300 text-sm mt-2">You&apos;ve been placed in</p>
           <p className="font-black text-3xl" style={{ color: result.tier.color }}>{result.tier.name}</p>
           <p className="text-gray-500 text-[11px] mt-1">{result.projectedRp} RP · ranked rounds move you from here</p>
           <button type="button" onClick={onClose} className={`${btn} w-full mt-5`}>Continue</button>
