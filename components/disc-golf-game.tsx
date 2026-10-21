@@ -300,6 +300,7 @@ export function DiscGolfGame() {
   useEffect(() => { challengeRef.current = challenge; }, [challenge]);
   const [finalPars, setFinalPars] = useState<number[]>(HOLES.map((h) => h.par));
   const [finalMode, setFinalMode] = useState<Mode>("course");
+  const [finalRankedField, setFinalRankedField] = useState<FieldPlayer[] | null>(null); // ranked field snapshot for the finish screen
   // Today's Daily-Challenge star result for the finish screen: stars earned this
   // round, the day's (difficulty-adjusted) to-par goals, the day's best so far,
   // and the coin bonus paid for any newly earned star tiers.
@@ -1737,8 +1738,8 @@ export function DiscGolfGame() {
   }, [syncHud, setReplayLoadErr, setPendingReplay]); // setters listed so the React Compiler can keep this memo (stable at runtime)
 
   const setReplaySpeed = useCallback((speed: number) => {
-    const rp = stateRef.current?.replay;
-    if (rp) rp.speed = speed;
+    const g = stateRef.current;
+    if (g?.replay) g.replay.speed = speed;
     setReplayView((v) => (v ? { ...v, speed } : v));
   }, []);
   const skipReplayHole = useCallback(() => {
@@ -1945,6 +1946,7 @@ export function DiscGolfGame() {
     setFinalTotal(total);
     setFinalPars(pars);
     setFinalMode(mode);
+    setFinalRankedField(rankedFieldRef.current);
     setFinalPracticeHole(g?.practice ? g?.practiceHole ?? null : null);
     setFinalParty(g?.party ? { names: g.party.names, totals: g.party.scores.map((sc) => sc.reduce<number>((a, b) => a + (b ?? 0), 0)) } : null);
     setFinalOnline(online);
@@ -3679,6 +3681,9 @@ export function DiscGolfGame() {
   const sideLayout = inRoundLayout && viewportLayout?.sides ? viewportLayout : null;
   const todayGoals = useMemo(() => (hub === "solo" && today ? dailyStarThresholds(today) : null), [hub, today]);
 
+  // Replay HUD text (derived during render; only shown while watching a replay)
+  const replayCap = replayView ? replayCaption(replayView.data) : null;
+  const replayOnHole = replayView ? replayView.data.scores[hud.hole - 1] : undefined;
   if (HoleSheet && holeSheetId) return <HoleSheet courseId={holeSheetId} />;
   return (
     <div className={`app-root w-full bg-[#0f1117] flex select-none overflow-hidden ${sideLayout ? "flex-row" : "flex-col"}`}>
@@ -4393,33 +4398,29 @@ export function DiscGolfGame() {
       </div>
 
       {/* Replay controls replace the disc rack while watching a recorded round */}
-      {screen === "playing" && replayView && (() => {
-        const cap = replayCaption(replayView.data);
-        const onHole = replayView.data.scores[hud.hole - 1];
-        return (
-          <div className="shrink-0 w-full border-t border-white/10 bg-[#13161b]">
-            <div className="mx-auto w-full max-w-[480px] px-3 pt-2.5 pb-[max(calc(env(safe-area-inset-bottom)+0.4rem),1.25rem)] flex flex-col gap-2">
-              <div className="flex items-baseline justify-between gap-2">
-                <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#36D7B7]">▶ Replay</span>
-                <span className="text-[11px] text-gray-400 truncate min-w-0">{replayView.data.name} · {cap.course} · {cap.score}</span>
-              </div>
-              <div className="text-white text-sm font-bold">
-                {replayView.ended ? "Round complete" : `Hole ${hud.hole} of ${hud.holes} · par ${hud.par}${onHole ? ` · scored ${onHole}` : ""}`}
-              </div>
-              <div className="flex gap-2">
-                {replayView.ended ? (<>
-                  <button type="button" onClick={() => startReplay(replayView.data, replayView.fromResults)} className="flex-1 bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white font-bold py-2.5 rounded-lg transition text-sm">↻ Watch again</button>
-                  <button type="button" onClick={endReplay} className={`${btn} flex-1 !mt-0 !py-2.5 text-sm`}>Done</button>
-                </>) : (<>
-                  <button type="button" onClick={() => setReplaySpeed(replayView.speed === 1 ? 2 : 1)} className="flex-1 bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white font-bold py-2.5 rounded-lg transition text-sm">{replayView.speed === 1 ? "2× speed" : "1× speed"}</button>
-                  <button type="button" onClick={skipReplayHole} className="flex-1 bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white font-bold py-2.5 rounded-lg transition text-sm">Skip hole ›</button>
-                  <button type="button" onClick={endReplay} className="flex-1 bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white font-bold py-2.5 rounded-lg transition text-sm">Exit</button>
-                </>)}
-              </div>
+      {screen === "playing" && replayView && (
+        <div className="shrink-0 w-full border-t border-white/10 bg-[#13161b]">
+          <div className="mx-auto w-full max-w-[480px] px-3 pt-2.5 pb-[max(calc(env(safe-area-inset-bottom)+0.4rem),1.25rem)] flex flex-col gap-2">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#36D7B7]">▶ Replay</span>
+              <span className="text-[11px] text-gray-400 truncate min-w-0">{replayView.data.name} · {replayCap?.course} · {replayCap?.score}</span>
+            </div>
+            <div className="text-white text-sm font-bold">
+              {replayView.ended ? "Round complete" : `Hole ${hud.hole} of ${hud.holes} · par ${hud.par}${replayOnHole ? ` · scored ${replayOnHole}` : ""}`}
+            </div>
+            <div className="flex gap-2">
+              {replayView.ended ? (<>
+                <button type="button" onClick={() => startReplay(replayView.data, replayView.fromResults)} className="flex-1 bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white font-bold py-2.5 rounded-lg transition text-sm">↻ Watch again</button>
+                <button type="button" onClick={endReplay} className={`${btn} flex-1 !mt-0 !py-2.5 text-sm`}>Done</button>
+              </>) : (<>
+                <button type="button" onClick={() => setReplaySpeed(replayView.speed === 1 ? 2 : 1)} className="flex-1 bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white font-bold py-2.5 rounded-lg transition text-sm">{replayView.speed === 1 ? "2× speed" : "1× speed"}</button>
+                <button type="button" onClick={skipReplayHole} className="flex-1 bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white font-bold py-2.5 rounded-lg transition text-sm">Skip hole ›</button>
+                <button type="button" onClick={endReplay} className="flex-1 bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white font-bold py-2.5 rounded-lg transition text-sm">Exit</button>
+              </>)}
             </div>
           </div>
-        );
-      })()}
+        </div>
+      )}
 
       {/* A shared replay link (?rp=) waits for a tap so audio can start. */}
       {(pendingReplay || replayLoadErr) && screen !== "playing" && (
@@ -4765,7 +4766,7 @@ export function DiscGolfGame() {
               <div className="bg-[#1a1d23] border border-white/5 rounded-2xl overflow-hidden">
                 <p className="text-white font-bold text-sm px-4 py-2.5 border-b border-white/5">🏁 Final standings · you vs the field</p>
                 <ol>
-                  {careerLiveStandings(rankedFieldRef.current ?? [], "You", scorecard, finalPars.length, finalParTotal).slice(0, 10).map((row, i) => (
+                  {careerLiveStandings(finalRankedField ?? [], "You", scorecard, finalPars.length, finalParTotal).slice(0, 10).map((row, i) => (
                     <li
                       key={`${row.name}-${row.rank}`}
                       className={`flex items-center gap-3 px-4 py-2 text-sm ${i !== 0 ? "border-t border-white/5" : ""} ${row.you ? "bg-[#36D7B7]/10" : ""}`}
