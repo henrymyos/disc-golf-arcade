@@ -4,7 +4,7 @@
 // holes of a Pro Tour course whole, side by side, at ONE scale, with a 100 ft
 // grid from the tee — using the exact same drawing code as play (drawRough,
 // drawHoleFeatures, drawBasket, drawTree). Nova screenshots it to compare each
-// hole with its caddie-book page. Use ?holesheet=all for every built hole (198 with wave 3).
+// hole with its caddie-book page. Use ?holesheet=all for every built hole (252 with wave 4).
 import { useEffect, useRef } from "react";
 import { PROTOUR_COURSES, proTourCourseById, type Hole, type ProTourCourse } from "@/lib/discgolf/engine";
 import { GROUND_THEMES, cosmeticByKey } from "@/lib/discgolf/cosmetics";

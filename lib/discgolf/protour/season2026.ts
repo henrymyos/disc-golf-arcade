@@ -5,7 +5,7 @@
 // were copied from each event's DGPT page (nothing is fetched from pdga.com).
 //
 // `built` marks a course that's playable in the game: the pilot courses plus
-// waves 1–3 so far; the rest list as "Coming later".
+// waves 1–3 so far (wave 4 is held); the rest list as "Coming later".
 
 export type ProTier = "Elite" | "Elite+" | "Playoffs" | "Major";
 export type ProStopCourse = { id: string; name: string; built: boolean };
@@ -27,6 +27,8 @@ export const SEASON_2026: ProStop[] = [
   { stop: 2, event: "Big Easy Open", tier: "Elite", dates: "Mar 13–15", city: "Jefferson Parish, LA", pdgaEventUrl: pdga(96402), courses: [c("parc-des-familles", "Parc des Familles")] },
   { stop: 3, event: "Queen City Classic", tier: "Elite", dates: "Mar 27–29", city: "Charlotte, NC", pdgaEventUrl: pdga(96403), courses: [c("hornets-nest", "Hornets Nest")] },
   { stop: 4, event: "Champions Cup", tier: "Major", dates: "Apr 9–12", city: "Lynchburg, VA", pdgaEventUrl: pdga(97336), courses: [c("new-london-tech", "New London Tech")] },
+  // Wave 4 held (hold rule, Oct 23): Disc Side of Heaven, Bad Rock Creek and Pickard Park each
+  // stay out of the ±1.5 band at one bag level after the allowed levers; data kept in PRO_COURSES.
   { stop: 5, event: "Jonesboro Open", tier: "Elite", dates: "Apr 17–19", city: "Jonesboro, AR", pdgaEventUrl: pdga(96404), courses: [c("disc-side-of-heaven", "Disc Side of Heaven")] },
   { stop: 6, event: "Kansas City Wide Open", tier: "Elite", dates: "Apr 24–26", city: "Liberty, MO", pdgaEventUrl: pdga(96407), courses: [c("bad-rock-creek", "Bad Rock Creek")] },
   { stop: 7, event: "Open at Austin", tier: "Elite+", dates: "May 7–10", city: "Austin, TX", pdgaEventUrl: pdga(96408), courses: [c("harvey-penick", "Harvey Penick", true), c("sprinkle-valley", "Sprinkle Valley")] },
