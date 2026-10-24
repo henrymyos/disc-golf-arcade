@@ -167,8 +167,10 @@ describe("2026 season list", () => {
   });
 
   it("marks exactly the built courses as built (held courses keep their data but show as later)", () => {
-    const HELD = ["brighton-majestic", "disc-side-of-heaven", "bad-rock-creek", "pickard-park"];
+    const HELD = ["brighton-majestic"]; // wave 4 ships out of band: Henry chose to ship it (Oct 24)
     expect([...BUILT_COURSE_IDS].sort()).toEqual(COURSES.map((c) => c.id).filter((id) => !HELD.includes(id)).sort());
+    expect(BUILT_COURSE_IDS).toHaveLength(13);
+    expect(SEASON_2026.filter((s) => s.courses.some((c) => c.built))).toHaveLength(11); // hub: 11 of 23 stops
   });
 
   it("names the USDGC course Winthrop Gold (Henry's call; the book says 'Winthrop Arena')", () => {

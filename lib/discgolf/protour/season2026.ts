@@ -5,7 +5,7 @@
 // were copied from each event's DGPT page (nothing is fetched from pdga.com).
 //
 // `built` marks a course that's playable in the game: the pilot courses plus
-// waves 1–3 so far (wave 4 is held); the rest list as "Coming later".
+// waves 1–4 (wave 4 shipped out of band by Henry's choice, Oct 24); the rest list as "Coming later".
 
 export type ProTier = "Elite" | "Elite+" | "Playoffs" | "Major";
 export type ProStopCourse = { id: string; name: string; built: boolean };
@@ -27,10 +27,10 @@ export const SEASON_2026: ProStop[] = [
   { stop: 2, event: "Big Easy Open", tier: "Elite", dates: "Mar 13–15", city: "Jefferson Parish, LA", pdgaEventUrl: pdga(96402), courses: [c("parc-des-familles", "Parc des Familles")] },
   { stop: 3, event: "Queen City Classic", tier: "Elite", dates: "Mar 27–29", city: "Charlotte, NC", pdgaEventUrl: pdga(96403), courses: [c("hornets-nest", "Hornets Nest")] },
   { stop: 4, event: "Champions Cup", tier: "Major", dates: "Apr 9–12", city: "Lynchburg, VA", pdgaEventUrl: pdga(97336), courses: [c("new-london-tech", "New London Tech")] },
-  // Wave 4 held (hold rule, Oct 23): Disc Side of Heaven, Bad Rock Creek and Pickard Park each
-  // stay out of the ±1.5 band at one bag level after the allowed levers; data kept in PRO_COURSES.
-  { stop: 5, event: "Jonesboro Open", tier: "Elite", dates: "Apr 17–19", city: "Jonesboro, AR", pdgaEventUrl: pdga(96404), courses: [c("disc-side-of-heaven", "Disc Side of Heaven")] },
-  { stop: 6, event: "Kansas City Wide Open", tier: "Elite", dates: "Apr 24–26", city: "Liberty, MO", pdgaEventUrl: pdga(96407), courses: [c("bad-rock-creek", "Bad Rock Creek")] },
+  // Wave 4 (Disc Side of Heaven, Bad Rock Creek, Pickard Park) sits outside the ±1.5 balance band;
+  // Henry chose to ship it as the real courses play anyway (Oct 24), overriding the hold rule.
+  { stop: 5, event: "Jonesboro Open", tier: "Elite", dates: "Apr 17–19", city: "Jonesboro, AR", pdgaEventUrl: pdga(96404), courses: [c("disc-side-of-heaven", "Disc Side of Heaven", true)] },
+  { stop: 6, event: "Kansas City Wide Open", tier: "Elite", dates: "Apr 24–26", city: "Liberty, MO", pdgaEventUrl: pdga(96407), courses: [c("bad-rock-creek", "Bad Rock Creek", true)] },
   { stop: 7, event: "Open at Austin", tier: "Elite+", dates: "May 7–10", city: "Austin, TX", pdgaEventUrl: pdga(96408), courses: [c("harvey-penick", "Harvey Penick", true), c("sprinkle-valley", "Sprinkle Valley")] },
   { stop: 8, event: "OTB Open", tier: "Elite+", dates: "May 21–24", city: "Stockton, CA", pdgaEventUrl: pdga(96409), courses: [c("swenson-park-a", "Swenson Park A"), c("swenson-park-b", "Swenson Park B")] },
   { stop: 9, event: "Northwest Championship", tier: "Elite+", dates: "Jun 4–7", city: "Portland, OR", pdgaEventUrl: pdga(96410), courses: [c("milo-mciver", "Milo McIver"), c("glendoveer-east", "Glendoveer East")] },
@@ -41,7 +41,7 @@ export const SEASON_2026: ProStop[] = [
   // Brighton held (Henry, Oct 18): its FPO-only layout plays ~14 strokes too easy; course data stays in PRO_COURSES.
   { stop: 14, event: "US Women's Disc Golf Championship", tier: "Major", dates: "Jul 16–19", city: "Lehi, UT", pdgaEventUrl: pdga(97341), courses: [c("brighton-majestic", "Brighton \"Majestic\""), c("dragonfly", "Dragonfly")] },
   { stop: 15, event: "Ledgestone Open", tier: "Elite+", dates: "Jul 30–Aug 2", city: "Peoria, IL", pdgaEventUrl: pdga(96414), courses: [c("eureka-lake", "Eureka Lake"), c("sunset-hills", "Sunset Hills"), c("northwood-black", "Northwood Black", true)] },
-  { stop: 16, event: "Discmania Challenge", tier: "Elite", dates: "Aug 7–9", city: "Indianola, IA", pdgaEventUrl: pdga(96415), courses: [c("pickard-park", "Pickard Park")] },
+  { stop: 16, event: "Discmania Challenge", tier: "Elite", dates: "Aug 7–9", city: "Indianola, IA", pdgaEventUrl: pdga(96415), courses: [c("pickard-park", "Pickard Park", true)] },
   { stop: 17, event: "Doubles Championship at the Preserve", tier: "Elite", dates: "Aug 14–16", city: "Clearwater, MN", pdgaEventUrl: pdga(96416), courses: [c("the-preserve", "The Preserve")] },
   { stop: 18, event: "Pro World Championships", tier: "Major", dates: "Aug 26–30", city: "Milford, MI", pdgaEventUrl: pdga(97344), courses: [c("black-locust-south", "Black Locust South", true), c("kensington-toboggan", "Kensington Toboggan", true)] },
   { stop: 19, event: "LWS Open at Idlewild", tier: "Elite", dates: "Sep 4–6", city: "Burlington, KY", pdgaEventUrl: pdga(96417), courses: [c("idlewild", "Idlewild", true)] },
