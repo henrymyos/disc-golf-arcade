@@ -13,7 +13,7 @@ export function RoundSidebar({ hud, width }: { hud: HudInfo; width: number }) {
   return (
     <aside style={{ width }} className="flex shrink-0 flex-col justify-center gap-3 overflow-y-auto border-r border-white/10 bg-[#13161b] px-4 py-4 text-left" aria-label="Round scorecard">
       <div className="rounded-xl border border-white/10 bg-[#0f1117] px-3 py-3">
-        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-gray-500">{hud.player ? `${hud.player} · ` : ""}{hud.course ? `${hud.course} · ` : ""}Hole {hud.hole} of {hud.holes}</p>
+        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-gray-500">{hud.player ? `${hud.player} · ` : ""}{hud.course ? `${hud.course} · ` : ""}{hud.practiceHole ? `Hole ${hud.practiceHole} · Practice` : `Hole ${hud.hole} of ${hud.holes}`}</p>
         <p className="mt-1 text-white text-2xl font-black leading-none">
           Par {hud.par}
           {hud.holeFt != null && <span className="ml-2 text-base font-bold text-gray-400">{hud.holeFt} ft</span>}
@@ -41,7 +41,7 @@ export function RoundSidebar({ hud, width }: { hud: HudInfo; width: number }) {
                 const color = d == null ? "#5b6270" : d < 0 ? "#36D7B7" : d === 0 ? "#e5e7eb" : "#e23b3b";
                 return (
                   <div key={i} className={`flex flex-col items-center rounded py-0.5 ${i === hud.hole - 1 ? "bg-white/10" : ""}`}>
-                    <span className="text-[9px] text-gray-500 leading-none">{i + 1}</span>
+                    <span className="text-[9px] text-gray-500 leading-none">{hud.practiceHole ?? i + 1}</span>
                     <span className="text-[11px] font-mono font-bold leading-tight" style={{ color }}>{s ?? "·"}</span>
                     <span className="text-[8px] text-gray-600 leading-none">{p}</span>
                   </div>
