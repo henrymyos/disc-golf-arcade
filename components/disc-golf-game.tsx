@@ -2429,7 +2429,11 @@ export function DiscGolfGame() {
       // fire on every keystroke.
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
-      if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " ", "Enter"].includes(e.key)) e.preventDefault();
+      // Only swallow Space/Enter/arrows mid-round. On the menus they stay native,
+      // so a focused button activates and the menu scrolls (Space used to start
+      // a surprise round from the title hub instead).
+      const inRound = screenRef.current === "playing" || screenRef.current === "holeComplete";
+      if (inRound && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " ", "Enter"].includes(e.key)) e.preventDefault();
       keysRef.current.add(e.key);
       if (e.key >= "1" && e.key <= "9") {
         const n = Number(e.key) - 1; // number keys pick bag slots
@@ -2437,10 +2441,7 @@ export function DiscGolfGame() {
       }
       if (e.key === "b" || e.key === "B") setThrowStyle("BH");
       if (e.key === "f" || e.key === "F") setThrowStyle("FH");
-      if (e.key === " " || e.key === "Enter") {
-        if (screenRef.current === "title") startGame();
-        else if (screenRef.current === "holeComplete") nextHole();
-      }
+      if ((e.key === " " || e.key === "Enter") && screenRef.current === "holeComplete") nextHole();
     }
     function onUp(e: KeyboardEvent) {
       keysRef.current.delete(e.key);
@@ -2451,7 +2452,7 @@ export function DiscGolfGame() {
       window.removeEventListener("keydown", onDown);
       window.removeEventListener("keyup", onUp);
     };
-  }, [startGame, nextHole, selectDisc]);
+  }, [nextHole, selectDisc]);
 
   // Main loop
   useEffect(() => {
