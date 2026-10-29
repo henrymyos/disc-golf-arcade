@@ -15,7 +15,9 @@ export type DemoHole = {
   frame: (tt: number, now: number, controls: boolean) => string;
 };
 
-export function createDemoHole(ctx: CanvasRenderingContext2D): DemoHole {
+/** `teach: false` drops the beats that only teach the control strip (the
+ *  attract loop hides it), so the disc is in the air sooner. */
+export function createDemoHole(ctx: CanvasRenderingContext2D, { teach = true } = {}): DemoHole {
   const DW = DEMO_W, DH = DEMO_H;
   type Pt = { x: number; y: number };
   type Shape = "hyzer" | "flat" | "anny";
@@ -37,9 +39,8 @@ export function createDemoHole(ctx: CanvasRenderingContext2D): DemoHole {
     { from: { x: 133, y: 150 }, ctrl: { x: 100, y: 104 }, to: { x: 116, y: 76 }, di: 1, shape: "hyzer", stance: "BH" }, // hyzer carves back to the left
     { from: { x: 116, y: 76 }, ctrl: { x: 118, y: 56 }, to: basket, di: 2, shape: "flat", stance: "BH" },  // flat putt straight in
   ];
-  const throwIdx = [5, 9, 12]; // BEATS index of each shot's throw
   type Beat = { dur: number; cap: string; kind: "intro" | "aim" | "throw" | "switch" | "select" | "celebrate"; shot: number; teach?: "disc" | "shape" | "throw" };
-  const BEATS: Beat[] = [
+  const ALL_BEATS: Beat[] = [
     { dur: 1000, cap: "An imaginary player takes on a hole", kind: "intro", shot: 0 },
     { dur: 1500, cap: "Tap a disc to choose — drivers bomb, putters control", kind: "select", shot: 0, teach: "disc" },
     { dur: 1500, cap: "Pick your throw — backhand curves left, forehand right", kind: "select", shot: 0, teach: "throw" },
@@ -55,6 +56,8 @@ export function createDemoHole(ctx: CanvasRenderingContext2D): DemoHole {
     { dur: 900, cap: "Sink it!", kind: "throw", shot: 2 },
     { dur: 1800, cap: "Hole complete! 🎉", kind: "celebrate", shot: 2 },
   ];
+  const BEATS = teach ? ALL_BEATS : ALL_BEATS.filter((b) => b.kind !== "select");
+  const throwIdx = SHOTS.map((_, s) => BEATS.findIndex((b) => b.kind === "throw" && b.shot === s)); // BEATS index of each shot's throw
   const total = BEATS.reduce((s, b) => s + b.dur, 0);
   const qbez = (a: Pt, c: Pt, b: Pt, t: number): Pt => ({
     x: (1 - t) * (1 - t) * a.x + 2 * (1 - t) * t * c.x + t * t * b.x,

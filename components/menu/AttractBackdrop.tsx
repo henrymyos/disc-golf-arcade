@@ -10,11 +10,12 @@ import { createDemoHole, DEMO_W, DEMO_H } from "../game/demoHole";
 // so the whole hole reads in a short strip under the title instead of hiding
 // behind the menu. It stops drawing while the tab is hidden, and under
 // prefers-reduced-motion it paints a single still frame (mid-approach).
-const STILL_AT_MS = 9_400;
+const STILL_AT_MS = 6_600;
 // The part of the demo canvas that holds the hole: x 66..174 (fairway + trees +
-// pond) by y 22..268 (basket to just behind the tee).
-const SRC = { x0: 66, x1: 174, y0: 22, y1: 268 };
-const STRIP_W = SRC.y1 - SRC.y0; // 246: the hole's length runs left → right
+// pond) by y 4..268 (room past the basket so its ring clears the edge feather,
+// to just behind the tee).
+const SRC = { x0: 66, x1: 174, y0: 4, y1: 268 };
+const STRIP_W = SRC.y1 - SRC.y0; // 264: the hole's length runs left → right
 const STRIP_H = SRC.x1 - SRC.x0; // 108
 
 export function AttractBackdrop() {
@@ -28,7 +29,7 @@ export function AttractBackdrop() {
     off.height = DEMO_H;
     const offCtx = off.getContext("2d");
     if (!offCtx) return;
-    const demo = createDemoHole(offCtx);
+    const demo = createDemoHole(offCtx, { teach: false });
     ctx.imageSmoothingEnabled = false;
     // Demo (x, y) → strip (y1 − y, x − x0): the tee (bottom) lands on the left.
     const paint = (tt: number, now: number) => {
