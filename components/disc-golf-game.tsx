@@ -566,7 +566,6 @@ export function DiscGolfGame() {
   // disc the player already had (so nothing's lost) and mark all past levels
   // resolved. Thereafter, each new level offers a 1-of-2 disc choice (one popup
   // per level, oldest first). Skips levels with nothing new to offer.
-  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!bagLoaded || levelUp) return; // wait for storage; resolve one popup at a time
     if (levelRewarded == null) {
@@ -607,7 +606,6 @@ export function DiscGolfGame() {
     if (bagChanged) { bagRef.current = res.bag; setBag(res.bag); try { localStorage.setItem(BAG_KEY, JSON.stringify(res.bag)); } catch { /* ignore */ } }
     if (seenChanged) { setBagSeen(res.seen); try { localStorage.setItem(BAGSEEN_KEY, JSON.stringify(res.seen)); } catch { /* ignore */ } }
   }, [bagLoaded, levelRewarded, unlocked, owned, playerLevel, bagSeen]);
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Title-screen navigation: a small hub so the menu isn't a wall of buttons.
   const [hub, setHub] = useState<"home" | "solo" | "online" | "challenge" | "practice" | "holePractice">("home");
@@ -997,9 +995,7 @@ export function DiscGolfGame() {
     if (screen !== "playing") return;
     throwStyleRef.current = defaultThrowStyleRef.current;
     releaseRef.current = defaultReleaseRef.current;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setThrowStyle(defaultThrowStyleRef.current);
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setRelease(defaultReleaseRef.current);
   }, [screen]);
 
