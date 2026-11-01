@@ -2873,7 +2873,7 @@ export function DiscGolfGame() {
           ctx.strokeStyle = "rgba(255,255,255,0.35)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(tx, ty, r, 0, Math.PI * 2); ctx.stroke();
         }
       }
-      drawBasket(ctx, hole.basket.x + rattle, hole.basket.y - cam, g.skill.catchR * (g.momentum ?? 1), cosmeticByKey(BASKET_SKINS, basketSkinRef.current), ink.ring);
+      drawBasket(ctx, hole.basket.x + rattle, hole.basket.y - cam, catchRFor(hole, g.rest, g.skill.catchR * (g.momentum ?? 1)), cosmeticByKey(BASKET_SKINS, basketSkinRef.current), ink.ring);
       for (const tr of hole.trees) {
         // A tree you're stuck right behind goes translucent — a cue that this
         // throw passes through it (the aim line runs straight on through, too).
