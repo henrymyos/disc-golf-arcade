@@ -95,4 +95,7 @@ describe("fictional career sponsors", () => {
     for (const b of ["Infinite Discs", "Dynamic Discs", "Friction Gloves", "GripEQ", "ZÜCA", "1st Phorm", "Red Bull", "Nike"]) expect(src).not.toContain(b);
     expect(src).not.toMatch(/name: "Discmania"/);
   });
+  it("career panel shows a generic Rating label, not PDGA", () => {
+    expect(readFileSync("components/panels/CareerPanel.tsx", "utf8")).not.toContain("PDGA ");
+  });
 });

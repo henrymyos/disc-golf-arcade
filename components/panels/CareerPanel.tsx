@@ -60,7 +60,7 @@ export function CareerSlots({ careers, onPick, onDelete, onBack }: {
             <div className="flex items-center gap-2">
               <button type="button" onClick={() => onPick(slot)} className="flex-1 min-w-0 text-left">
                 <p className="text-white font-bold truncate">{c.name}{c.retired ? <span className="text-gray-500 font-normal"> · Retired</span> : null}</p>
-                <p className="text-gray-400 text-[11px]">{STAGE_LABEL[c.stage]} · Age {c.age} · Overall {Math.round(careerRating(c.skills))}{c.stage === "pro" && c.worldRank ? ` · World #${c.worldRank}` : ` · PDGA ${c.pdgaRating}`}</p>
+                <p className="text-gray-400 text-[11px]">{STAGE_LABEL[c.stage]} · Age {c.age} · Overall {Math.round(careerRating(c.skills))}{c.stage === "pro" && c.worldRank ? ` · World #${c.worldRank}` : ` · Rating ${c.pdgaRating}`}</p>
               </button>
               {confirmDel === slot ? (
                 <span className="shrink-0 text-[11px] text-gray-400">Delete? <button type="button" onClick={() => { onDelete(slot); setConfirmDel(null); }} className="text-[#e2453b] font-bold">Yes</button> · <button type="button" onClick={() => setConfirmDel(null)} className="text-gray-300">No</button></span>
@@ -192,7 +192,7 @@ export function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onS
           <h2 className="text-white font-black text-xl">{career.name}</h2>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
-        <p className="text-gray-400 text-xs -mt-2">Retired at age {career.age} · {career.season} seasons · PDGA {career.pdgaRating} · earned {fmtCash(career.cash)}</p>
+        <p className="text-gray-400 text-xs -mt-2">Retired at age {career.age} · {career.season} seasons · Rating {career.pdgaRating} · earned {fmtCash(career.cash)}</p>
         <div className="grid grid-cols-2 gap-2 text-center">
           <CareerStat label="Titles" v={career.titles.length} />
           <CareerStat label="Majors" v={career.majors} />
@@ -222,7 +222,7 @@ export function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onS
           <p className="text-[11px] mt-0.5">
             {career.stage === "pro" && career.worldRank
               ? <span className="text-[#f5d24a] font-bold">World #{career.worldRank}</span>
-              : <span className="text-gray-500">PDGA {career.pdgaRating}</span>}
+              : <span className="text-gray-500">Rating {career.pdgaRating}</span>}
             <span className="text-[#36D7B7] font-bold font-mono ml-2">{fmtCash(career.cash)}</span>
             <span className="text-[#f5d24a] font-bold font-mono ml-2" title="Season energy — spend it to enter events">⚡{career.energy}</span>
           </p>
