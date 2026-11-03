@@ -52,3 +52,10 @@ export function claimSupportNudge(now: number, url: string | null = supportUrl()
     return false;
   }
 }
+
+// Which finished rounds may show the nudge: solo Daily or full 18-hole rounds only.
+// Never practice holes, Pro Tour, Pass & Play / online. Minigames use their own screen.
+export function nudgeEligible(r: { practice: boolean; proTour: boolean; multiplayer: boolean; daily: boolean; holes: number }): boolean {
+  if (r.practice || r.proTour || r.multiplayer) return false;
+  return r.daily || r.holes === 18;
+}

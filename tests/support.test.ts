@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
-import { claimSupportNudge, supportUrl, supportPromptsOff, setSupportPromptsOff, NUDGE_INTERVAL_MS, SUPPORT_NUDGE_KEY } from "../lib/support";
+import { claimSupportNudge, nudgeEligible, supportUrl, supportPromptsOff, setSupportPromptsOff, NUDGE_INTERVAL_MS, SUPPORT_NUDGE_KEY } from "../lib/support";
 import { newCareer, normalizeCareer, type Career } from "../lib/discgolf/career";
 
 function mem(): Storage & { data: Map<string, string> } {
@@ -60,6 +60,29 @@ describe("round-end nudge cadence", () => {
   });
 });
 
+describe("which rounds can show the nudge", () => {
+  const solo = { practice: false, proTour: false, multiplayer: false, daily: false, holes: 18 };
+  it("shows after a finished 9-hole Daily and a finished 18-hole round", () => {
+    expect(nudgeEligible({ ...solo, daily: true, holes: 9 })).toBe(true);
+    expect(nudgeEligible(solo)).toBe(true);
+  });
+  it("never after Pro Tour, practice, multiplayer or a short non-Daily round", () => {
+    expect(nudgeEligible({ ...solo, proTour: true })).toBe(false);
+    expect(nudgeEligible({ ...solo, practice: true, holes: 1 })).toBe(false);
+    expect(nudgeEligible({ ...solo, daily: true, practice: true, holes: 1 })).toBe(false);
+    expect(nudgeEligible({ ...solo, multiplayer: true })).toBe(false);
+    expect(nudgeEligible({ ...solo, daily: true, holes: 9, multiplayer: true })).toBe(false);
+    expect(nudgeEligible({ ...solo, holes: 9 })).toBe(false);
+  });
+  it("minigames never reach the round summary that mounts the nudge", () => {
+    const src = readFileSync("components/disc-golf-game.tsx", "utf8");
+    const mini = src.slice(src.indexOf("miniResult && ("), src.indexOf('screen === "gameComplete"'));
+    expect(mini.length).toBeGreaterThan(0);
+    expect(mini).not.toContain("SupportNudge");
+    expect(src.match(/<SupportNudge \/>/g)).toHaveLength(1);
+  });
+});
+
 describe("fictional career sponsors", () => {
   it("an old save holding a real-brand sponsor loads with the new name and same money", () => {
     const c = newCareer("Old Save", 7);
@@ -71,5 +94,8 @@ describe("fictional career sponsors", () => {
     const src = readFileSync("lib/discgolf/career.ts", "utf8") + readFileSync("components/panels/CareerPanel.tsx", "utf8");
     for (const b of ["Infinite Discs", "Dynamic Discs", "Friction Gloves", "GripEQ", "ZÜCA", "1st Phorm", "Red Bull", "Nike"]) expect(src).not.toContain(b);
     expect(src).not.toMatch(/name: "Discmania"/);
+  });
+  it("career panel shows a generic Rating label, not PDGA", () => {
+    expect(readFileSync("components/panels/CareerPanel.tsx", "utf8")).not.toContain("PDGA ");
   });
 });
