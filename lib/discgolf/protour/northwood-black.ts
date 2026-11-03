@@ -6,6 +6,10 @@
 // The woods course: OB is one-sided and named (stakes, fences, the road), drawn
 // as strips on that side only; every other edge plays the woods as hazard rough.
 // Drop zones: dzAll on 8 and 17 (any OB throw). Flat: no elevation.
+// Balance (Oct 2026): pairs 50–60 ft short of the basket on 2, 3, 4, 5, 9, 11,
+// 16 and 18, so scores track the other tour courses
+// (tests/protour-balance.test.ts).
+// balanceTrees are ours, not the book's, and none stand in OB.
 import type { ProCourse, ProHole } from "./types";
 
 const BOOK = "https://drive.google.com/file/d/1gFu0KFDA0nXHv4cqqwYYvXNsGtXAZTy-/view";

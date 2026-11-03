@@ -9,6 +9,10 @@
 // shows no profile stay flat.
 // Drop zones: tee shots only on 2, 5 (FPO tee), 9 and 10 (island green); dzAll on
 // 13 (OB creek or left before the gap). Mando and re-tee DZs are left off.
+// Balance (Oct 2026): pairs about 50 ft short of the basket on 3, 6, 7, 12, 16
+// and 17, one tree on 8, and a staggered pair (90 and 55 ft short) on 14, so
+// scores track the other tour courses (tests/protour-balance.test.ts).
+// balanceTrees are ours, not the book's, and none stand in OB or water.
 import type { ProCourse, ProHole } from "./types";
 
 const BOOK = "https://drive.google.com/file/d/12NcwTuWemS-b02K3sGvwGMPc_j_M80yy/view";

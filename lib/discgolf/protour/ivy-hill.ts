@@ -8,6 +8,10 @@
 // Drop zones: dzAll on 1, 5, 9, 12 and 13 (any OB throw); tee shots only on 4, 6,
 // 7, 14 (DZ1; the island-only DZ2 is out) and 17. 3, 10 and 16 re-throw, as the
 // engine already does. No elevation (the book shows none).
+// Balance (Oct 2026): pairs 50–60 ft short of the basket on 3, 11 and 15 only;
+// the island greens and the 100 ft lane on 2 get none, so scores track the
+// other tour courses (tests/protour-balance.test.ts).
+// balanceTrees are ours, not the book's, and none stand in OB or water.
 import type { ProCourse, ProHole } from "./types";
 
 const BOOK = "https://drive.google.com/file/d/1s8zHFvArPcdGPWyAelOvyEW_fSxP3mUS/view";
