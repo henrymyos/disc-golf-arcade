@@ -1017,6 +1017,7 @@ export function DiscGolfGame() {
     const hole = g.roundHoles[g.holeIndex];
     setHud({
       hole: g.holeIndex + 1, par: hole.par, throws: g.throws, holes: g.roundHoles.length,
+      practiceHole: g.practice ? g.practiceHole : undefined,
       player: g.party ? g.party.names[g.party.current] : undefined,
       scores: g.roundHoles.map((_, i) => (typeof g.scores[i] === "number" ? g.scores[i] : null)),
       pars: g.roundHoles.map((h) => h.par),
@@ -4045,7 +4046,7 @@ export function DiscGolfGame() {
             sl.tone === "even" ? "text-white" : "text-[#e08a3b]";
           return (
             <Overlay onTap={nextHole}>
-              <p className="text-gray-400 text-[11px] font-semibold uppercase tracking-[0.15em]">Hole {hud.hole}</p>
+              <p className="text-gray-400 text-[11px] font-semibold uppercase tracking-[0.15em]">Hole {hud.practiceHole ?? hud.hole}{hud.practiceHole ? " · practice" : ""}</p>
               <p className={`${tone} font-black text-4xl leading-none`}>
                 {sl.emoji && `${sl.emoji} `}{sl.name}
               </p>
@@ -4067,7 +4068,7 @@ export function DiscGolfGame() {
                       <div key={from} className="grid gap-x-1 gap-y-0.5 justify-center items-center" style={{ gridTemplateColumns: `repeat(${cells.length}, 22px)` }}>
                         {/* Hole numbers */}
                         {cells.map((_, i) => (
-                          <span key={`n${from + i}`} className="text-center text-[10px] font-semibold leading-none text-gray-300">{from + i + 1}</span>
+                          <span key={`n${from + i}`} className="text-center text-[10px] font-semibold leading-none text-gray-300">{hud.practiceHole ?? from + i + 1}</span>
                         ))}
                         {/* Divider under the numbers, above the pars */}
                         <div className="col-span-full border-t border-white/15" />
@@ -4699,7 +4700,7 @@ export function DiscGolfGame() {
                     {/* Same look as the in-round card: hole # / line / par / boxed, color-coded score. */}
                     <div className="grid gap-x-1 gap-y-0.5 justify-center items-center" style={{ gridTemplateColumns: `repeat(${cells.length}, 24px)` }}>
                       {cells.map((_, i) => (
-                        <span key={`n${from + i}`} className="text-center text-[10px] font-semibold leading-none text-gray-300">{from + i + 1}</span>
+                        <span key={`n${from + i}`} className="text-center text-[10px] font-semibold leading-none text-gray-300">{finalPracticeHole ?? from + i + 1}</span>
                       ))}
                       <div className="col-span-full border-t border-white/15" />
                       {cells.map((p, i) => (

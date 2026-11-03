@@ -106,6 +106,7 @@ export function targetHole(station: number): Hole {
 // own HUD). Distances in feet; wind in mph and screen-space angle (radians).
 export type HudInfo = {
   hole: number; par: number; throws: number; holes: number; player?: string; course?: string;
+  practiceHole?: number; // the course's real hole number in a one-hole practice round (hole is always 1 there)
   scores: (number | null)[]; pars: number[];
   pinFt?: number; holeFt?: number; windMph?: number; windAng?: number;
 };
