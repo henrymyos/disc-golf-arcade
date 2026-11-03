@@ -75,6 +75,7 @@ import { AuthPanel } from "./panels/AuthPanel";
 import { AttractBackdrop } from "./menu/AttractBackdrop";
 import { DailyButton } from "./menu/DailyButton";
 import { SupportLink, SupportNudge } from "./support/Support";
+import { nudgeEligible } from "@/lib/support";
 import { NextGoalCard, GoalToast } from "./menu/NextGoal";
 import { useNextGoal } from "./menu/useNextGoal";
 import { BoardNamePrompt } from "./menu/BoardNamePrompt";
@@ -4546,8 +4547,8 @@ export function DiscGolfGame() {
                 {coinReward > 0 && (
                   <p className="text-[#f5d24a] text-sm font-bold mt-1">+{coinReward} <Coin /></p>
                 )}
-                {/* Tip-jar nudge: finished 18-hole rounds only — never minigames, Pro Tour or practice. */}
-                {finalPracticeHole == null && !finalIsProTour && finalPars.length === 18 && (
+                {/* Tip-jar nudge: finished Daily or 18-hole rounds only (lib/support.ts nudgeEligible). */}
+                {nudgeEligible({ practice: finalPracticeHole != null, proTour: finalIsProTour, multiplayer: !!finalParty || finalOnline, daily: finalIsDaily, holes: finalPars.length }) && (
                   <div className="mt-2.5"><SupportNudge /></div>
                 )}
                 {/* Daily stars — the day's three to-par goals, lit as earned. */}
