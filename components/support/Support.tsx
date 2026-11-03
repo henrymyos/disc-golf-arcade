@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { claimSupportNudge, setSupportPromptsOff, supportPromptsOff, supportUrl } from "@/lib/support";
+import { SUPPORTERS } from "@/lib/supporters";
 
 // Small text link under the main-menu utilities. Never above Play.
 export function SupportLink() {
@@ -12,12 +13,12 @@ export function SupportLink() {
       <a href={url} target="_blank" rel="noopener" className="text-[#36D7B7] text-sm font-semibold hover:underline">
         Support the Arcade
       </a>
-      <p className="text-gray-500 text-[11px] mt-0.5">Free and ad-free. Tips keep it running.</p>
+      <p className="text-gray-500 text-[11px] mt-0.5">Free, no ads, no paywalls. Tips help pay for new courses.</p>
     </div>
   );
 }
 
-// One-line, dismissible thank-you on a finished 18-hole round summary, at most
+// One-line, dismissible thank-you on a finished Daily or 18-hole round summary, at most
 // once a week per device (lib/support.ts). Mount it only while eligible.
 export function SupportNudge() {
   const [url, setUrl] = useState<string | null>(null);
@@ -29,11 +30,27 @@ export function SupportNudge() {
   return (
     <div className="flex items-center justify-between gap-2 bg-[#1a1d23] border border-white/10 rounded-lg px-3 py-2 text-xs" data-testid="support-nudge">
       <span className="text-gray-300">
-        Enjoying the Arcade?{" "}
-        <a href={url} target="_blank" rel="noopener" className="text-[#36D7B7] font-semibold hover:underline">Leave a tip</a>
-        {" "}to keep it free.
+        Enjoying the Arcade? A tip on Ko-fi helps pay for new courses.{" "}
+        <a href={url} target="_blank" rel="noopener" className="text-[#36D7B7] font-semibold hover:underline">Tip on Ko-fi</a>
       </span>
       <button type="button" onClick={() => setUrl(null)} aria-label="Dismiss" className="text-gray-500 hover:text-white px-1">✕</button>
+    </div>
+  );
+}
+
+// Settings › Support: the tip link, plus the hand-kept supporters list when it isn't empty.
+export function SupportSettingsRow({ supporters = SUPPORTERS }: { supporters?: string[] }) {
+  const url = supportUrl();
+  if (!url) return null;
+  return (
+    <div className="bg-[#1a1d23] border border-white/10 rounded-lg px-3 py-2.5" data-testid="support-settings">
+      <div className="flex items-center justify-between">
+        <span className="text-white text-sm font-semibold">Support</span>
+        <a href={url} target="_blank" rel="noopener" className="text-[#36D7B7] text-xs font-bold hover:underline">Support the Arcade</a>
+      </div>
+      {supporters.length > 0 && (
+        <p className="text-gray-400 text-[11px] mt-1" data-testid="supporters">Thanks to our supporters: {supporters.join(", ")}</p>
+      )}
     </div>
   );
 }

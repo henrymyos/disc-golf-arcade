@@ -1,7 +1,7 @@
 "use client";
 
 import type { Release } from "@/lib/discgolf/engine";
-import { SupportPromptsToggle } from "@/components/support/Support";
+import { SupportPromptsToggle, SupportSettingsRow } from "@/components/support/Support";
 
 
 export function SettingsPanel(props: {
@@ -83,6 +83,7 @@ export function SettingsPanel(props: {
           </span>
         </button>
 
+        <SupportSettingsRow />
         <SupportPromptsToggle />
 
         <div>
