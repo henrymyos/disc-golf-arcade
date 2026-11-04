@@ -210,13 +210,13 @@ const RIVAL_PALETTE = ["#e23b7b", "#5fb0e8", "#b85cd6", "#e2a13b", "#36D7B7", "#
 // your first as your rating climbs. There are three category slots (Disc / Gear /
 // General); you hold at most one deal per slot, and signing a better offer in a slot
 // SWAPS out the current one (see signSponsor). The Disc slot can also hold a
-// MANUFACTURER deal (Innova / Discraft): the marquee late-game contract that pays a
+// MANUFACTURER deal (Tailwind / Copperline): the marquee late-game contract that pays a
 // fortune but locks your bag to that brand's discs only.
 const SPONSOR_CAP = SPONSOR_SLOTS.length;
 // Fictional sponsors (ids stay stable so existing saves keep their deals; names are
 // refreshed from this pool on load). Disc-slot
 // support deals are non-exclusive disc brands/retailers; only the two giants
-// (Innova / Discraft) sign you to an EXCLUSIVE manufacturer deal that locks your bag.
+// (Tailwind / Copperline) sign you to an EXCLUSIVE manufacturer deal that locks your bag.
 const SPONSOR_POOL: Sponsor[] = [
   // ── Disc slot — disc brands/retailers → exclusive manufacturer deals ──
   { id: "localdisc", name: "Local Disc Shop", slot: "disc", tier: 1, signing: 200, stipend: 150, coach: false, reqRating: 30, reqStage: "highschool" },
@@ -225,8 +225,10 @@ const SPONSOR_POOL: Sponsor[] = [
   // Manufacturer deals — only a genuine top-tour pro lands one. Huge money + their
   // full disc lineup, but you carry ONLY their plastic from then on. (These are the
   // only two brands whose discs exist in the catalog, so the bag lock works.)
-  { id: "innova", name: "Innova", slot: "disc", tier: 5, signing: 220000, stipend: 140000, coach: true, reqRating: 82, reqStage: "pro", brand: "Innova" },
-  { id: "discraft", name: "Discraft", slot: "disc", tier: 5, signing: 220000, stipend: 140000, coach: true, reqRating: 82, reqStage: "pro", brand: "Discraft" },
+  // Display names are fictional; ids + `brand` stay "innova"/"Innova" etc. so old
+  // saves keep their deal and the lock still matches the catalog's disc brand.
+  { id: "innova", name: "Tailwind Discs", slot: "disc", tier: 5, signing: 220000, stipend: 140000, coach: true, reqRating: 82, reqStage: "pro", brand: "Innova" },
+  { id: "discraft", name: "Copperline Discs", slot: "disc", tier: 5, signing: 220000, stipend: 140000, coach: true, reqRating: 82, reqStage: "pro", brand: "Discraft" },
   // ── Gear slot — disc golf equipment: gloves, bags, carts ──
   { id: "campusgear", name: "Campus Gear", slot: "gear", tier: 1, signing: 500, stipend: 400, coach: true, reqRating: 38, reqStage: "highschool" },
   { id: "voltathletic", name: "Volt Athletic", slot: "gear", tier: 3, signing: 15000, stipend: 12000, coach: false, reqRating: 66, reqStage: "pro" },

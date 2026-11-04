@@ -495,7 +495,7 @@ describe("manufacturer sponsorships (brand-exclusive deals)", () => {
   const elitePro = (): Career => ({ ...newCareer("Ace", 77), stage: "pro", age: 27, skills: { power: 86, control: 86, putt: 86, stamina: 50 } });
   const brandOf = (k: string) => discByKey(k)?.brand;
 
-  it("offers Innova/Discraft only to an elite pro", () => {
+  it("offers the manufacturer deals only to an elite pro", () => {
     const ids = availableSponsors(elitePro()).map((s) => s.id);
     expect(ids).toContain("innova");
     expect(ids).toContain("discraft");
@@ -639,6 +639,14 @@ describe("normalizeCareer (migration)", () => {
     expect(fixed.bag.length).toBeGreaterThan(0);
     expect(fixed.rankPoints).toBe(0);
     expect(fixed.trainBought).toBe(0);
+  });
+  it("an old save holding a real-brand manufacturer deal loads with the fictional name and keeps its lock", () => {
+    const old = { ...newCareer("Old", 22), stage: "pro", sponsors: [{ id: "innova", name: "Innova", slot: "disc", tier: 5, signing: 220000, stipend: 140000, coach: true, reqRating: 82, reqStage: "pro", brand: "Innova" }] } as unknown as Career;
+    const fixed = normalizeCareer(old);
+    expect(fixed.sponsors[0]).toMatchObject({ id: "innova", name: "Tailwind Discs", stipend: 140000 });
+    expect(sponsorBrandLock(fixed)).toBe("Innova"); // bag lock still matches the catalog brand
+    const d = normalizeCareer({ ...old, sponsors: [{ ...old.sponsors[0], id: "discraft", name: "Discraft", brand: "Discraft" }] });
+    expect(d.sponsors[0].name).toBe("Copperline Discs");
   });
 });
 
