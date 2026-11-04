@@ -745,7 +745,7 @@ export function DiscGolfGame() {
       /* ignore */
     }
     setBagLoaded(true); // let the bag-reconcile effect run now that storage is read
-  }, []);
+  }, [addCoins]);
 
   // Snapshot / clear the resumable solo round.
   const persistResume = useCallback((g: GameState) => {
@@ -1195,7 +1195,7 @@ export function DiscGolfGame() {
     clearResume();
     setScreen("playing");
     syncHud();
-  }, [muted, musicVolume, syncHud, clearResume]);
+  }, [muted, musicVolume, syncHud, clearResume, addCoins]);
 
   // ── Career handlers ──
 

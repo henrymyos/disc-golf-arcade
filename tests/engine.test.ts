@@ -38,7 +38,6 @@ import {
   unlockedDiscKeys,
   BAG_MAX,
   isDiscUnlocked,
-  discUnlockLevel,
   discAvailableAtLevel,
   levelUpChoices,
   DISC_PRICE,

@@ -79,7 +79,7 @@ export function AuthPanel(props: {
               <button type="button" onClick={() => switchTo("signup")} className={seg(mode === "signup")}>Sign up</button>
             </div>
 
-            <form onSubmit={(e) => { e.preventDefault(); if (!busy && email && password) (mode === "login" ? onSignIn() : onSignUp()); }} className="space-y-3">
+            <form onSubmit={(e) => { e.preventDefault(); if (!busy && email && password) { if (mode === "login") onSignIn(); else onSignUp(); } }} className="space-y-3">
               <input type="email" inputMode="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" className={input} />
               <div className="relative">
                 <input
