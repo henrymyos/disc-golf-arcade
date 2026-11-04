@@ -10,6 +10,19 @@
 
 export type FtPt = { x: number; y: number };
 export type FtRect = { x: number; y: number; w: number; h: number };
+// A sand hazard (+1, play it where it lies), in one of four shapes:
+//   { x, y, d }            round bunker: center + diameter (the original format)
+//   { poly, holes? }       any outline (concave is fine); each `holes` ring is a
+//                          grass island cut out of the sand
+//   { x, y, rx, ry, rot? } ellipse: center + radii, turned `rot` degrees
+//   { x, y, w, h, rot? }   rect in the FtRect convention, turned `rot` degrees
+//                          about its center
+// `rot` turns +x toward +y (counterclockwise on screen, seen from the tee).
+export type ProHazard =
+  | { x: number; y: number; d: number }
+  | { poly: FtPt[]; holes?: FtPt[][] }
+  | { x: number; y: number; rx: number; ry: number; rot?: number }
+  | (FtRect & { rot?: number });
 
 export type ProHole = {
   n: number;
@@ -23,7 +36,7 @@ export type ProHole = {
   obZones?: FtRect[]; // marked OB inside the corridor
   islands?: FtPt[][]; // extra in-bounds ribbons (island / peninsula greens)
   islandGreen?: boolean; // the book's green is an island (ringed by water/OB); shown on chips + glyphs
-  hazard?: { x: number; y: number; d: number }[]; // round bunkers (center + diameter)
+  hazard?: ProHazard[]; // sand bunkers, any shape (see ProHazard)
   dropZone?: FtPt; // the book's main DZ only (one per hole)
   dzAll?: true; // the book sends EVERY OB throw to the DZ (default: tee shots only)
   walls?: { x: number; y: number; w: number }[]; // fences / gates that block at any height

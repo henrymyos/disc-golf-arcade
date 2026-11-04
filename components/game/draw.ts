@@ -334,25 +334,54 @@ export function drawHoleFeatures(ctx: CanvasRenderingContext2D, hole: Hole, grou
     ctx.restore();
   }
 
-  // Hazards (sand) — sandy ovals ringed in caddie-book orange with an HZ
+  // Hazards (sand) — sandy ovals (or shaped outlines) ringed in caddie-book orange with an HZ
   // tag, so they read as "+1 stroke" at a glance (unlike plain fairway).
   for (const hz of hole.hazard ?? []) {
-    const hx = hz.x + hz.w / 2;
-    const hy = hz.y - cam + hz.h / 2;
-    ctx.fillStyle = "#d9c089";
-    ctx.beginPath();
-    ctx.ellipse(hx, hy, hz.w / 2, hz.h / 2, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = "#c4a96b";
-    ctx.beginPath();
-    ctx.ellipse(hx, hy, hz.w / 2 - 2, hz.h / 2 - 2, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = "#e0923b";
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([3, 2]);
-    ctx.beginPath();
-    ctx.ellipse(hx, hy, hz.w / 2, hz.h / 2, 0, 0, Math.PI * 2);
-    ctx.stroke();
+    const hx = hz.tag?.x ?? hz.x + hz.w / 2;
+    const hy = (hz.tag?.y ?? hz.y + hz.h / 2) - cam;
+    const rings = hz.rings;
+    if (rings) {
+      // Shaped hazard: same look as the ovals. The 2px light rim is a 4px edge
+      // stroke clipped to the sand (the outer half falls outside the clip).
+      const trace = () => {
+        ctx.beginPath();
+        for (const r of rings) {
+          ctx.moveTo(r[0].x, r[0].y - cam);
+          for (let i = 1; i < r.length; i++) ctx.lineTo(r[i].x, r[i].y - cam);
+          ctx.closePath();
+        }
+      };
+      ctx.save();
+      trace();
+      ctx.clip("evenodd");
+      ctx.fillStyle = "#c4a96b";
+      ctx.fill("evenodd");
+      ctx.strokeStyle = "#d9c089";
+      ctx.lineWidth = 4;
+      ctx.lineJoin = "round";
+      ctx.stroke();
+      ctx.restore();
+      ctx.strokeStyle = "#e0923b";
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([3, 2]);
+      trace();
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = "#d9c089";
+      ctx.beginPath();
+      ctx.ellipse(hx, hy, hz.w / 2, hz.h / 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#c4a96b";
+      ctx.beginPath();
+      ctx.ellipse(hx, hy, hz.w / 2 - 2, hz.h / 2 - 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#e0923b";
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([3, 2]);
+      ctx.beginPath();
+      ctx.ellipse(hx, hy, hz.w / 2, hz.h / 2, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
     ctx.setLineDash([]);
     ctx.lineWidth = 1;
     ctx.fillStyle = "#a8651f";

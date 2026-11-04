@@ -11,7 +11,8 @@
 //   DGA_BALANCE=1 npx vitest run tests/protour-balance.test.ts
 // Optional: DGA_BALANCE_ROUNDS=<n> (default 10), DGA_BALANCE_OUT=<file> (copy of
 // the tables), DGA_BALANCE_ONLY=pilot|baseline (run one group),
-// DGA_BALANCE_COURSE=<name> (one course, e.g. "Maple Hill").
+// DGA_BALANCE_COURSE=<name> (one course, e.g. "Maple Hill"), DGA_BALANCE_HOLE=<n>
+// (play only hole n of each course; per-hole tables then show just that row).
 import { describe, it, expect } from "vitest";
 import { writeFileSync } from "node:fs";
 import {
@@ -34,6 +35,7 @@ import type { Hole, Vec, Flight, Disc, Mode } from "../lib/discgolf/engine";
 
 const RUN = !!process.env.DGA_BALANCE;
 const ROUNDS = Number(process.env.DGA_BALANCE_ROUNDS ?? 10);
+const ONLY_HOLE = Number(process.env.DGA_BALANCE_HOLE ?? 0);
 
 // Bags a real player would carry (non-career play has no skill mods).
 const BAGS: { label: string; keys: string[] }[] = [
@@ -147,6 +149,7 @@ describe.skipIf(!RUN)("Pro Tour balance probe (dev only)", () => {
         const holesStat = Array.from({ length: 18 }, blank);
         for (let r = 0; r < ROUNDS; r++) {
           c.holes(r).forEach((h, i) => {
+            if (ONLY_HOLE && i !== ONLY_HOLE - 1) return;
             const { strokes: s, ob } = playHole(h, bag, prof, rnd, h.par + 8);
             for (const x of [st, holesStat[i]]) {
               x.n++; x.toPar += s - h.par; x.ob += ob;
@@ -181,7 +184,10 @@ describe.skipIf(!RUN)("Pro Tour balance probe (dev only)", () => {
     }
     for (const [id, byBag] of Object.entries(perHole)) {
       out.push("", `${id}, avg vs par per hole`, "| Hole | " + BAGS.map((b) => b.label).join(" | ") + " |", "|---|" + BAGS.map(() => "---|").join(""));
-      for (let i = 0; i < 18; i++) out.push(`| ${i + 1} | ` + BAGS.map((b) => { const x = byBag[b.label][i]; return `${sgn(x.toPar / x.n)} (ace ${pct(x.aces, x.n)}, OB ${(x.ob / x.n).toFixed(2)})`; }).join(" | ") + " |");
+      for (let i = 0; i < 18; i++) {
+        if (!byBag[BAGS[0].label][i].n) continue;
+        out.push(`| ${i + 1} | ` + BAGS.map((b) => { const x = byBag[b.label][i]; return `${sgn(x.toPar / x.n)} (ace ${pct(x.aces, x.n)}, birdie ${pct(x.birdies, x.n)}, bogey ${pct(x.bogeys, x.n)}, OB ${(x.ob / x.n).toFixed(2)})`; }).join(" | ") + " |");
+      }
     }
     const text = out.join("\n");
     console.log(text);

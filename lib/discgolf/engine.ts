@@ -4,7 +4,7 @@
 // Imported by components/disc-golf-game.tsx.
 import { centralDay } from "./time";
 import { TIERS, type Tier } from "./ranked";
-import type { ProHole, ProCourse } from "./protour/types";
+import type { ProHole, ProCourse, ProHazard } from "./protour/types";
 import { MAPLE_HILL } from "./protour/maple-hill";
 import { BREWSTER_RIDGE } from "./protour/brewster-ridge";
 import { IDLEWILD } from "./protour/idlewild";
@@ -41,6 +41,12 @@ const CANCEL_POWER = CANCEL_R / MAX_DRAG; // below this power, releasing cancels
 type Vec = { x: number; y: number };
 type Tree = { x: number; y: number; r: number };
 type Water = { x: number; y: number; w: number; h: number };
+// A sand hazard. Without `rings` it's the ellipse inscribed in {x,y,w,h} (every
+// original bunker). With `rings` it's that outline instead: ring 0 is the edge,
+// further rings are grass islands cut out of it (even-odd, concave is fine), the
+// box is its bounding box (so box-only code such as overlap checks still works),
+// and `tag` is a spot well inside the sand for the HZ label.
+type Hazard = Water & { rings?: Vec[][]; tag?: Vec };
 // The fairway is a curved centerline (tee → green) with a width; anything
 // outside that ribbon is OUT OF BOUNDS — so doglegs and OB lines both curve.
 // Penalty regions (fly over them freely; only matter at ground level):
@@ -74,7 +80,7 @@ type Water = { x: number; y: number; w: number; h: number };
 // GROUND_THEMES palette key (grass/fairway tint), `weather` an optional falling
 // overlay. Stamped per hole so the look travels with the hole into the Daily mix.
 export type Weather = "rain" | "snow";
-type Hole = { par: number; worldH: number; worldW?: number; lenMul?: number; tee: Vec; basket: Vec; fairway: Vec[]; fairways?: Vec[][]; fwWidth: number; trees: Tree[]; water: Water[]; hazard?: Water[]; obZones?: Water[]; dropZone?: Vec; walls?: { x: number; y: number; w: number }[]; roughIsHazard?: boolean; wind?: Vec; windMag?: number; elev?: number; elevZones?: { to: number; elev: number }[]; treeMul?: number; theme?: string; weather?: Weather; bookFt?: number; obRects?: boolean; teeCatchMul?: number; dzDriveOnly?: boolean };
+type Hole = { par: number; worldH: number; worldW?: number; lenMul?: number; tee: Vec; basket: Vec; fairway: Vec[]; fairways?: Vec[][]; fwWidth: number; trees: Tree[]; water: Water[]; hazard?: Hazard[]; obZones?: Water[]; dropZone?: Vec; walls?: { x: number; y: number; w: number }[]; roughIsHazard?: boolean; wind?: Vec; windMag?: number; elev?: number; elevZones?: { to: number; elev: number }[]; treeMul?: number; theme?: string; weather?: Weather; bookFt?: number; obRects?: boolean; teeCatchMul?: number; dzDriveOnly?: boolean };
 
 // Holes are authored in this old 448-tall frame, then stretched to a length
 // that scales with par (below).
@@ -238,11 +244,15 @@ function treeTarget(h: Hole): number {
 // hazard and one standing in the water/sand just reads as broken, so any fill
 // tree that would land in a hazard shape is rejected. Geometry mirrors the
 // landing tests: water/obZones are rectangles (inRect), bunkers are inscribed
-// ellipses (inHazard) — here grown by `m` instead of shrunk by DISC_R.
+// ellipses or polygons (inHazard) — here grown by `m` instead of shrunk by DISC_R.
 function treeInHazard(h: Hole, x: number, y: number, m: number): boolean {
   for (const w of h.water) if (x > w.x - m && x < w.x + w.w + m && y > w.y - m && y < w.y + w.h + m) return true;
   for (const ob of h.obZones ?? []) if (x > ob.x - m && x < ob.x + ob.w + m && y > ob.y - m && y < ob.y + ob.h + m) return true;
   for (const hz of h.hazard ?? []) {
+    if (hz.rings) {
+      if (inRings(hz.rings, x, y) || distToRings(hz.rings, x, y) < m) return true;
+      continue;
+    }
     const rx = hz.w / 2 + m, ry = hz.h / 2 + m;
     const nx = (x - (hz.x + hz.w / 2)) / rx, ny = (y - (hz.y + hz.h / 2)) / ry;
     if (nx * nx + ny * ny <= 1) return true;
@@ -553,6 +563,32 @@ function proHoleBoundsFt(h: ProHole): { x0: number; x1: number; y0: number; y1: 
     y1: Math.max(...ys) + half + PRO_MARGIN_FT,
   };
 }
+// One Pro hazard (feet) → a world hazard. A round bunker stays the native
+// inscribed-ellipse bunker, so every circle plays exactly as before; every other
+// shape becomes polygon rings.
+function proHazard(z: ProHazard, px: (p: { x: number; y: number }) => Vec): Hazard {
+  if ("d" in z) { const c = px(z), d = z.d / FEET_PER_PX; return { x: c.x - d / 2, y: c.y - d / 2, w: d, h: d }; }
+  const turn = (cx: number, cy: number, rot = 0) => (p: { x: number; y: number }) => {
+    const a = (rot * Math.PI) / 180, dx = p.x - cx, dy = p.y - cy;
+    return { x: cx + dx * Math.cos(a) - dy * Math.sin(a), y: cy + dx * Math.sin(a) + dy * Math.cos(a) };
+  };
+  let ringsFt: { x: number; y: number }[][];
+  if ("poly" in z) ringsFt = [z.poly, ...(z.holes ?? [])];
+  else if ("rx" in z) ringsFt = [Array.from({ length: 32 }, (_, i) => turn(z.x, z.y, z.rot)({ x: z.x + z.rx * Math.cos((i * Math.PI) / 16), y: z.y + z.ry * Math.sin((i * Math.PI) / 16) }))];
+  else ringsFt = [[{ x: z.x, y: z.y }, { x: z.x + z.w, y: z.y }, { x: z.x + z.w, y: z.y + z.h }, { x: z.x, y: z.y + z.h }].map(turn(z.x + z.w / 2, z.y + z.h / 2, z.rot))];
+  const rings = ringsFt.map((r) => r.map(px));
+  const xs = rings[0].map((p) => p.x), ys = rings[0].map((p) => p.y);
+  const box = { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+  // The HZ tag goes on the grid point deepest inside the sand (a concave or
+  // holed shape's box center can sit on grass).
+  let tag: Vec = { x: box.x + box.w / 2, y: box.y + box.h / 2 }, best = -1;
+  for (let i = 1; i < 12; i++) for (let j = 1; j < 12; j++) {
+    const x = box.x + (box.w * i) / 12, y = box.y + (box.h * j) / 12;
+    const d = inRings(rings, x, y) ? distToRings(rings, x, y) : -1;
+    if (d > best) { best = d; tag = { x, y }; }
+  }
+  return { ...box, rings, tag };
+}
 // Pure: one ProHole (feet) → one playable Hole (world px). The world is at least
 // the viewport wide, centred on the hole; the tee keeps the usual TEE_BEHIND of
 // room under it. Fill trees come from populateTrees, which keeps the key trees.
@@ -581,7 +617,7 @@ function proHoleToHole(h: ProHole): Hole {
     fwWidth: h.widthFt / FEET_PER_PX,
     trees: [...(h.keyTrees ?? []), ...(h.balanceTrees ?? [])].map((t) => ({ ...px(t), r: t.r / FEET_PER_PX })),
     water: (h.water ?? []).map(rect),
-    hazard: (h.hazard ?? []).map((z) => { const c = px(z), d = z.d / FEET_PER_PX; return { x: c.x - d / 2, y: c.y - d / 2, w: d, h: d }; }),
+    hazard: (h.hazard ?? []).map((z) => proHazard(z, px)),
     obZones: h.obZones?.map(rect),
     dropZone: h.dropZone ? px(h.dropZone) : undefined,
     walls: h.walls?.map((wl) => { const a = px(wl); return { x: a.x, y: a.y, w: wl.w / FEET_PER_PX }; }),
@@ -1403,13 +1439,15 @@ type StepStatus = "fly" | "stop" | "hole" | "oob" | "ob";
 function inRect(r: Water, x: number, y: number) {
   return x > r.x && x < r.x + r.w && y > r.y && y < r.y + r.h;
 }
-// Hazards (sand) are DRAWN as an ellipse inscribed in {x,y,w,h}, so a plain
+// Round hazards (sand) are DRAWN as an ellipse inscribed in {x,y,w,h}, so a plain
 // bounding-box test false-positives in the rect corners that are visually
 // fairway. This tests whether the whole disc sits inside that ellipse — a
 // throw only counts as a hazard when it's completely in the sand, not merely
 // clipping the edge. Shrinking the radii by DISC_R approximates "disc fully
 // contained"; a hazard smaller than the disc can never fully contain it.
-function inHazard(hz: Water, x: number, y: number) {
+function inHazard(hz: Hazard, x: number, y: number) {
+  // A shaped hazard: inside the outline and at least DISC_R from every edge.
+  if (hz.rings) return inRings(hz.rings, x, y) && distToRings(hz.rings, x, y) >= DISC_R;
   const cx = hz.x + hz.w / 2;
   const cy = hz.y + hz.h / 2;
   const rx = hz.w / 2 - DISC_R;
@@ -1427,6 +1465,23 @@ function distToSeg(px: number, py: number, ax: number, ay: number, bx: number, b
   let t = l2 ? ((px - ax) * dx + (py - ay) * dy) / l2 : 0;
   t = Math.max(0, Math.min(1, t));
   return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+}
+// Even-odd point-in-polygon over every ring (outline + cut-out islands); concave
+// outlines work. A point exactly on an edge may land either way, which never
+// matters: inHazard also needs DISC_R of clearance from every edge.
+function inRings(rings: Vec[][], x: number, y: number): boolean {
+  let inside = false;
+  for (const r of rings) for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+    const a = r[i], b = r[j];
+    if (a.y > y !== b.y > y && x < ((b.x - a.x) * (y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
+  }
+  return inside;
+}
+// Distance from a point to the nearest edge of any ring.
+function distToRings(rings: Vec[][], x: number, y: number): number {
+  let m = Infinity;
+  for (const r of rings) for (let i = 0, j = r.length - 1; i < r.length; j = i++) m = Math.min(m, distToSeg(x, y, r[j].x, r[j].y, r[i].x, r[i].y));
+  return m;
 }
 // Distance from a point to a polyline (the fairway centerline).
 function distToPath(px: number, py: number, pts: Vec[]) {
@@ -2748,6 +2803,8 @@ export {
   AudioEngine,
   inRect,
   inHazard,
+  inRings,
+  distToRings,
   distToSeg,
   distToPath,
   offRibbons,
@@ -2792,6 +2849,7 @@ export type {
   Vec,
   Tree,
   Water,
+  Hazard,
   Hole,
   Mode,
   Tournament,

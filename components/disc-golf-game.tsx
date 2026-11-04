@@ -3273,8 +3273,19 @@ export function DiscGolfGame() {
         for (const wt of hole.water) ctx.fillRect(ox + wt.x * s, oy + wt.y * s, wt.w * s, wt.h * s);
         for (const hz of hole.hazard ?? []) {
           ctx.fillStyle = "#d9c089";
-          ctx.fillRect(ox + hz.x * s, oy + hz.y * s, hz.w * s, hz.h * s);
           ctx.strokeStyle = "#e0923b";
+          if (hz.rings) {
+            ctx.beginPath();
+            for (const r of hz.rings) {
+              ctx.moveTo(ox + r[0].x * s, oy + r[0].y * s);
+              for (let i = 1; i < r.length; i++) ctx.lineTo(ox + r[i].x * s, oy + r[i].y * s);
+              ctx.closePath();
+            }
+            ctx.fill("evenodd");
+            ctx.stroke();
+            continue;
+          }
+          ctx.fillRect(ox + hz.x * s, oy + hz.y * s, hz.w * s, hz.h * s);
           ctx.strokeRect(ox + hz.x * s + 0.5, oy + hz.y * s + 0.5, Math.max(2, hz.w * s) - 1, Math.max(2, hz.h * s) - 1);
         }
         if (hole.dropZone) {
