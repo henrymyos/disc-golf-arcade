@@ -202,4 +202,8 @@ describe("round 2: Pickard 7, Ivy Hill 11, Winthrop Gold 14, Harvey Penick 9", (
     expect(src.hazard!.filter((z) => "d" in z)).toHaveLength(4);
     expect(src.hazard!.filter((z) => "poly" in z)).toHaveLength(1);
   });
+
+  it("Harvey Penick 9: no bunker hidden under the pond", () => {
+    expect(hole("harvey-penick", 9).hazard ?? []).toEqual([]);
+  });
 });
