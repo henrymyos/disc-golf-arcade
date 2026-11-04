@@ -173,3 +173,18 @@ describe("Bad Rock Creek 13: one sand area, two islands", () => {
     }
   });
 });
+
+describe("round 2: Pickard 7, Ivy Hill 11, Winthrop Gold 14, Harvey Penick 9", () => {
+  const hole = (id: string, n: number) => proTourCourseById(id)!.holes[n - 1];
+  const sandAt = (g: Hole, x: number, y: number) => g.hazard!.some((hz) => inHazard(hz, g.tee.x + x / FT, g.tee.y - y / FT));
+
+  it("Pickard 7: one sand area round a hexagon island green; tee and green clear, the carry is sand", () => {
+    const g = hole("pickard-park", 7);
+    expect(g.hazard).toHaveLength(1);
+    expect(g.hazard![0].rings).toHaveLength(2);
+    expect(sandAt(g, 0, 0)).toBe(false); // tee
+    expect(sandAt(g, 0, 340)).toBe(false); // basket, centre of the hexagon
+    expect(sandAt(g, 30, 340)).toBe(false); // inside the hexagon's right point
+    for (const [x, y] of [[0, 150], [-60, 275], [60, 275], [0, 410], [-60, 340]]) expect(sandAt(g, x, y), `${x},${y}`).toBe(true); // old seams are sand now
+  });
+});
