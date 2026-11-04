@@ -298,7 +298,7 @@ export function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onS
           <p className="text-gray-400 text-xs font-bold uppercase tracking-wide">Bag · {career.bag.length}/{CAREER_BAG_MAX}</p>
           <p className="text-[10px] text-gray-500">tap a disc for details</p>
         </div>
-        {brandLock && <p className="text-[#f5d24a] text-[10px] -mt-1">🥏 {brandLock} deal — your bag &amp; shop are {brandLock} discs only.</p>}
+        {brandLock && <p className="text-[#f5d24a] text-[10px] -mt-1">🥏 {career.sponsors.find((s) => s.brand)?.name} deal — your bag &amp; shop are locked to its lineup.</p>}
         <div className="flex flex-wrap gap-1.5">
           {career.discs.map((key) => {
             const d = discByKey(key);
@@ -430,7 +430,7 @@ export function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onS
               </div>
               {held && (
                 <div className={`flex items-center justify-between gap-2 text-[11px] ${held.brand ? "text-[#f5d24a]" : ""}`}>
-                  <span className={`min-w-0 truncate ${held.brand ? "font-bold" : "text-white"}`}>{held.brand ? "🥏 " : ""}{held.name}{held.coach ? " 🎓" : ""}{held.brand ? <span className="text-gray-500 font-normal"> · {held.brand} discs only</span> : ""}</span>
+                  <span className={`min-w-0 truncate ${held.brand ? "font-bold" : "text-white"}`}>{held.brand ? "🥏 " : ""}{held.name}{held.coach ? " 🎓" : ""}{held.brand ? <span className="text-gray-500 font-normal"> · exclusive</span> : ""}</span>
                   <span className="shrink-0 flex items-center gap-2">
                     <span className={held.brand ? "font-mono" : "text-gray-400 font-mono"}>{fmtCash(held.stipend)}/yr</span>
                     {dropId === held.id ? (
@@ -449,7 +449,7 @@ export function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onS
                     <div className="min-w-0">
                       <p className={`text-xs font-semibold truncate ${s.brand ? "text-[#f5d24a]" : "text-white"}`}>{s.brand ? "🥏 " : ""}{s.name}{s.coach ? " 🎓" : ""}</p>
                       <p className="text-gray-500 text-[10px]">{!paid && `${fmtCash(s.signing)} signing · `}{fmtCash(s.stipend)}/yr{s.coach ? " · +1 training" : ""}</p>
-                      {s.brand && <p className="text-[#e0923b] text-[10px] font-semibold">Exclusive — you’ll carry only {s.brand} discs.</p>}
+                      {s.brand && <p className="text-[#e0923b] text-[10px] font-semibold">Exclusive — locks your bag to {s.name}’ lineup.</p>}
                       {isSwap && <p className="text-gray-500 text-[10px]">Swaps out {held!.name}.</p>}
                     </div>
                     <button type="button" onClick={() => onSign(s.id)} className="shrink-0 rounded bg-[#e0923b] hover:brightness-110 text-[#0f1117] text-[11px] font-bold px-2.5 py-1">{isSwap ? "Swap" : "Sign"}</button>
