@@ -256,7 +256,7 @@ describe.each(COURSES.map((c) => [c.id, c] as const))("%s data matches its caddi
       const g = proHoleToHole(h);
       const inside = (x: number, y: number) => x >= 0 && x <= (g.worldW ?? W) && y >= 0 && y <= g.worldH;
       for (const p of [g.tee, g.basket, ...g.fairway, ...g.trees, ...(g.dropZone ? [g.dropZone] : [])]) expect(inside(p.x, p.y), `hole ${h.n}`).toBe(true);
-      for (const r of [...g.water, ...(g.obZones ?? [])]) expect(inside(r.x, r.y) && inside(r.x + r.w, r.y + r.h), `hole ${h.n} world rect`).toBe(true);
+      for (const r of [...g.water, ...(g.obZones ?? []), ...(g.hazard ?? [])]) expect(inside(r.x, r.y) && inside(r.x + r.w, r.y + r.h), `hole ${h.n} world rect`).toBe(true);
     }
   });
 
@@ -421,7 +421,8 @@ describe("wave 4 course specifics", () => {
     expect(dz(BAD_ROCK_CREEK)).toEqual(["1"]);
     expect(b.filter((h) => h.rough === "hazard").map((h) => h.n)).toEqual([5, 6, 13, 15, 17]);
     expect(b[12].islandGreen).toBe(true);
-    expect(b[12].hazard!.length).toBeGreaterThan(8);
+    expect(b[12].hazard).toHaveLength(1); // one sand polygon…
+    expect((b[12].hazard![0] as { holes: unknown[] }).holes).toHaveLength(2); // …with the two islands cut out
     expect(b[8].trees).toBe("wooded");
     expect(b.filter((h) => h.mando).map((h) => h.n)).toEqual([3, 12, 14]);
     for (const h of b) expect(slope(h)).toBe(0);
