@@ -196,4 +196,10 @@ describe("round 2: Pickard 7, Ivy Hill 11, Winthrop Gold 14, Harvey Penick 9", (
     expect(sandAt(g, 0, 0)).toBe(false);
     expect(sandAt(g, -10, 320)).toBe(false); // basket
   });
+
+  it("Winthrop Gold 14: the three stacked disks are one bunker; four round disks stay", () => {
+    const src = proTourCourseById("winthrop-gold")!.course.holes[13];
+    expect(src.hazard!.filter((z) => "d" in z)).toHaveLength(4);
+    expect(src.hazard!.filter((z) => "poly" in z)).toHaveLength(1);
+  });
 });
