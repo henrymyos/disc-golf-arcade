@@ -187,4 +187,13 @@ describe("round 2: Pickard 7, Ivy Hill 11, Winthrop Gold 14, Harvey Penick 9", (
     expect(sandAt(g, 30, 340)).toBe(false); // inside the hexagon's right point
     for (const [x, y] of [[0, 150], [-60, 275], [60, 275], [0, 410], [-60, 340]]) expect(sandAt(g, x, y), `${x},${y}`).toBe(true); // old seams are sand now
   });
+
+  it("Ivy Hill 11: the tall grass is one shape plus the round bunker long", () => {
+    const g = hole("ivy-hill", 11);
+    expect(g.hazard).toHaveLength(2);
+    expect(g.hazard![0].rings).toHaveLength(1);
+    expect(sandAt(g, 0, 130)).toBe(true); // old seam between the first two circles
+    expect(sandAt(g, 0, 0)).toBe(false);
+    expect(sandAt(g, -10, 320)).toBe(false); // basket
+  });
 });
