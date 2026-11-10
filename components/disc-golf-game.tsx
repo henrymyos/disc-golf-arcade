@@ -58,7 +58,7 @@ import { Coin, hubCard, titleCardSm, GoalStar, Overlay, btn, ordinal } from "./p
 import { ChallengePanel, PartyPanel, LobbyPanel } from "./panels/OnlinePanels";
 import { HolePracticePicker } from "./panels/HolePracticePicker";
 import { TutorialPanel } from "./panels/TutorialPanel";
-import { StatsPanel } from "./panels/StatsPanel";
+import { StatsPanel, GameStatsGrid } from "./panels/StatsPanel";
 import { LeaderboardPanel } from "./panels/LeaderboardPanel";
 import { TournamentPanel } from "./panels/TournamentPanel";
 import { CareerSlots, CareerPanel } from "./panels/CareerPanel";
@@ -82,6 +82,8 @@ import { BoardNamePrompt } from "./menu/BoardNamePrompt";
 import { ControlPanel } from "./play/ControlPanel";
 import { RoundSidebar } from "./play/RoundSidebar";
 import { roundLayout, type RoundLayout } from "@/lib/discgolf/layout";
+import { simFrame, FAST_FORWARD } from "@/lib/discgolf/sim";
+import { roundStats, type RoundStats } from "@/lib/discgolf/stats";
 import { postMiniResult, postRoundResult, readBoardChoice, writeBoardChoice, type BoardChoice, type PostOutcome } from "@/lib/leaderboard/post";
 
 
@@ -104,6 +106,7 @@ export function DiscGolfGame() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const stateRef = useRef<GameState | null>(null);
   const keysRef = useRef<Set<string>>(new Set());
+  const fastRef = useRef(false); // this flight is fast-forwarding (tap / Space mid-flight)
   const [roundSerial, setRoundSerial] = useState(0); // +1 per recorded full round (goal toasts)
   const playAreaRef = useRef<HTMLDivElement | null>(null); // the board's container (sizing + letterbox colour)
   // Which in-round layout this viewport gets (null until mounted). Dev builds
@@ -305,6 +308,7 @@ export function DiscGolfGame() {
   // Today's Daily-Challenge star result for the finish screen: stars earned this
   // round, the day's (difficulty-adjusted) to-par goals, the day's best so far,
   // and the coin bonus paid for any newly earned star tiers.
+  const [finalStats, setFinalStats] = useState<RoundStats | null>(null); // C1X/C2/parked/penalties for the summary
   const [finalDailyStars, setFinalDailyStars] = useState<{ earned: number; best: number; thresholds: [number, number, number]; coins: number } | null>(null);
   // Daily-Challenge stars by day index (persisted; per-day best of 1–3).
   const [dayStars, setDayStars] = useState<Record<string, number>>({});
@@ -1948,6 +1952,16 @@ export function DiscGolfGame() {
     setFinalPracticeHole(g?.practice ? g?.practiceHole ?? null : null);
     setFinalParty(g?.party ? { names: g.party.names, totals: g.party.scores.map((sc) => sc.reduce<number>((a, b) => a + (b ?? 0), 0)) } : null);
     setFinalOnline(online);
+    // Disc golf stats need one player's own throws: not for pass-and-play, online or minis.
+    // A resumed round only recorded the holes since resuming: pad the front (as the replay does).
+    const stats = g && !g.party && !g.online && !g.mini && !g.replay
+      ? (() => {
+          const rec = [...g.roundPaths, g.shotPaths];
+          const n = g.roundHoles.length;
+          return roundStats([...Array.from({ length: Math.max(0, n - rec.length) }, () => []), ...rec].slice(-n), g.roundHoles, scores);
+        })()
+      : null;
+    setFinalStats(stats);
 
     // Personal bests are tracked per fixed course — Glendoveer, Winthrop and
     // Olympus each have their own key (the daily course changes every day).
@@ -1997,9 +2011,9 @@ export function DiscGolfGame() {
 
     // Round history + achievements only count for full rounds, not practice.
     if (!practice) {
-      let hist: { mode: Mode; total: number; date: number; scores?: number[]; pars?: number[] }[] = [];
+      let hist: { mode: Mode; total: number; date: number; scores?: number[]; pars?: number[]; stats?: RoundStats }[] = [];
       try { hist = JSON.parse(localStorage.getItem(HIST_KEY) || "[]"); } catch { /* ignore */ }
-      hist.push({ mode, total, date: Date.now(), scores, pars });
+      hist.push({ mode, total, date: Date.now(), scores, pars, ...(stats ? { stats } : {}) });
       const trimmed = hist.slice(-100);
       try { localStorage.setItem(HIST_KEY, JSON.stringify(trimmed)); } catch { /* ignore */ }
       roundsPlayedRef.current = hist.length;
@@ -2443,6 +2457,7 @@ export function DiscGolfGame() {
       if (e.key === "b" || e.key === "B") setThrowStyle("BH");
       if (e.key === "f" || e.key === "F") setThrowStyle("FH");
       if ((e.key === " " || e.key === "Enter") && screenRef.current === "holeComplete") nextHole();
+      if ((e.key === " " || e.key === "Enter") && screenRef.current === "playing" && stateRef.current?.phase === "fly" && !stateRef.current.replay) fastRef.current = true;
     }
     function onUp(e: KeyboardEvent) {
       keysRef.current.delete(e.key);
@@ -3524,6 +3539,21 @@ export function DiscGolfGame() {
         ctx.textAlign = "left";
       }
 
+      // Fast-forward cue mid-flight: a quiet "tap" hint at 1x, a ▶▶ badge at 4x.
+      if (g.phase === "fly" && !g.replay) {
+        ctx.save();
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.font = "bold 9px ui-monospace, monospace";
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = "rgba(0,0,0,0.7)";
+        ctx.fillStyle = fastRef.current ? "#f5d24a" : "rgba(255,255,255,0.6)";
+        const label = fastRef.current ? `▶▶ ${FAST_FORWARD}×` : "tap to speed up ▶▶";
+        ctx.strokeText(label, W / 2, H - 12);
+        ctx.fillText(label, W / 2, H - 12);
+        ctx.restore();
+      }
+
       // Penalty banner — big red "OUT OF BOUNDS / HAZARD" + "+1", centered.
       if (g.flash) {
         const FLASH_MS = 1500;
@@ -3559,14 +3589,14 @@ export function DiscGolfGame() {
     // the frame rate dips — the disc/camera advance by elapsed real time rather
     // than once-per-frame (which slowed to a crawl on slower devices). Render
     // once per frame after catching the sim up.
-    const STEP_MS = 1000 / 60; // simulate at 60 Hz
+    // A tap mid-flight fast-forwards (lib/discgolf/sim): more of the same
+    // 60 Hz steps per frame, so the throw lands exactly where it would at 1x.
     let prev = performance.now();
     let acc = 0;
+    const flyingFast = () => fastRef.current && stateRef.current?.phase === "fly" && !stateRef.current.replay && screenRef.current === "playing" && !pausedRef.current;
     function frame(now: number) {
-      acc += Math.min(STEP_MS * 4, now - prev); // never try to catch up more than 4 steps
+      acc = simFrame(acc, now - prev, update, flyingFast);
       prev = now;
-      let steps = 0;
-      while (acc >= STEP_MS && steps < 4) { update(); acc -= STEP_MS; steps++; }
       draw();
       rafRef.current = requestAnimationFrame(frame);
     }
@@ -3628,7 +3658,9 @@ export function DiscGolfGame() {
   function onCanvasDown(e: React.PointerEvent<HTMLCanvasElement>) {
     if (screenRef.current !== "playing" || pausedRef.current) return;
     const g = stateRef.current;
+    if (g?.phase === "fly" && !g.replay) { fastRef.current = true; return; } // tap mid-flight: fast-forward
     if (!g || g.phase !== "aim" || g.replay) return;
+    fastRef.current = false; // every throw starts at 1x (throws only begin with this drag)
     const p = clientToCanvas(e.clientX, e.clientY);
     dragRef.current = { active: true, ax: p.x, ay: p.y, cx: p.x, cy: p.y };
     applyDrag(g, p.x, p.y);
@@ -4582,6 +4614,7 @@ export function DiscGolfGame() {
                     </p>
                   </div>
                 )}
+                {finalStats && <GameStatsGrid stats={finalStats} className="mt-2.5" />}
               </>)}
               {finalMode === "ranked" && rankedResult && (() => {
                 const r = rankedResult;
@@ -4842,7 +4875,9 @@ export function DiscGolfGame() {
                 // Ranked's only way onward is back to the ladder — no replay/home here.
                 <button type="button" onClick={() => { audioRef.current?.stopMusic(); setScreen("title"); setRankedOpen(true); }} className={btn}>🏅 Back to Ranked</button>
               ) : (
-                <button type="button" onClick={() => (finalMode === "tour" ? startGame("tour", finalSeed) : startGame())} className={btn}>↻ Play again</button>
+                // The Daily replays freely from the menu (best of the day counts), so
+                // Retry is the same one-tap restart of today's course.
+                <button type="button" onClick={() => (finalMode === "tour" ? startGame("tour", finalSeed) : finalIsDaily ? startGame("daily") : startGame())} className={btn}>{finalIsDaily ? "↻ Retry Daily" : "↻ Play again"}</button>
               )}
               <button type="button" onClick={shareCard} aria-label="Share card" title="Share card" className="mt-1 flex items-center justify-center bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white px-3.5 py-3 rounded-lg transition">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5 -mt-px" aria-hidden="true">

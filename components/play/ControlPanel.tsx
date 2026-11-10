@@ -115,7 +115,7 @@ export function ControlPanel({ side, activeBag, discIndex, onSelectDisc, release
           <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
             <dt><Kbd>1</Kbd>–<Kbd>{Math.max(1, Math.min(9, activeBag.length))}</Kbd></dt><dd className="text-gray-300">Pick a disc from your bag</dd>
             <dt><Kbd>B</Kbd> <Kbd>F</Kbd></dt><dd className="text-gray-300">Backhand / forehand</dd>
-            <dt><Kbd>Space</Kbd> <Kbd>Enter</Kbd></dt><dd className="text-gray-300">Next hole (after you hole out)</dd>
+            <dt><Kbd>Space</Kbd> <Kbd>Enter</Kbd></dt><dd className="text-gray-300">Fast-forward a flight · next hole</dd>
             <dt className="text-gray-500">Mouse</dt><dd className="text-gray-300">Drag back from anywhere to aim and throw</dd>
           </dl>
         </div>}

@@ -10,6 +10,7 @@ import {
   skillMods, seasonSchedule, placeLabel, STAGE_LABEL, SKILL_KEYS, SKILL_LABEL, eventEnergyCost, canEnterEvent, availableSponsors, sponsorBrandLock, trainingPointCost, trainBonusFor, fmtCash, SPONSOR_CAP, SPONSOR_SLOTS, SPONSOR_SLOT_LABEL, careerRating, careerCoins as coinsForFinish, careerDiscShop, CAREER_BAG_MAX, CAREER_CORE_DISCS, DEFAULT_CAREER_LOOK, type CareerLook, careerYear, type Career, type CareerEvent, type EventResult, type CareerSkills,
 } from "@/lib/discgolf/career";
 import { btn, Coin } from "./ui";
+import { FlightShapeCard } from "./FlightShapeCard";
 
 
 // ── Career mode panel: the multi-decade journey from junior events to the pro
@@ -565,6 +566,7 @@ export function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onS
                 <p className="text-gray-500 text-[9px] uppercase tracking-wide mb-0.5">Speed · Glide · Turn · Fade</p>
                 <p className="text-[#36D7B7] font-mono font-black text-base tracking-wide">{nums}</p>
               </div>
+              <div className="mt-2"><FlightShapeCard disc={d} /></div>
               {owned ? (
                 <button type="button" onClick={() => { onToggleBag(d.key); setDiscInfo(null); }} className={`${btn} w-full !mt-3`}>{inBag ? "Remove from bag" : "Add to bag"}</button>
               ) : cost != null ? (
