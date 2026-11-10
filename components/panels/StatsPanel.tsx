@@ -2,10 +2,32 @@
 
 import { useState } from "react";
 import { HIST_KEY } from "@/lib/progress";
+import { totalStats, pctLabel, type RoundStats } from "@/lib/discgolf/stats";
+
+// C1X / C2 putting, parked throws and penalty strokes — the round summary and
+// the Stats screen's "Your game" section share this grid.
+export function GameStatsGrid({ stats, className = "" }: { stats: RoundStats; className?: string }) {
+  const cells = [
+    { label: "C1X putts", hint: "10–33 ft", value: pctLabel(stats.c1x) },
+    { label: "C2 putts", hint: "33–66 ft", value: pctLabel(stats.c2) },
+    { label: "Parked", hint: "left a tap-in", value: String(stats.parked) },
+    { label: "OB / hazard", hint: "penalty strokes", value: String(stats.penalties) },
+  ];
+  return (
+    <div className={`grid grid-cols-2 gap-1.5 text-left ${className}`}>
+      {cells.map((c) => (
+        <div key={c.label} className="bg-[#1a1d23] border border-white/10 rounded-lg px-2.5 py-1.5">
+          <p className="text-gray-400 text-[10px] font-semibold uppercase tracking-wide">{c.label} <span className="normal-case tracking-normal font-normal text-gray-500">· {c.hint}</span></p>
+          <p className="text-white font-mono font-bold text-sm">{c.value}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 
 export function StatsPanel({ onClose }: { onClose: () => void }) {
-  const [hist] = useState<{ mode: string; total: number; date: number; scores?: number[]; pars?: number[] }[]>(() => {
+  const [hist] = useState<{ mode: string; total: number; date: number; scores?: number[]; pars?: number[]; stats?: unknown }[]>(() => {
     try {
       const h = JSON.parse(localStorage.getItem(HIST_KEY) || "[]");
       return Array.isArray(h) ? h : [];
@@ -46,6 +68,7 @@ export function StatsPanel({ onClose }: { onClose: () => void }) {
     { label: "Double+", n: dist.worse, color: "#e23b3b" },
   ];
   const maxN = Math.max(1, ...distRows.map((d) => d.n));
+  const game = totalStats(hist); // rounds before stats existed have none and are skipped
   return (
     <div className="absolute inset-0 z-20 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start justify-center rounded-lg">
       <div className="w-full max-w-xs space-y-4 my-auto text-left">
@@ -67,6 +90,10 @@ export function StatsPanel({ onClose }: { onClose: () => void }) {
                   </span>
                 </div>
               ))}
+            </div>
+            <div>
+              <p className="text-gray-400 text-xs font-semibold mb-1.5">Your game{game.rounds ? ` (${game.rounds} round${game.rounds === 1 ? "" : "s"})` : ""}</p>
+              {game.rounds ? <GameStatsGrid stats={game.stats} /> : <p className="text-gray-500 text-xs">– Putting, parked and OB stats start with your next round.</p>}
             </div>
             {holesCounted > 0 && (
               <div>

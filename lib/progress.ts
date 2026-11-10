@@ -4,6 +4,7 @@
 
 import type { Career } from "./discgolf/career";
 import type { DailyReward } from "./discgolf/wallet";
+import type { RoundStats } from "./discgolf/stats";
 import { SEASON_HISTORY_MAX, type RankedState, type SeasonRecord } from "./discgolf/ranked";
 
 export const BEST_KEY = "discgolf.best.glendoveer18";
@@ -30,7 +31,7 @@ export const COINSEARNED_KEY = "discgolf.coinsEarned.v1"; // lifetime coins earn
 export const COINSSPENT_KEY = "discgolf.coinsSpent.v1"; // lifetime coins spent (monotonic, for loss-free merge)
 export const UPDATEDAT_KEY = "discgolf.updatedAt.v1"; // last local change time, for newer-wins preference merge
 
-export type HistoryRow = { mode: string; total: number; date: number; scores?: number[]; pars?: number[] };
+export type HistoryRow = { mode: string; total: number; date: number; scores?: number[]; pars?: number[]; stats?: RoundStats };
 export type Progress = {
   best: number | null;
   winthropBest: number | null;

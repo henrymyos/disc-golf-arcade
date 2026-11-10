@@ -58,7 +58,7 @@ import { Coin, hubCard, titleCardSm, GoalStar, Overlay, btn, ordinal } from "./p
 import { ChallengePanel, PartyPanel, LobbyPanel } from "./panels/OnlinePanels";
 import { HolePracticePicker } from "./panels/HolePracticePicker";
 import { TutorialPanel } from "./panels/TutorialPanel";
-import { StatsPanel } from "./panels/StatsPanel";
+import { StatsPanel, GameStatsGrid } from "./panels/StatsPanel";
 import { LeaderboardPanel } from "./panels/LeaderboardPanel";
 import { TournamentPanel } from "./panels/TournamentPanel";
 import { CareerSlots, CareerPanel } from "./panels/CareerPanel";
@@ -83,6 +83,7 @@ import { ControlPanel } from "./play/ControlPanel";
 import { RoundSidebar } from "./play/RoundSidebar";
 import { roundLayout, type RoundLayout } from "@/lib/discgolf/layout";
 import { simFrame, FAST_FORWARD } from "@/lib/discgolf/sim";
+import { roundStats, type RoundStats } from "@/lib/discgolf/stats";
 import { postMiniResult, postRoundResult, readBoardChoice, writeBoardChoice, type BoardChoice, type PostOutcome } from "@/lib/leaderboard/post";
 
 
@@ -307,6 +308,7 @@ export function DiscGolfGame() {
   // Today's Daily-Challenge star result for the finish screen: stars earned this
   // round, the day's (difficulty-adjusted) to-par goals, the day's best so far,
   // and the coin bonus paid for any newly earned star tiers.
+  const [finalStats, setFinalStats] = useState<RoundStats | null>(null); // C1X/C2/parked/penalties for the summary
   const [finalDailyStars, setFinalDailyStars] = useState<{ earned: number; best: number; thresholds: [number, number, number]; coins: number } | null>(null);
   // Daily-Challenge stars by day index (persisted; per-day best of 1–3).
   const [dayStars, setDayStars] = useState<Record<string, number>>({});
@@ -1950,6 +1952,16 @@ export function DiscGolfGame() {
     setFinalPracticeHole(g?.practice ? g?.practiceHole ?? null : null);
     setFinalParty(g?.party ? { names: g.party.names, totals: g.party.scores.map((sc) => sc.reduce<number>((a, b) => a + (b ?? 0), 0)) } : null);
     setFinalOnline(online);
+    // Disc golf stats need one player's own throws: not for pass-and-play, online or minis.
+    // A resumed round only recorded the holes since resuming: pad the front (as the replay does).
+    const stats = g && !g.party && !g.online && !g.mini && !g.replay
+      ? (() => {
+          const rec = [...g.roundPaths, g.shotPaths];
+          const n = g.roundHoles.length;
+          return roundStats([...Array.from({ length: Math.max(0, n - rec.length) }, () => []), ...rec].slice(-n), g.roundHoles, scores);
+        })()
+      : null;
+    setFinalStats(stats);
 
     // Personal bests are tracked per fixed course — Glendoveer, Winthrop and
     // Olympus each have their own key (the daily course changes every day).
@@ -1999,9 +2011,9 @@ export function DiscGolfGame() {
 
     // Round history + achievements only count for full rounds, not practice.
     if (!practice) {
-      let hist: { mode: Mode; total: number; date: number; scores?: number[]; pars?: number[] }[] = [];
+      let hist: { mode: Mode; total: number; date: number; scores?: number[]; pars?: number[]; stats?: RoundStats }[] = [];
       try { hist = JSON.parse(localStorage.getItem(HIST_KEY) || "[]"); } catch { /* ignore */ }
-      hist.push({ mode, total, date: Date.now(), scores, pars });
+      hist.push({ mode, total, date: Date.now(), scores, pars, ...(stats ? { stats } : {}) });
       const trimmed = hist.slice(-100);
       try { localStorage.setItem(HIST_KEY, JSON.stringify(trimmed)); } catch { /* ignore */ }
       roundsPlayedRef.current = hist.length;
@@ -4602,6 +4614,7 @@ export function DiscGolfGame() {
                     </p>
                   </div>
                 )}
+                {finalStats && <GameStatsGrid stats={finalStats} className="mt-2.5" />}
               </>)}
               {finalMode === "ranked" && rankedResult && (() => {
                 const r = rankedResult;
