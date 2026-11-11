@@ -1,7 +1,32 @@
 "use client";
 
 import type { Release } from "@/lib/discgolf/engine";
+import { useEffect, useState } from "react";
 import { SupportPromptsToggle, SupportSettingsRow } from "@/components/support/Support";
+import { setTipsOff, tipsOff } from "@/lib/discgolf/tips";
+
+function TipsToggle() {
+  const [on, setOn] = useState(true);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate from localStorage after mount
+    setOn(!tipsOff());
+  }, []);
+  return (
+    <button
+      type="button"
+      onClick={() => { setTipsOff(on); setOn(!on); }}
+      className="w-full flex items-center justify-between bg-[#1a1d23] border border-white/10 rounded-lg px-3 py-2.5"
+    >
+      <span className="text-left">
+        <span className="block text-white text-sm font-semibold">Disc golf tips</span>
+        <span className="block text-gray-500 text-[11px]">One-line rules tips the first time wind, OB or a hazard comes up</span>
+      </span>
+      <span className={`shrink-0 text-xs font-bold px-2 py-0.5 rounded ${on ? "bg-[#36D7B7] text-[#0f1117]" : "bg-white/10 text-gray-400"}`}>
+        {on ? "ON" : "OFF"}
+      </span>
+    </button>
+  );
+}
 
 
 export function SettingsPanel(props: {
@@ -71,6 +96,8 @@ export function SettingsPanel(props: {
             {showGhost ? "ON" : "OFF"}
           </span>
         </button>
+
+        <TipsToggle />
 
         <button
           type="button"

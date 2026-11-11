@@ -84,6 +84,7 @@ import { RoundSidebar } from "./play/RoundSidebar";
 import { roundLayout, type RoundLayout } from "@/lib/discgolf/layout";
 import { simFrame, FAST_FORWARD } from "@/lib/discgolf/sim";
 import { roundStats, type RoundStats } from "@/lib/discgolf/stats";
+import { TIPS, claimTip, lieTips, type TipId } from "@/lib/discgolf/tips";
 import { postMiniResult, postRoundResult, readBoardChoice, writeBoardChoice, type BoardChoice, type PostOutcome } from "@/lib/leaderboard/post";
 
 
@@ -332,6 +333,16 @@ export function DiscGolfGame() {
   const saveScoreRef = useRef<(c?: BoardChoice) => Promise<void>>(async () => {});
   const runMiniPostRef = useRef<(res: { kind: "putt" | "target"; makes: number; best: number; points: number; coins: number }, c: BoardChoice | null, isActive: () => boolean) => Promise<void>>(async () => {});
   const [shareMsg, setShareMsg] = useState<string | null>(null); // transient share/copy confirmation
+  // Disc golf 101: a one-line rules tip, shown once per device per moment.
+  const [tip, setTip] = useState<TipId | null>(null);
+  const tipTimerRef = useRef(0);
+  const offerTip = useCallback((candidates: TipId[]) => {
+    const id = claimTip(candidates);
+    if (!id) return;
+    window.clearTimeout(tipTimerRef.current);
+    setTip(id);
+    tipTimerRef.current = window.setTimeout(() => setTip(null), 7000);
+  }, []);
 
   const screenRef = useRef<Screen>("title");
   const pausedRef = useRef(false); // freezes the sim while the pause menu is open
@@ -1051,7 +1062,9 @@ export function DiscGolfGame() {
     // A tree you've come to rest right behind is "ghosted": you throw through it
     // (real-life gap past the trunk), and it's drawn translucent so you can see.
     g.ghostTrees = treesAtLie(hole, g.rest.x, g.rest.y);
-  }, []);
+    const tee = isTeeLie(hole, g.rest);
+    offerTip(lieTips({ firstTee: tee && g.holeIndex === 0, tee, windAlong: windAlong(hole, g.rest), distFt: pxToFeet(distBetween(g.rest, hole.basket)) }));
+  }, [offerTip]);
 
   // Auto-caddie for the practice minis (putting / accuracy): equip the disc the
   // station's distance calls for and reflect it everywhere — the game state the
@@ -2685,6 +2698,7 @@ export function DiscGolfGame() {
           const lie = pen.lie ?? g.rest;
           g.throws += pen.strokes;
           g.flash = { text: pen.dz ? "OB — DROP ZONE" : "OUT OF BOUNDS", at: performance.now() };
+          offerTip(pen.dz ? ["dz", "ob"] : ["ob"]);
           d.x = lie.x;
           d.y = lie.y;
           d.vx = 0;
@@ -2714,6 +2728,7 @@ export function DiscGolfGame() {
           if (pen.kind === "sand") {
             g.throws += pen.strokes;
             g.flash = { text: "HAZARD", at: performance.now() };
+            offerTip(["hazard"]);
             spawnBurst(d.x, d.y, ["#d9c089", "#c4a96b"], 12, 1.4);
             audioRef.current?.sfx("tree");
             vibrate(60);
@@ -3602,7 +3617,7 @@ export function DiscGolfGame() {
     }
     rafRef.current = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [syncHud, persistResume, addCoins, equipForLie, equipForMini]);
+  }, [syncHud, persistResume, addCoins, equipForLie, equipForMini, offerTip]);
 
   useEffect(() => {
     return () => {
@@ -3751,6 +3766,15 @@ export function DiscGolfGame() {
           className={`max-h-full max-w-full bg-[#4a8a3a] ${sideLayout ? "rounded-lg border border-white/10" : ""}`}
           style={{ imageRendering: "pixelated", touchAction: "none" }}
         />
+
+        {/* Disc golf 101 tip: never blocks a throw (no pointer events), fades on its own. */}
+        {screen === "playing" && tip && (
+          <div className="pointer-events-none absolute inset-x-0 top-12 z-10 flex justify-center px-3" role="status">
+            <p className="max-w-xs rounded-lg border border-[#36D7B7]/40 bg-[#0f1117]/90 px-3 py-2 text-[12px] leading-snug text-gray-100 shadow-lg">
+              <span className="font-bold text-[#36D7B7]">Tip · </span>{TIPS[tip]}
+            </p>
+          </div>
+        )}
 
         {/* Boot splash: shown until the entry effect decides landing vs. title, so
             returning players never see the login front door flash by. Matches the
