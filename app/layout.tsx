@@ -20,7 +20,7 @@ export const metadata: Metadata = {
   // links on the live domain so shared/challenge links unfurl correctly.
   metadataBase: new URL("https://discgolfarcade.com"),
   title: "Disc Golf Arcade",
-  description: "A retro pixel-art disc golf game — 18 holes, a daily challenge, real discs, and a leaderboard.",
+  description: "A free retro pixel-art disc golf game for phone and desktop: a daily challenge, real courses, a pro career and leaderboards. No account needed, and it plays offline.",
   appleWebApp: { capable: true, title: "Disc Golf Arcade", statusBarStyle: "black-translucent" },
 };
 

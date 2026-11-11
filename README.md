@@ -1,6 +1,6 @@
 # Disc Golf Arcade
 
-A retro pixel-art disc golf game for phone and desktop. Pull back to aim, pick a disc and a release angle, read the wind and the slope, and try to beat today's Daily.
+A retro pixel-art disc golf game for phone and desktop. Pull back to aim, pick a disc and a release angle, read the wind and the slope, and try to beat today's Daily. It's free, needs no account, and plays offline once it has loaded.
 
 **Play it:** https://discgolfarcade.com
 

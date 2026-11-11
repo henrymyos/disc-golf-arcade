@@ -3829,6 +3829,7 @@ export function DiscGolfGame() {
                 <h1 className="text-white font-black text-[30px] leading-none tracking-tight">
                   Disc Golf <span className="text-[#36D7B7]">Arcade</span>
                 </h1>
+                <p className="text-gray-400 text-[11px] leading-none tracking-wide">Free · no sign-up · plays offline</p>
                 <AttractBackdrop />
               </div>
 

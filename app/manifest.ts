@@ -4,7 +4,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Disc Golf Arcade",
     short_name: "Disc Golf",
-    description: "A retro pixel-art disc golf game — 18 holes, a daily challenge, real discs, and a leaderboard.",
+    description: "A free retro pixel-art disc golf game for phone and desktop: a daily challenge, real courses, a pro career and leaderboards. No account needed, and it plays offline.",
     start_url: "/",
     display: "standalone",
     orientation: "portrait",
