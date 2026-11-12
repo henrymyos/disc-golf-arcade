@@ -1,11 +1,29 @@
 import type { Metadata } from "next";
 import { parseChallenge } from "@/lib/discgolf/challenge";
 import { DiscGolfGame } from "@/components/disc-golf-game";
+import { loadReplay } from "@/actions/replays";
+import { isReplayId } from "@/lib/discgolf/replay";
+import { replayCard } from "@/lib/discgolf/replayCard";
 
 // When opened via a challenge link (?ch=…), give it a rich preview so the
 // shared link unfurls as "<friend> challenged you" with a generated OG image.
-export async function generateMetadata({ searchParams }: { searchParams: Promise<{ ch?: string | string[] }> }): Promise<Metadata> {
+export async function generateMetadata({ searchParams }: { searchParams: Promise<{ ch?: string | string[]; rp?: string | string[] }> }): Promise<Metadata> {
   const sp = await searchParams;
+  // A shared replay (?rp=<id>) unfurls with its own headline, score and hole map.
+  const rp = typeof sp.rp === "string" ? sp.rp : undefined;
+  if (isReplayId(rp)) {
+    const r = await loadReplay(rp).catch(() => null);
+    if (r) {
+      const { title, description } = replayCard(r);
+      const image = `/og?rp=${rp}`;
+      return {
+        title,
+        description,
+        openGraph: { title, description, type: "website", siteName: "Disc Golf Arcade", images: [{ url: image, width: 1200, height: 630, alt: title }] },
+        twitter: { card: "summary_large_image", title, description, images: [image] },
+      };
+    }
+  }
   const raw = typeof sp.ch === "string" ? sp.ch : Array.isArray(sp.ch) ? sp.ch[0] : undefined;
   const c = parseChallenge(raw);
   if (!c) return {};
