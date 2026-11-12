@@ -27,13 +27,18 @@ export function SupportNudge() {
     if (claimSupportNudge(Date.now())) setUrl(supportUrl());
   }, []);
   if (!url) return null;
+  return <SupportNudgeBar url={url} onDismiss={() => setUrl(null)} />;
+}
+
+// The nudge's markup, split out so tests can render it without running the effect.
+export function SupportNudgeBar({ url, onDismiss }: { url: string; onDismiss: () => void }) {
   return (
-    <div className="flex items-center justify-between gap-2 bg-[#1a1d23] border border-white/10 rounded-lg px-3 py-2 text-xs" data-testid="support-nudge">
+    <div className="flex items-center justify-between gap-2 bg-[#1a1d23] border border-white/10 rounded-lg pl-3 pr-0 py-0.5 text-xs" data-testid="support-nudge">
       <span className="text-gray-300">
         Enjoying the Arcade? A tip on Ko-fi helps pay for new courses.{" "}
         <a href={url} target="_blank" rel="noopener" className="text-[#36D7B7] font-semibold hover:underline">Tip on Ko-fi</a>
       </span>
-      <button type="button" onClick={() => setUrl(null)} aria-label="Dismiss" className="text-gray-500 hover:text-white px-1">✕</button>
+      <button type="button" onClick={onDismiss} aria-label="Dismiss" className="shrink-0 min-w-11 min-h-11 flex items-center justify-center text-gray-500 hover:text-white">✕</button>
     </div>
   );
 }
@@ -43,13 +48,14 @@ export function SupportSettingsRow({ supporters = SUPPORTERS }: { supporters?: s
   const url = supportUrl();
   if (!url) return null;
   return (
-    <div className="bg-[#1a1d23] border border-white/10 rounded-lg px-3 py-2.5" data-testid="support-settings">
-      <div className="flex items-center justify-between">
+    <div className="bg-[#1a1d23] border border-white/10 rounded-lg px-3 py-0.5" data-testid="support-settings">
+      {/* The whole row is the link: a 44 px tap target (WCAG 2.5.5). */}
+      <a href={url} target="_blank" rel="noopener" className="group flex items-center justify-between min-h-11">
         <span className="text-white text-sm font-semibold">Support</span>
-        <a href={url} target="_blank" rel="noopener" className="text-[#36D7B7] text-xs font-bold hover:underline">Support the Arcade</a>
-      </div>
+        <span className="text-[#36D7B7] text-xs font-bold group-hover:underline">Support the Arcade</span>
+      </a>
       {supporters.length > 0 && (
-        <p className="text-gray-400 text-[11px] mt-1" data-testid="supporters">Thanks to our supporters: {supporters.join(", ")}</p>
+        <p className="text-gray-400 text-[11px] pb-2" data-testid="supporters">Thanks to our supporters: {supporters.join(", ")}</p>
       )}
     </div>
   );

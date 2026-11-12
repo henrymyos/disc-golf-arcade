@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createElement as h } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { SupportLink, SupportPromptsToggle, SupportSettingsRow } from "../components/support/Support";
+import { SupportLink, SupportNudgeBar, SupportPromptsToggle, SupportSettingsRow } from "../components/support/Support";
 import { SUPPORTERS } from "../lib/supporters";
 
 const URL = "https://ko-fi.com/test";
@@ -28,5 +28,17 @@ describe("support UI", () => {
     vi.stubEnv("NEXT_PUBLIC_SUPPORT_URL", URL);
     expect(SUPPORTERS).toEqual([]);
     expect(renderToStaticMarkup(h(SupportSettingsRow, { supporters: ["Ann", "Bo", "Cy"] }))).toContain("Thanks to our supporters: Ann, Bo, Cy");
+  });
+  it("Settings row: the whole row is the link, at least 44 px tall", () => {
+    vi.stubEnv("NEXT_PUBLIC_SUPPORT_URL", URL);
+    const row = renderToStaticMarkup(h(SupportSettingsRow));
+    expect(row).toMatch(/<a href="[^"]+" target="_blank" rel="noopener" class="[^"]*min-h-11[^"]*"><span[^>]*>Support<\/span>/);
+  });
+  it("round-end nudge: copy, new-tab Ko-fi link, 44 px dismiss button", () => {
+    const bar = renderToStaticMarkup(h(SupportNudgeBar, { url: URL, onDismiss: () => {} }));
+    expect(bar).toContain("Enjoying the Arcade? A tip on Ko-fi helps pay for new courses.");
+    expect(bar).toContain(`<a href="${URL}" target="_blank" rel="noopener"`);
+    expect(bar).toContain(">Tip on Ko-fi</a>");
+    expect(bar).toMatch(/<button type="button" aria-label="Dismiss" class="[^"]*min-w-11 min-h-11[^"]*">✕<\/button>/);
   });
 });
