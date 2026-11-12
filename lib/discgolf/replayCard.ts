@@ -37,9 +37,10 @@ export function holeLabel(score: number, par: number): string {
 const signed = (d: number) => (d === 0 ? "E" : d > 0 ? `+${d}` : `${d}`);
 const words = (d: number) => (d === 0 ? "even par" : d < 0 ? `${-d} under` : `${d} over`);
 
-export function replayCard(r: Replay): ReplayCard {
+// firstHole numbers the card from a later hole (a one-hole practice round).
+export function replayCard(r: Replay, firstHole = 1): ReplayCard {
   const holes: HoleResult[] = r.scores.map((score, i) => ({
-    hole: i + 1, score, par: r.pars[i], diff: score - r.pars[i], label: holeLabel(score, r.pars[i]),
+    hole: i + firstHole, score, par: r.pars[i], diff: score - r.pars[i], label: holeLabel(score, r.pars[i]),
   }));
   const total = r.scores.reduce((a, b) => a + b, 0);
   const par = r.pars.reduce((a, b) => a + b, 0);
@@ -135,4 +136,29 @@ export const svgDataUri = (svg: string) => `data:image/svg+xml;charset=utf-8,${e
 // Colour per hole result, shared by the OG scorecard strip and the landing card.
 export function resultColor(h: HoleResult): string {
   return h.score === 1 || h.diff <= -2 ? "#f5d24a" : h.diff === -1 ? "#36D7B7" : h.diff === 0 ? "#3a4150" : h.diff === 1 ? "#e08a3b" : "#d9534f";
+}
+
+// One emoji per hole (dark-mode friendly: par is a dark square), rows of 9,
+// the same colour steps as resultColor so the text card matches the image.
+export function emojiCard(holes: HoleResult[]): string {
+  const e = (h: HoleResult) => (h.score === 1 || h.diff <= -2 ? "🟨" : h.diff === -1 ? "🟩" : h.diff === 0 ? "⬛" : h.diff === 1 ? "🟧" : "🟥");
+  const rows: string[] = [];
+  for (let i = 0; i < holes.length; i += 9) rows.push(holes.slice(i, i + 9).map(e).join(""));
+  return rows.join("\n");
+}
+
+// The text that rides along with a shared scorecard: what happened, the emoji
+// card, and a link that drops the recipient straight onto the same course.
+export function shareText(card: ReplayCard, o: { link: string; daily?: { date: string; stars: number } }): string {
+  const grid = emojiCard(card.holes);
+  if (o.daily) {
+    const stars = "★".repeat(o.daily.stars) + "☆".repeat(Math.max(0, 3 - o.daily.stars));
+    return `Disc Golf Arcade Daily · ${o.daily.date} ${stars}\n${card.total} (${card.toPar})${card.highlight ? ` · ${card.headline}` : ""}\n${grid}\n${o.link}`;
+  }
+  return `${card.headline} at ${card.course}: ${card.total} (${card.toPar}) on Disc Golf Arcade\n${grid}\nBeat it: ${o.link}`;
+}
+
+// "Nov 12" for a Daily seed (the seed is the Central-time day index).
+export function dailyDateLabel(seed: number): string {
+  return new Date(seed * 86_400_000).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 }

@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { buildRound, PROTOUR_COURSES } from "../lib/discgolf/engine";
 import { buildReplay, type Replay } from "../lib/discgolf/replay";
-import { replayCard, mapHoleIndex, replayHoleSvg, holeLabel } from "../lib/discgolf/replayCard";
+import { replayCard, mapHoleIndex, replayHoleSvg, holeLabel, emojiCard, shareText, dailyDateLabel } from "../lib/discgolf/replayCard";
+import { centralDay } from "../lib/discgolf/time";
 
 // One straight throw per stroke from tee toward the basket, so every hole has paths.
 function round(mode: Replay["mode"], seed: number, scores: (par: number, i: number) => number, extra: Partial<Parameters<typeof buildReplay>[0]> = {}): Replay {
@@ -59,5 +60,37 @@ describe("replay share card", () => {
     const c = replayCard(r);
     expect(mapHoleIndex(r, c)).not.toBe(2);
     expect(replayHoleSvg(r, 2)).toBeNull();
+  });
+});
+
+describe("share text", () => {
+  it("draws one emoji per hole in rows of nine", () => {
+    const c = replayCard(round("course", 0, (p, i) => (i === 0 ? 1 : i === 1 ? p - 1 : i === 2 ? p + 1 : i === 3 ? p + 2 : p)));
+    const rows = emojiCard(c.holes).split("\n");
+    expect(rows).toHaveLength(2);
+    expect([...rows[0]].slice(0, 5).join("")).toBe("🟨🟩🟧🟥⬛");
+    expect([...rows[1]]).toHaveLength(9);
+  });
+
+  it("carries the headline, score, card and link", () => {
+    const c = replayCard(round("course", 0, (p, i) => (i === 6 ? p - 1 : p)));
+    const t = shareText(c, { link: "https://x.test/?ch=1" });
+    expect(t.split("\n")[0]).toBe(`Birdie on Hole 7 at Glendoveer East: ${c.total} (-1) on Disc Golf Arcade`);
+    expect(t.endsWith("Beat it: https://x.test/?ch=1")).toBe(true);
+  });
+
+  it("formats the Daily with its date and stars", () => {
+    const seed = centralDay(Date.UTC(2026, 10, 12, 18));
+    expect(dailyDateLabel(seed)).toBe("Nov 12");
+    const c = replayCard(round("daily", seed, (p) => p));
+    const t = shareText(c, { link: "L", daily: { date: dailyDateLabel(seed), stars: 2 } });
+    expect(t.split("\n").slice(0, 2)).toEqual(["Disc Golf Arcade Daily · Nov 12 ★★☆", `${c.total} (E)`]);
+    expect(t.endsWith("\nL")).toBe(true);
+  });
+
+  it("numbers a practice hole from where it is on the course", () => {
+    const c = replayCard(round("course", 0, (p, i) => (i === 0 ? p - 1 : p)), 7);
+    expect(c.holes[0].hole).toBe(7);
+    expect(c.headline).toBe("Birdie on Hole 7");
   });
 });

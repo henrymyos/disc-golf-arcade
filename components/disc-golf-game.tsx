@@ -38,7 +38,8 @@ import {
 import { parseChallenge, challengeParam, isChallengeTourSeed } from "@/lib/discgolf/challenge";
 import { buildReplay, replayFrame, type Replay } from "@/lib/discgolf/replay";
 import { saveReplay, loadReplay } from "@/actions/replays";
-import { replayCard, mapHoleIndex, replayHoleSvg, svgDataUri, resultColor } from "@/lib/discgolf/replayCard";
+import { replayCard, mapHoleIndex, replayHoleSvg, svgDataUri, resultColor, shareText, dailyDateLabel } from "@/lib/discgolf/replayCard";
+import { renderShareCard } from "./game/shareCard";
 import {
   newCareer, normalizeCareer, skillMods, momentumAfter, simEvent, recordResult, advanceSeason, retire, IDENTITY_MODS, signSponsor, unsignSponsor, buyTrainingPoint, spendSkillPoint, careerCoins as coinsForFinish, buyCareerDisc, toggleCareerBag, buyCareerCosmetic, equipCareerLook, DEFAULT_CAREER_LOOK, type CareerLook, careerFieldForRound, careerCardRacers, careerLiveStandings, careerHoleLenScale, rankedFieldForRound, rankedPlacementField, rankedCardRacers, type Career, type CareerEvent, type EventResult, type CareerSkills, type FieldPlayer,
 } from "@/lib/discgolf/career";
@@ -1911,8 +1912,17 @@ export function DiscGolfGame() {
       return out;
     };
     const dga = (window as unknown as { __dga?: Record<string, unknown> }).__dga;
-    if (dga) dga.plan = plan;
-  }, []);
+    if (dga) {
+      dga.plan = plan;
+      // Throw a planned shot without simulating a drag (headless play-throughs).
+      dga.throw = (angle: number, power: number) => {
+        const g = stateRef.current;
+        if (!g || g.phase !== "aim") return false;
+        g.angle = angle; g.power = power; throwDisc();
+        return true;
+      };
+    }
+  }, [throwDisc]);
 
   const finishGame = useCallback((scores: number[]) => {
     const g = stateRef.current;
@@ -2351,98 +2361,60 @@ export function DiscGolfGame() {
   // Render the finished round to an image and share it (or download as fallback).
   const shareCard = useCallback(async () => {
     const total = finalTotal;
-    const parTotal = finalPars.reduce((s, n) => s + n, 0);
-    const over = total - parTotal;
-    const nHoles = finalPars.length;
     const isDaily = finalMode === "daily";
-    const courseLabel = isDaily ? "Daily Challenge" : finalMode === "winthrop" ? "Winthrop Lake" : finalMode === "olympus" ? "Olympus" : finalMode === "ranked" ? "Ranked" : finalMode === "tour" ? tourVenue(finalSeed) : "Glendoveer East";
-    const courseName = `${courseLabel} · ${nHoles} holes · par ${parTotal}`;
-    const os = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
-    const cv = document.createElement("canvas");
-    cv.width = 600;
-    cv.height = 320;
-    const c = cv.getContext("2d");
-    if (!c) return;
-    c.fillStyle = "#0f1117";
-    c.fillRect(0, 0, 600, 320);
-    c.textAlign = "left";
-    c.fillStyle = "#36D7B7";
-    c.font = "bold 32px ui-monospace, monospace";
-    c.fillText("DISC GOLF", 28, 52);
-    c.fillStyle = "#9aa";
-    c.font = "15px ui-monospace, monospace";
-    c.fillText(courseName, 28, 78);
-    c.fillStyle = "#fff";
-    c.font = "bold 56px ui-monospace, monospace";
-    c.fillText(`${total}`, 28, 150);
-    c.fillStyle = over <= 0 ? "#36D7B7" : "#e08a3b";
-    c.font = "bold 26px ui-monospace, monospace";
-    c.fillText(over === 0 ? "Even par" : os(over), 120, 150);
-    // hole strip (up to 9 per row)
-    const perRow = Math.min(9, nHoles);
-    const cellW = Math.min(48, Math.floor(540 / perRow));
-    const x0 = 28;
-    const y0 = 196;
-    for (let i = 0; i < nHoles; i++) {
-      const x = x0 + (i % perRow) * cellW;
-      const y = y0 + Math.floor(i / perRow) * 54;
-      const s = scorecard[i];
-      const diff = (s ?? finalPars[i]) - finalPars[i];
-      c.fillStyle = "#9aa";
-      c.font = "11px ui-monospace, monospace";
-      c.textAlign = "center";
-      c.fillText(`${i + 1}`, x + cellW / 2, y);
-      c.fillStyle = s == null ? "#555" : diff < 0 ? "#36D7B7" : diff > 1 ? "#e23b3b" : diff === 1 ? "#f5d24a" : "#fff";
-      c.font = "bold 18px ui-monospace, monospace";
-      c.fillText(s != null ? `${s}` : "–", x + cellW / 2, y + 22);
-    }
-    c.textAlign = "left";
-    c.fillStyle = "#667";
-    c.font = "12px ui-monospace, monospace";
-    c.fillText("play it yourself · disc-golf-arcade.vercel.app", 28, 308);
-
-    const flash = (msg: string) => { setShareMsg(msg); window.setTimeout(() => setShareMsg(null), 2200); };
-    const where = isDaily ? "today's Daily Challenge" : courseLabel;
+    const name = profile.name.trim() || "A friend";
+    // Solo rounds already have a replay (with flight paths for the hole map);
+    // anything else (Pass & Play, online, practice) gets a card without the map.
+    const r = lastReplay ?? buildReplay({
+      mode: finalMode, seed: finalSeed, name,
+      scores: finalPars.map((p, i) => scorecard[i] ?? p), pars: finalPars, paths: [],
+    });
+    const card = replayCard(r, finalPracticeHole ?? 1);
+    const dailyDate = isDaily ? dailyDateLabel(finalSeed) : null;
+    const kicker = finalPracticeHole != null ? "Practice" : dailyDate ? `Daily Challenge · ${dailyDate}` : card.stop ?? (finalMode === "ranked" ? "Ranked" : "Round");
     // A challenge link when the round is replayable as-is (fixed courses, the Daily, tour courses at full length), else just the app.
     const canLink = finalPracticeHole == null && !finalParty
       && (finalMode === "course" || finalMode === "winthrop" || finalMode === "olympus" || finalMode === "daily" || (finalMode === "tour" && isChallengeTourSeed(finalSeed)));
-    const link = `${location.origin}${location.pathname}${canLink ? `?ch=${challengeParam(finalMode, finalSeed, total, profile.name.trim() || "A friend")}` : ""}`;
-    const shareText = `I shot ${total} (${os(over)}) on ${where}! ${link}`;
-    await new Promise<void>((resolve) => {
-      cv.toBlob(async (blob) => {
-        if (!blob) return resolve();
-        // 1) Native share sheet with the scorecard image (mobile). If the sheet
-        //    opens we're done — success OR cancel — we never fall back to a download.
-        try {
-          const nav = navigator as Navigator & { canShare?: (d: { files: File[] }) => boolean };
-          const file = new File([blob], "discgolf-scorecard.png", { type: "image/png" });
-          if (nav.canShare?.({ files: [file] })) {
-            await nav.share({ files: [file], title: "Disc Golf", text: `I shot ${total} (${os(over)}) on ${where}!` });
-            return resolve();
-          }
-        } catch { return resolve(); /* cancelled/failed — do nothing (no download) */ }
-        // 2) No share sheet (desktop): copy to the clipboard instead of downloading —
-        //    the scorecard image if the browser allows it, otherwise the challenge link.
-        try {
-          const CI = (window as unknown as { ClipboardItem?: typeof ClipboardItem }).ClipboardItem;
-          if (CI && navigator.clipboard?.write) {
-            await navigator.clipboard.write([new CI({ [blob.type]: blob })]);
-            flash("Scorecard copied to clipboard");
-            return resolve();
-          }
-        } catch { /* image clipboard unsupported — fall back to a text link */ }
-        try {
-          if (navigator.clipboard?.writeText) {
-            await navigator.clipboard.writeText(shareText);
-            flash("Share link copied to clipboard");
-            return resolve();
-          }
-        } catch { /* ignore */ }
-        flash("Sharing isn't available here");
-        resolve();
-      }, "image/png");
-    });
-  }, [finalTotal, finalPars, finalMode, finalSeed, finalPracticeHole, finalParty, scorecard, profile.name]);
+    const link = `${location.origin}${location.pathname}${canLink ? `?ch=${challengeParam(finalMode, finalSeed, total, name)}` : ""}`;
+    const text = shareText(card, { link, daily: dailyDate ? { date: dailyDate, stars: finalDailyStars?.earned ?? 0 } : undefined });
+
+    const flash = (msg: string) => { setShareMsg(msg); window.setTimeout(() => setShareMsg(null), 2200); };
+    const blob = await renderShareCard(r, card, kicker).catch(() => null);
+    // 1) Native share sheet with the card image + text and link (mobile). If the
+    //    sheet opens we're done, success OR cancel; never fall back to a download.
+    try {
+      const nav = navigator as Navigator & { canShare?: (d: { files: File[] }) => boolean };
+      const file = blob ? new File([blob], "disc-golf-arcade.png", { type: "image/png" }) : null;
+      if (file && nav.canShare?.({ files: [file] })) {
+        await nav.share({ files: [file], text });
+        return;
+      }
+      if (!file && nav.share) { await nav.share({ text }); return; }
+    } catch { return; /* cancelled/failed: do nothing */ }
+    // 2) No share sheet (desktop): copy the card image and the text together
+    //    (the paste target picks one), else the image alone, else the text.
+    const CI = (window as unknown as { ClipboardItem?: typeof ClipboardItem }).ClipboardItem;
+    if (blob && CI && navigator.clipboard?.write) {
+      try {
+        await navigator.clipboard.write([new CI({ [blob.type]: blob, "text/plain": new Blob([text], { type: "text/plain" }) })]);
+        flash("Scorecard + link copied");
+        return;
+      } catch { /* mixed items unsupported */ }
+      try {
+        await navigator.clipboard.write([new CI({ [blob.type]: blob })]);
+        flash("Scorecard copied to clipboard");
+        return;
+      } catch { /* image clipboard unsupported: fall back to text */ }
+    }
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        flash("Share text copied to clipboard");
+        return;
+      }
+    } catch { /* ignore */ }
+    flash("Sharing isn't available here");
+  }, [finalTotal, finalPars, finalMode, finalSeed, finalPracticeHole, finalParty, finalDailyStars, scorecard, profile.name, lastReplay]);
 
   // When a hole finishes, record/show the best-ever strokes for that hole.
   // Only for Glendoveer — the daily course's holes change every day.
