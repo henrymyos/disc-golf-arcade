@@ -21,6 +21,8 @@
 // signature holes 5, 6, 7, 10, 16, 17.
 // Held (Oct 23): 400-round probe +2.7 / −3.8 / +6.7 (Lv1 / Lv5 / Lv12); Lv12 is
 // 6.3 over the +0.4 baseline (17 +3.9, 5 +2.3), so the stop shows as later.
+// Nov 12: removed the balance trees on 12 (one) that stood in a hazard; the
+// build dropped them, so they never played and scores are unchanged.
 import type { ProCourse, ProHole } from "./types";
 
 const BOOK = "https://drive.google.com/file/d/15jEswxw8RDkxWXj8dNDZWlMB1saEbsBI/view";
@@ -40,7 +42,7 @@ const HOLES: ProHole[] = [
   { n: 9, par: 3, lengthFt: 377, line: [{ x: 0, y: 0 }, { x: 10, y: 190 }, { x: 20, y: 370 }], widthFt: 150, rough: "ob", obZones: [{ x: -110, y: 80, w: 220, h: 40 }], balanceTrees: [{ x: 50, y: 320, r: 20 }, { x: -20, y: 320, r: 20 }], trees: "mixed", elev: 1, note: "Over the creek, then uphill up a strung lane to the green", ref: { url: BOOK, page: 22 } },
   { n: 10, par: 5, lengthFt: 1086, line: [{ x: 0, y: 0 }, { x: -120, y: 290 }, { x: -160, y: 550 }, { x: -90, y: 800 }, { x: -10, y: 970 }, { x: 30, y: 1030 }], widthFt: 160, rough: "ob", obZones: [{ x: -100, y: 980, w: 220, h: 20 }], dropZone: { x: -140, y: 230 }, trees: "wooded", elevZones: [{ to: 0.5, elev: 2 }, { to: 1, elev: -1 }], note: "1,086 ft up a strung lane over a hump, the creek in front of the green", ref: { url: BOOK, page: 24 } },
   { n: 11, par: 4, lengthFt: 745, line: [{ x: 0, y: 0 }, { x: 210, y: 210 }, { x: 170, y: 390 }, { x: 70, y: 530 }, { x: -10, y: 580 }], widthFt: 160, rough: "hazard", trees: "wooded", elev: -1, mando: "Not left of the marked pole", note: "Down right off the tee, then a long left-hand bend through the woods", ref: { url: BOOK, page: 25 } },
-  { n: 12, par: 3, lengthFt: 399, line: [{ x: 0, y: 0 }, { x: 0, y: 200 }, { x: 20, y: 390 }], widthFt: 150, rough: "hazard", obZones: [{ x: -110, y: 140, w: 220, h: 40 }, { x: 60, y: 230, w: 50, h: 100 }], balanceTrees: [{ x: 50, y: 340, r: 20 }, { x: -20, y: 340, r: 20 }], trees: "wooded", mando: "Between the two marked trees past the creek", note: "Over the creek and through a double mando gap in the woods", ref: { url: BOOK, page: 26 } },
+  { n: 12, par: 3, lengthFt: 399, line: [{ x: 0, y: 0 }, { x: 0, y: 200 }, { x: 20, y: 390 }], widthFt: 150, rough: "hazard", obZones: [{ x: -110, y: 140, w: 220, h: 40 }, { x: 60, y: 230, w: 50, h: 100 }], balanceTrees: [{ x: -20, y: 340, r: 20 }], trees: "wooded", mando: "Between the two marked trees past the creek", note: "Over the creek and through a double mando gap in the woods", ref: { url: BOOK, page: 26 } },
   { n: 13, par: 3, lengthFt: 435, line: [{ x: 0, y: 0 }, { x: -50, y: 220 }, { x: -100, y: 420 }], widthFt: 150, rough: "hazard", obZones: [{ x: -180, y: 250, w: 40, h: 220 }], trees: "wooded", note: "Long wooded par 3 drifting left, the rope OB left of the green", ref: { url: BOOK, page: 27 } },
   { n: 14, par: 4, lengthFt: 720, line: [{ x: 0, y: 0 }, { x: -70, y: 350 }, { x: -150, y: 700 }], widthFt: 150, rough: "hazard", obZones: [{ x: -230, y: 560, w: 280, h: 30 }, { x: -250, y: 600, w: 40, h: 180 }], trees: "wooded", elev: -1, note: "Down a wooded lane, over the creek bed to a green with the line left", ref: { url: BOOK, page: 29 } },
   { n: 15, par: 4, lengthFt: 600, line: [{ x: 0, y: 0 }, { x: 70, y: 220 }, { x: 20, y: 440 }, { x: -20, y: 580 }], widthFt: 160, rough: "hazard", obZones: [{ x: 120, y: 100, w: 40, h: 350 }, { x: -120, y: 640, w: 200, h: 30 }], trees: "wooded", elev: 1, note: "Uphill up a wooded lane with the rope right and long", ref: { url: BOOK, page: 30 } },

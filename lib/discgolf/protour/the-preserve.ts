@@ -1,0 +1,55 @@
+// The Preserve (Black Bear), Clearwater MN: Doubles Championship at the
+// Preserve (DGPT Elite), Aug 14–16 2026. MPO, par 65, 10,881 ft on the A pins
+// (the final-round pins: rounds 1–2 throw to B, round 3 to A, on 1, 3 and 4).
+// The event is doubles; the game plays the course as singles. Facts from the
+// public 2026 caddie book (Google Drive PDF, linked from the DGPT event page);
+// each hole cites its MPO page (holes 1–4, 8–12, 14 and 16 have separate FPO
+// and MPO pages, FPO first). Hand-placed and rounded to 10 ft in our own format
+// (see ./types). Nothing from the book's map art is copied, traced or stored;
+// the game draws its own holes.
+// Wooded lakeside course: the ponds decide 1, 7, 8, 11, 17 and 18; 7's
+// fairway is hazard except the three safe landing zones (A, B, C) and the
+// green; 11 is an island green; 17 threads a narrow gap and a peninsula.
+// No elevation is printed, so every hole is flat.
+// Drop zones: tee shots only on 8, 11 and 18 (the book's "if both tee shots
+// land OB" doubles rule read as a singles tee-shot DZ). Off: the mando DZs on
+// 2, 6, 12 and 15; the mandos stay as text. 18's DZ sits on the left layup
+// strip, kept in bounds with an island ribbon.
+// Balance: no levers. 100-round probe (Nov 12) +4.5 / −0.6 / +2.0 (Lv1 / Lv5 /
+// Lv12) vs the +1.9 / −3.1 / +0.4 baseline: harder at every level, mostly the
+// pond carries on 8 and 18 (Lv1 +1.8 and +2.3); shipped anyway (band advisory).
+import type { ProCourse, ProHole } from "./types";
+
+const BOOK = "https://drive.google.com/file/d/1IydEwSK_wqnJfef8h4SnTwN8sdCQ9M3v/view";
+
+const HOLES: ProHole[] = [
+  { n: 1, par: 4, lengthFt: 708, layout: "A", line: [{ x: 0, y: 0 }, { x: 40, y: 280 }, { x: 20, y: 580 }, { x: -50, y: 680 }], widthFt: 150, rough: "hazard", water: [{ x: -160, y: 180, w: 150, h: 380 }, { x: -20, y: 550, w: 40, h: 150 }], trees: "open", note: "Up the right of the pond, then back left over its arm to the A pin", ref: { url: BOOK, page: 9 } },
+  { n: 2, par: 3, lengthFt: 318, line: [{ x: 0, y: 0 }, { x: 0, y: 160 }, { x: 10, y: 310 }], widthFt: 150, rough: "hazard", obZones: [{ x: -110, y: 220, w: 80, h: 200 }, { x: -110, y: 170, w: 60, h: 50 }, { x: -110, y: 130, w: 30, h: 40 }], trees: "mixed", mando: "Between the two marked trees", note: "Up a tree-lined lane with the pond OB left and two mando trees", ref: { url: BOOK, page: 11 } },
+  { n: 3, par: 3, lengthFt: 405, layout: "A", line: [{ x: 0, y: 0 }, { x: -40, y: 200 }, { x: -70, y: 390 }], widthFt: 150, rough: "hazard", obZones: [{ x: -180, y: 140, w: 90, h: 130 }, { x: -180, y: 270, w: 70, h: 150 }, { x: -180, y: 420, w: 60, h: 80 }], trees: "wooded", note: "Long wooded par 3 up a lane, the cart path OB left", ref: { url: BOOK, page: 13 } },
+  { n: 4, par: 4, lengthFt: 672, layout: "A", line: [{ x: 0, y: 0 }, { x: -260, y: 320 }, { x: -80, y: 520 }], widthFt: 150, rough: "hazard", obZones: [{ x: -370, y: -80, w: 320, h: 80 }, { x: -370, y: 0, w: 240, h: 80 }, { x: -370, y: 80, w: 180, h: 70 }, { x: -370, y: 150, w: 110, h: 60 }, { x: -370, y: 310, w: 10, h: 110 }, { x: -370, y: 420, w: 40, h: 90 }], trees: "mixed", note: "Up the left along the OB line, then right into the trees to the green", ref: { url: BOOK, page: 15 } },
+  { n: 5, par: 4, lengthFt: 695, line: [{ x: 0, y: 0 }, { x: -90, y: 180 }, { x: -150, y: 380 }, { x: -110, y: 510 }, { x: -40, y: 640 }], widthFt: 150, rough: "hazard", trees: "wooded", note: "Long wooded S-bend: left off the tee, then right up to the green", ref: { url: BOOK, page: 16 } },
+  { n: 6, par: 4, lengthFt: 747, line: [{ x: 0, y: 0 }, { x: -60, y: 180 }, { x: -100, y: 320 }, { x: -110, y: 470 }, { x: -40, y: 610 }, { x: 0, y: 700 }], widthFt: 150, rough: "hazard", obZones: [{ x: -40, y: 370, w: 110, h: 70 }, { x: -80, y: 240, w: 150, h: 130 }, { x: -60, y: 180, w: 130, h: 60 }], trees: "mixed", mando: "Not right of the marked tree", note: "Up the left of the OB line past the mando, then right to the green", ref: { url: BOOK, page: 17 } },
+  { n: 7, par: 4, lengthFt: 830, line: [{ x: 0, y: 0 }, { x: 20, y: 300 }, { x: 20, y: 520 }, { x: 60, y: 660 }, { x: 140, y: 800 }], widthFt: 150, rough: "hazard", water: [{ x: 40, y: -60, w: 210, h: 240 }, { x: 70, y: 180, w: 180, h: 190 }, { x: 120, y: 370, w: 130, h: 230 }, { x: -30, y: 750, w: 90, h: 60 }, { x: 40, y: 690, w: 100, h: 60 }, { x: 120, y: 650, w: 100, h: 60 }], hazard: [{ poly: [{ x: -90, y: 30 }, { x: 40, y: 30 }, { x: 40, y: 180 }, { x: 70, y: 180 }, { x: 70, y: 370 }, { x: 120, y: 370 }, { x: 120, y: 650 }, { x: 40, y: 690 }, { x: -30, y: 750 }, { x: -90, y: 750 }], holes: [[{ x: 60, y: 290 }, { x: 60, y: 270 }, { x: 50, y: 250 }, { x: 30, y: 240 }, { x: 10, y: 230 }, { x: -10, y: 240 }, { x: -30, y: 250 }, { x: -40, y: 270 }, { x: -40, y: 290 }, { x: -40, y: 300 }, { x: -30, y: 320 }, { x: -10, y: 330 }, { x: 10, y: 340 }, { x: 30, y: 330 }, { x: 50, y: 320 }, { x: 60, y: 300 }], [{ x: 110, y: 430 }, { x: 110, y: 400 }, { x: 100, y: 380 }, { x: 80, y: 370 }, { x: 50, y: 360 }, { x: 30, y: 370 }, { x: 10, y: 380 }, { x: -10, y: 400 }, { x: -10, y: 430 }, { x: -10, y: 450 }, { x: 10, y: 470 }, { x: 30, y: 490 }, { x: 50, y: 490 }, { x: 80, y: 490 }, { x: 100, y: 470 }, { x: 110, y: 450 }], [{ x: 50, y: 570 }, { x: 30, y: 540 }, { x: 10, y: 510 }, { x: -10, y: 500 }, { x: -30, y: 500 }, { x: -40, y: 510 }, { x: -50, y: 540 }, { x: -40, y: 570 }, { x: -30, y: 610 }, { x: -10, y: 640 }, { x: 10, y: 660 }, { x: 30, y: 680 }, { x: 50, y: 670 }, { x: 60, y: 660 }, { x: 70, y: 640 }, { x: 60, y: 600 }]] }, { poly: [{ x: -90, y: 860 }, { x: 220, y: 860 }, { x: 220, y: 710 }, { x: 120, y: 710 }, { x: 120, y: 750 }, { x: 60, y: 750 }, { x: 60, y: 810 }, { x: -90, y: 810 }], holes: [[{ x: 190, y: 840 }, { x: 190, y: 820 }, { x: 190, y: 800 }, { x: 180, y: 780 }, { x: 170, y: 770 }, { x: 150, y: 750 }, { x: 130, y: 750 }, { x: 110, y: 750 }, { x: 100, y: 760 }, { x: 90, y: 780 }, { x: 90, y: 800 }, { x: 100, y: 820 }, { x: 110, y: 840 }, { x: 130, y: 850 }, { x: 150, y: 850 }, { x: 170, y: 850 }]] }], trees: "open", mando: "Not right of the marked tree by the green", note: "Safe landing zones A, B and C up the pond; all else is hazard; carry to the green", ref: { url: BOOK, page: 18 } },
+  { n: 8, par: 3, lengthFt: 366, line: [{ x: 0, y: 0 }, { x: 80, y: 350 }], widthFt: 150, rough: "hazard", water: [{ x: -30, y: 280, w: 150, h: 50 }, { x: -30, y: 130, w: 210, h: 150 }, { x: 0, y: 60, w: 130, h: 70 }], dropZone: { x: 160, y: 100 }, trees: "open", note: "All carry over the pond to a shoreline green; a missed drive plays from the DZ", ref: { url: BOOK, page: 20 } },
+  { n: 9, par: 3, lengthFt: 391, line: [{ x: 0, y: 0 }, { x: -70, y: 190 }, { x: 0, y: 360 }], widthFt: 150, rough: "hazard", trees: "mixed", note: "Big hyzer line out of the trees across an open field to the green", ref: { url: BOOK, page: 22 } },
+  { n: 10, par: 4, lengthFt: 750, line: [{ x: 0, y: 0 }, { x: -10, y: 270 }, { x: -10, y: 510 }, { x: -20, y: 740 }], widthFt: 150, rough: "ob", obZones: [{ x: -100, y: 470, w: 180, h: 30 }, { x: -110, y: 510, w: 60, h: 280 }], hazard: [{ x: 0, y: 710, rx: 40, ry: 20, rot: 30 }], trees: "wooded", note: "Up a tight lane, over the OB gap at the bridge to a bunkered green", ref: { url: BOOK, page: 24 } },
+  { n: 11, par: 3, lengthFt: 320, line: [{ x: 0, y: 0 }, { x: 40, y: 310 }], widthFt: 150, rough: "ob", water: [{ x: -60, y: 210, w: 150, h: 70 }], obZones: [{ x: -70, y: 90, w: 200, h: 120 }, { x: -70, y: 70, w: 80, h: 20 }, { x: 30, y: 70, w: 100, h: 20 }, { x: -70, y: 10, w: 200, h: 60 }, { x: -70, y: 280, w: 70, h: 80 }, { x: 70, y: 280, w: 60, h: 80 }, { x: -70, y: 360, w: 200, h: 40 }], islandGreen: true, dropZone: { x: 20, y: 90 }, trees: "open", note: "All carry over the pond to the island green; a missed drive plays from the DZ", ref: { url: BOOK, page: 26 } },
+  { n: 12, par: 4, lengthFt: 760, line: [{ x: 0, y: 0 }, { x: 180, y: 350 }, { x: 40, y: 690 }], widthFt: 150, rough: "hazard", hazard: [{ x: 140, y: 390, rx: 10, ry: 30, rot: 0 }, { x: 70, y: 620, rx: 100, ry: 10, rot: 74 }], trees: "wooded", mando: "Not right of the marked tree", note: "Dogleg right, then back left up the hill; sand in the fairway, hillside by the green", ref: { url: BOOK, page: 28 } },
+  { n: 13, par: 3, lengthFt: 365, line: [{ x: 0, y: 0 }, { x: -10, y: 180 }, { x: -30, y: 360 }], widthFt: 150, rough: "hazard", obZones: [{ x: -130, y: 380, w: 60, h: 90 }, { x: -70, y: 400, w: 40, h: 70 }, { x: -30, y: 430, w: 50, h: 40 }, { x: 20, y: 450, w: 50, h: 20 }], trees: "wooded", note: "Straight up a wooded lane to a green above the river, OB long", ref: { url: BOOK, page: 29 } },
+  { n: 14, par: 5, lengthFt: 1058, line: [{ x: 0, y: 0 }, { x: -90, y: 390 }, { x: -100, y: 590 }, { x: -30, y: 810 }, { x: 20, y: 1030 }], widthFt: 150, rough: "ob", obZones: [{ x: -210, y: 560, w: 230, h: 60 }], trees: "mixed", note: "1,058 ft: up the lane, over the rough crossing, then a roped strip to the green", ref: { url: BOOK, page: 31 } },
+  { n: 15, par: 4, lengthFt: 784, line: [{ x: 0, y: 0 }, { x: -50, y: 360 }, { x: -90, y: 650 }, { x: -170, y: 750 }], widthFt: 150, rough: "hazard", trees: "mixed", mando: "Not left of the marked tree", note: "Long lane up the right side, then left around the mando tree to the green", ref: { url: BOOK, page: 32 } },
+  { n: 16, par: 3, lengthFt: 402, line: [{ x: 0, y: 0 }, { x: 0, y: 210 }, { x: -10, y: 400 }], widthFt: 150, rough: "hazard", keyTrees: [{ x: -30, y: 390, r: 10 }, { x: 10, y: 390, r: 10 }], trees: "mixed", note: "Open field to a green tucked between two trees", ref: { url: BOOK, page: 34 } },
+  { n: 17, par: 3, lengthFt: 368, line: [{ x: 0, y: 0 }, { x: -10, y: 160 }, { x: 30, y: 260 }, { x: 20, y: 360 }], widthFt: 150, rough: "ob", water: [{ x: -60, y: 250, w: 70, h: 100 }], obZones: [{ x: -80, y: -10, w: 50, h: 170 }, { x: 10, y: -10, w: 80, h: 170 }, { x: 30, y: 160, w: 60, h: 80 }, { x: 70, y: 240, w: 20, h: 190 }, { x: -90, y: 160, w: 30, h: 190 }, { x: -80, y: 410, w: 170, h: 60 }, { x: -90, y: 350, w: 90, h: 60 }], trees: "open", note: "Through a narrow gap, then up a peninsula past the pond to the green", ref: { url: BOOK, page: 35 } },
+  { n: 18, par: 4, lengthFt: 942, line: [{ x: 0, y: 0 }, { x: -50, y: 420 }, { x: -70, y: 670 }, { x: -140, y: 930 }], widthFt: 170, rough: "ob", water: [{ x: -110, y: 50, w: 230, h: 360 }, { x: -170, y: 700, w: 130, h: 130 }], obZones: [{ x: -260, y: 820, w: 40, h: 210 }, { x: -70, y: 830, w: 190, h: 200 }, { x: 50, y: 420, w: 70, h: 280 }], islands: [[{ x: -140, y: 110 }, { x: -130, y: 430 }]], hazard: [{ x: -80, y: 590, rx: 10, ry: 50, rot: 0 }, { x: -140, y: 880, rx: 30, ry: 20, rot: -30 }], dropZone: { x: -140, y: 120 }, trees: "open", note: "Carry the pond, then over its arm to a ringed green; a missed drive plays the DZ", ref: { url: BOOK, page: 36 } },
+
+];
+
+export const THE_PRESERVE: ProCourse = {
+  id: "the-preserve",
+  name: "The Preserve",
+  city: "Clearwater, MN",
+  layoutLabel: "MPO · A pins",
+  theme: "classic",
+  book: BOOK,
+  holes: HOLES,
+};
