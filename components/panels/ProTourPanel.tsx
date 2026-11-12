@@ -193,7 +193,7 @@ export function ProTourPanel({ bests, onClose, onPlay, onPractice }: {
         <h2 className="text-white font-black text-xl">2026 Pro Tour</h2>
         <button type="button" onClick={onClose} aria-label="Close" className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
       </div>
-      <p className="text-gray-400 text-[11px] shrink-0">The real 2026 season, hole by hole. MPO layouts.</p>
+      <p className="text-gray-400 text-[11px] shrink-0">The real 2026 season, hole by hole. MPO layouts (FPO where the book is FPO only).</p>
       <div className="flex gap-1 bg-[#1a1d23] border border-white/10 rounded-lg p-1 mt-2.5 shrink-0" role="tablist" aria-label="Filter">
         <button type="button" onClick={() => setFilter("all")} className={seg(filter === "all")}>All</button>
         <button type="button" onClick={() => setFilter("playable")} className={seg(filter === "playable")}>Playable</button>
