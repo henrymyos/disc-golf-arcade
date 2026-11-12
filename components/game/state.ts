@@ -45,7 +45,7 @@ export type GameState = {
   camY: number; // top of the viewport in world coords (vertical scroll)
   camX: number; // left of the viewport in world coords (horizontal pan on wide holes)
   introT: number; // frames elapsed in the intro fly-over
-  flash: { text: string; at: number } | null; // big centered penalty banner (OB / hazard)
+  flash: { text: string; at: number; sub?: string; gold?: boolean } | null; // big centered banner: penalty (OB / hazard) or a gold ace/eagle callout
   lenScale?: number; // career hole-length scale this round was built with (for replays)
   // Watching a recorded round: the disc follows the saved paths, input is off.
   replay?: { data: Replay; clock: number; lastT: number; speed: number; lastFlying: number; ended: boolean };
@@ -74,7 +74,7 @@ export function freshHole(hole: Hole) {
     camY: 0, // start showing the basket (top), then pan down
     camX: camXFor(hole, hole.basket.x), // intro looks at the basket first
     introT: 0,
-    flash: null as { text: string; at: number } | null,
+    flash: null as { text: string; at: number; sub?: string; gold?: boolean } | null,
   };
 }
 

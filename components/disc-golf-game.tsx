@@ -2495,7 +2495,10 @@ export function DiscGolfGame() {
       }
       if (ps.length > 400) ps.splice(0, ps.length - 400);
     }
+    // Reduced motion: no screen shake and a lighter confetti shower.
+    const reduceMotion = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     function shake(mag: number) {
+      if (reduceMotion) return;
       shakeRef.current = { until: performance.now() + 160, mag };
     }
 
@@ -2672,6 +2675,17 @@ export function DiscGolfGame() {
             const oy = nBursts > 1 ? (Math.random() - 0.5) * 24 : 0;
             spawnBurst(hole.basket.x + ox, hole.basket.y + oy, cel.colors, Math.round(cel.count * (under ? 1.5 : 1)), cel.speed * (under ? 1.1 : 1), cel.grav, cel.life);
           }
+          // Aces and eagles-or-better get a moment: a gold callout, a confetti
+          // shower over the basket and a longer pause before the hole card.
+          if (g.throws === 1 || hole.par - g.throws >= 2) {
+            const sl = scoreLabel(g.throws, hole.par);
+            g.flash = { text: `${sl.name.replace("!", "").toUpperCase()}!`, sub: g.throws === 1 ? "HOLE IN ONE" : `${g.throws - hole.par} ON A PAR ${hole.par}`, gold: true, at: performance.now() };
+            const n = reduceMotion ? 1 : 5;
+            for (let b = 0; b < n; b++) {
+              spawnBurst(hole.basket.x + (b - (n - 1) / 2) * 36, hole.basket.y - 14 - Math.random() * 18, ["#f5d24a", "#36D7B7", "#ffffff", "#ff7ab6"], 40, 2.6, 0.06, 60);
+            }
+            vibrate([30, 40, 30, 40, 120]);
+          }
         } else if (res.status === "ob" || res.status === "oob") {
           // OUT OF BOUNDS: +1 and play from where it crossed the line.
           // resolvePenalty encapsulates the rule (water/ob kind, +1 stroke, and
@@ -2734,7 +2748,7 @@ export function DiscGolfGame() {
           syncHud(); // the new lie: distance to the pin for the side column
         }
       } else if (g.phase === "holed") {
-        if (g.holedAt && performance.now() - g.holedAt > 850) {
+        if (g.holedAt && performance.now() - g.holedAt > (g.flash?.gold ? 1700 : 850)) {
           g.scores[g.holeIndex] = g.throws;
           // Momentum was retired with the Mental skill, so this is always neutral (1)
           // now — kept wired so the call site is ready if momentum ever returns.
@@ -3560,9 +3574,9 @@ export function DiscGolfGame() {
         ctx.restore();
       }
 
-      // Penalty banner — big red "OUT OF BOUNDS / HAZARD" + "+1", centered.
+      // Centered banner: red "OUT OF BOUNDS / HAZARD" + "+1", or a gold "ACE!" / "EAGLE!".
       if (g.flash) {
-        const FLASH_MS = 1500;
+        const FLASH_MS = g.flash.gold ? 1900 : 1500;
         const t = (performance.now() - g.flash.at) / FLASH_MS;
         if (t >= 1) {
           g.flash = null;
@@ -3577,13 +3591,15 @@ export function DiscGolfGame() {
           ctx.textBaseline = "middle";
           ctx.lineWidth = 3;
           ctx.strokeStyle = "rgba(0,0,0,0.85)";
-          ctx.fillStyle = "#ff2e2e";
-          ctx.font = "bold 22px ui-monospace, monospace";
+          ctx.fillStyle = g.flash.gold ? "#f5d24a" : "#ff2e2e";
+          ctx.font = `bold ${g.flash.gold ? 26 : 22}px ui-monospace, monospace`;
           ctx.strokeText(g.flash.text, W / 2, cy - 7);
           ctx.fillText(g.flash.text, W / 2, cy - 7);
-          ctx.font = "bold 18px ui-monospace, monospace";
-          ctx.strokeText("+1", W / 2, cy + 14);
-          ctx.fillText("+1", W / 2, cy + 14);
+          const sub = g.flash.sub ?? "+1";
+          if (g.flash.gold) ctx.fillStyle = "#ffffff";
+          ctx.font = `bold ${g.flash.gold ? 11 : 18}px ui-monospace, monospace`;
+          ctx.strokeText(sub, W / 2, cy + 14);
+          ctx.fillText(sub, W / 2, cy + 14);
           ctx.restore();
           ctx.textAlign = "left";
           ctx.textBaseline = "middle";
@@ -4106,7 +4122,7 @@ export function DiscGolfGame() {
           return (
             <Overlay onTap={nextHole}>
               <p className="text-gray-400 text-[11px] font-semibold uppercase tracking-[0.15em]">Hole {hud.practiceHole ?? hud.hole}{hud.practiceHole ? " · practice" : ""}</p>
-              <p className={`${tone} font-black text-4xl leading-none`}>
+              <p className={`${tone} font-black text-4xl leading-none`} style={sl.tone === "great" ? { textShadow: "0 0 18px rgba(245,210,74,0.55)" } : undefined}>
                 {sl.emoji && `${sl.emoji} `}{sl.name}
               </p>
               <p className="text-gray-300 text-sm">{hud.throws} throws · par {hud.par}</p>
