@@ -12,8 +12,8 @@
 // Drop zones (tee shots only, as the book says): 1, 5, 9, 12, 13 and 17. The
 // mando DZs (4, 15, 16) are off; 8's optional ("may proceed") DZ is off.
 // Balance: one lever, as on Kippis 2: a balanceTrees pair (not in the book) ~50
-// ft short of 11's green, off the creek (hole-only probe: Lv1 aces 35% -> 19%).
-// 100-round probe (Nov 12) +0.0 / −4.1 / +2.9 (Lv1 / Lv5 / Lv12) vs the +1.9 /
+// ft short of 11's green, off the creek (hole-only probe: Lv1 aces 35% -> 25%).
+// 100-round probe (Nov 12) +0.0 / −4.7 / +2.2 (Lv1 / Lv5 / Lv12) vs the +1.9 /
 // −3.1 / +0.4 baseline; advisory only since Oct 24.
 import type { ProCourse, ProHole } from "./types";
 
@@ -30,7 +30,7 @@ const HOLES: ProHole[] = [
   { n: 8, par: 4, lengthFt: 793, line: [{ x: 0, y: 0 }, { x: -10, y: 210 }, { x: -20, y: 390 }, { x: -50, y: 570 }, { x: -110, y: 700 }, { x: -140, y: 770 }], widthFt: 220, rough: "ob", water: [{ x: -210, y: 670, w: 30, h: 160 }, { x: -90, y: 710, w: 50, h: 60 }], trees: "mixed", note: "Through a gap into an open field, then left to a green in a creek bend", ref: { url: BOOK, page: 15 } },
   { n: 9, par: 3, lengthFt: 354, line: [{ x: 0, y: 0 }, { x: 10, y: 180 }, { x: 30, y: 350 }], widthFt: 150, rough: "ob", obZones: [{ x: -70, y: 100, w: 180, h: 80 }, { x: 0, y: 180, w: 110, h: 130 }], dropZone: { x: 10, y: 90 }, trees: "open", note: "Off a bridge over OB to a staked landing area round the pin; tee-shot DZ", ref: { url: BOOK, page: 16 } },
   { n: 10, par: 3, lengthFt: 425, line: [{ x: 0, y: 0 }, { x: 10, y: 210 }, { x: 10, y: 420 }], widthFt: 220, rough: "ob", trees: "mixed", note: "Long open field shot past a tree clump right, woods OB all round", ref: { url: BOOK, page: 17 } },
-  { n: 11, par: 3, lengthFt: 300, line: [{ x: 0, y: 0 }, { x: -10, y: 150 }, { x: -30, y: 290 }], widthFt: 150, rough: "ob", water: [{ x: 20, y: -40, w: 50, h: 390 }], balanceTrees: [{ x: 0, y: 250, r: 15 }, { x: -60, y: 240, r: 20 }], trees: "mixed", note: "Narrow staked strip with the creek OB down the right", ref: { url: BOOK, page: 18 } },
+  { n: 11, par: 3, lengthFt: 300, line: [{ x: 0, y: 0 }, { x: -10, y: 150 }, { x: -30, y: 290 }], widthFt: 150, rough: "ob", water: [{ x: 20, y: -40, w: 50, h: 390 }], balanceTrees: [{ x: 0, y: 250, r: 10 }, { x: -60, y: 240, r: 20 }], trees: "mixed", note: "Narrow staked strip with the creek OB down the right", ref: { url: BOOK, page: 18 } },
   { n: 12, par: 3, lengthFt: 364, line: [{ x: 0, y: 0 }, { x: -30, y: 180 }, { x: -70, y: 350 }], widthFt: 200, rough: "ob", obZones: [{ x: -140, y: 180, w: 180, h: 100 }], islandGreen: true, dropZone: { x: -50, y: 160 }, trees: "open", note: "Over an OB gap to a staked oval green; tee-shot DZ short of the gap", ref: { url: BOOK, page: 19 } },
   { n: 13, par: 5, lengthFt: 1105, line: [{ x: 0, y: 0 }, { x: -200, y: 300 }, { x: -240, y: 560 }, { x: -220, y: 760 }, { x: -180, y: 910 }, { x: -130, y: 1020 }], widthFt: 150, rough: "ob", water: [{ x: -180, y: 50, w: 170, h: 220 }, { x: -140, y: 300, w: 150, h: 650 }, { x: -80, y: 950, w: 90, h: 150 }], dropZone: { x: -220, y: 300 }, trees: "mixed", note: "Carry the lake onto a long peninsula, the water OB right to the green", ref: { url: BOOK, page: 20 } },
   { n: 14, par: 4, lengthFt: 850, line: [{ x: 0, y: 0 }, { x: -60, y: 150 }, { x: -150, y: 310 }, { x: -180, y: 500 }, { x: -160, y: 670 }, { x: -130, y: 800 }], widthFt: 160, rough: "ob", water: [{ x: -110, y: 320, w: 70, h: 350 }], trees: "wooded", note: "Bends left along the lake (OB right), staked woods left, to a tucked green", ref: { url: BOOK, page: 21 } },
