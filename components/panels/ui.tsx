@@ -10,7 +10,7 @@ export const btn =
 export const titleCard =
   "w-full rounded-xl border border-[#36D7B7]/55 bg-[#1a1d23] hover:border-[#36D7B7] hover:bg-[#20262f] active:scale-[0.99] text-white font-bold py-3 transition";
 export const titleCardSm =
-  "flex-1 rounded-lg border border-[#36D7B7]/45 bg-[#1a1d23] hover:border-[#36D7B7] text-gray-200 hover:text-white text-xs font-semibold py-2 transition";
+  "flex-1 rounded-lg border border-[#36D7B7]/45 bg-[#1a1d23] hover:border-[#36D7B7] text-gray-200 hover:text-white text-xs font-semibold min-h-11 py-2 transition";
 // Big primary hub card — the three main actions, made large so they're clearly
 // the buttons to press.
 export const hubCard =

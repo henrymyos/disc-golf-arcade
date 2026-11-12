@@ -3798,7 +3798,7 @@ export function DiscGolfGame() {
               className="min-h-full flex items-center justify-center px-5"
               style={{ paddingTop: "max(env(safe-area-inset-top), 0.75rem)", paddingBottom: "max(env(safe-area-inset-bottom), 0.75rem)" }}
             >
-              <div className="flex flex-col items-center text-center animate-pulse">
+              <div className="flex flex-col items-center text-center motion-safe:animate-pulse">
                 <svg width="56" height="56" viewBox="0 0 32 32" aria-hidden className="drop-shadow">
                   <g stroke="#2a7d70" strokeWidth="2" strokeLinecap="round">
                     <line x1="2" y1="12.5" x2="8" y2="12.5" /><line x1="1" y1="18" x2="7" y2="18" />
@@ -3822,7 +3822,7 @@ export function DiscGolfGame() {
             type="button"
             onClick={() => setSettingsOpen(true)}
             aria-label="Settings"
-            className="absolute z-10 w-9 h-9 flex items-center justify-center rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 active:bg-white/15 text-gray-300 hover:text-white text-lg transition"
+            className="absolute z-10 w-11 h-11 flex items-center justify-center rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 active:bg-white/15 text-gray-300 hover:text-white text-lg transition"
             // Pin to the top-right of the app's centered mobile-width column (the
             // same 480px frame the in-round HUD caps at), not the window edge — on
             // a wide desktop the window's corner is nowhere near the app. The max()
@@ -3884,17 +3884,17 @@ export function DiscGolfGame() {
 
               {/* Coins + daily reward */}
               <div className="w-full flex items-center gap-2 mt-3">
-                <div className="flex items-center gap-1.5 rounded-lg bg-[#f5d24a]/10 border border-[#f5d24a]/30 px-2.5 py-1.5">
+                <div className="self-stretch flex items-center gap-1.5 rounded-lg bg-[#f5d24a]/10 border border-[#f5d24a]/30 px-2.5 py-1.5">
                   <Coin />
                   <span className="text-[#f5d24a] font-bold text-sm font-mono">{fmtCoins(coins)}</span>
                 </div>
                 {dailyAvailable(daily, today) ? (
                   <button type="button" onClick={claimDaily}
-                    className="flex-1 rounded-lg bg-[#36D7B7] hover:bg-[#2bc4a6] active:scale-[0.99] text-[#0f1117] font-bold text-sm py-2 transition animate-pulse">
+                    className="flex-1 rounded-lg bg-[#36D7B7] hover:bg-[#2bc4a6] active:scale-[0.99] text-[#0f1117] font-bold text-sm min-h-11 py-2 transition motion-safe:animate-pulse">
                     🎁 Daily reward
                   </button>
                 ) : (
-                  <div className="flex-1 rounded-lg border border-white/10 text-gray-400 text-xs font-semibold py-2 text-center">
+                  <div className="flex-1 min-h-11 flex items-center justify-center rounded-lg border border-white/10 text-gray-400 text-xs font-semibold py-2 text-center">
                     🎁 Claimed · 🔥 {daily?.streak ?? 0}d
                   </div>
                 )}
