@@ -14,8 +14,8 @@
 // 45% -> 16% and 43% -> 26%). 5 (246 ft over the pond) still gives Lv1 aces
 // ~34%; the pond beside its green leaves no room for a pair. 100-round probe
 // (Nov 12) −10.2 / −12.8 / −8.6 (Lv1 / Lv5 / Lv12) vs the +1.9 / −3.1 / +0.4
-// baseline: an FPO layout ~2,000 ft shorter than the MPO courses, like Brighton
-// (held). It ships because the band is advisory since Oct 24; Henry may hold it.
+// baseline: an FPO layout ~2,000 ft shorter than the MPO courses, like Brighton.
+// It ships because the band is advisory since Oct 24 (Henry kept both, Nov 12).
 import type { ProCourse, ProHole } from "./types";
 
 const BOOK = "https://drive.google.com/file/d/1YaClskK_mTv9PFWAKhjfept-LGNgm-3G/view";
