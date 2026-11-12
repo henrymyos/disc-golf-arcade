@@ -1,5 +1,8 @@
 import { ImageResponse } from "next/og";
 import { parseChallenge } from "@/lib/discgolf/challenge";
+import { loadReplay } from "@/actions/replays";
+import { isReplayId } from "@/lib/discgolf/replay";
+import { replayImage } from "./replay-image";
 
 // Dynamic Open Graph image for shared challenge links (and a default card).
 // 1200×630 is the standard OG/Twitter large-image size.
@@ -29,8 +32,15 @@ function Frame({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function GET(req: Request) {
+export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
+  const rp = searchParams.get("rp");
+  // A replay id is immutable once saved, so its card can be cached hard; a bad
+  // or missing id falls through to the default card with a short cache.
+  if (isReplayId(rp)) {
+    const r = await loadReplay(rp).catch(() => null);
+    if (r) return replayImage(r);
+  }
   const c = parseChallenge(searchParams.get("ch"));
 
   const header = (
@@ -56,7 +66,7 @@ export function GET(req: Request) {
           <div style={{ display: "flex", fontSize: "26px", color: MUTED }}>discgolfarcade.com</div>
         </Frame>
       ),
-      { width: 1200, height: 630 },
+      { width: 1200, height: 630, headers: rp ? { "cache-control": "public, max-age=300" } : undefined },
     );
   }
 
@@ -87,3 +97,4 @@ export function GET(req: Request) {
     { width: 1200, height: 630 },
   );
 }
+

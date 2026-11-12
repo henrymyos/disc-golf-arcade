@@ -38,6 +38,7 @@ import {
 import { parseChallenge, challengeParam } from "@/lib/discgolf/challenge";
 import { buildReplay, replayFrame, type Replay } from "@/lib/discgolf/replay";
 import { saveReplay, loadReplay } from "@/actions/replays";
+import { replayCard, mapHoleIndex, replayHoleSvg, svgDataUri, resultColor } from "@/lib/discgolf/replayCard";
 import {
   newCareer, normalizeCareer, skillMods, momentumAfter, simEvent, recordResult, advanceSeason, retire, IDENTITY_MODS, signSponsor, unsignSponsor, buyTrainingPoint, spendSkillPoint, careerCoins as coinsForFinish, buyCareerDisc, toggleCareerBag, buyCareerCosmetic, equipCareerLook, DEFAULT_CAREER_LOOK, type CareerLook, careerFieldForRound, careerCardRacers, careerLiveStandings, careerHoleLenScale, rankedFieldForRound, rankedPlacementField, rankedCardRacers, type Career, type CareerEvent, type EventResult, type CareerSkills, type FieldPlayer,
 } from "@/lib/discgolf/career";
@@ -1783,10 +1784,8 @@ export function DiscGolfGame() {
         link = `${location.origin}${location.pathname}?rp=${res.id}`;
         setReplayLink(link);
       }
-      const total = lastReplay.scores.reduce((a, b) => a + b, 0);
-      const par = lastReplay.pars.reduce((a, b) => a + b, 0);
-      const d = total - par;
-      const text = `Watch my ${total} (${d === 0 ? "E" : d > 0 ? `+${d}` : d}) on Disc Golf Arcade`;
+      const c = replayCard(lastReplay);
+      const text = `${c.headline} at ${c.course}, ${c.total} (${c.toPar}). Watch my replay on Disc Golf Arcade`;
       const nav = navigator as Navigator & { share?: (d: { title?: string; text?: string; url?: string }) => Promise<void> };
       if (nav.share) { try { await nav.share({ title: "Disc Golf Arcade replay", text, url: link }); return; } catch { /* cancelled → copy instead */ } }
       let copied = false;
@@ -1797,6 +1796,25 @@ export function DiscGolfGame() {
       setReplayBusy(false);
     }
   }, [lastReplay, replayBusy, replayLink]);
+
+  // The recipient's landing card: the same summary + hole map the link preview shows.
+  const pendingCard = useMemo(() => (pendingReplay ? replayCard(pendingReplay) : null), [pendingReplay]);
+  const pendingMap = useMemo(() => {
+    if (!pendingReplay || !pendingCard) return null;
+    const i = mapHoleIndex(pendingReplay, pendingCard);
+    const svg = i == null ? null : replayHoleSvg(pendingReplay, i);
+    return svg && i != null ? { src: svgDataUri(svg), hole: pendingCard.holes[i] } : null;
+  }, [pendingReplay, pendingCard]);
+
+  // "Play this course" from a shared replay: drop the replay and tee off on the same layout.
+  const playReplayCourse = useCallback((r: Replay) => {
+    const p = replayCard(r).play;
+    if (!p) return;
+    setPendingReplay(null);
+    setReplayView(null);
+    try { window.history.replaceState(null, "", location.pathname); } catch { /* ignore */ }
+    startGame(p.mode, p.seed);
+  }, [startGame]);
 
   // ?rp=<id> opens a shared replay (after a tap, so audio + fullscreen behave).
   useEffect(() => {
@@ -4479,6 +4497,9 @@ export function DiscGolfGame() {
             <div className="flex gap-2">
               {replayView.ended ? (<>
                 <button type="button" onClick={() => startReplay(replayView.data, replayView.fromResults)} className="flex-1 bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white font-bold py-2.5 rounded-lg transition text-sm">↻ Watch again</button>
+                {!replayView.fromResults && replayCard(replayView.data).play ? (
+                  <button type="button" onClick={() => playReplayCourse(replayView.data)} className={`${btn} flex-1 !mt-0 !py-2.5 text-sm`}>⛳ Play it</button>
+                ) : null}
                 <button type="button" onClick={endReplay} className={`${btn} flex-1 !mt-0 !py-2.5 text-sm`}>Done</button>
               </>) : (<>
                 <button type="button" onClick={() => setReplaySpeed(replayView.speed === 1 ? 2 : 1)} className="flex-1 bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white font-bold py-2.5 rounded-lg transition text-sm">{replayView.speed === 1 ? "2× speed" : "1× speed"}</button>
@@ -4493,12 +4514,34 @@ export function DiscGolfGame() {
       {/* A shared replay link (?rp=) waits for a tap so audio can start. */}
       {(pendingReplay || replayLoadErr) && screen !== "playing" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0f1117]/85 backdrop-blur-sm px-6">
-          <div className="w-full max-w-[300px] bg-[#1a1d23] border border-white/15 rounded-xl p-5 flex flex-col gap-3 text-center">
+          <div className="w-full max-w-[340px] max-h-[calc(100dvh-2rem)] overflow-y-auto bg-[#1a1d23] border border-white/15 rounded-xl p-5 flex flex-col gap-3 text-center">
             {pendingReplay ? (<>
-              <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#36D7B7]">Shared replay</div>
-              <div className="text-white font-black text-xl">{pendingReplay.name}</div>
-              <div className="text-gray-300 text-sm">{replayCaption(pendingReplay).course} · {replayCaption(pendingReplay).score}</div>
-              <button type="button" onClick={() => startReplay(pendingReplay)} className={`${btn} w-full !mt-1`}>▶ Watch round</button>
+              <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#36D7B7]">Shared replay{pendingCard?.stop ? ` · ${pendingCard.stop}` : ""}</div>
+              <div className={`font-black text-2xl leading-tight ${pendingCard?.highlight ? (pendingCard.highlight.diff <= -2 || pendingCard.highlight.score === 1 ? "text-[#f5d24a]" : "text-[#36D7B7]") : "text-white"}`}>{pendingCard?.headline}</div>
+              <div className="text-gray-300 text-sm"><span className="text-white font-bold">{pendingReplay.name}</span> at {pendingCard?.course}</div>
+              <div className="flex items-end justify-center gap-2">
+                <span className="text-white font-black text-4xl leading-none">{pendingCard?.total}</span>
+                <span className={`font-black text-xl ${pendingCard && pendingCard.total < pendingCard.par ? "text-[#36D7B7]" : pendingCard && pendingCard.total > pendingCard.par ? "text-[#e08a3b]" : "text-white"}`}>{pendingCard?.toPar}</span>
+                <span className="text-gray-400 text-xs pb-0.5">par {pendingCard?.par}</span>
+              </div>
+              {pendingMap && (
+                <figure className="relative mx-auto w-full max-w-[220px] aspect-[2/3] rounded-lg overflow-hidden border border-white/15">
+                  {/* eslint-disable-next-line @next/next/no-img-element -- inline SVG data URI, nothing to optimize */}
+                  <img src={pendingMap.src} alt={`Hole ${pendingMap.hole.hole} flight paths`} className="w-full h-full object-cover" />
+                  <figcaption className="absolute inset-x-0 bottom-0 flex justify-between bg-[#13161b]/90 px-2 py-1 text-[11px] font-bold text-white">
+                    <span>Hole {pendingMap.hole.hole} · par {pendingMap.hole.par}</span><span style={{ color: resultColor(pendingMap.hole) === "#3a4150" ? "#9aa4b2" : resultColor(pendingMap.hole) }}>{pendingMap.hole.label}</span>
+                  </figcaption>
+                </figure>
+              )}
+              <div className="flex flex-wrap justify-center gap-[3px]" aria-label="Scorecard">
+                {pendingCard?.holes.map((h) => (
+                  <span key={h.hole} title={`Hole ${h.hole}: ${h.label}`} className="w-[22px] h-[22px] rounded text-[11px] font-black flex items-center justify-center" style={{ background: resultColor(h), color: h.diff === 0 ? "#cfd6e0" : "#0f1117" }}>{h.score}</span>
+                ))}
+              </div>
+              <button type="button" onClick={() => startReplay(pendingReplay)} className={`${btn} w-full !mt-1`}>▶ Watch the replay</button>
+              {pendingCard?.play && (
+                <button type="button" onClick={() => playReplayCourse(pendingReplay)} className="w-full bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white font-bold py-2.5 rounded-lg transition text-sm">⛳ Play this course</button>
+              )}
               <button type="button" onClick={() => { setPendingReplay(null); try { window.history.replaceState(null, "", location.pathname); } catch { /* ignore */ } }} className="text-gray-400 text-xs hover:text-white">Not now</button>
             </>) : (<>
               <div className="text-white font-bold">{replayLoadErr}</div>
