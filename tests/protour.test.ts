@@ -275,11 +275,10 @@ describe("2026 season list", () => {
     expect(SEASON_2026.filter((s) => s.tier === "Major")).toHaveLength(5);
   });
 
-  it("marks exactly the built courses as built (held courses keep their data but show as later)", () => {
-    const HELD = ["brighton-majestic"]; // wave 4 ships out of band: Henry chose to ship it (Oct 24)
-    expect([...BUILT_COURSE_IDS].sort()).toEqual(COURSES.map((c) => c.id).filter((id) => !HELD.includes(id)).sort());
-    expect(BUILT_COURSE_IDS).toHaveLength(27);
-    expect(SEASON_2026.filter((s) => s.courses.some((c) => c.built))).toHaveLength(20); // hub: 20 of 23 stops (wave 5 adds stops 1–3, wave 6 stops 8, 9 and 17, wave 7 stops 11–13; wave 8 and Glendoveer East add second courses only)
+  it("marks exactly the built courses as built (Brighton un-held Nov 12, so nothing is held)", () => {
+    expect([...BUILT_COURSE_IDS].sort()).toEqual(COURSES.map((c) => c.id).sort());
+    expect(BUILT_COURSE_IDS).toHaveLength(28);
+    expect(SEASON_2026.filter((s) => s.courses.some((c) => c.built))).toHaveLength(21); // hub: 21 of 23 stops (wave 5 adds stops 1–3, wave 6 stops 8, 9 and 17, wave 7 stops 11–13, Brighton stop 14; wave 8 and Glendoveer East add second courses only)
   });
 
   it("names the USDGC course Winthrop Gold (Henry's call; the book says 'Winthrop Arena')", () => {

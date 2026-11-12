@@ -8,7 +8,8 @@
 // waves 1–8 (wave 4 shipped out of band by Henry's choice, Oct 24; wave 5 = stops 1–3,
 // Nov 12; wave 6 = stops 8, 9 and 17, Nov 12;
 // wave 7 = stops 11–13, Nov 12; wave 8 = second courses at stops 7, 8 and 15,
-// Nov 12; Glendoveer East from its book at stop 9, Nov 12); the rest list as
+// Nov 12; Glendoveer East from its book at stop 9, Nov 12; Brighton at stop 14
+// un-held, Nov 12); the rest list as
 // "Coming later".
 
 export type ProTier = "Elite" | "Elite+" | "Playoffs" | "Major";
@@ -42,8 +43,8 @@ export const SEASON_2026: ProStop[] = [
   { stop: 11, event: "Swedish Open", tier: "Elite", dates: "Jun 26–28", city: "Borås, Sweden", pdgaEventUrl: pdga(96411), courses: [c("ymergarden", "Ymergården", true)] },
   { stop: 12, event: "Ale Open", tier: "Elite", dates: "Jul 3–5", city: "Nol, Sweden", pdgaEventUrl: pdga(96412), courses: [c("ale-dgc", "Ale Disc Golf Center", true)] },
   { stop: 13, event: "Heinola Open", tier: "Elite", dates: "Jul 10–12", city: "Heinola, Finland", pdgaEventUrl: pdga(96413), courses: [c("kippasuo", "Kippis", true)] },
-  // Brighton held (Henry, Oct 18): its FPO-only layout plays ~14 strokes too easy; course data stays in PRO_COURSES.
-  { stop: 14, event: "US Women's Disc Golf Championship", tier: "Major", dates: "Jul 16–19", city: "Lehi, UT", pdgaEventUrl: pdga(97341), courses: [c("brighton-majestic", "Brighton \"Majestic\""), c("dragonfly", "Dragonfly")] },
+  // Brighton un-held (Henry, Nov 12): live like Sunset Hills, though its short FPO layout plays well under par.
+  { stop: 14, event: "US Women's Disc Golf Championship", tier: "Major", dates: "Jul 16–19", city: "Lehi, UT", pdgaEventUrl: pdga(97341), courses: [c("brighton-majestic", "Brighton \"Majestic\"", true), c("dragonfly", "Dragonfly")] },
   { stop: 15, event: "Ledgestone Open", tier: "Elite+", dates: "Jul 30–Aug 2", city: "Peoria, IL", pdgaEventUrl: pdga(96414), courses: [c("eureka-lake", "Eureka Lake", true), c("sunset-hills", "Sunset Hills", true), c("northwood-black", "Northwood Black", true)] },
   { stop: 16, event: "Discmania Challenge", tier: "Elite", dates: "Aug 7–9", city: "Indianola, IA", pdgaEventUrl: pdga(96415), courses: [c("pickard-park", "Pickard Park", true)] },
   { stop: 17, event: "Doubles Championship at the Preserve", tier: "Elite", dates: "Aug 14–16", city: "Clearwater, MN", pdgaEventUrl: pdga(96416), courses: [c("the-preserve", "The Preserve", true)] },
