@@ -6,8 +6,7 @@
 // already-clamped name/label reach the output.
 
 import { buildRound, isProTourSeed, proTourCourseBySeed, tourVenue, W } from "./engine";
-import { courseLabelFor } from "./challenge";
-import { SEASON_2026 } from "./protour/season2026";
+import { courseLabelFor, proTourStop } from "./challenge";
 import type { Replay } from "./replay";
 
 export type HoleResult = { hole: number; score: number; par: number; diff: number; label: string };
@@ -50,8 +49,7 @@ export function replayCard(r: Replay): ReplayCard {
   const venue = r.mode === "tour" ? tourVenue(r.seed)
     : r.mode === "ranked" ? "a Ranked course" : r.mode === "academy" ? "the Academy" : courseLabelFor(r.mode);
   const course = r.label ?? venue;
-  const stopRow = pro && SEASON_2026.find((s) => s.courses.some((c) => c.id === pro.course.id));
-  const stop = stopRow ? `Stop ${stopRow.stop} · ${stopRow.event}` : undefined;
+  const stop = pro ? proTourStop(r.seed) : undefined;
 
   // Best hole: an ace first, then the lowest score to par; earliest wins ties.
   let best: HoleResult | null = null;

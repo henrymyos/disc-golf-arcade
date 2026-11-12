@@ -28,7 +28,7 @@ export async function generateMetadata({ searchParams }: { searchParams: Promise
   const c = parseChallenge(raw);
   if (!c) return {};
   const title = `${c.name} challenged you on Disc Golf Arcade`;
-  const description = `${c.name} shot ${c.score} (${c.overStr}) on ${c.courseLabel}. Tee off and beat it!`;
+  const description = `${c.name} shot ${c.score} (${c.overStr}) on ${c.courseLabel}${c.stop ? ` (2026 Pro Tour ${c.stop})` : ""}. Tee off and beat it!`;
   const image = `/og?ch=${encodeURIComponent(raw!)}`;
   return {
     title,
