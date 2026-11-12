@@ -59,6 +59,7 @@ import { SWENSON_PARK_B } from "../lib/discgolf/protour/swenson-park-b";
 import { SPRINKLE_VALLEY } from "../lib/discgolf/protour/sprinkle-valley";
 import { EUREKA_LAKE } from "../lib/discgolf/protour/eureka-lake";
 import { SUNSET_HILLS } from "../lib/discgolf/protour/sunset-hills";
+import { GLENDOVEER_EAST } from "../lib/discgolf/protour/glendoveer-east";
 import { stopSummary } from "../lib/discgolf/protour/stopSummary";
 
 const FT = 1.8; // FEET_PER_PX
@@ -247,8 +248,15 @@ const CARDS: Record<string, { par: number[]; ft: number[]; pages?: number[]; tot
     pages: [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24],
     totalPar: 61, totalFt: 7602,
   },
+  // Glendoveer East (stop 9's second course, Nov 12): MPO pages, from the book's p3 scorecard.
+  "glendoveer-east": {
+    par: [4, 3, 3, 3, 4, 3, 4, 3, 4, 4, 5, 3, 4, 4, 3, 3, 4, 5],
+    ft: [670, 390, 370, 450, 910, 415, 710, 500, 695, 710, 1145, 370, 775, 845, 335, 410, 830, 1000],
+    pages: [9, 10, 12, 14, 15, 17, 18, 19, 21, 23, 25, 27, 29, 30, 31, 33, 35, 37],
+    totalPar: 66, totalFt: 11530,
+  },
 };
-const COURSES = [MAPLE_HILL, BREWSTER_RIDGE, IDLEWILD, WINTHROP_GOLD, KENSINGTON_TOBOGGAN, FOX_RUN_MEADOWS, IVY_HILL, NORTHWOOD_BLACK, HARVEY_PENICK, BRIGHTON_MAJESTIC, BLACK_LOCUST_SOUTH, DISC_SIDE_OF_HEAVEN, BAD_ROCK_CREEK, PICKARD_PARK, OLYMPUS, PARC_DES_FAMILLES, HORNETS_NEST, SWENSON_PARK_A, MILO_MCIVER, THE_PRESERVE, YMERGARDEN, ALE_DGC, KIPPIS, SWENSON_PARK_B, SPRINKLE_VALLEY, EUREKA_LAKE, SUNSET_HILLS];
+const COURSES = [MAPLE_HILL, BREWSTER_RIDGE, IDLEWILD, WINTHROP_GOLD, KENSINGTON_TOBOGGAN, FOX_RUN_MEADOWS, IVY_HILL, NORTHWOOD_BLACK, HARVEY_PENICK, BRIGHTON_MAJESTIC, BLACK_LOCUST_SOUTH, DISC_SIDE_OF_HEAVEN, BAD_ROCK_CREEK, PICKARD_PARK, OLYMPUS, PARC_DES_FAMILLES, HORNETS_NEST, SWENSON_PARK_A, MILO_MCIVER, THE_PRESERVE, YMERGARDEN, ALE_DGC, KIPPIS, SWENSON_PARK_B, SPRINKLE_VALLEY, EUREKA_LAKE, SUNSET_HILLS, GLENDOVEER_EAST];
 const PILOT_IDS = ["maple-hill", "brewster-ridge", "idlewild"];
 const lineFt = (h: ProHole) => h.line.reduce((s, p, i) => (i ? s + Math.hypot(p.x - h.line[i - 1].x, p.y - h.line[i - 1].y) : 0), 0);
 
@@ -270,8 +278,8 @@ describe("2026 season list", () => {
   it("marks exactly the built courses as built (held courses keep their data but show as later)", () => {
     const HELD = ["brighton-majestic"]; // wave 4 ships out of band: Henry chose to ship it (Oct 24)
     expect([...BUILT_COURSE_IDS].sort()).toEqual(COURSES.map((c) => c.id).filter((id) => !HELD.includes(id)).sort());
-    expect(BUILT_COURSE_IDS).toHaveLength(26);
-    expect(SEASON_2026.filter((s) => s.courses.some((c) => c.built))).toHaveLength(20); // hub: 20 of 23 stops (wave 5 adds stops 1–3, wave 6 stops 8, 9 and 17, wave 7 stops 11–13; wave 8 adds second courses only)
+    expect(BUILT_COURSE_IDS).toHaveLength(27);
+    expect(SEASON_2026.filter((s) => s.courses.some((c) => c.built))).toHaveLength(20); // hub: 20 of 23 stops (wave 5 adds stops 1–3, wave 6 stops 8, 9 and 17, wave 7 stops 11–13; wave 8 and Glendoveer East add second courses only)
   });
 
   it("names the USDGC course Winthrop Gold (Henry's call; the book says 'Winthrop Arena')", () => {
@@ -392,8 +400,8 @@ describe("Henry's Oct 16 rules for Pro Tour holes: tee-shot catch radius and dri
     ...TOUR_COURSES.flatMap((t) => buildRound(t.seed, "tour")),
   ];
 
-  it("every one of the 486 Pro Tour holes carries the 0.85 tee catch, and no hand-authored hole does", () => {
-    expect(proHoles).toHaveLength(486);
+  it("every one of the 504 Pro Tour holes carries the 0.85 tee catch, and no hand-authored hole does", () => {
+    expect(proHoles).toHaveLength(504);
     expect(PROTOUR_TEE_CATCH_MUL).toBe(0.85);
     for (const { id, n, h } of proHoles) expect(h.teeCatchMul, `${id} ${n}`).toBe(0.85);
     for (const h of handAuthored) expect(h.teeCatchMul).toBeUndefined();
@@ -726,10 +734,19 @@ describe("wave 8 course specifics", () => {
     expect(flat(SUNSET_HILLS)).toBe(true);
   });
 
-  it("Glendoveer East stays unbuilt: the hand-made course keeps its name, the Pro Tour slot stays 'Coming later'", () => {
+  it("Glendoveer East: built from the book as its own Pro Tour course; the hand-made course is untouched", () => {
     const nw = SEASON_2026.find((s) => s.stop === 9)!;
-    expect(nw.courses).toEqual([{ id: "milo-mciver", name: "Milo McIver", built: true }, { id: "glendoveer-east", name: "Glendoveer East", built: false }]);
-    expect(proTourCourseById("glendoveer-east")).toBeUndefined();
+    expect(nw.courses).toEqual([{ id: "milo-mciver", name: "Milo McIver", built: true }, { id: "glendoveer-east", name: "Glendoveer East", built: true }]);
+    expect(proTourCourseById("glendoveer-east")!.seed).toBe(0x2026c01c);
+    const g = GLENDOVEER_EAST.holes;
+    expect(dz(GLENDOVEER_EAST)).toEqual([]); // 1's DZ is optional; the rest are mando DZs
+    for (const n of [5, 18]) expect(g[n - 1].water?.length, `hole ${n}`).toBeGreaterThan(0);
+    expect(flat(GLENDOVEER_EAST)).toBe(true);
+    // the hand-made course keeps its own (par-stretched) geometry: hole 15 plays ~530 ft there, 335 here
+    const hand = buildRound(1, "course");
+    expect(hand).toHaveLength(18);
+    expect(hand.reduce((s, h) => s + h.par, 0)).toBe(66);
+    expect(hand.some((h) => h.teeCatchMul !== undefined)).toBe(false);
   });
 });
 
@@ -887,7 +904,7 @@ describe("pro tour courses plug into the tour seed space", () => {
     // Winthrop Gold kept its slot when it was renamed from Winthrop Arena, so its
     // seed (and any best saved under it) didn't move.
     expect(proTourCourseById("winthrop-gold")!.seed).toBe(0x2026c004);
-    // every course in schedule-of-building order, appended: waves 1, 2, 3, 4, 5, 6, 7, then 8
+    // every course in schedule-of-building order, appended: waves 1, 2, 3, 4, 5, 6, 7, 8, then Glendoveer East
     expect(PROTOUR_COURSES.map((c) => [c.course.id, c.seed])).toEqual([
       ["maple-hill", 0x2026c001], ["brewster-ridge", 0x2026c002], ["idlewild", 0x2026c003],
       ["winthrop-gold", 0x2026c004], ["kensington-toboggan", 0x2026c005], ["fox-run-meadows", 0x2026c006],
@@ -898,6 +915,7 @@ describe("pro tour courses plug into the tour seed space", () => {
       ["swenson-park-a", 0x2026c012], ["milo-mciver", 0x2026c013], ["the-preserve", 0x2026c014],
       ["ymergarden", 0x2026c015], ["ale-dgc", 0x2026c016], ["kippasuo", 0x2026c017],
       ["swenson-park-b", 0x2026c018], ["sprinkle-valley", 0x2026c019], ["eureka-lake", 0x2026c01a], ["sunset-hills", 0x2026c01b],
+      ["glendoveer-east", 0x2026c01c],
     ]);
     expect(PROTOUR_COURSES.slice(0, 3).map((c) => c.course.id)).toEqual(PILOT_IDS);
     // new courses are appended after the pilot, each on the next seed
