@@ -94,3 +94,21 @@ describe("share text", () => {
     expect(c.headline).toBe("Birdie on Hole 7");
   });
 });
+
+describe("challenge-back text", () => {
+  const c = replayCard(round("course", 0, (p) => p)); // even par
+  it("says who you beat and asks them back", () => {
+    const t = shareText(c, { link: "L", vs: { name: "Sam", score: c.total + 2 } });
+    expect(t.split("\n")[0]).toBe(`Beat Sam's ${c.total + 2} with a ${c.total} (E) at Glendoveer East on Disc Golf Arcade`);
+    expect(t.endsWith("Your move: L")).toBe(true);
+  });
+  it("owns a loss and a tie", () => {
+    expect(shareText(c, { link: "L", vs: { name: "Sam", score: c.total - 1 } }).split("\n")[0]).toBe(`Sam's ${c.total - 1} got me: ${c.total} (E) at Glendoveer East on Disc Golf Arcade`);
+    expect(shareText(c, { link: "L", vs: { name: "Sam", score: c.total } }).split("\n")[0]).toBe(`Tied Sam's ${c.total} (E) at Glendoveer East on Disc Golf Arcade`);
+  });
+  it("adds the Daily streak from two days", () => {
+    const d = replayCard(round("daily", 20769, (p) => p));
+    expect(shareText(d, { link: "L", daily: { date: "Nov 12", stars: 1 }, streak: 4 }).split("\n")[0]).toBe("Disc Golf Arcade Daily · Nov 12 ★☆☆ 🔥4");
+    expect(shareText(d, { link: "L", daily: { date: "Nov 12", stars: 1 }, streak: 1 }).split("\n")[0]).toBe("Disc Golf Arcade Daily · Nov 12 ★☆☆");
+  });
+});

@@ -40,6 +40,7 @@ import { buildReplay, replayFrame, type Replay } from "@/lib/discgolf/replay";
 import { saveReplay, loadReplay } from "@/actions/replays";
 import { replayCard, mapHoleIndex, replayHoleSvg, svgDataUri, resultColor, shareText, dailyDateLabel } from "@/lib/discgolf/replayCard";
 import { renderShareCard } from "./game/shareCard";
+import { dailyStreak, finishedDailyDays } from "@/lib/discgolf/goals";
 import {
   newCareer, normalizeCareer, skillMods, momentumAfter, simEvent, recordResult, advanceSeason, retire, IDENTITY_MODS, signSponsor, unsignSponsor, buyTrainingPoint, spendSkillPoint, careerCoins as coinsForFinish, buyCareerDisc, toggleCareerBag, buyCareerCosmetic, equipCareerLook, DEFAULT_CAREER_LOOK, type CareerLook, careerFieldForRound, careerCardRacers, careerLiveStandings, careerHoleLenScale, rankedFieldForRound, rankedPlacementField, rankedCardRacers, type Career, type CareerEvent, type EventResult, type CareerSkills, type FieldPlayer,
 } from "@/lib/discgolf/career";
@@ -2376,7 +2377,12 @@ export function DiscGolfGame() {
     const canLink = finalPracticeHole == null && !finalParty
       && (finalMode === "course" || finalMode === "winthrop" || finalMode === "olympus" || finalMode === "daily" || (finalMode === "tour" && isChallengeTourSeed(finalSeed)));
     const link = `${location.origin}${location.pathname}${canLink ? `?ch=${challengeParam(finalMode, finalSeed, total, name)}` : ""}`;
-    const text = shareText(card, { link, daily: dailyDate ? { date: dailyDate, stars: finalDailyStars?.earned ?? 0 } : undefined });
+    const text = shareText(card, {
+      link,
+      daily: dailyDate ? { date: dailyDate, stars: finalDailyStars?.earned ?? 0 } : undefined,
+      vs: finalChallenge && finalPracticeHole == null ? { name: finalChallenge.name, score: finalChallenge.score } : undefined,
+      streak: isDaily ? dailyStreak(finishedDailyDays(dayBests, dayStars), finalSeed) : undefined,
+    });
 
     const flash = (msg: string) => { setShareMsg(msg); window.setTimeout(() => setShareMsg(null), 2200); };
     const blob = await renderShareCard(r, card, kicker).catch(() => null);
@@ -2414,7 +2420,7 @@ export function DiscGolfGame() {
       }
     } catch { /* ignore */ }
     flash("Sharing isn't available here");
-  }, [finalTotal, finalPars, finalMode, finalSeed, finalPracticeHole, finalParty, finalDailyStars, scorecard, profile.name, lastReplay]);
+  }, [finalTotal, finalPars, finalMode, finalSeed, finalPracticeHole, finalParty, finalDailyStars, finalChallenge, dayBests, dayStars, scorecard, profile.name, lastReplay]);
 
   // When a hole finishes, record/show the best-ever strokes for that hole.
   // Only for Glendoveer — the daily course's holes change every day.
@@ -4661,6 +4667,7 @@ export function DiscGolfGame() {
                     {finalDailyStars.coins > 0 && (
                       <p className="text-[#f5d24a] text-sm font-bold mt-1">+{finalDailyStars.coins} <Coin /> star bonus</p>
                     )}
+                    {streak >= 2 && <p className="text-[#e0923b] text-xs font-bold mt-1.5">🔥 {streak}-day Daily streak</p>}
                     <p className="text-gray-400 text-[10px] mt-1.5">
                       {finalDailyStars.earned === 3
                         ? "All 3 stars — today's course, conquered!"
@@ -4719,6 +4726,12 @@ export function DiscGolfGame() {
                   ⚔ vs {finalChallenge.name} ({finalChallenge.score}):{" "}
                   {finalTotal < finalChallenge.score ? "You win!" : finalTotal === finalChallenge.score ? "Tied!" : "They got you."}
                 </p>
+              )}
+              {finalChallenge && (
+                <button type="button" onClick={() => void shareCard()}
+                  className="mt-2 min-h-11 rounded-lg border border-[#e0923b]/60 bg-[#e0923b]/15 hover:bg-[#e0923b]/25 text-white font-bold px-4 py-2 text-sm transition">
+                  ⚔ Send it back to {finalChallenge.name}
+                </button>
               )}
             </div>
 
