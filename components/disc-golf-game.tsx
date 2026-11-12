@@ -35,7 +35,7 @@ import {
 import {
   W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, leaderboardCourse, TOURN_KEY, TOURNAMENTS, tournDef, tournRoundPlayHoles, tournPlace, tournFieldRound, tournLiveStandings, ACHIEVEMENTS, earnedAchievements, achievementReward, scoreLabel, STRAIGHT_SPEED_MUL, releaseSpeedMul, ADV_DISCS, levelUpChoices, validDiscIndex, DEFAULT_DISC_INDEX, BAG_MAX, discIndexByKey, unlockedDiscKeys, reconcileBag, tourVenue, isProTourSeed, proTourCourseBySeed, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, dailySeed, dailyStarThresholds, dailyStarsEarned, buildRound, elevAt, vibrate, pxToFeet, distBetween, autoDiscIndex, windAlong, resolvePenalty, isTeeLie, catchRFor, treesAtLie, stepFlight, type Vec, type Hole, type Mode, type Tournament, type TournLiveRow, type Achievement, type FlightPath, type Release, type Flight, type GhostState,
 } from "@/lib/discgolf/engine";
-import { parseChallenge, challengeParam } from "@/lib/discgolf/challenge";
+import { parseChallenge, challengeParam, isChallengeTourSeed } from "@/lib/discgolf/challenge";
 import { buildReplay, replayFrame, type Replay } from "@/lib/discgolf/replay";
 import { saveReplay, loadReplay } from "@/actions/replays";
 import { replayCard, mapHoleIndex, replayHoleSvg, svgDataUri, resultColor } from "@/lib/discgolf/replayCard";
@@ -287,7 +287,7 @@ export function DiscGolfGame() {
 
   // ── Challenge links: ?ch=<mode>.<seed>.<score>.<name> replays the exact
   // same round (same pins + wind) so two players can compare fairly. ──
-  type Challenge = { mode: Mode; seed: number; score: number; name: string };
+  type Challenge = { mode: Mode; seed: number; score: number; name: string; label: string };
   const [challenge, setChallenge] = useState<Challenge | null>(null);
   const challengePlayRef = useRef(false); // current round IS the challenge round
   const [finalChallenge, setFinalChallenge] = useState<Challenge | null>(null);
@@ -298,7 +298,7 @@ export function DiscGolfGame() {
       const c = parseChallenge(new URLSearchParams(location.search).get("ch"));
       if (c) {
         // eslint-disable-next-line react-hooks/set-state-in-effect
-        setChallenge({ mode: c.mode, seed: c.seed, score: c.score, name: c.name });
+        setChallenge({ mode: c.mode, seed: c.seed, score: c.score, name: c.name, label: c.mode === "daily" ? "a Daily course" : c.courseLabel });
       }
     } catch { /* ignore malformed links */ }
   }, []);
@@ -2403,8 +2403,9 @@ export function DiscGolfGame() {
 
     const flash = (msg: string) => { setShareMsg(msg); window.setTimeout(() => setShareMsg(null), 2200); };
     const where = isDaily ? "today's Daily Challenge" : courseLabel;
-    // A replay link when the mode supports it (course/winthrop/daily), else just the app.
-    const canLink = finalMode === "course" || finalMode === "winthrop" || finalMode === "olympus" || finalMode === "daily";
+    // A challenge link when the round is replayable as-is (fixed courses, the Daily, tour courses at full length), else just the app.
+    const canLink = finalPracticeHole == null && !finalParty
+      && (finalMode === "course" || finalMode === "winthrop" || finalMode === "olympus" || finalMode === "daily" || (finalMode === "tour" && isChallengeTourSeed(finalSeed)));
     const link = `${location.origin}${location.pathname}${canLink ? `?ch=${challengeParam(finalMode, finalSeed, total, profile.name.trim() || "A friend")}` : ""}`;
     const shareText = `I shot ${total} (${os(over)}) on ${where}! ${link}`;
     await new Promise<void>((resolve) => {
@@ -2441,7 +2442,7 @@ export function DiscGolfGame() {
         resolve();
       }, "image/png");
     });
-  }, [finalTotal, finalPars, finalMode, finalSeed, scorecard, profile.name]);
+  }, [finalTotal, finalPars, finalMode, finalSeed, finalPracticeHole, finalParty, scorecard, profile.name]);
 
   // When a hole finishes, record/show the best-ever strokes for that hole.
   // Only for Glendoveer — the daily course's holes change every day.
@@ -3912,8 +3913,7 @@ export function DiscGolfGame() {
                   onClick={() => { startGame(challenge.mode, challenge.seed); challengePlayRef.current = true; }}
                   className="w-full rounded-xl border border-[#e0923b]/60 bg-[#e0923b]/15 hover:bg-[#e0923b]/25 text-white font-bold py-3 px-3 mt-4 transition text-sm"
                 >
-                  ⚔ {challenge.name} challenged you: {challenge.score} on{" "}
-                  {challenge.mode === "course" ? "Glendoveer" : challenge.mode === "winthrop" ? "Winthrop Lake" : challenge.mode === "olympus" ? "Olympus" : "a Daily course"} — play it!
+                  ⚔ {challenge.name} challenged you: {challenge.score} on {challenge.label} — play it!
                 </button>
               )}
 

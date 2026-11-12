@@ -88,6 +88,7 @@ export async function GET(req: Request) {
           <div style={{ display: "flex", fontSize: "34px", color: MUTED }}>
             on {c.courseLabel} · par {c.par}
           </div>
+          {c.stop && <div style={{ display: "flex", fontSize: "26px", color: TEAL, fontWeight: 700, textTransform: "uppercase", letterSpacing: "3px" }}>2026 Pro Tour · {c.stop}</div>}
         </div>
         <div style={{ display: "flex", fontSize: "30px", color: "#fff", fontWeight: 700 }}>
           Tee off and beat it →
