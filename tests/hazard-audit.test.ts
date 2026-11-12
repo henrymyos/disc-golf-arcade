@@ -71,6 +71,10 @@ describe("Pro Tour hazard audit (every course, every hole)", () => {
     expect(report.filter((r) => r.hidden.length || r.deadOffRibbon.length).map((r) => `${r.id}: ${[...r.hidden, ...r.deadOffRibbon].join(", ")}`)).toEqual([]);
   });
 
+  it("no authored key or balance tree stands in a hazard (the build would silently drop it)", () => {
+    expect(report.filter((r) => r.droppedTrees.length).map((r) => `${r.id}: ${r.droppedTrees.join(", ")}`)).toEqual([]);
+  });
+
   it("no duplicate hazards, water or OB rects", () => {
     expect(report.filter((r) => r.dupes.length).map((r) => `${r.id}: ${r.dupes.join(", ")}`)).toEqual([]);
   });
