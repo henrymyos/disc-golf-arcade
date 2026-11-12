@@ -25,6 +25,9 @@ import { HORNETS_NEST } from "./protour/hornets-nest";
 import { SWENSON_PARK_A } from "./protour/swenson-park-a";
 import { MILO_MCIVER } from "./protour/milo-mciver";
 import { THE_PRESERVE } from "./protour/the-preserve";
+import { YMERGARDEN } from "./protour/ymergarden";
+import { ALE_DGC } from "./protour/ale-dgc";
+import { KIPPIS } from "./protour/kippis";
 
 const W = 320;
 const H = 448;
@@ -645,7 +648,7 @@ function proHoleToHole(h: ProHole): Hole {
 // generateTourCourse / tourVenue / tourCharacter intercept these seeds first.
 // Append only: seeds are PROTOUR_SEED_BASE + index + 1 and saved bests are keyed
 // by seed, so inserting a course would orphan the bests of every course after it.
-const PRO_COURSES: ProCourse[] = [MAPLE_HILL, BREWSTER_RIDGE, IDLEWILD, WINTHROP_GOLD, KENSINGTON_TOBOGGAN, FOX_RUN_MEADOWS, IVY_HILL, NORTHWOOD_BLACK, HARVEY_PENICK, BRIGHTON_MAJESTIC, BLACK_LOCUST_SOUTH, DISC_SIDE_OF_HEAVEN, BAD_ROCK_CREEK, PICKARD_PARK, OLYMPUS, PARC_DES_FAMILLES, HORNETS_NEST, SWENSON_PARK_A, MILO_MCIVER, THE_PRESERVE];
+const PRO_COURSES: ProCourse[] = [MAPLE_HILL, BREWSTER_RIDGE, IDLEWILD, WINTHROP_GOLD, KENSINGTON_TOBOGGAN, FOX_RUN_MEADOWS, IVY_HILL, NORTHWOOD_BLACK, HARVEY_PENICK, BRIGHTON_MAJESTIC, BLACK_LOCUST_SOUTH, DISC_SIDE_OF_HEAVEN, BAD_ROCK_CREEK, PICKARD_PARK, OLYMPUS, PARC_DES_FAMILLES, HORNETS_NEST, SWENSON_PARK_A, MILO_MCIVER, THE_PRESERVE, YMERGARDEN, ALE_DGC, KIPPIS];
 const PROTOUR_SEED_BASE = 0x2026c000 >>> 0;
 type ProTourCourse = { seed: number; course: ProCourse; holes: Hole[]; par: number; lengthFt: number };
 const PROTOUR_COURSES: ProTourCourse[] = PRO_COURSES.map((course, i) => {

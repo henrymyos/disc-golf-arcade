@@ -52,6 +52,9 @@ import { HORNETS_NEST } from "../lib/discgolf/protour/hornets-nest";
 import { SWENSON_PARK_A } from "../lib/discgolf/protour/swenson-park-a";
 import { MILO_MCIVER } from "../lib/discgolf/protour/milo-mciver";
 import { THE_PRESERVE } from "../lib/discgolf/protour/the-preserve";
+import { YMERGARDEN } from "../lib/discgolf/protour/ymergarden";
+import { ALE_DGC } from "../lib/discgolf/protour/ale-dgc";
+import { KIPPIS } from "../lib/discgolf/protour/kippis";
 import { stopSummary } from "../lib/discgolf/protour/stopSummary";
 
 const FT = 1.8; // FEET_PER_PX
@@ -193,8 +196,28 @@ const CARDS: Record<string, { par: number[]; ft: number[]; pages?: number[]; tot
     pages: [9, 11, 13, 15, 16, 17, 18, 20, 22, 24, 26, 28, 29, 31, 32, 34, 35, 36],
     totalPar: 65, totalFt: 10881,
   },
+  // Wave 7 (stops 11–13, Nov 12): metric books; ft = each MPO page's printed feet,
+  // which sum to the p3 scorecard's meter total (2,527 / 2,981 / 2,697 m).
+  ymergarden: {
+    par: [3, 3, 3, 4, 4, 3, 3, 3, 4, 4, 3, 4, 3, 3, 4, 3, 3, 4],
+    ft: [407, 358, 295, 607, 719, 354, 367, 335, 728, 476, 367, 587, 381, 322, 587, 361, 269, 771],
+    pages: [8, 10, 11, 12, 13, 14, 16, 18, 20, 21, 23, 25, 26, 28, 30, 32, 33, 35],
+    totalPar: 61, totalFt: 8291,
+  },
+  "ale-dgc": {
+    par: [3, 4, 3, 4, 3, 3, 5, 3, 3, 3, 3, 4, 5, 3, 4, 3, 3, 4],
+    ft: [476, 633, 535, 656, 302, 338, 961, 433, 479, 420, 276, 666, 1017, 358, 591, 394, 361, 886],
+    pages: [9, 11, 12, 13, 14, 15, 17, 19, 21, 23, 24, 25, 27, 28, 29, 30, 32, 34],
+    totalPar: 63, totalFt: 9782,
+  },
+  kippasuo: {
+    par: [4, 3, 3, 3, 3, 3, 4, 3, 4, 3, 4, 4, 4, 3, 4, 3, 3, 4],
+    ft: [568, 312, 308, 285, 377, 289, 656, 315, 728, 351, 906, 742, 620, 472, 719, 299, 312, 591],
+    pages: [7, 8, 9, 10, 12, 13, 14, 15, 16, 18, 19, 21, 23, 24, 26, 27, 29, 30],
+    totalPar: 62, totalFt: 8850,
+  },
 };
-const COURSES = [MAPLE_HILL, BREWSTER_RIDGE, IDLEWILD, WINTHROP_GOLD, KENSINGTON_TOBOGGAN, FOX_RUN_MEADOWS, IVY_HILL, NORTHWOOD_BLACK, HARVEY_PENICK, BRIGHTON_MAJESTIC, BLACK_LOCUST_SOUTH, DISC_SIDE_OF_HEAVEN, BAD_ROCK_CREEK, PICKARD_PARK, OLYMPUS, PARC_DES_FAMILLES, HORNETS_NEST, SWENSON_PARK_A, MILO_MCIVER, THE_PRESERVE];
+const COURSES = [MAPLE_HILL, BREWSTER_RIDGE, IDLEWILD, WINTHROP_GOLD, KENSINGTON_TOBOGGAN, FOX_RUN_MEADOWS, IVY_HILL, NORTHWOOD_BLACK, HARVEY_PENICK, BRIGHTON_MAJESTIC, BLACK_LOCUST_SOUTH, DISC_SIDE_OF_HEAVEN, BAD_ROCK_CREEK, PICKARD_PARK, OLYMPUS, PARC_DES_FAMILLES, HORNETS_NEST, SWENSON_PARK_A, MILO_MCIVER, THE_PRESERVE, YMERGARDEN, ALE_DGC, KIPPIS];
 const PILOT_IDS = ["maple-hill", "brewster-ridge", "idlewild"];
 const lineFt = (h: ProHole) => h.line.reduce((s, p, i) => (i ? s + Math.hypot(p.x - h.line[i - 1].x, p.y - h.line[i - 1].y) : 0), 0);
 
@@ -216,8 +239,8 @@ describe("2026 season list", () => {
   it("marks exactly the built courses as built (held courses keep their data but show as later)", () => {
     const HELD = ["brighton-majestic"]; // wave 4 ships out of band: Henry chose to ship it (Oct 24)
     expect([...BUILT_COURSE_IDS].sort()).toEqual(COURSES.map((c) => c.id).filter((id) => !HELD.includes(id)).sort());
-    expect(BUILT_COURSE_IDS).toHaveLength(19);
-    expect(SEASON_2026.filter((s) => s.courses.some((c) => c.built))).toHaveLength(17); // hub: 17 of 23 stops (wave 5 adds stops 1–3, wave 6 stops 8, 9 and 17)
+    expect(BUILT_COURSE_IDS).toHaveLength(22);
+    expect(SEASON_2026.filter((s) => s.courses.some((c) => c.built))).toHaveLength(20); // hub: 20 of 23 stops (wave 5 adds stops 1–3, wave 6 stops 8, 9 and 17, wave 7 stops 11–13)
   });
 
   it("names the USDGC course Winthrop Gold (Henry's call; the book says 'Winthrop Arena')", () => {
@@ -338,8 +361,8 @@ describe("Henry's Oct 16 rules for Pro Tour holes: tee-shot catch radius and dri
     ...TOUR_COURSES.flatMap((t) => buildRound(t.seed, "tour")),
   ];
 
-  it("every one of the 360 Pro Tour holes carries the 0.85 tee catch, and no hand-authored hole does", () => {
-    expect(proHoles).toHaveLength(360);
+  it("every one of the 414 Pro Tour holes carries the 0.85 tee catch, and no hand-authored hole does", () => {
+    expect(proHoles).toHaveLength(414);
     expect(PROTOUR_TEE_CATCH_MUL).toBe(0.85);
     for (const { id, n, h } of proHoles) expect(h.teeCatchMul, `${id} ${n}`).toBe(0.85);
     for (const h of handAuthored) expect(h.teeCatchMul).toBeUndefined();
@@ -379,6 +402,8 @@ describe("Henry's Oct 16 rules for Pro Tour holes: tee-shot catch radius and dri
       "hornets-nest 16",
       "swenson-park-a 13",
       "the-preserve 8", "the-preserve 11", "the-preserve 18",
+      "ale-dgc 3", "ale-dgc 4", "ale-dgc 6", "ale-dgc 8",
+      "kippasuo 17",
     ]);
     for (const x of proHoles) if (x.h.dropZone) expect(!!x.h.dzDriveOnly, `${x.id} ${x.n}`).toBe(!x.ph.dzAll);
   });
@@ -578,6 +603,46 @@ describe("wave 6 course specifics", () => {
   });
 });
 
+describe("wave 7 course specifics", () => {
+  const dz = (c: { holes: ProHole[] }) => c.holes.filter((h) => h.dropZone).map((h) => `${h.n}${h.dzAll ? " all" : ""}`);
+  const flat = (c: { holes: ProHole[] }) => c.holes.every((h) => !h.elev && !h.elevZones);
+
+  it("Ymergården: no DZs (all four are mando-miss DZs), OB road across 15, hazard island 17, no-OB tunnels, flat", () => {
+    const y = YMERGARDEN.holes;
+    expect(dz(YMERGARDEN)).toEqual([]);
+    expect(y.filter((h) => h.mando).map((h) => h.n)).toEqual([3, 7, 10, 16]);
+    expect(y.filter((h) => !h.obZones && !h.water && h.rough === "hazard" && !h.hazard).map((h) => h.n)).toEqual([5, 6, 7, 9, 12, 13]);
+    expect(y.filter((h) => h.rough === "ob").map((h) => h.n)).toEqual([3, 4, 16]);
+    expect(y.filter((h) => h.islandGreen).map((h) => h.n)).toEqual([17]);
+    // 15: the OB road band spans the corridor ~320 ft out
+    expect(y[14].obZones!.some((z) => z.w >= 150 && z.y > 280 && z.y < 360)).toBe(true);
+    expect(flat(YMERGARDEN)).toBe(true);
+  });
+
+  it("Ale: tee-shot DZs on 3, 4, 6 and 8, island holes 3, 4, 6 and 18, pond carries on 8 and 12, slopes from the profiles", () => {
+    const a = ALE_DGC.holes;
+    expect(dz(ALE_DGC)).toEqual(["3", "4", "6", "8"]);
+    expect(a.filter((h) => h.islandGreen).map((h) => h.n)).toEqual([6, 18]);
+    for (const n of [8, 12]) expect(a[n - 1].water?.length, `hole ${n}`).toBeGreaterThan(0);
+    expect(a.filter((h) => h.elev).map((h) => [h.n, h.elev])).toEqual([[2, 1], [3, -1], [6, -1], [7, 1], [14, -1], [15, 1], [16, -1]]);
+    // 18: past the yellow line it's hazard, with the green cut out of it
+    expect((a[17].hazard ?? []).map((z) => ("poly" in z ? z.holes?.length : 0))).toEqual([1]);
+  });
+
+  it("Kippis: island 17 with its tee-shot DZ, the wooden structure on 16 leaves a gap on the line, flat", () => {
+    const k = KIPPIS.holes;
+    expect(dz(KIPPIS)).toEqual(["17"]);
+    expect(k.filter((h) => h.islandGreen).map((h) => h.n)).toEqual([17]);
+    const walls = k[15].walls!;
+    expect(walls).toHaveLength(2);
+    const [l, r] = [...walls].sort((p, q) => p.x - q.x);
+    expect(l.x + l.w).toBeLessThan(0);
+    expect(r.x).toBeGreaterThan(0);
+    expect(r.x - (l.x + l.w)).toBeGreaterThanOrEqual(20);
+    expect(flat(KIPPIS)).toBe(true);
+  });
+});
+
 describe("season stop cards", () => {
   const gmc = SEASON_2026.find((s) => s.stop === 20)!;
   const usdgc = SEASON_2026.find((s) => s.stop === 22)!;
@@ -732,7 +797,7 @@ describe("pro tour courses plug into the tour seed space", () => {
     // Winthrop Gold kept its slot when it was renamed from Winthrop Arena, so its
     // seed (and any best saved under it) didn't move.
     expect(proTourCourseById("winthrop-gold")!.seed).toBe(0x2026c004);
-    // every course in schedule-of-building order, appended: waves 1, 2, 3, 4, 5, then 6
+    // every course in schedule-of-building order, appended: waves 1, 2, 3, 4, 5, 6, then 7
     expect(PROTOUR_COURSES.map((c) => [c.course.id, c.seed])).toEqual([
       ["maple-hill", 0x2026c001], ["brewster-ridge", 0x2026c002], ["idlewild", 0x2026c003],
       ["winthrop-gold", 0x2026c004], ["kensington-toboggan", 0x2026c005], ["fox-run-meadows", 0x2026c006],
@@ -741,6 +806,7 @@ describe("pro tour courses plug into the tour seed space", () => {
       ["disc-side-of-heaven", 0x2026c00c], ["bad-rock-creek", 0x2026c00d], ["pickard-park", 0x2026c00e],
       ["olympus", 0x2026c00f], ["parc-des-familles", 0x2026c010], ["hornets-nest", 0x2026c011],
       ["swenson-park-a", 0x2026c012], ["milo-mciver", 0x2026c013], ["the-preserve", 0x2026c014],
+      ["ymergarden", 0x2026c015], ["ale-dgc", 0x2026c016], ["kippasuo", 0x2026c017],
     ]);
     expect(PROTOUR_COURSES.slice(0, 3).map((c) => c.course.id)).toEqual(PILOT_IDS);
     // new courses are appended after the pilot, each on the next seed
