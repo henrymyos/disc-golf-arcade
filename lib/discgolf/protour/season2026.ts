@@ -8,7 +8,8 @@
 // waves 1–8 (wave 4 shipped out of band by Henry's choice, Oct 24; wave 5 = stops 1–3,
 // Nov 12; wave 6 = stops 8, 9 and 17, Nov 12;
 // wave 7 = stops 11–13, Nov 12; wave 8 = second courses at stops 7, 8 and 15,
-// Nov 12); the rest list as "Coming later".
+// Nov 12; Glendoveer East from its book at stop 9, Nov 12); the rest list as
+// "Coming later".
 
 export type ProTier = "Elite" | "Elite+" | "Playoffs" | "Major";
 export type ProStopCourse = { id: string; name: string; built: boolean };
@@ -36,7 +37,7 @@ export const SEASON_2026: ProStop[] = [
   { stop: 6, event: "Kansas City Wide Open", tier: "Elite", dates: "Apr 24–26", city: "Liberty, MO", pdgaEventUrl: pdga(96407), courses: [c("bad-rock-creek", "Bad Rock Creek", true)] },
   { stop: 7, event: "Open at Austin", tier: "Elite+", dates: "May 7–10", city: "Austin, TX", pdgaEventUrl: pdga(96408), courses: [c("harvey-penick", "Harvey Penick", true), c("sprinkle-valley", "Sprinkle Valley", true)] },
   { stop: 8, event: "OTB Open", tier: "Elite+", dates: "May 21–24", city: "Stockton, CA", pdgaEventUrl: pdga(96409), courses: [c("swenson-park-a", "Swenson Park A", true), c("swenson-park-b", "Swenson Park B", true)] },
-  { stop: 9, event: "Northwest Championship", tier: "Elite+", dates: "Jun 4–7", city: "Portland, OR", pdgaEventUrl: pdga(96410), courses: [c("milo-mciver", "Milo McIver", true), c("glendoveer-east", "Glendoveer East")] },
+  { stop: 9, event: "Northwest Championship", tier: "Elite+", dates: "Jun 4–7", city: "Portland, OR", pdgaEventUrl: pdga(96410), courses: [c("milo-mciver", "Milo McIver", true), c("glendoveer-east", "Glendoveer East", true)] },
   { stop: 10, event: "European Open", tier: "Major", dates: "Jun 18–21", city: "Tallinn, Estonia", pdgaEventUrl: pdga(97339), courses: [c("song-festival-grounds", "Song Festival Grounds")] },
   { stop: 11, event: "Swedish Open", tier: "Elite", dates: "Jun 26–28", city: "Borås, Sweden", pdgaEventUrl: pdga(96411), courses: [c("ymergarden", "Ymergården", true)] },
   { stop: 12, event: "Ale Open", tier: "Elite", dates: "Jul 3–5", city: "Nol, Sweden", pdgaEventUrl: pdga(96412), courses: [c("ale-dgc", "Ale Disc Golf Center", true)] },
