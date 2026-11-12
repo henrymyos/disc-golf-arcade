@@ -5,7 +5,8 @@
 // were copied from each event's DGPT page (nothing is fetched from pdga.com).
 //
 // `built` marks a course that's playable in the game: the pilot courses plus
-// waves 1–4 (wave 4 shipped out of band by Henry's choice, Oct 24); the rest list as "Coming later".
+// waves 1–5 (wave 4 shipped out of band by Henry's choice, Oct 24; wave 5 = stops 1–3,
+// Nov 12); the rest list as "Coming later".
 
 export type ProTier = "Elite" | "Elite+" | "Playoffs" | "Major";
 export type ProStopCourse = { id: string; name: string; built: boolean };
@@ -23,9 +24,9 @@ const pdga = (id: number) => `https://www.pdga.com/tour/event/${id}`;
 const c = (id: string, name: string, built = false): ProStopCourse => ({ id, name, built });
 
 export const SEASON_2026: ProStop[] = [
-  { stop: 1, event: "Supreme Flight Open", tier: "Elite", dates: "Feb 27–Mar 1", city: "Brooksville, FL", pdgaEventUrl: pdga(96401), courses: [c("olympus", "Olympus")] },
-  { stop: 2, event: "Big Easy Open", tier: "Elite", dates: "Mar 13–15", city: "Jefferson Parish, LA", pdgaEventUrl: pdga(96402), courses: [c("parc-des-familles", "Parc des Familles")] },
-  { stop: 3, event: "Queen City Classic", tier: "Elite", dates: "Mar 27–29", city: "Charlotte, NC", pdgaEventUrl: pdga(96403), courses: [c("hornets-nest", "Hornets Nest")] },
+  { stop: 1, event: "Supreme Flight Open", tier: "Elite", dates: "Feb 27–Mar 1", city: "Brooksville, FL", pdgaEventUrl: pdga(96401), courses: [c("olympus", "Olympus", true)] },
+  { stop: 2, event: "Big Easy Open", tier: "Elite", dates: "Mar 13–15", city: "Jefferson Parish, LA", pdgaEventUrl: pdga(96402), courses: [c("parc-des-familles", "Parc des Familles", true)] },
+  { stop: 3, event: "Queen City Classic", tier: "Elite", dates: "Mar 27–29", city: "Charlotte, NC", pdgaEventUrl: pdga(96403), courses: [c("hornets-nest", "Hornets Nest", true)] },
   { stop: 4, event: "Champions Cup", tier: "Major", dates: "Apr 9–12", city: "Lynchburg, VA", pdgaEventUrl: pdga(97336), courses: [c("new-london-tech", "New London Tech")] },
   // Wave 4 (Disc Side of Heaven, Bad Rock Creek, Pickard Park) sits outside the ±1.5 balance band;
   // Henry chose to ship it as the real courses play anyway (Oct 24), overriding the hold rule.
