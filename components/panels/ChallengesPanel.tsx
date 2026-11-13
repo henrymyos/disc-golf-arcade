@@ -65,7 +65,7 @@ export function ChallengesPanel({ history, owned, coins, today, onClaim, onClose
           <h2 className="text-white font-black text-xl">Challenges</h2>
           <div className="flex items-center gap-2">
             <span className="text-[#f5d24a] font-bold font-mono text-sm inline-flex items-center gap-1">{fmtCoins(coins)} <Coin /></span>
-            <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
+            <button type="button" onClick={onClose} aria-label="Close" className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
           </div>
         </div>
 

@@ -107,7 +107,7 @@ export function RankedPanel({ ranked, onPlay, onClose }: {
               </div>
             )}
           </div>
-          <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
+          <button type="button" onClick={onClose} aria-label="Close" className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
 
         {/* Division Info — a clear open/close dropdown (arrow flips when open) */}

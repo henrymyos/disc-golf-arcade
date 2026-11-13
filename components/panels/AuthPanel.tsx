@@ -25,7 +25,7 @@ export function AuthPanel(props: {
     <div className="absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start justify-center rounded-lg">
       <div className="w-full max-w-xs my-auto">
         <div className="flex justify-end">
-          <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none -mt-1">×</button>
+          <button type="button" onClick={onClose} aria-label="Close" className="text-gray-400 hover:text-white text-2xl leading-none -mt-1">×</button>
         </div>
 
         {recovering ? (
