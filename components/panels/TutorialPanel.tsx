@@ -32,7 +32,7 @@ export function TutorialPanel({ onClose }: { onClose: () => void }) {
       <div className="w-full max-w-xs space-y-3 my-auto text-center">
         <div className="flex items-center justify-between">
           <h2 className="text-white font-black text-xl">How to Play</h2>
-          <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
+          <button type="button" onClick={onClose} aria-label="Close" className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
         <canvas ref={canvasRef} width={DEMO_W} height={DEMO_H} className="w-full rounded-xl border border-white/10 bg-[#2f5a26]" style={{ imageRendering: "pixelated" }} />
         <p className="text-gray-200 text-sm font-medium min-h-[40px] leading-snug flex items-center justify-center">{caption}</p>

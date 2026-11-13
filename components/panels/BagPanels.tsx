@@ -85,7 +85,7 @@ export function BagPanel({ bag, unlocked, owned, level, onAdd, onRemove, onMove,
       <div className="w-full max-w-xs mx-auto flex flex-col h-full px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] text-left">
         <div className="flex items-center justify-between shrink-0">
           <h2 className="text-white font-black text-xl">Your Bag · {bag.length}/{BAG_MAX}</h2>
-          <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
+          <button type="button" onClick={onClose} aria-label="Close" className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
         <p className="text-gray-500 text-[11px] mt-1 shrink-0">Carry up to {BAG_MAX} discs into a round — only these are usable. {full ? "Bag's full; remove one to swap." : "Add discs from your collection below."}</p>
         <div className="flex-1 overflow-y-auto mt-2.5 space-y-2 pr-0.5 -mr-0.5">

@@ -74,7 +74,7 @@ export function StatsPanel({ onClose }: { onClose: () => void }) {
       <div className="w-full max-w-xs space-y-4 my-auto text-left">
         <div className="flex items-center justify-between">
           <h2 className="text-white font-black text-xl">Stats</h2>
-          <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
+          <button type="button" onClick={onClose} aria-label="Close" className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
         {hist.length === 0 ? (
           <p className="text-gray-400 text-sm">No rounds yet — play one and come back!</p>

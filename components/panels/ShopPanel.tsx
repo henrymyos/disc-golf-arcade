@@ -93,7 +93,7 @@ export function ShopPanel({ coins, unlocked, owned, level, profile, onBuy, onEqu
           <h2 className="text-white font-black text-xl">Shop</h2>
           <div className="flex items-center gap-2">
             <span className="text-[#f5d24a] font-bold font-mono text-sm">{fmtCoins(coins)} <Coin /></span>
-            <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
+            <button type="button" onClick={onClose} aria-label="Close" className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
           </div>
         </div>
         <div className="flex gap-1 bg-[#1a1d23] rounded-lg p-1 overflow-x-auto" style={{ scrollbarWidth: "thin" }}>

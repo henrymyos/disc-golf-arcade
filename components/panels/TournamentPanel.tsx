@@ -33,7 +33,7 @@ export function TournamentPanel({ tournaments, active, bests, onStart, onAbandon
             <h2 className="text-white font-black text-lg truncate">{def.name}</h2>
             <div className="flex items-center gap-2 shrink-0">
               <DiffStars n={tournStarDifficulty(def)} />
-              <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
+              <button type="button" onClick={onClose} aria-label="Close" className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
             </div>
           </div>
           <p className="text-gray-500 text-[11px] shrink-0">{def.venues} · {def.rounds.length} rounds{hasCut ? " · cut after R2" : ""}</p>
@@ -98,7 +98,7 @@ export function TournamentPanel({ tournaments, active, bests, onStart, onAbandon
       <div className="w-full max-w-xs mx-auto flex flex-col h-full px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] text-left">
         <div className="flex items-center justify-between shrink-0">
           <h2 className="text-white font-black text-xl">Tournaments</h2>
-          <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
+          <button type="button" onClick={onClose} aria-label="Close" className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
         <div className="flex-1 overflow-y-auto mt-2.5 space-y-2.5 pr-0.5 -mr-0.5">
           {roster.map(({ d }) => {

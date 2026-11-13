@@ -63,7 +63,7 @@ export function CoursesPanel({ courses, tourCourses, bests, tourBests, onClose, 
       <div className="w-full max-w-xs mx-auto flex flex-col h-full px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] text-left">
         <div className="flex items-center justify-between shrink-0">
           <h2 className="text-white font-black text-xl">Challenge the Arcade</h2>
-          <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
+          <button type="button" onClick={onClose} aria-label="Close" className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
         <div className="flex gap-1 bg-[#1a1d23] border border-white/10 rounded-lg p-1 mt-3 shrink-0">
           <button type="button" onClick={() => setTab("championship")} className={seg(tab === "championship")}>Championship</button>

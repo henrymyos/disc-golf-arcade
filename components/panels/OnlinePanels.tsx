@@ -66,7 +66,7 @@ export function LobbyPanel({ lobby, players, hostLeft, error, courses, onPickCou
       <div className="w-full max-w-xs space-y-6 my-auto text-left">
         <div className="flex items-center justify-between">
           <h2 className="text-white font-black text-xl">Lobby</h2>
-          <button type="button" onClick={onLeave} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
+          <button type="button" onClick={onLeave} aria-label="Leave lobby" className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
         <div className="rounded-xl bg-[#1a1d23] border border-white/10 p-4 text-center">
           <p className="text-gray-500 text-[10px] uppercase tracking-[0.2em]">Join code</p>
@@ -133,7 +133,7 @@ export function PartyPanel({ onClose, onStart }: { onClose: () => void; onStart:
       <div className="w-full max-w-xs space-y-3 my-auto text-left">
         <div className="flex items-center justify-between">
           <h2 className="text-white font-black text-xl">Pass &amp; Play</h2>
-          <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
+          <button type="button" onClick={onClose} aria-label="Close" className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
         <p className="text-gray-500 text-[11px]">Take turns on each hole, one phone. Doesn&apos;t count toward records.</p>
         <div className="flex gap-1 bg-[#1a1d23] border border-white/10 rounded-lg p-1">

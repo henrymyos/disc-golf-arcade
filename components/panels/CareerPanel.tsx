@@ -52,7 +52,7 @@ export function CareerSlots({ careers, onPick, onDelete, onBack }: {
     <div className={wrap}><div className="w-full max-w-sm space-y-3 my-auto text-left">
       <div className="flex items-center justify-between">
         <h2 className="text-white font-black text-xl">Career</h2>
-        <button type="button" onClick={onBack} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
+        <button type="button" onClick={onBack} aria-label="Close" className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
       </div>
       <p className="text-gray-400 text-sm">Pick a save slot. Each career is its own journey — keep up to {careers.length} going at once and switch between them anytime.</p>
       {careers.map((c, slot) => (
@@ -150,7 +150,7 @@ export function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onS
       <div className={wrap}><div className={card}>
         <div className="flex items-center justify-between">
           <h2 className="text-white font-black text-xl">Career</h2>
-          <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
+          <button type="button" onClick={onClose} aria-label="Close" className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
         <ul className="text-gray-300 text-sm space-y-2">
           <li className="flex gap-2"><span className="text-[#36D7B7]">▸</span><span>Start as a <span className="text-white">14-year-old</span> with two discs and $1,000 — separate from your main account.</span></li>
@@ -191,7 +191,7 @@ export function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onS
       <div className={wrap}><div className={card}>
         <div className="flex items-center justify-between">
           <h2 className="text-white font-black text-xl">{career.name}</h2>
-          <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
+          <button type="button" onClick={onClose} aria-label="Close" className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
         <p className="text-gray-400 text-xs -mt-2">Retired at age {career.age} · {career.season} seasons · Rating {career.pdgaRating} · earned {fmtCash(career.cash)}</p>
         <div className="grid grid-cols-2 gap-2 text-center">
@@ -233,7 +233,7 @@ export function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onS
             <span className="block text-[#36D7B7] font-black text-2xl font-mono leading-none">{overall}</span>
             <span className="block text-gray-500 text-[8px] uppercase tracking-wide">Overall</span>
           </span>
-          <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
+          <button type="button" onClick={onClose} aria-label="Close" className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
       </div>
 
