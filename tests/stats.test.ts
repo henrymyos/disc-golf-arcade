@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { roundStats, totalStats, pctLabel } from "../lib/discgolf/stats";
+import { roundStats, totalStats, pctLabel, toParSummary, toParLabel } from "../lib/discgolf/stats";
 import type { Vec } from "../lib/discgolf/engine";
 
 // FEET_PER_PX is 1.8: a point `ft` feet straight below the basket.
@@ -45,5 +45,19 @@ describe("totalStats (history rows)", () => {
   it("labels percentages, or a dash with no attempts", () => {
     expect(pctLabel([7, 9])).toBe("7/9 · 78%");
     expect(pctLabel([0, 0])).toBe("–");
+  });
+});
+
+describe("toParSummary", () => {
+  it("scores rounds against their own pars and skips rows without pars", () => {
+    const s = toParSummary([
+      { scores: [3, 2, 4], pars: [3, 3, 3] }, // +0
+      { scores: [2, 2], pars: [3, 3] }, // -2
+      { scores: [5] }, // no pars: skipped
+      { scores: [3, 3], pars: [3] }, // mismatched: skipped
+    ]);
+    expect(s).toEqual({ rounds: 2, best: -2, avg: -1 });
+    expect(toParSummary([])).toEqual({ rounds: 0, best: null, avg: null });
+    expect([toParLabel(0), toParLabel(2), toParLabel(-3)]).toEqual(["E", "+2", "-3"]);
   });
 });

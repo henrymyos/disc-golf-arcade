@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { HIST_KEY } from "@/lib/progress";
-import { totalStats, pctLabel, type RoundStats } from "@/lib/discgolf/stats";
+import { totalStats, pctLabel, toParSummary, toParLabel, type RoundStats } from "@/lib/discgolf/stats";
 
 // C1X / C2 putting, parked throws and penalty strokes — the round summary and
 // the Stats screen's "Your game" section share this grid.
@@ -53,11 +53,18 @@ export function StatsPanel({ onClose }: { onClose: () => void }) {
       else dist.worse++;
     });
   }
-  const rowsFor: { label: string; rows: { total: number }[] }[] = [
-    { label: "Glendoveer East", rows: byMode("course") },
-    { label: "Winthrop Lake", rows: byMode("winthrop") },
-    { label: "Olympus", rows: byMode("olympus") },
-    { label: "Daily Challenge", rows: byMode("daily") },
+  const strokesRow = (label: string, rows: { total: number }[]) => ({ label, text: `${rows.length} rds${best(rows) != null ? ` · best ${best(rows)}` : ""} · avg ${avg(rows)}` });
+  // Daily, tour and ranked courses change par from round to round, so they read to par.
+  const toParRow = (label: string, mode: string) => {
+    const t = toParSummary(byMode(mode));
+    return { label, rounds: t.rounds, text: `${t.rounds} rds${t.best != null ? ` · best ${toParLabel(t.best)}` : ""} · avg ${t.avg != null ? toParLabel(Math.round(t.avg * 10) / 10) : "–"}` };
+  };
+  const rowsFor: { label: string; text: string }[] = [
+    strokesRow("Glendoveer East", byMode("course")),
+    strokesRow("Winthrop Lake", byMode("winthrop")),
+    strokesRow("Olympus", byMode("olympus")),
+    toParRow("Daily Challenge", "daily"),
+    ...[toParRow("Tour courses", "tour"), toParRow("Ranked", "ranked")].filter((r) => r.rounds > 0),
   ];
   const distRows = [
     { label: "Aces", n: dist.ace, color: "#f5d24a" },
@@ -82,12 +89,10 @@ export function StatsPanel({ onClose }: { onClose: () => void }) {
           <>
             <p className="text-gray-400 text-xs">{hist.length} round{hist.length === 1 ? "" : "s"} played</p>
             <div className="space-y-1.5">
-              {rowsFor.map(({ label, rows }) => (
+              {rowsFor.map(({ label, text }) => (
                 <div key={label} className="flex items-center justify-between bg-[#1a1d23] border border-white/10 rounded-lg px-3 py-2 text-sm">
                   <span className="text-white font-semibold">{label}</span>
-                  <span className="text-gray-400 font-mono text-xs">
-                    {rows.length} rds{best(rows) != null ? ` · best ${best(rows)}` : ""} · avg {avg(rows)}
-                  </span>
+                  <span className="text-gray-400 font-mono text-xs">{text}</span>
                 </div>
               ))}
             </div>

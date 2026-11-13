@@ -54,3 +54,17 @@ export function totalStats(rows: { stats?: unknown }[]): { stats: RoundStats; ro
 
 // "7/9 · 78%", or "–" with no attempts.
 export const pctLabel = ([made, tried]: [number, number]) => (tried ? `${made}/${tried} · ${Math.round((made / tried) * 100)}%` : "–");
+
+// Rounds on courses whose par changes per round (Daily, tour, ranked): compare
+// to par, not strokes. Rows without per-hole pars (very old saves) are skipped.
+export function toParSummary(rows: { scores?: number[]; pars?: number[] }[]): { rounds: number; best: number | null; avg: number | null } {
+  const overs = rows.flatMap((r) =>
+    Array.isArray(r.scores) && Array.isArray(r.pars) && r.scores.length && r.scores.length === r.pars.length
+      ? [r.scores.reduce((s, x) => s + x, 0) - r.pars.reduce((s, x) => s + x, 0)]
+      : [],
+  );
+  if (!overs.length) return { rounds: 0, best: null, avg: null };
+  return { rounds: overs.length, best: Math.min(...overs), avg: overs.reduce((s, x) => s + x, 0) / overs.length };
+}
+
+export const toParLabel = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
