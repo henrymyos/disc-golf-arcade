@@ -399,6 +399,8 @@ export function DiscGolfGame() {
   const unlockedRef = useRef<string[]>([]);
   const [newAchievements, setNewAchievements] = useState<Achievement[]>([]);
   const [roundsPlayed, setRoundsPlayed] = useState(0);
+  // Set once the saved history has loaded, so returning players never see the first-run nudge flash.
+  const [newPlayer, setNewPlayer] = useState(false);
   const roundsPlayedRef = useRef(0);
   const [history, setHistory] = useState<EventRound[]>([]); // recorded rounds (for weekly events)
 
@@ -672,7 +674,7 @@ export function DiscGolfGame() {
       const ach = JSON.parse(localStorage.getItem(ACH_KEY) || "[]");
       if (Array.isArray(ach)) { unlockedRef.current = ach; setUnlocked(ach); }
       const hist = JSON.parse(localStorage.getItem(HIST_KEY) || "[]");
-      if (Array.isArray(hist)) { roundsPlayedRef.current = hist.length; setRoundsPlayed(hist.length); setHistory(hist); }
+      if (Array.isArray(hist)) { roundsPlayedRef.current = hist.length; setRoundsPlayed(hist.length); setHistory(hist); setNewPlayer(hist.length === 0); }
       const tourn = JSON.parse(localStorage.getItem(TOURN_KEY) || "null");
       if (tourn && typeof tourn.id === "string" && tournDef(tourn.id) && Array.isArray(tourn.myTotals)) setTournament(tourn);
       setResumeRound(readResume());
@@ -3967,6 +3969,11 @@ export function DiscGolfGame() {
                     <button type="button" onClick={() => setHub("practice")} className={hubCard}>
                       <span className="font-black text-lg">Practice</span>
                     </button>
+                    {newPlayer && roundsPlayed === 0 && (
+                      <button type="button" onClick={() => setTutorialOpen(true)} className="min-h-11 self-center px-3 text-sm text-[#36D7B7] hover:text-white underline underline-offset-4">
+                        New here? Watch How to Play
+                      </button>
+                    )}
                   </div>
 
                   {/* Utilities — Bag, Shop, Challenges, Leaderboards (Settings = top-right gear) */}
