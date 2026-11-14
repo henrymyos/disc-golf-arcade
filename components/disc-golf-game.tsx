@@ -58,23 +58,17 @@ import {
 } from "./game/courses";
 import { themeInk, treeStyleFor, drawBasket, drawTree, drawTrail, drawWeather, drawPowerRing, drawRough, drawHoleFeatures } from "./game/draw";
 import { Coin, hubCard, titleCardSm, GoalStar, Overlay, btn, ordinal } from "./panels/ui";
-import { ChallengePanel, PartyPanel, LobbyPanel } from "./panels/OnlinePanels";
 import { HolePracticePicker } from "./panels/HolePracticePicker";
 import { TutorialPanel } from "./panels/TutorialPanel";
 import { StatsPanel, GameStatsGrid } from "./panels/StatsPanel";
 import { LeaderboardPanel } from "./panels/LeaderboardPanel";
-import { TournamentPanel } from "./panels/TournamentPanel";
-import { CareerSlots, CareerPanel } from "./panels/CareerPanel";
 import { CoursesPanel } from "./panels/CoursesPanel";
 import { ProTourPanel, PRO_STOPS_BUILT } from "./panels/ProTourPanel";
 import { SEASON_2026 } from "@/lib/discgolf/protour/season2026";
-import { ShopPanel } from "./panels/ShopPanel";
 import { BagPanel, LevelUpPanel } from "./panels/BagPanels";
-import { ProfilePanel } from "./panels/ProfilePanel";
 import { RankedPanel, PlacementReveal, PlacementDots } from "./panels/RankedPanel";
 import { ChallengesPanel } from "./panels/ChallengesPanel";
 import { SettingsPanel } from "./panels/SettingsPanel";
-import { AuthPanel } from "./panels/AuthPanel";
 import { AttractBackdrop } from "./menu/AttractBackdrop";
 import { DailyButton } from "./menu/DailyButton";
 import { SupportLink, SupportNudge } from "./support/Support";
@@ -106,6 +100,28 @@ import { postMiniResult, postRoundResult, readBoardChoice, writeBoardChoice, typ
 // is never bundled there.
 const HoleSheet = process.env.NODE_ENV !== "production" ? dynamic(() => import("./dev/HoleSheet"), { ssr: false }) : null;
 
+// Menu overlays that only open on a tap load as their own chunks, keeping them
+// out of the first-load bundle. preloadPanels() fetches them once the page is idle
+// so the network-first service worker caches them for offline play.
+const loadOnline = () => import("./panels/OnlinePanels");
+const loadTournament = () => import("./panels/TournamentPanel");
+const loadCareer = () => import("./panels/CareerPanel");
+const loadShop = () => import("./panels/ShopPanel");
+const loadProfile = () => import("./panels/ProfilePanel");
+const loadAuth = () => import("./panels/AuthPanel");
+const ChallengePanel = dynamic(() => loadOnline().then((m) => m.ChallengePanel), { ssr: false });
+const PartyPanel = dynamic(() => loadOnline().then((m) => m.PartyPanel), { ssr: false });
+const LobbyPanel = dynamic(() => loadOnline().then((m) => m.LobbyPanel), { ssr: false });
+const TournamentPanel = dynamic(() => loadTournament().then((m) => m.TournamentPanel), { ssr: false });
+const CareerSlots = dynamic(() => loadCareer().then((m) => m.CareerSlots), { ssr: false });
+const CareerPanel = dynamic(() => loadCareer().then((m) => m.CareerPanel), { ssr: false });
+const ShopPanel = dynamic(() => loadShop().then((m) => m.ShopPanel), { ssr: false });
+const ProfilePanel = dynamic(() => loadProfile().then((m) => m.ProfilePanel), { ssr: false });
+const AuthPanel = dynamic(() => loadAuth().then((m) => m.AuthPanel), { ssr: false });
+function preloadPanels() {
+  for (const load of [loadOnline, loadTournament, loadCareer, loadShop, loadProfile, loadAuth]) load().catch(() => {});
+}
+
 export function DiscGolfGame() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const stateRef = useRef<GameState | null>(null);
@@ -122,6 +138,15 @@ export function DiscGolfGame() {
     update();
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
+  }, []);
+  // Fetch the lazy menu panels once the first screen has settled (Safari has no requestIdleCallback).
+  useEffect(() => {
+    if (typeof window.requestIdleCallback !== "function") {
+      const t = window.setTimeout(preloadPanels, 2000);
+      return () => window.clearTimeout(t);
+    }
+    const id = window.requestIdleCallback(preloadPanels, { timeout: 5000 });
+    return () => window.cancelIdleCallback(id);
   }, []);
   // Dev-only: ?holesheet=<course-id> swaps the game for the hole sheet.
   const [holeSheetId, setHoleSheetId] = useState<string | null>(null);
