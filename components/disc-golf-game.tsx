@@ -376,6 +376,7 @@ export function DiscGolfGame() {
 
   const screenRef = useRef<Screen>("title");
   const pausedRef = useRef(false); // freezes the sim while the pause menu is open
+  const pauseRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     screenRef.current = screen;
   }, [screen]);
@@ -2483,6 +2484,14 @@ export function DiscGolfGame() {
       // P (pad Start) toggles the in-round menu; Esc also closes it.
       if (pausedRef.current) {
         if (e.key === "p" || e.key === "P" || e.key === "Escape") setPauseMenu(null);
+        // Up/down walk the menu buttons; a pad's A (synthetic Space) presses the focused one.
+        const items = [...(pauseRef.current?.querySelectorAll("button") ?? [])];
+        const at = items.indexOf(document.activeElement as HTMLButtonElement);
+        if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+          e.preventDefault();
+          items[(at + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length]?.focus();
+        }
+        if (e.key === " " && !e.isTrusted && at >= 0) items[at].click();
         return;
       }
       // Don't hijack keys while the user is typing in a field — otherwise
@@ -4528,9 +4537,9 @@ export function DiscGolfGame() {
         {/* In-round pause menu */}
         {pauseMenu && (screen === "playing" || screen === "holeComplete") && (
           <div className="absolute inset-0 z-40 flex items-center justify-center bg-[#0f1117]/80 backdrop-blur-sm rounded-lg px-6">
-            <div className="w-full max-w-[240px] flex flex-col gap-2.5">
-              <h2 className="text-white font-black text-2xl text-center mb-1">Paused</h2>
-              <button type="button" onClick={() => setPauseMenu(null)} className={`${btn} w-full !mt-0`}>Continue</button>
+            <div ref={pauseRef} role="dialog" aria-modal="true" aria-labelledby="pause-title" className="w-full max-w-[240px] flex flex-col gap-2.5">
+              <h2 id="pause-title" className="text-white font-black text-2xl text-center mb-1">Paused</h2>
+              <button type="button" autoFocus onClick={() => setPauseMenu(null)} className={`${btn} w-full !mt-0`}>Continue</button>
               {pauseMenu.isCareer && (
                 <button type="button" onClick={simCurrentCareerRound}
                   className="w-full bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white font-bold py-3 rounded-lg transition">
