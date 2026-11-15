@@ -83,6 +83,7 @@ import { simFrame, FAST_FORWARD } from "@/lib/discgolf/sim";
 import { roundStats, type RoundStats } from "@/lib/discgolf/stats";
 import { TIPS, claimTip, lieTips, type TipId } from "@/lib/discgolf/tips";
 import { keyAim, pullFor, KEY_AIM_START_POWER } from "@/lib/discgolf/keyAim";
+import { padKeys, padPresses } from "@/lib/discgolf/gamepad";
 import { postMiniResult, postRoundResult, readBoardChoice, writeBoardChoice, type BoardChoice, type PostOutcome } from "@/lib/leaderboard/post";
 
 
@@ -2520,6 +2521,23 @@ export function DiscGolfGame() {
     window.addEventListener("keydown", onDown);
     return () => window.removeEventListener("keydown", onDown);
   }, [nextHole, selectDisc, throwDisc]);
+
+  // Gamepad: replay the pad as the keys the keydown handler above reads. Polls only
+  // while a pad is connected (Chrome reports one after its first button press).
+  useEffect(() => {
+    let raf = 0;
+    const held = new Map<string, number>();
+    function poll(now: number) {
+      const pad = Array.from(navigator.getGamepads?.() ?? []).find((p) => p?.connected);
+      if (!pad) { raf = 0; held.clear(); return; }
+      for (const key of padPresses(padKeys(pad), held, now)) window.dispatchEvent(new KeyboardEvent("keydown", { key, cancelable: true }));
+      raf = requestAnimationFrame(poll);
+    }
+    function start() { if (!raf) raf = requestAnimationFrame(poll); }
+    window.addEventListener("gamepadconnected", start);
+    start();
+    return () => { window.removeEventListener("gamepadconnected", start); cancelAnimationFrame(raf); };
+  }, []);
 
   // Main loop
   useEffect(() => {
