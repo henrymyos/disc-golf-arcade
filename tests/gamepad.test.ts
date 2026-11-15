@@ -12,6 +12,7 @@ describe("gamepad", () => {
     expect([...padKeys(pad([1], [0.9, -0.8]))].sort()).toEqual(["ArrowRight", "ArrowUp", "Escape"]);
     expect(padKeys(pad([], [0.3, -0.3])).size).toBe(0); // inside the dead zone
     expect(padKeys({ buttons: [], axes: [] }).size).toBe(0); // non-standard / empty pad
+    expect([...padKeys(pad([9]))]).toEqual(["p"]); // Start opens the in-round menu
   });
 
   it("fires new presses once, repeats held arrows after a delay, never repeats buttons", () => {

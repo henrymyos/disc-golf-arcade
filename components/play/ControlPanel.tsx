@@ -117,6 +117,7 @@ export function ControlPanel({ side, activeBag, discIndex, onSelectDisc, release
             <dt><Kbd>B</Kbd> <Kbd>F</Kbd></dt><dd className="text-gray-300">Backhand / forehand</dd>
             <dt><Kbd>←</Kbd><Kbd>→</Kbd> <Kbd>↑</Kbd><Kbd>↓</Kbd></dt><dd className="text-gray-300">Aim · power (<Kbd>Esc</Kbd> cancels)</dd>
             <dt><Kbd>Space</Kbd> <Kbd>Enter</Kbd></dt><dd className="text-gray-300">Throw · fast-forward a flight · next hole</dd>
+            <dt><Kbd>P</Kbd></dt><dd className="text-gray-300">Menu (pause)</dd>
             <dt className="text-gray-500">Gamepad</dt><dd className="text-gray-300">D-pad or stick aims · A throws · B cancels · LB/RB disc · X/Y backhand/forehand</dd>
             <dt className="text-gray-500">Mouse</dt><dd className="text-gray-300">Drag back from anywhere to aim and throw</dd>
           </dl>
