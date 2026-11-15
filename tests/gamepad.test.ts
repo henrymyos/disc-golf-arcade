@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { padKeys, padPresses, cycleBag, PAD_REPEAT_DELAY, PAD_REPEAT_EVERY } from "../lib/discgolf/gamepad";
+import { padKeys, padPresses, cycleBag, spatialNext, PAD_REPEAT_DELAY, PAD_REPEAT_EVERY } from "../lib/discgolf/gamepad";
 
 const pad = (pressed: number[], axes = [0, 0]) => ({
   buttons: Array.from({ length: 17 }, (_, i) => ({ pressed: pressed.includes(i) })),
@@ -43,5 +43,18 @@ describe("bag cycling", () => {
   });
   it("pad bumpers and face buttons map to the bag and stance keys", () => {
     expect([...padKeys(pad([2, 3, 4, 5]))].sort()).toEqual(["[", "]", "b", "f"]);
+  });
+
+  it("menu arrows move to the nearest button that way, down a grid before across", () => {
+    const box = (left: number, top: number) => ({ left, top, width: 100, height: 40 });
+    // 2-column hub: 0 1 / 2 3, then a wide Close button 4 under the grid
+    const boxes = [box(0, 0), box(120, 0), box(0, 60), box(120, 60), { left: 0, top: 120, width: 220, height: 40 }];
+    expect(spatialNext(boxes, 0, "ArrowDown")).toBe(2);
+    expect(spatialNext(boxes, 0, "ArrowRight")).toBe(1);
+    expect(spatialNext(boxes, 3, "ArrowLeft")).toBe(2);
+    expect(spatialNext(boxes, 3, "ArrowUp")).toBe(1);
+    expect(spatialNext(boxes, 2, "ArrowDown")).toBe(4);
+    expect(spatialNext(boxes, 4, "ArrowDown")).toBe(-1); // nothing below: stay put
+    expect(spatialNext(boxes, 0, "Escape")).toBe(-1);
   });
 });

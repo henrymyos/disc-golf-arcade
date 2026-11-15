@@ -83,7 +83,7 @@ import { simFrame, FAST_FORWARD } from "@/lib/discgolf/sim";
 import { roundStats, type RoundStats } from "@/lib/discgolf/stats";
 import { TIPS, claimTip, lieTips, type TipId } from "@/lib/discgolf/tips";
 import { keyAim, pullFor, KEY_AIM_START_POWER } from "@/lib/discgolf/keyAim";
-import { padKeys, padPresses, cycleBag } from "@/lib/discgolf/gamepad";
+import { padKeys, padPresses, cycleBag, spatialNext, menuLayer, MENU_FOCUSABLE } from "@/lib/discgolf/gamepad";
 import { postMiniResult, postRoundResult, readBoardChoice, writeBoardChoice, type BoardChoice, type PostOutcome } from "@/lib/leaderboard/post";
 
 
@@ -2494,6 +2494,20 @@ export function DiscGolfGame() {
         if (e.key === " " && !e.isTrusted && at >= 0) items[at].click();
         return;
       }
+      const inRound = screenRef.current === "playing" || screenRef.current === "holeComplete";
+      // Menus (title hub, panels, results) by pad: the stick / d-pad moves focus between the
+      // top layer's buttons, A presses the focused one, B closes the panel. Esc closes it
+      // from a keyboard too (below); keyboard arrows stay native so menus still scroll.
+      if (!inRound && !e.isTrusted && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " "].includes(e.key)) {
+        const items = [...menuLayer(document).querySelectorAll<HTMLElement>(MENU_FOCUSABLE)].filter((el) => el.getClientRects().length);
+        const at = items.indexOf(document.activeElement as HTMLElement);
+        if (e.key === " ") { if (at >= 0) items[at].click(); return; }
+        const next = at < 0 ? 0 : spatialNext(items.map((el) => el.getBoundingClientRect()), at, e.key);
+        document.documentElement.dataset.pad = ""; // ring on (globals.css): a pad press isn't keyboard focus to the browser
+        items[next]?.focus();
+        items[next]?.scrollIntoView({ block: "nearest" });
+        return;
+      }
       // Don't hijack keys while the user is typing in a field — otherwise
       // preventDefault on Space/Enter would block spaces in names (e.g. lobby
       // names, the leaderboard save box) and the disc/stance shortcuts would
@@ -2503,7 +2517,7 @@ export function DiscGolfGame() {
       // Only swallow Space/Enter/arrows mid-round. On the menus they stay native,
       // so a focused button activates and the menu scrolls (Space used to start
       // a surprise round from the title hub instead).
-      const inRound = screenRef.current === "playing" || screenRef.current === "holeComplete";
+      if (!inRound && e.key === "Escape") { const layer = menuLayer(document); if (layer !== document.body) layer.querySelector<HTMLElement>('[aria-label="Close"]')?.click(); }
       if (inRound && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " ", "Enter"].includes(e.key)) e.preventDefault();
       // Arrow keys aim like a drag (the first press starts from half power and the
       // auto-aim); Space/Enter throws, Escape cancels.
@@ -2554,9 +2568,11 @@ export function DiscGolfGame() {
       raf = requestAnimationFrame(poll);
     }
     function start() { if (!raf) raf = requestAnimationFrame(poll); }
+    const ringOff = () => { delete document.documentElement.dataset.pad; };
     window.addEventListener("gamepadconnected", start);
+    window.addEventListener("pointerdown", ringOff);
     start();
-    return () => { window.removeEventListener("gamepadconnected", start); cancelAnimationFrame(raf); };
+    return () => { window.removeEventListener("gamepadconnected", start); window.removeEventListener("pointerdown", ringOff); cancelAnimationFrame(raf); };
   }, []);
 
   // Main loop

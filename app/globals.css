@@ -87,3 +87,6 @@ body {
   0% { transform: scale(0.6); opacity: 0; }
   100% { transform: scale(1); opacity: 1; }
 }
+
+/* Controller menu focus (set by the pad handler, cleared by the next pointer press). */
+html[data-pad] :focus { outline: 2px solid #36D7B7; outline-offset: 2px; }
