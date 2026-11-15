@@ -1,6 +1,7 @@
 // Gamepad play: turn a pad (standard mapping) into the keys the keyboard handler
 // already understands. D-pad / left stick = arrows (aim + power), A = Space
-// (throw, fast-forward, next hole), B = Escape (cancel the aim).
+// (throw, fast-forward, next hole), B = Escape (cancel the aim), X / Y = b / f
+// (backhand / forehand), LB / RB = [ / ] (previous / next disc in the bag).
 export const PAD_REPEAT_DELAY = 300; // ms before a held direction repeats (like OS key repeat)
 export const PAD_REPEAT_EVERY = 60;
 const STICK_DEAD = 0.5;
@@ -17,6 +18,10 @@ export function padKeys(p: Pad): Set<string> {
   if (b(13) || y > STICK_DEAD) keys.add("ArrowDown");
   if (b(0)) keys.add(" ");
   if (b(1)) keys.add("Escape");
+  if (b(2)) keys.add("b");
+  if (b(3)) keys.add("f");
+  if (b(4)) keys.add("[");
+  if (b(5)) keys.add("]");
   return keys;
 }
 
@@ -36,4 +41,12 @@ export function padPresses(keys: Set<string>, held: Map<string, number>, now: nu
     }
   }
   return out;
+}
+
+// [ / ]: the bag slot before / after the current disc, wrapping (first slot if the disc isn't bagged).
+export function cycleBag(bag: readonly string[], current: string | undefined, key: string): string | null {
+  if (!bag.length || (key !== "[" && key !== "]")) return null;
+  const i = current === undefined ? -1 : bag.indexOf(current);
+  if (i < 0) return bag[0];
+  return bag[(i + (key === "]" ? 1 : -1) + bag.length) % bag.length];
 }
