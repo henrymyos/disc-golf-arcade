@@ -1,7 +1,8 @@
 // Gamepad play: turn a pad (standard mapping) into the keys the keyboard handler
 // already understands. D-pad / left stick = arrows (aim + power), A = Space
 // (throw, fast-forward, next hole), B = Escape (cancel the aim), X / Y = b / f
-// (backhand / forehand), LB / RB = [ / ] (previous / next disc in the bag).
+// (backhand / forehand), LB / RB = [ / ] (previous / next disc in the bag),
+// Start = p (open / close the in-round menu).
 export const PAD_REPEAT_DELAY = 300; // ms before a held direction repeats (like OS key repeat)
 export const PAD_REPEAT_EVERY = 60;
 const STICK_DEAD = 0.5;
@@ -22,6 +23,7 @@ export function padKeys(p: Pad): Set<string> {
   if (b(3)) keys.add("f");
   if (b(4)) keys.add("[");
   if (b(5)) keys.add("]");
+  if (b(9)) keys.add("p");
   return keys;
 }
 

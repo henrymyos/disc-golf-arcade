@@ -380,6 +380,10 @@ export function DiscGolfGame() {
     screenRef.current = screen;
   }, [screen]);
   useEffect(() => { pausedRef.current = pauseMenu != null; }, [pauseMenu]);
+  const openPauseMenu = useCallback(() => {
+    const g = stateRef.current;
+    setPauseMenu({ canRestart: !!g && !g.online && !g.mini && !tournamentPlayRef.current && !careerPlayRef.current, isCareer: careerPlayRef.current });
+  }, []);
 
   const discIndexRef = useRef(1);
   useEffect(() => {
@@ -2476,7 +2480,11 @@ export function DiscGolfGame() {
   // Keyboard
   useEffect(() => {
     function onDown(e: KeyboardEvent) {
-      if (pausedRef.current) return;
+      // P (pad Start) toggles the in-round menu; Esc also closes it.
+      if (pausedRef.current) {
+        if (e.key === "p" || e.key === "P" || e.key === "Escape") setPauseMenu(null);
+        return;
+      }
       // Don't hijack keys while the user is typing in a field — otherwise
       // preventDefault on Space/Enter would block spaces in names (e.g. lobby
       // names, the leaderboard save box) and the disc/stance shortcuts would
@@ -2509,6 +2517,7 @@ export function DiscGolfGame() {
           return;
         }
       }
+      if ((e.key === "p" || e.key === "P") && inRound && !stateRef.current?.replay) { openPauseMenu(); return; }
       if (e.key >= "1" && e.key <= "9") {
         const n = Number(e.key) - 1; // number keys pick bag slots
         if (n < activeBagRef.current.length) selectDisc(discIndexByKey(activeBagRef.current[n]));
@@ -2522,7 +2531,7 @@ export function DiscGolfGame() {
     }
     window.addEventListener("keydown", onDown);
     return () => window.removeEventListener("keydown", onDown);
-  }, [nextHole, selectDisc, throwDisc]);
+  }, [nextHole, selectDisc, throwDisc, openPauseMenu]);
 
   // Gamepad: replay the pad as the keys the keydown handler above reads. Polls only
   // while a pad is connected (Chrome reports one after its first button press).
@@ -4622,7 +4631,7 @@ export function DiscGolfGame() {
           onRelease={setRelease}
           throwStyle={throwStyle}
           onThrowStyle={setThrowStyle}
-          onMenu={() => { const g = stateRef.current; setPauseMenu({ canRestart: !!g && !g.online && !g.mini && !tournamentPlayRef.current && !careerPlayRef.current, isCareer: careerPlayRef.current }); }}
+          onMenu={openPauseMenu}
         />
       )}
 
