@@ -15,7 +15,7 @@ export function NextGoalCard({ goal }: { goal: Goal }) {
           <p className="text-gray-400 text-[11px] leading-tight truncate">{goal.detail}</p>
         </div>
       </div>
-      <div className="mt-2 h-1.5 rounded bg-white/10 overflow-hidden" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+      <div className="mt-2 h-1.5 rounded bg-white/10 overflow-hidden" role="progressbar" aria-label={`${goal.title}: progress`} aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
         <div className="h-full rounded bg-[#f5d24a]" style={{ width: `${pct}%` }} />
       </div>
     </div>
