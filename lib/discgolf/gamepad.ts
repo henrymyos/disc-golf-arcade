@@ -52,3 +52,34 @@ export function cycleBag(bag: readonly string[], current: string | undefined, ke
   if (i < 0) return bag[0];
   return bag[(i + (key === "]" ? 1 : -1) + bag.length) % bag.length];
 }
+
+// Menu navigation (title hub, panels, results): arrows / the pad move focus to the
+// nearest button in that direction; off-axis distance counts double so a 2-column
+// grid steps straight down before it slides across. -1: nothing that way.
+type Box = { left: number; top: number; width: number; height: number };
+export function spatialNext(boxes: readonly Box[], from: number, key: string): number {
+  const dir = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[key];
+  if (!dir) return -1;
+  const c = (b: Box) => [b.left + b.width / 2, b.top + b.height / 2];
+  const [fx, fy] = c(boxes[from]);
+  let best = -1, bestScore = Infinity;
+  boxes.forEach((b, i) => {
+    if (i === from) return;
+    const [x, y] = c(b);
+    const along = (x - fx) * dir[0] + (y - fy) * dir[1];
+    if (along <= 1) return;
+    const score = along + 2 * Math.abs(dir[0] ? y - fy : x - fx);
+    if (score < bestScore) { bestScore = score; best = i; }
+  });
+  return best;
+}
+
+// The menu layer on top: the last-drawn open overlay with buttons in it (panels are
+// "absolute inset-0 z-*" boxes, dialogs have role=dialog), else the whole page.
+export const MENU_FOCUSABLE = 'button:not([disabled]), a[href], [role="button"], input[type="checkbox"]';
+export function menuLayer(doc: Document): HTMLElement {
+  const z = (el: Element) => parseInt(getComputedStyle(el).zIndex) || 0;
+  const layers = [...doc.querySelectorAll<HTMLElement>('[role="dialog"], [class*="absolute inset-0 z-"]')]
+    .filter((el) => el.getClientRects().length && el.querySelector(MENU_FOCUSABLE));
+  return layers.sort((a, b) => z(a) - z(b)).at(-1) ?? doc.body; // stable sort: DOM order breaks ties
+}
