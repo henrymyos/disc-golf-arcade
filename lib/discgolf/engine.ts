@@ -657,11 +657,15 @@ const PRO_COURSES: ProCourse[] = [MAPLE_HILL, BREWSTER_RIDGE, IDLEWILD, WINTHROP
 const PROTOUR_SEED_BASE = 0x2026c000 >>> 0;
 type ProTourCourse = { seed: number; course: ProCourse; holes: Hole[]; par: number; lengthFt: number };
 const PROTOUR_COURSES: ProTourCourse[] = PRO_COURSES.map((course, i) => {
-  const holes = course.holes.map((h) => ({ ...proHoleToHole(h), theme: course.theme }));
+  let holes: Hole[] | undefined;
   return {
     seed: (PROTOUR_SEED_BASE + i + 1) >>> 0,
     course,
-    holes,
+    // Built on first use: converting all 504 holes (tree fill included) up front
+    // cost ~15 ms of main-thread time at every page load.
+    get holes() {
+      return (holes ??= course.holes.map((h) => ({ ...proHoleToHole(h), theme: course.theme })));
+    },
     par: course.holes.reduce((s, h) => s + h.par, 0),
     lengthFt: course.holes.reduce((s, h) => s + h.lengthFt, 0),
   };
