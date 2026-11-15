@@ -36,6 +36,9 @@ export function TutorialPanel({ onClose }: { onClose: () => void }) {
         </div>
         <canvas ref={canvasRef} width={DEMO_W} height={DEMO_H} className="w-full rounded-xl border border-white/10 bg-[#2f5a26]" style={{ imageRendering: "pixelated" }} />
         <p className="text-gray-200 text-sm font-medium min-h-[40px] leading-snug flex items-center justify-center">{caption}</p>
+        <p className="hidden pointer-fine:block text-gray-400 text-xs leading-snug">
+          No mouse needed: arrows aim and set power, Space throws, P pauses. A controller works too.
+        </p>
         <button type="button" onClick={onClose} className={`${btn} w-full`}>Got it ✓</button>
       </div>
     </div>
