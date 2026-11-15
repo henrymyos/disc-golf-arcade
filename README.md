@@ -17,7 +17,7 @@ A retro pixel-art disc golf game for phone and desktop. Pull back to aim, pick a
 - **Online:** private lobbies over Supabase Realtime with live ghosts of the other players' throws; challenge links that replay your exact round; shareable round replays.
 - **Practice:** Putting and Accuracy minigames (each with a board), any hole on any course, and an animated How to Play.
 - **Progress:** levels with disc drafts, 20 achievements, a Next-goal card, coins, and a shop of disc skins, trails, baskets, aim lines, course themes and celebrations.
-- **Feel:** a flight model with turn, fade, glide, wind and elevation; sound, haptics, screen shake and particles; a phone layout that fills the screen and a three-column desktop layout with keyboard shortcuts; arrow keys or a gamepad can aim and throw.
+- **Feel:** a flight model with turn, fade, glide, wind and elevation; sound, haptics, screen shake and particles; a phone layout that fills the screen and a three-column desktop layout with keyboard shortcuts; arrow keys or a gamepad can aim and throw, and a gamepad also walks the menus (A picks, B closes a panel).
 - **Accounts are optional:** guests play everything. Signing in syncs progress across devices and keeps your leaderboard name yours.
 
 ## How it's built
