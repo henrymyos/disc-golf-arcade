@@ -82,6 +82,7 @@ import { roundLayout, type RoundLayout } from "@/lib/discgolf/layout";
 import { simFrame, FAST_FORWARD } from "@/lib/discgolf/sim";
 import { roundStats, type RoundStats } from "@/lib/discgolf/stats";
 import { TIPS, claimTip, lieTips, type TipId } from "@/lib/discgolf/tips";
+import { keyAim, pullFor, KEY_AIM_START_POWER } from "@/lib/discgolf/keyAim";
 import { postMiniResult, postRoundResult, readBoardChoice, writeBoardChoice, type BoardChoice, type PostOutcome } from "@/lib/leaderboard/post";
 
 
@@ -125,7 +126,6 @@ function preloadPanels() {
 export function DiscGolfGame() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const stateRef = useRef<GameState | null>(null);
-  const keysRef = useRef<Set<string>>(new Set());
   const fastRef = useRef(false); // this flight is fast-forwarding (tap / Space mid-flight)
   const [roundSerial, setRoundSerial] = useState(0); // +1 per recorded full round (goal toasts)
   const playAreaRef = useRef<HTMLDivElement | null>(null); // the board's container (sizing + letterbox colour)
@@ -175,7 +175,8 @@ export function DiscGolfGame() {
   // Drag-to-throw (Wii-golf style): pull back to set power + aim, release to throw.
   // ax/ay: where the press started (the anchor); cx/cy: the current pointer.
   // Pull is measured anchor→pointer so you can grab anywhere on screen.
-  const dragRef = useRef<{ active: boolean; ax: number; ay: number; cx: number; cy: number }>({ active: false, ax: 0, ay: 0, cx: 0, cy: 0 });
+  // kb: aimed with the arrow keys (window pointerup must not throw it).
+  const dragRef = useRef<{ active: boolean; ax: number; ay: number; cx: number; cy: number; kb?: boolean }>({ active: false, ax: 0, ay: 0, cx: 0, cy: 0 });
   const camRef = useRef({ x: 0, y: 0 }); // current camera scroll, mirrored for the pointer handlers
   const ghostRef = useRef<Vec[][][] | null>(null); // best-round flight paths for the active course
   // Juice: short-lived particles (world coords), camera shake, basket rattle.
@@ -2486,7 +2487,27 @@ export function DiscGolfGame() {
       // a surprise round from the title hub instead).
       const inRound = screenRef.current === "playing" || screenRef.current === "holeComplete";
       if (inRound && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " ", "Enter"].includes(e.key)) e.preventDefault();
-      keysRef.current.add(e.key);
+      // Arrow keys aim like a drag (the first press starts from half power and the
+      // auto-aim); Space/Enter throws, Escape cancels.
+      const g = stateRef.current;
+      const dr = dragRef.current;
+      const kbAim = dr.active && !!dr.kb;
+      if (screenRef.current === "playing" && g?.phase === "aim" && !g.replay && (!dr.active || kbAim)) {
+        const next = keyAim(g.angle, kbAim ? g.power : KEY_AIM_START_POWER, e.key);
+        if (next) {
+          if (!dr.active) fastRef.current = false;
+          g.angle = next.angle; g.power = next.power;
+          const pull = pullFor(next.angle, next.power, MAX_DRAG);
+          dragRef.current = { active: true, kb: true, ax: 0, ay: 0, cx: pull.x, cy: pull.y };
+          return;
+        }
+        if (kbAim && (e.key === " " || e.key === "Enter" || e.key === "Escape")) {
+          dr.active = false;
+          if (e.key !== "Escape" && g.power > CANCEL_POWER) throwDisc();
+          else g.power = 0;
+          return;
+        }
+      }
       if (e.key >= "1" && e.key <= "9") {
         const n = Number(e.key) - 1; // number keys pick bag slots
         if (n < activeBagRef.current.length) selectDisc(discIndexByKey(activeBagRef.current[n]));
@@ -2496,16 +2517,9 @@ export function DiscGolfGame() {
       if ((e.key === " " || e.key === "Enter") && screenRef.current === "holeComplete") nextHole();
       if ((e.key === " " || e.key === "Enter") && screenRef.current === "playing" && stateRef.current?.phase === "fly" && !stateRef.current.replay) fastRef.current = true;
     }
-    function onUp(e: KeyboardEvent) {
-      keysRef.current.delete(e.key);
-    }
     window.addEventListener("keydown", onDown);
-    window.addEventListener("keyup", onUp);
-    return () => {
-      window.removeEventListener("keydown", onDown);
-      window.removeEventListener("keyup", onUp);
-    };
-  }, [nextHole, selectDisc]);
+    return () => window.removeEventListener("keydown", onDown);
+  }, [nextHole, selectDisc, throwDisc]);
 
   // Main loop
   useEffect(() => {
@@ -3727,7 +3741,7 @@ export function DiscGolfGame() {
   useEffect(() => {
     function move(e: PointerEvent) {
       const dr = dragRef.current;
-      if (!dr.active) return;
+      if (!dr.active || dr.kb) return;
       const g = stateRef.current;
       if (!g || g.phase !== "aim") return;
       const p = clientToCanvas(e.clientX, e.clientY);
@@ -3737,7 +3751,7 @@ export function DiscGolfGame() {
     }
     function up() {
       const dr = dragRef.current;
-      if (!dr.active) return;
+      if (!dr.active || dr.kb) return;
       dr.active = false;
       const g = stateRef.current;
       if (!g) return;
