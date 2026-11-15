@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { padKeys, padPresses, PAD_REPEAT_DELAY, PAD_REPEAT_EVERY } from "../lib/discgolf/gamepad";
+import { padKeys, padPresses, cycleBag, PAD_REPEAT_DELAY, PAD_REPEAT_EVERY } from "../lib/discgolf/gamepad";
 
 const pad = (pressed: number[], axes = [0, 0]) => ({
   buttons: Array.from({ length: 17 }, (_, i) => ({ pressed: pressed.includes(i) })),
@@ -24,5 +24,23 @@ describe("gamepad", () => {
     expect(padPresses(new Set(), held, 1000)).toEqual([]); // release clears
     expect(held.size).toBe(0);
     expect(padPresses(new Set([" "]), held, 1001)).toEqual([" "]); // a fresh press fires again
+  });
+});
+
+describe("bag cycling", () => {
+  const bag = ["aviar", "buzzz", "destroyer"];
+  it("steps through the bag and wraps both ways", () => {
+    expect(cycleBag(bag, "buzzz", "]")).toBe("destroyer");
+    expect(cycleBag(bag, "destroyer", "]")).toBe("aviar");
+    expect(cycleBag(bag, "aviar", "[")).toBe("destroyer");
+  });
+  it("falls back to the first slot, ignores other keys and empty bags", () => {
+    expect(cycleBag(bag, "wraith", "]")).toBe("aviar");
+    expect(cycleBag(bag, undefined, "[")).toBe("aviar");
+    expect(cycleBag(bag, "buzzz", "x")).toBeNull();
+    expect(cycleBag([], "buzzz", "]")).toBeNull();
+  });
+  it("pad bumpers and face buttons map to the bag and stance keys", () => {
+    expect([...padKeys(pad([2, 3, 4, 5]))].sort()).toEqual(["[", "]", "b", "f"]);
   });
 });

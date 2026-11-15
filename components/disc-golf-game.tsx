@@ -83,7 +83,7 @@ import { simFrame, FAST_FORWARD } from "@/lib/discgolf/sim";
 import { roundStats, type RoundStats } from "@/lib/discgolf/stats";
 import { TIPS, claimTip, lieTips, type TipId } from "@/lib/discgolf/tips";
 import { keyAim, pullFor, KEY_AIM_START_POWER } from "@/lib/discgolf/keyAim";
-import { padKeys, padPresses } from "@/lib/discgolf/gamepad";
+import { padKeys, padPresses, cycleBag } from "@/lib/discgolf/gamepad";
 import { postMiniResult, postRoundResult, readBoardChoice, writeBoardChoice, type BoardChoice, type PostOutcome } from "@/lib/leaderboard/post";
 
 
@@ -2513,6 +2513,8 @@ export function DiscGolfGame() {
         const n = Number(e.key) - 1; // number keys pick bag slots
         if (n < activeBagRef.current.length) selectDisc(discIndexByKey(activeBagRef.current[n]));
       }
+      const cycled = cycleBag(activeBagRef.current, ADV_DISCS[discIndexRef.current]?.key, e.key);
+      if (cycled) selectDisc(discIndexByKey(cycled));
       if (e.key === "b" || e.key === "B") setThrowStyle("BH");
       if (e.key === "f" || e.key === "F") setThrowStyle("FH");
       if ((e.key === " " || e.key === "Enter") && screenRef.current === "holeComplete") nextHole();

@@ -113,11 +113,11 @@ export function ControlPanel({ side, activeBag, discIndex, onSelectDisc, release
         {side && <div className="mt-3 rounded-lg border border-white/10 bg-[#0f1117] px-3 py-2.5">
           <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-gray-500 mb-1.5">Keyboard</p>
           <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
-            <dt><Kbd>1</Kbd>–<Kbd>{Math.max(1, Math.min(9, activeBag.length))}</Kbd></dt><dd className="text-gray-300">Pick a disc from your bag</dd>
+            <dt><Kbd>1</Kbd>–<Kbd>{Math.max(1, Math.min(9, activeBag.length))}</Kbd> <Kbd>[</Kbd><Kbd>]</Kbd></dt><dd className="text-gray-300">Pick a disc from your bag</dd>
             <dt><Kbd>B</Kbd> <Kbd>F</Kbd></dt><dd className="text-gray-300">Backhand / forehand</dd>
             <dt><Kbd>←</Kbd><Kbd>→</Kbd> <Kbd>↑</Kbd><Kbd>↓</Kbd></dt><dd className="text-gray-300">Aim · power (<Kbd>Esc</Kbd> cancels)</dd>
             <dt><Kbd>Space</Kbd> <Kbd>Enter</Kbd></dt><dd className="text-gray-300">Throw · fast-forward a flight · next hole</dd>
-            <dt className="text-gray-500">Gamepad</dt><dd className="text-gray-300">D-pad or stick aims · A throws · B cancels</dd>
+            <dt className="text-gray-500">Gamepad</dt><dd className="text-gray-300">D-pad or stick aims · A throws · B cancels · LB/RB disc · X/Y backhand/forehand</dd>
             <dt className="text-gray-500">Mouse</dt><dd className="text-gray-300">Drag back from anywhere to aim and throw</dd>
           </dl>
         </div>}
