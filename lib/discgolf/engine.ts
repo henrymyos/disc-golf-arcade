@@ -720,8 +720,14 @@ function difficultyStars(diff: number): 1 | 2 | 3 | 4 | 5 {
   return 1;
 }
 // Convenience: a course's raw difficulty / star difficulty from (mode, seed).
+// Cached: deterministic per (mode, seed), but regenerating a tour course is slow and
+// the tournament roster sorts at module load call this O(n log n) times.
+const COURSE_DIFF_CACHE = new Map<string, number>();
 function courseDifficultyOf(mode: Mode, seed?: number): number {
-  return courseDifficulty(courseHoles(mode, seed));
+  const key = `${mode}:${seed ?? ""}`;
+  let d = COURSE_DIFF_CACHE.get(key);
+  if (d === undefined) COURSE_DIFF_CACHE.set(key, (d = courseDifficulty(courseHoles(mode, seed))));
+  return d;
 }
 function courseStarDifficulty(mode: Mode, seed?: number): 1 | 2 | 3 | 4 | 5 {
   return difficultyStars(courseDifficultyOf(mode, seed));
@@ -808,7 +814,7 @@ function tournRoundPlayHoles(tournSeed: number, round: number, rd: TournRound): 
 }
 // A tournament's difficulty = the average difficulty of the courses it visits.
 function tournDifficulty(def: TournDef): number {
-  return def.rounds.reduce((s, r) => s + courseDifficulty(tournRoundHoles(r)), 0) / def.rounds.length;
+  return def.rounds.reduce((s, r) => s + courseDifficultyOf(r.mode, r.seed), 0) / def.rounds.length;
 }
 function tournStarDifficulty(def: TournDef): 1 | 2 | 3 | 4 | 5 {
   return difficultyStars(tournDifficulty(def));
@@ -1872,7 +1878,7 @@ const TOURNAMENTS: TournDef[] = (() => {
     { mode: "course" }, { mode: "winthrop" }, { mode: "olympus" },
     ...TOUR_COURSES.map((c) => ({ mode: "tour", seed: c.seed } as TournRound)),
   ];
-  const cDiff = (r: TournRound) => courseDifficulty(tournRoundHoles(r));
+  const cDiff = (r: TournRound) => courseDifficultyOf(r.mode, r.seed);
   const byEasy = [...all].sort((a, b) => cDiff(a) - cDiff(b));
   const div = (d: TournDef) => TOURN_DIVISION_INDEX.get(d.id) ?? 0;
   const cmp = (a: TournDef, b: TournDef) => div(a) - div(b) || tournDifficulty(a) - tournDifficulty(b) || (a.id < b.id ? -1 : 1);
