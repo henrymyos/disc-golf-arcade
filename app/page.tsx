@@ -39,5 +39,6 @@ export async function generateMetadata({ searchParams }: { searchParams: Promise
 }
 
 export default function Home() {
-  return <DiscGolfGame />;
+  // contents: a landmark for screen readers without changing the body's flex layout.
+  return <main className="contents"><DiscGolfGame /></main>;
 }
