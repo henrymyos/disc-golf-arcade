@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mergeProgress, type Progress } from "../lib/progress";
+import { mergeProgress, courseHoleBestKey, type Progress } from "../lib/progress";
 
 const base: Progress = { best: null, winthropBest: null, holeBest: [], achievements: [], history: [], settings: null, career: null, coins: 0, daily: null, owned: [], profile: null, ranked: null, bag: [], bagSeen: [], levelRewarded: null };
 
@@ -27,6 +27,22 @@ describe("mergeProgress", () => {
     expect(m.holeBest[1]).toBe(2);
     expect(m.holeBest[2]).toBe(5);
     expect(m.holeBest).toHaveLength(18);
+  });
+
+  it("merges other courses' per-hole bests per course, keeping old rows without them", () => {
+    const a: Progress = { ...base, courseHoleBest: { winthrop: [3, 4], "tour-7": [2] } };
+    const b: Progress = { ...base, courseHoleBest: { winthrop: [2, null, 4] } };
+    const m = mergeProgress(a, b);
+    expect(m.courseHoleBest?.winthrop.slice(0, 3)).toEqual([2, 4, 4]);
+    expect(m.courseHoleBest?.["tour-7"][0]).toBe(2);
+    expect(mergeProgress(base, base).courseHoleBest).toEqual({});
+  });
+
+  it("keys per-hole bests only for premade courses", () => {
+    expect(courseHoleBestKey("winthrop", 99)).toBe("winthrop");
+    expect(courseHoleBestKey("tour", 12345)).toBe("tour-12345");
+    expect(courseHoleBestKey("daily", 5)).toBeNull();
+    expect(courseHoleBestKey("course", 1)).toBeNull(); // Glendoveer keeps its own key
   });
 
   it("unions achievements", () => {

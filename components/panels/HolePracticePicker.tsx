@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { HOLEBEST_KEY } from "@/lib/progress";
+import { HOLEBEST_KEY, courseHoleBestKey, readCourseHoleBest } from "@/lib/progress";
 import { courseHoles, type Mode } from "@/lib/discgolf/engine";
 import { FIXED_COURSES, TOUR_COURSE_INFOS, type CourseInfo } from "../game/courses";
 import { titleCardSm } from "./ui";
@@ -19,13 +19,14 @@ export function HolePracticePicker({ onBack, onPick }: {
   // Every premade course — the two championship layouts + every pro-tour venue.
   const allCourses = useMemo(() => [...FIXED_COURSES, ...TOUR_COURSE_INFOS], []);
   const [course, setCourse] = useState<CourseInfo>(allCourses[0]);
-  // Glendoveer per-hole bests, read once when the page opens.
+  // Per-hole bests (Glendoveer + every other premade course), read once when the page opens.
   const [holeBest] = useState<(number | null)[]>(() => {
     try {
       const hb = JSON.parse(localStorage.getItem(HOLEBEST_KEY) || "null");
       return Array.isArray(hb) ? hb : [];
     } catch { return []; }
   });
+  const [courseBests] = useState(readCourseHoleBest);
   const key = (c: CourseInfo) => (c.seed != null ? `tour-${c.seed}` : c.mode);
   const holes = courseHoles(course.mode, course.seed);
   return (
@@ -46,7 +47,8 @@ export function HolePracticePicker({ onBack, onPick }: {
       <p className="text-gray-500 text-[11px]">{course.name} · pick a hole — practice doesn&apos;t count toward bests or boards.</p>
       <div className="grid grid-cols-3 gap-1.5">
         {holes.map((h, i) => {
-          const best = course.mode === "course" ? holeBest[i] : null;
+          const ck = courseHoleBestKey(course.mode, course.seed);
+          const best = course.mode === "course" ? holeBest[i] : ck ? courseBests[ck]?.[i] : null;
           return (
             <button
               key={i}

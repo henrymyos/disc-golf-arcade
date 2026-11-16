@@ -11,6 +11,7 @@ export const BEST_KEY = "discgolf.best.glendoveer18";
 export const WBEST_KEY = "discgolf.best.winthrop18";
 export const OBEST_KEY = "discgolf.best.olympus18";
 export const HOLEBEST_KEY = "discgolf.holebest.glendoveer18";
+export const COURSEHOLEBEST_KEY = "discgolf.holebest.courses.v1"; // other premade courses' per-hole bests, keyed like challengeKey ("winthrop", "tour-<seed>")
 export const SETTINGS_KEY = "discgolf.settings.v1";
 export const ACH_KEY = "discgolf.achievements.v1";
 export const HIST_KEY = "discgolf.history.v1";
@@ -37,6 +38,7 @@ export type Progress = {
   winthropBest: number | null;
   olympusBest?: number | null; // optional: rows written before Olympus existed don't carry it
   holeBest: (number | null)[];
+  courseHoleBest?: Record<string, (number | null)[]>; // per-hole bests on Winthrop/Olympus/tour courses, keyed by course
   achievements: string[];
   history: HistoryRow[];
   settings: Record<string, unknown> | null;
@@ -100,6 +102,20 @@ export function trimDailyBests(map: Record<string, number>): Record<string, numb
   return out;
 }
 
+// Per-hole bests for a premade course other than Glendoveer: "winthrop", "olympus"
+// or "tour-<seed>" (same keys as challengeKey); null for courses without fixed holes.
+export function courseHoleBestKey(mode: string, seed: number | undefined): string | null {
+  if (mode === "winthrop" || mode === "olympus") return mode;
+  if (mode === "tour" && seed != null) return `tour-${seed}`;
+  return null;
+}
+
+export function readCourseHoleBest(): Record<string, (number | null)[]> {
+  if (typeof localStorage === "undefined") return {};
+  const m = parse<unknown>(localStorage.getItem(COURSEHOLEBEST_KEY), {});
+  return m && typeof m === "object" && !Array.isArray(m) ? (m as Record<string, (number | null)[]>) : {};
+}
+
 export function readLocalProgress(): Progress {
   if (typeof localStorage === "undefined") {
     return { best: null, winthropBest: null, holeBest: [], achievements: [], history: [], settings: null, career: null, coins: 0, daily: null, owned: [], profile: null, ranked: null, bag: [], bagSeen: [], levelRewarded: null };
@@ -111,6 +127,7 @@ export function readLocalProgress(): Progress {
   const oBestRaw = localStorage.getItem(OBEST_KEY);
   const olympusBest = oBestRaw != null && Number.isFinite(Number(oBestRaw)) ? Number(oBestRaw) : null;
   const holeBest = parse<(number | null)[]>(localStorage.getItem(HOLEBEST_KEY), []);
+  const courseHoleBest = readCourseHoleBest();
   const achievements = parse<string[]>(localStorage.getItem(ACH_KEY), []);
   const history = parse<HistoryRow[]>(localStorage.getItem(HIST_KEY), []);
   const settings = parse<Record<string, unknown> | null>(localStorage.getItem(SETTINGS_KEY), null);
@@ -138,7 +155,7 @@ export function readLocalProgress(): Progress {
   const coinsSpent = csRaw != null && Number.isFinite(Number(csRaw)) ? Number(csRaw) : undefined;
   const uaRaw = localStorage.getItem(UPDATEDAT_KEY);
   const updatedAt = uaRaw != null && Number.isFinite(Number(uaRaw)) ? Number(uaRaw) : undefined;
-  return { best, winthropBest, olympusBest, holeBest, achievements, history, settings, career, careers, coins, daily, owned, profile, ranked, bag, bagSeen, levelRewarded, dailyStars, dailyBests, coinsEarned, coinsSpent, updatedAt };
+  return { best, winthropBest, olympusBest, holeBest, courseHoleBest, achievements, history, settings, career, careers, coins, daily, owned, profile, ranked, bag, bagSeen, levelRewarded, dailyStars, dailyBests, coinsEarned, coinsSpent, updatedAt };
 }
 
 // Wipe this device's saved progress (device SETTINGS are kept). Used on sign-out
@@ -146,7 +163,7 @@ export function readLocalProgress(): Progress {
 // account's data lives in the cloud, which logging back in restores.
 export function clearLocalProgress() {
   if (typeof localStorage === "undefined") return;
-  for (const k of [BEST_KEY, WBEST_KEY, OBEST_KEY, HOLEBEST_KEY, ACH_KEY, HIST_KEY, CAREER_KEY, CAREERS_KEY, COINS_KEY, DAILY_KEY, OWNED_KEY, PROFILE_KEY, RANKED_KEY, BAG_KEY, BAGSEEN_KEY, LEVELREWARD_KEY, DAILYSTARS_KEY, DAILYBEST_KEY, COINSEARNED_KEY, COINSSPENT_KEY, UPDATEDAT_KEY]) {
+  for (const k of [BEST_KEY, WBEST_KEY, OBEST_KEY, HOLEBEST_KEY, COURSEHOLEBEST_KEY, ACH_KEY, HIST_KEY, CAREER_KEY, CAREERS_KEY, COINS_KEY, DAILY_KEY, OWNED_KEY, PROFILE_KEY, RANKED_KEY, BAG_KEY, BAGSEEN_KEY, LEVELREWARD_KEY, DAILYSTARS_KEY, DAILYBEST_KEY, COINSEARNED_KEY, COINSSPENT_KEY, UPDATEDAT_KEY]) {
     try { localStorage.removeItem(k); } catch { /* ignore */ }
   }
 }
@@ -158,6 +175,7 @@ export function applyProgress(p: Progress) {
     if (p.winthropBest != null) localStorage.setItem(WBEST_KEY, String(p.winthropBest));
     if (p.olympusBest != null) localStorage.setItem(OBEST_KEY, String(p.olympusBest));
     if (p.holeBest?.length) localStorage.setItem(HOLEBEST_KEY, JSON.stringify(p.holeBest));
+    if (p.courseHoleBest && Object.keys(p.courseHoleBest).length) localStorage.setItem(COURSEHOLEBEST_KEY, JSON.stringify(p.courseHoleBest));
     localStorage.setItem(ACH_KEY, JSON.stringify(p.achievements ?? []));
     localStorage.setItem(HIST_KEY, JSON.stringify((p.history ?? []).slice(-100)));
     if (p.settings) localStorage.setItem(SETTINGS_KEY, JSON.stringify(p.settings));
@@ -187,12 +205,16 @@ export function mergeProgress(a: Progress, b: Progress): Progress {
   const minDefined = (x: number | null, y: number | null) =>
     x == null ? y : y == null ? x : Math.min(x, y);
 
-  const len = Math.max(a.holeBest?.length ?? 0, b.holeBest?.length ?? 0, 18);
-  const holeBest: (number | null)[] = [];
-  for (let i = 0; i < len; i++) {
-    const x = a.holeBest?.[i] ?? null;
-    const y = b.holeBest?.[i] ?? null;
-    holeBest[i] = minDefined(x, y);
+  const mergeHoles = (x: (number | null)[] | undefined, y: (number | null)[] | undefined) => {
+    const len = Math.max(x?.length ?? 0, y?.length ?? 0, 18);
+    const out: (number | null)[] = [];
+    for (let i = 0; i < len; i++) out[i] = minDefined(x?.[i] ?? null, y?.[i] ?? null);
+    return out;
+  };
+  const holeBest = mergeHoles(a.holeBest, b.holeBest);
+  const courseHoleBest: Record<string, (number | null)[]> = {};
+  for (const k of new Set([...Object.keys(a.courseHoleBest ?? {}), ...Object.keys(b.courseHoleBest ?? {})])) {
+    courseHoleBest[k] = mergeHoles(a.courseHoleBest?.[k], b.courseHoleBest?.[k]);
   }
 
   const achievements = Array.from(new Set([...(a.achievements ?? []), ...(b.achievements ?? [])]));
@@ -287,6 +309,7 @@ export function mergeProgress(a: Progress, b: Progress): Progress {
     winthropBest: minDefined(a.winthropBest, b.winthropBest),
     olympusBest: minDefined(a.olympusBest ?? null, b.olympusBest ?? null),
     holeBest,
+    courseHoleBest,
     achievements,
     history: history.slice(-100),
     settings: newer.settings ?? older.settings,
