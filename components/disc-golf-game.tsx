@@ -718,7 +718,10 @@ export function DiscGolfGame() {
       const ach = JSON.parse(localStorage.getItem(ACH_KEY) || "[]");
       if (Array.isArray(ach)) { unlockedRef.current = ach; setUnlocked(ach); }
       const hist = JSON.parse(localStorage.getItem(HIST_KEY) || "[]");
-      if (Array.isArray(hist)) { roundsPlayedRef.current = hist.length; setRoundsPlayed(hist.length); setHistory(hist); setNewPlayer(hist.length === 0); }
+      if (Array.isArray(hist)) {
+        const rounds = Math.max(hist.length, readLifetime()?.rounds ?? 0); // all-time: history keeps only the last 100
+        roundsPlayedRef.current = rounds; setRoundsPlayed(rounds); setHistory(hist); setNewPlayer(hist.length === 0);
+      }
       const tourn = JSON.parse(localStorage.getItem(TOURN_KEY) || "null");
       if (tourn && typeof tourn.id === "string" && tournDef(tourn.id) && Array.isArray(tourn.myTotals)) setTournament(tourn);
       setResumeRound(readResume());
@@ -2105,9 +2108,11 @@ export function DiscGolfGame() {
       hist.push({ mode, total, date: Date.now(), scores, pars, ...(stats ? { stats } : {}) });
       const trimmed = hist.slice(-100);
       try { localStorage.setItem(HIST_KEY, JSON.stringify(trimmed)); } catch { /* ignore */ }
-      try { localStorage.setItem(LIFETIME_KEY, JSON.stringify(nextLifetime(readLifetime(), hist, scores))); } catch { /* ignore */ }
-      roundsPlayedRef.current = hist.length;
-      setRoundsPlayed(hist.length);
+      const life = nextLifetime(readLifetime(), hist, scores);
+      try { localStorage.setItem(LIFETIME_KEY, JSON.stringify(life)); } catch { /* ignore */ }
+      const rounds = Math.max(hist.length, life.rounds); // XP counts all-time rounds, not the 100-round history
+      roundsPlayedRef.current = rounds;
+      setRoundsPlayed(rounds);
       setHistory(trimmed);
       setRoundSerial((n) => n + 1); // a finished round may complete the menu's Next goal
 
