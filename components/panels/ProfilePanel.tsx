@@ -9,6 +9,7 @@ import {
   TOTAL_PAR, WINTHROP_PAR, OLYMPUS_PAR, ACHIEVEMENTS, BAG_MAX, type Achievement,
 } from "@/lib/discgolf/engine";
 import { Coin } from "./ui";
+import { readLifetime } from "@/lib/progress";
 
 
 // Player profile — pick an avatar, set a name, see your level and badges.
@@ -35,6 +36,7 @@ export function ProfilePanel({ profile, coins, owned, unlocked, roundsPlayed, be
 }) {
   const discsOwned = owned.filter((k) => !k.includes(":")).length; // exclude avatar:/event: cosmetics
   const lvl = levelFromXp(playerXp(roundsPlayed, unlocked.length, discsOwned));
+  const [lifeRounds] = useState(() => readLifetime()?.rounds ?? 0); // history (roundsPlayed) keeps only the last 100
   const pct = lvl.need ? Math.round((lvl.into / lvl.need) * 100) : 100;
   const over = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
   const [badgeInfo, setBadgeInfo] = useState<Achievement | null>(null); // tapped badge → its how-to-earn card
@@ -70,7 +72,7 @@ export function ProfilePanel({ profile, coins, owned, unlocked, roundsPlayed, be
         {/* Lifetime stats */}
         <div className="grid grid-cols-5 gap-1.5 text-center">
           {[
-            { v: roundsPlayed, l: "Rounds" },
+            { v: Math.max(roundsPlayed, lifeRounds), l: "Rounds" },
             { v: bestScore != null ? over(bestScore - TOTAL_PAR) : "–", l: "GE Best" },
             { v: winthropBest != null ? over(winthropBest - WINTHROP_PAR) : "–", l: "WL Best" },
             { v: olympusBest != null ? over(olympusBest - OLYMPUS_PAR) : "–", l: "OLY Best" },

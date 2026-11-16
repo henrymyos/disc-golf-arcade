@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mergeProgress, courseHoleBestKey, type Progress } from "../lib/progress";
+import { mergeProgress, courseHoleBestKey, nextLifetime, type Progress } from "../lib/progress";
 
 const base: Progress = { best: null, winthropBest: null, holeBest: [], achievements: [], history: [], settings: null, career: null, coins: 0, daily: null, owned: [], profile: null, ranked: null, bag: [], bagSeen: [], levelRewarded: null };
 
@@ -43,6 +43,20 @@ describe("mergeProgress", () => {
     expect(courseHoleBestKey("tour", 12345)).toBe("tour-12345");
     expect(courseHoleBestKey("daily", 5)).toBeNull();
     expect(courseHoleBestKey("course", 1)).toBeNull(); // Glendoveer keeps its own key
+  });
+
+  it("merges lifetime counters by the larger value, absent on old rows", () => {
+    const a: Progress = { ...base, lifetime: { rounds: 140, aces: 2 } };
+    const b: Progress = { ...base, lifetime: { rounds: 120, aces: 3 } };
+    expect(mergeProgress(a, b).lifetime).toEqual({ rounds: 140, aces: 3 });
+    expect(mergeProgress(a, base).lifetime).toEqual({ rounds: 140, aces: 2 });
+    expect(mergeProgress(base, base).lifetime).toBeUndefined();
+  });
+
+  it("counts lifetime rounds and aces, seeding from history the first time", () => {
+    const hist = [{ scores: [1, 3, 1] }, { scores: [2] }, {}];
+    expect(nextLifetime(null, hist, [2])).toEqual({ rounds: 3, aces: 2 });
+    expect(nextLifetime({ rounds: 150, aces: 4 }, hist, [3, 1, 4])).toEqual({ rounds: 151, aces: 5 });
   });
 
   it("unions achievements", () => {

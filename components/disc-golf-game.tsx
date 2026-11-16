@@ -9,7 +9,7 @@ import {
 import type { ArcadeScore } from "@/lib/arcade-types";
 import { getSupabase } from "@/lib/supabase/browser";
 import {
-  BEST_KEY, WBEST_KEY, OBEST_KEY, HOLEBEST_KEY, COURSEHOLEBEST_KEY, courseHoleBestKey, readCourseHoleBest, SETTINGS_KEY, ACH_KEY, HIST_KEY, CAREER_KEY, CAREERS_KEY, CAREER_SLOTS, COINS_KEY, DAILY_KEY, OWNED_KEY, PROFILE_KEY, RANKED_KEY, BAG_KEY, BAGSEEN_KEY, LEVELREWARD_KEY, DAILYSTARS_KEY, DAILYBEST_KEY, COINSEARNED_KEY, COINSSPENT_KEY, UPDATEDAT_KEY, readLocalProgress, applyProgress, mergeProgress, clearLocalProgress, trimDailyStars, trimDailyBests, type Progress,
+  BEST_KEY, WBEST_KEY, OBEST_KEY, HOLEBEST_KEY, COURSEHOLEBEST_KEY, courseHoleBestKey, readCourseHoleBest, SETTINGS_KEY, ACH_KEY, HIST_KEY, CAREER_KEY, CAREERS_KEY, CAREER_SLOTS, COINS_KEY, DAILY_KEY, OWNED_KEY, PROFILE_KEY, RANKED_KEY, BAG_KEY, BAGSEEN_KEY, LEVELREWARD_KEY, DAILYSTARS_KEY, DAILYBEST_KEY, COINSEARNED_KEY, COINSSPENT_KEY, UPDATEDAT_KEY, LIFETIME_KEY, readLifetime, nextLifetime, readLocalProgress, applyProgress, mergeProgress, clearLocalProgress, trimDailyStars, trimDailyBests, type Progress,
 } from "@/lib/progress";
 import {
   dayNumber, claimDailyReward, dailyAvailable, coinsForRound, modeCoinMult, fmtCoins, dailyStarCoins, type DailyReward,
@@ -2105,6 +2105,7 @@ export function DiscGolfGame() {
       hist.push({ mode, total, date: Date.now(), scores, pars, ...(stats ? { stats } : {}) });
       const trimmed = hist.slice(-100);
       try { localStorage.setItem(HIST_KEY, JSON.stringify(trimmed)); } catch { /* ignore */ }
+      try { localStorage.setItem(LIFETIME_KEY, JSON.stringify(nextLifetime(readLifetime(), hist, scores))); } catch { /* ignore */ }
       roundsPlayedRef.current = hist.length;
       setRoundsPlayed(hist.length);
       setHistory(trimmed);

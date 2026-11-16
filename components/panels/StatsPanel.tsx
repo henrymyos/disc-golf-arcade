@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { HIST_KEY } from "@/lib/progress";
+import { HIST_KEY, readLifetime } from "@/lib/progress";
 import { totalStats, pctLabel, toParSummary, toParLabel, type RoundStats } from "@/lib/discgolf/stats";
 
 // C1X / C2 putting, parked throws and penalty strokes — the round summary and
@@ -33,6 +33,8 @@ export function StatsPanel({ onClose }: { onClose: () => void }) {
       return Array.isArray(h) ? h : [];
     } catch { return []; }
   });
+  const [life] = useState(readLifetime);
+  const rounds = Math.max(hist.length, life?.rounds ?? 0);
   const byMode = (m: string) => hist.filter((r) => r.mode === m);
   const avg = (rows: { total: number }[]) => (rows.length ? (rows.reduce((s, r) => s + r.total, 0) / rows.length).toFixed(1) : "–");
   const best = (rows: { total: number }[]) => (rows.length ? Math.min(...rows.map((r) => r.total)) : null);
@@ -87,7 +89,10 @@ export function StatsPanel({ onClose }: { onClose: () => void }) {
           <p className="text-gray-400 text-sm">No rounds yet — play one and come back!</p>
         ) : (
           <>
-            <p className="text-gray-400 text-xs">{hist.length} round{hist.length === 1 ? "" : "s"} played</p>
+            <p className="text-gray-400 text-xs">
+              {rounds} round{rounds === 1 ? "" : "s"} played{life && life.aces > 0 ? ` · ${life.aces} ace${life.aces === 1 ? "" : "s"} all-time` : ""}
+              {hist.length < rounds ? ` · breakdown covers your last ${hist.length}` : ""}
+            </p>
             <div className="space-y-1.5">
               {rowsFor.map(({ label, text }) => (
                 <div key={label} className="flex items-center justify-between bg-[#1a1d23] border border-white/10 rounded-lg px-3 py-2 text-sm">

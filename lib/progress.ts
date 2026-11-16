@@ -12,6 +12,7 @@ export const WBEST_KEY = "discgolf.best.winthrop18";
 export const OBEST_KEY = "discgolf.best.olympus18";
 export const HOLEBEST_KEY = "discgolf.holebest.glendoveer18";
 export const COURSEHOLEBEST_KEY = "discgolf.holebest.courses.v1"; // other premade courses' per-hole bests, keyed like challengeKey ("winthrop", "tour-<seed>")
+export const LIFETIME_KEY = "discgolf.lifetime.v1"; // all-time rounds + aces (history keeps only the last 100 rounds)
 export const SETTINGS_KEY = "discgolf.settings.v1";
 export const ACH_KEY = "discgolf.achievements.v1";
 export const HIST_KEY = "discgolf.history.v1";
@@ -57,6 +58,7 @@ export type Progress = {
   coinsEarned?: number; // monotonic lifetime earned (balance = earned − spent)
   coinsSpent?: number;  // monotonic lifetime spent
   updatedAt?: number;   // last local change time (ms), for newer-wins merges
+  lifetime?: Lifetime;  // all-time counters (monotonic; merge keeps the larger)
 };
 
 // Normalize any progress to a fixed-length array of career slots. Older progress
@@ -116,6 +118,22 @@ export function readCourseHoleBest(): Record<string, (number | null)[]> {
   return m && typeof m === "object" && !Array.isArray(m) ? (m as Record<string, (number | null)[]>) : {};
 }
 
+export type Lifetime = { rounds: number; aces: number };
+
+export function readLifetime(): Lifetime | null {
+  if (typeof localStorage === "undefined") return null;
+  const v = parse<Partial<Lifetime> | null>(localStorage.getItem(LIFETIME_KEY), null);
+  return v && Number.isFinite(v.rounds) && Number.isFinite(v.aces) ? { rounds: v.rounds!, aces: v.aces! } : null;
+}
+
+// Counters after a finished round. `hist` already includes that round; with no
+// stored counters yet, start from what the (≤100-round) history still holds.
+export function nextLifetime(prev: Lifetime | null, hist: { scores?: number[] }[], scores: number[]): Lifetime {
+  const aces = (s?: number[]) => (s ?? []).filter((x) => x === 1).length;
+  if (!prev) return { rounds: hist.length, aces: hist.reduce((n, r) => n + aces(r.scores), 0) };
+  return { rounds: prev.rounds + 1, aces: prev.aces + aces(scores) };
+}
+
 export function readLocalProgress(): Progress {
   if (typeof localStorage === "undefined") {
     return { best: null, winthropBest: null, holeBest: [], achievements: [], history: [], settings: null, career: null, coins: 0, daily: null, owned: [], profile: null, ranked: null, bag: [], bagSeen: [], levelRewarded: null };
@@ -153,9 +171,10 @@ export function readLocalProgress(): Progress {
   const coinsEarned = ceRaw != null && Number.isFinite(Number(ceRaw)) ? Number(ceRaw) : undefined;
   const csRaw = localStorage.getItem(COINSSPENT_KEY);
   const coinsSpent = csRaw != null && Number.isFinite(Number(csRaw)) ? Number(csRaw) : undefined;
+  const lifetime = readLifetime() ?? undefined;
   const uaRaw = localStorage.getItem(UPDATEDAT_KEY);
   const updatedAt = uaRaw != null && Number.isFinite(Number(uaRaw)) ? Number(uaRaw) : undefined;
-  return { best, winthropBest, olympusBest, holeBest, courseHoleBest, achievements, history, settings, career, careers, coins, daily, owned, profile, ranked, bag, bagSeen, levelRewarded, dailyStars, dailyBests, coinsEarned, coinsSpent, updatedAt };
+  return { best, winthropBest, olympusBest, holeBest, courseHoleBest, achievements, history, settings, career, careers, coins, daily, owned, profile, ranked, bag, bagSeen, levelRewarded, dailyStars, dailyBests, coinsEarned, coinsSpent, updatedAt, lifetime };
 }
 
 // Wipe this device's saved progress (device SETTINGS are kept). Used on sign-out
@@ -163,7 +182,7 @@ export function readLocalProgress(): Progress {
 // account's data lives in the cloud, which logging back in restores.
 export function clearLocalProgress() {
   if (typeof localStorage === "undefined") return;
-  for (const k of [BEST_KEY, WBEST_KEY, OBEST_KEY, HOLEBEST_KEY, COURSEHOLEBEST_KEY, ACH_KEY, HIST_KEY, CAREER_KEY, CAREERS_KEY, COINS_KEY, DAILY_KEY, OWNED_KEY, PROFILE_KEY, RANKED_KEY, BAG_KEY, BAGSEEN_KEY, LEVELREWARD_KEY, DAILYSTARS_KEY, DAILYBEST_KEY, COINSEARNED_KEY, COINSSPENT_KEY, UPDATEDAT_KEY]) {
+  for (const k of [BEST_KEY, WBEST_KEY, OBEST_KEY, HOLEBEST_KEY, COURSEHOLEBEST_KEY, ACH_KEY, HIST_KEY, CAREER_KEY, CAREERS_KEY, COINS_KEY, DAILY_KEY, OWNED_KEY, PROFILE_KEY, RANKED_KEY, BAG_KEY, BAGSEEN_KEY, LEVELREWARD_KEY, DAILYSTARS_KEY, DAILYBEST_KEY, COINSEARNED_KEY, COINSSPENT_KEY, UPDATEDAT_KEY, LIFETIME_KEY]) {
     try { localStorage.removeItem(k); } catch { /* ignore */ }
   }
 }
@@ -196,6 +215,7 @@ export function applyProgress(p: Progress) {
     if (p.coinsEarned != null) localStorage.setItem(COINSEARNED_KEY, String(Math.max(0, Math.round(p.coinsEarned))));
     if (p.coinsSpent != null) localStorage.setItem(COINSSPENT_KEY, String(Math.max(0, Math.round(p.coinsSpent))));
     if (p.updatedAt != null) localStorage.setItem(UPDATEDAT_KEY, String(p.updatedAt));
+    if (p.lifetime) localStorage.setItem(LIFETIME_KEY, JSON.stringify(p.lifetime));
   } catch { /* ignore */ }
 }
 
@@ -334,5 +354,10 @@ export function mergeProgress(a: Progress, b: Progress): Progress {
     levelRewarded: a.levelRewarded == null ? b.levelRewarded : b.levelRewarded == null ? a.levelRewarded : Math.max(a.levelRewarded, b.levelRewarded),
     dailyStars: trimDailyStars(dailyStars),
     dailyBests: trimDailyBests(dailyBests),
+    // Lifetime counters: larger wins per field (a round played on both devices
+    // before a sync is counted once, never twice).
+    lifetime: a.lifetime || b.lifetime
+      ? { rounds: Math.max(a.lifetime?.rounds ?? 0, b.lifetime?.rounds ?? 0), aces: Math.max(a.lifetime?.aces ?? 0, b.lifetime?.aces ?? 0) }
+      : undefined,
   };
 }
