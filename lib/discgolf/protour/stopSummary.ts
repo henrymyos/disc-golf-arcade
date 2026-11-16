@@ -3,7 +3,7 @@
 // the first one: it says "2 courses" and shows the best of the course with the
 // most stars (ties: the lowest score vs par), naming that course.
 import { courseStars, proTourCourseById, type ProTourCourse } from "../engine";
-import type { ProStop } from "./season2026";
+import { SEASON_2026, type ProStop } from "./season2026";
 
 export type StopSummary = {
   built: ProTourCourse[]; // playable courses, in the stop's listed order
@@ -28,3 +28,6 @@ export function stopSummary(s: ProStop, bests: Record<number, number>): StopSumm
   }
   return { built, courseLabel, best, bestNamed: built.length > 1 };
 }
+
+// How many season stops have at least one playable course (the menu card).
+export const PRO_STOPS_BUILT = SEASON_2026.filter((s) => builtCourses(s).length > 0).length;

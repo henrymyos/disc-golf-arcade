@@ -14,9 +14,6 @@ export const FAN_NOTE = "Fan-made. Not affiliated with the DGPT, PDGA or the cou
 
 const fmtFt = (n: number) => n.toLocaleString("en-US");
 const over = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
-// A stop opens on its first built course (multi-course events list the
-// final-round course last, but only built courses can be opened).
-export const PRO_STOPS_BUILT = SEASON_2026.filter((s) => builtCourses(s).length > 0).length;
 
 function TierBadge({ tier }: { tier: ProTier }) {
   if (tier === "Major") return <span className="rounded px-1.5 py-px text-[9px] font-black uppercase tracking-wide bg-[#f5d24a] text-[#0f1117]">Major</span>;
@@ -110,7 +107,7 @@ function CourseDetail({ s, courseId, setCourseId, bests, onBack, onPlay, onPract
   const listRef = useRef<HTMLDivElement>(null);
   const [hint, setHint] = useState(false);
   if (!c) return null;
-  const holes = c.course.holes;
+  const holes = c.proHoles;
   const waterHoles = holes.filter((h) => (h.water ?? []).length > 0).length;
   const islands = holes.filter((h) => h.islandGreen).length;
   const best = bests[c.seed] ?? null;

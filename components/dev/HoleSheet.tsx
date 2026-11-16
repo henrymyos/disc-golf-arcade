@@ -61,7 +61,7 @@ function CourseSheet({ c }: { c: ProTourCourse }) {
       </h2>
       <div className="mt-2 flex flex-wrap items-start gap-3">
         {c.holes.map((h, i) => {
-          const ph = c.course.holes[i];
+          const ph = c.proHoles[i];
           return (
             <figure key={i} className="bg-[#1a1d23] border border-white/10 rounded-lg p-1.5" data-hole={i + 1}>
               <figcaption className="text-[11px] text-gray-300 font-mono mb-1">

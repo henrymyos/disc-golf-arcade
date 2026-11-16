@@ -40,7 +40,7 @@ export function parForChallenge(mode: Mode, seed: number): number {
   if (mode === "course") return TOTAL_PAR;
   if (mode === "winthrop") return WINTHROP_PAR;
   if (mode === "olympus") return OLYMPUS_PAR;
-  if (mode === "tour") return buildRound(seed, "tour").reduce((s, h) => s + h.par, 0);
+  if (mode === "tour") return proTourCourseBySeed(seed)?.par ?? buildRound(seed, "tour").reduce((s, h) => s + h.par, 0);
   return buildRound(seed, "daily").reduce((s, h) => s + h.par, 0);
 }
 

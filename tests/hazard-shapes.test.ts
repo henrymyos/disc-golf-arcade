@@ -67,7 +67,7 @@ describe("shaped hazards: hit-tests", () => {
     for (const hz of cases) for (let x = -5; x <= 60; x += 0.5) for (let y = -5; y <= 70; y += 0.5) expect(inHazard(hz, x, y)).toBe(old(hz, x, y));
     // …and every Pro Tour circle still converts to a plain round box with no rings.
     let n = 0;
-    for (const c of PROTOUR_COURSES) c.course.holes.forEach((h, i) => (h.hazard ?? []).forEach((z, j) => {
+    for (const c of PROTOUR_COURSES) c.proHoles.forEach((h, i) => (h.hazard ?? []).forEach((z, j) => {
       if (!("d" in z)) return;
       const g = c.holes[i].hazard![j];
       expect(g.rings).toBeUndefined();
@@ -143,7 +143,7 @@ describe("shaped hazards: Pro Tour format → world", () => {
 
 describe("Bad Rock Creek 13: one sand area, two islands", () => {
   const h = proTourCourseById("bad-rock-creek")!;
-  const src = h.course.holes[12];
+  const src = h.proHoles[12];
   const g = h.holes[12];
   const at = (x: number, y: number) => ({ x: g.tee.x + x / FT, y: g.tee.y - y / FT });
   const sand = (x: number, y: number) => { const p = at(x, y); return g.hazard!.some((hz) => inHazard(hz, p.x, p.y)); };
@@ -198,7 +198,7 @@ describe("round 2: Pickard 7, Ivy Hill 11, Winthrop Gold 14, Harvey Penick 9", (
   });
 
   it("Winthrop Gold 14: the three stacked disks are one bunker; four round disks stay", () => {
-    const src = proTourCourseById("winthrop-gold")!.course.holes[13];
+    const src = proTourCourseById("winthrop-gold")!.proHoles[13];
     expect(src.hazard!.filter((z) => "d" in z)).toHaveLength(4);
     expect(src.hazard!.filter((z) => "poly" in z)).toHaveLength(1);
   });
