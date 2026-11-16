@@ -9,7 +9,7 @@ import {
 import type { ArcadeScore } from "@/lib/arcade-types";
 import { getSupabase } from "@/lib/supabase/browser";
 import {
-  BEST_KEY, WBEST_KEY, OBEST_KEY, HOLEBEST_KEY, SETTINGS_KEY, ACH_KEY, HIST_KEY, CAREER_KEY, CAREERS_KEY, CAREER_SLOTS, COINS_KEY, DAILY_KEY, OWNED_KEY, PROFILE_KEY, RANKED_KEY, BAG_KEY, BAGSEEN_KEY, LEVELREWARD_KEY, DAILYSTARS_KEY, DAILYBEST_KEY, COINSEARNED_KEY, COINSSPENT_KEY, UPDATEDAT_KEY, readLocalProgress, applyProgress, mergeProgress, clearLocalProgress, trimDailyStars, trimDailyBests, type Progress,
+  BEST_KEY, WBEST_KEY, OBEST_KEY, HOLEBEST_KEY, COURSEHOLEBEST_KEY, courseHoleBestKey, readCourseHoleBest, SETTINGS_KEY, ACH_KEY, HIST_KEY, CAREER_KEY, CAREERS_KEY, CAREER_SLOTS, COINS_KEY, DAILY_KEY, OWNED_KEY, PROFILE_KEY, RANKED_KEY, BAG_KEY, BAGSEEN_KEY, LEVELREWARD_KEY, DAILYSTARS_KEY, DAILYBEST_KEY, COINSEARNED_KEY, COINSSPENT_KEY, UPDATEDAT_KEY, readLocalProgress, applyProgress, mergeProgress, clearLocalProgress, trimDailyStars, trimDailyBests, type Progress,
 } from "@/lib/progress";
 import {
   dayNumber, claimDailyReward, dailyAvailable, coinsForRound, modeCoinMult, fmtCoins, dailyStarCoins, type DailyReward,
@@ -2470,22 +2470,29 @@ export function DiscGolfGame() {
   }, [finalTotal, finalPars, finalMode, finalSeed, finalPracticeHole, finalParty, finalDailyStars, finalChallenge, dayBests, dayStars, scorecard, profile.name, lastReplay]);
 
   // When a hole finishes, record/show the best-ever strokes for that hole.
-  // Only for Glendoveer — the daily course's holes change every day.
+  // Only for premade courses (Glendoveer, Winthrop, Olympus, tour venues) — the
+  // daily course's holes change every day.
   useEffect(() => {
     if (screen !== "holeComplete") return;
     const g = stateRef.current;
-    if (!g || g.mode !== "course" || g.practice || g.career) { setHoleBestNote(null); return; }
+    const courseKey = g ? courseHoleBestKey(g.mode, g.seed) : null;
+    if (!g || (g.mode !== "course" && !courseKey) || g.practice || g.career || g.mini) { setHoleBestNote(null); return; }
     const idx = g.holeIndex;
     const s = g.scores[idx];
     if (typeof s !== "number") return;
-    const prev = holeBestRef.current[idx];
+    const courseBests = courseKey ? readCourseHoleBest() : null;
+    const bests = courseBests ? (Array.isArray(courseBests[courseKey!]) ? courseBests[courseKey!] : []) : holeBestRef.current;
+    const prev = typeof bests[idx] === "number" ? bests[idx] : null;
     const isNew = prev == null || s < prev;
     const best = isNew ? s : prev;
     if (isNew) {
-      const arr = holeBestRef.current.slice();
+      const arr = bests.slice();
       arr[idx] = s;
-      holeBestRef.current = arr;
-      try { localStorage.setItem(HOLEBEST_KEY, JSON.stringify(arr)); } catch { /* ignore */ }
+      for (let i = 0; i < idx; i++) arr[i] ??= null; // no holes in the JSON array
+      try {
+        if (courseBests) localStorage.setItem(COURSEHOLEBEST_KEY, JSON.stringify({ ...courseBests, [courseKey!]: arr }));
+        else { holeBestRef.current = arr; localStorage.setItem(HOLEBEST_KEY, JSON.stringify(arr)); }
+      } catch { /* ignore */ }
       saveProgress();
     }
     setHoleBestNote({ best: best as number, isNew });
