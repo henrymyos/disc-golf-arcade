@@ -61,3 +61,7 @@ export type ProCourse = {
   book: string; // the public caddie book the facts came from
   holes: ProHole[];
 };
+
+// A course without its holes: what the menus, HUD and share cards read before
+// the hole data has loaded (see ./meta).
+export type ProCourseMeta = Omit<ProCourse, "holes" | "book"> & { par: number; lengthFt: number };

@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   proHoleToHole,
   proHoleBoundsFt,
@@ -388,7 +388,7 @@ describe.each(COURSES.map((c) => [c.id, c] as const))("%s data matches its caddi
 });
 
 describe("Henry's Oct 16 rules for Pro Tour holes: tee-shot catch radius and drive-only drop zones", () => {
-  const proHoles = PROTOUR_COURSES.flatMap((c) => c.holes.map((h, i) => ({ id: c.course.id, n: i + 1, h, ph: c.course.holes[i] })));
+  const proHoles = PROTOUR_COURSES.flatMap((c) => c.holes.map((h, i) => ({ id: c.course.id, n: i + 1, h, ph: c.proHoles[i] })));
   const handAuthored: Hole[] = [
     ...buildRound(1, "course"), ...buildRound(1, "winthrop"), ...buildRound(1, "olympus"),
     ...TOUR_COURSES.flatMap((t) => buildRound(t.seed, "tour")),
@@ -934,5 +934,38 @@ describe("pro tour courses plug into the tour seed space", () => {
     const c = PROTOUR_COURSES[0];
     expect(generateTourCourse(c.seed)).toEqual(generateTourCourse(c.seed));
     for (const t of TOUR_COURSES) expect(isProTourSeed(t.seed)).toBe(false);
+  });
+});
+
+describe("Pro Tour hole data loads on demand", () => {
+  it("keeps the menu meta in step with the course files (order, fields, par, length)", async () => {
+    const { PRO_COURSE_META } = await import("../lib/discgolf/protour/meta");
+    const { PRO_COURSES } = await import("../lib/discgolf/protour/courses");
+    expect(PRO_COURSE_META.map((m) => m.id)).toEqual(PRO_COURSES.map((c) => c.id));
+    expect(PRO_COURSES.map((c) => c.id)).toEqual(COURSES.map((c) => c.id));
+    PRO_COURSES.forEach((c, i) => {
+      expect(PRO_COURSE_META[i], c.id).toEqual({
+        id: c.id, name: c.name, city: c.city, layoutLabel: c.layoutLabel, theme: c.theme,
+        par: c.holes.reduce((s, h) => s + h.par, 0), lengthFt: c.holes.reduce((s, h) => s + h.lengthFt, 0),
+      });
+    });
+  });
+
+  it("serves names, seeds and par before the holes load, and only builds rounds after", async () => {
+    vi.resetModules(); // a fresh engine: nothing loaded yet
+    const eng = await import("../lib/discgolf/engine");
+    const { parForChallenge } = await import("../lib/discgolf/challenge");
+    const seed = eng.proTourCourseById("maple-hill")!.seed;
+    expect(eng.proTourLoaded()).toBe(false);
+    expect(eng.isProTourSeed(seed)).toBe(true);
+    expect(eng.needsProTour("tour", seed)).toBe(true);
+    expect(eng.needsProTour("course", seed)).toBe(false);
+    expect(eng.needsProTour("tour", TOUR_COURSES[0].seed)).toBe(false); // generated venues never wait
+    expect(eng.tourVenue(seed)).toBe("Maple Hill");
+    expect(parForChallenge("tour", seed)).toBe(61);
+    expect(() => eng.buildRound(seed, "tour")).toThrow(/not loaded/);
+    await eng.loadProTour();
+    expect(eng.needsProTour("tour", seed)).toBe(false);
+    expect(eng.buildRound(seed, "tour")).toHaveLength(18);
   });
 });

@@ -53,7 +53,7 @@ function auditHole(g: Hole) {
 }
 
 const report = PROTOUR_COURSES.flatMap((c) => c.holes.map((g, i) => {
-  const src = c.course.holes[i];
+  const src = c.proHoles[i];
   // Key/balance trees whose trunk touches a hazard are dropped at build time
   // (populateTrees). Authored trees come first in the tree list, so build the hole
   // without hazards to get their world positions, then look for each one.

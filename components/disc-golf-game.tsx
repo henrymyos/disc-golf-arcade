@@ -33,7 +33,7 @@ import {
   dailyChallenges, weeklyChallenges, roundsThisDay, roundsThisWeek, challengeDone, dailyClaimKey, eventClaimKey, type EventRound,
 } from "@/lib/discgolf/events";
 import {
-  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, leaderboardCourse, TOURN_KEY, TOURNAMENTS, tournDef, tournRoundPlayHoles, tournPlace, tournFieldRound, tournLiveStandings, ACHIEVEMENTS, earnedAchievements, achievementReward, scoreLabel, STRAIGHT_SPEED_MUL, releaseSpeedMul, ADV_DISCS, levelUpChoices, validDiscIndex, DEFAULT_DISC_INDEX, BAG_MAX, discIndexByKey, unlockedDiscKeys, reconcileBag, tourVenue, isProTourSeed, proTourCourseBySeed, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, dailySeed, dailyStarThresholds, dailyStarsEarned, buildRound, elevAt, vibrate, pxToFeet, distBetween, autoDiscIndex, windAlong, resolvePenalty, isTeeLie, catchRFor, treesAtLie, stepFlight, type Vec, type Hole, type Mode, type Tournament, type TournLiveRow, type Achievement, type FlightPath, type Release, type Flight, type GhostState,
+  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, leaderboardCourse, TOURN_KEY, TOURNAMENTS, tournDef, tournRoundPlayHoles, tournPlace, tournFieldRound, tournLiveStandings, ACHIEVEMENTS, earnedAchievements, achievementReward, scoreLabel, STRAIGHT_SPEED_MUL, releaseSpeedMul, ADV_DISCS, levelUpChoices, validDiscIndex, DEFAULT_DISC_INDEX, BAG_MAX, discIndexByKey, unlockedDiscKeys, reconcileBag, tourVenue, isProTourSeed, proTourCourseBySeed, loadProTour, needsProTour, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, dailySeed, dailyStarThresholds, dailyStarsEarned, buildRound, elevAt, vibrate, pxToFeet, distBetween, autoDiscIndex, windAlong, resolvePenalty, isTeeLie, catchRFor, treesAtLie, stepFlight, type Vec, type Hole, type Mode, type Tournament, type TournLiveRow, type Achievement, type FlightPath, type Release, type Flight, type GhostState,
 } from "@/lib/discgolf/engine";
 import { parseChallenge, challengeParam, isChallengeTourSeed } from "@/lib/discgolf/challenge";
 import { buildReplay, replayFrame, type Replay } from "@/lib/discgolf/replay";
@@ -63,7 +63,7 @@ import { TutorialPanel } from "./panels/TutorialPanel";
 import { StatsPanel, GameStatsGrid } from "./panels/StatsPanel";
 import { LeaderboardPanel } from "./panels/LeaderboardPanel";
 import { CoursesPanel } from "./panels/CoursesPanel";
-import { ProTourPanel, PRO_STOPS_BUILT } from "./panels/ProTourPanel";
+import { PRO_STOPS_BUILT } from "@/lib/discgolf/protour/stopSummary";
 import { SEASON_2026 } from "@/lib/discgolf/protour/season2026";
 import { BagPanel, LevelUpPanel } from "./panels/BagPanels";
 import { RankedPanel, PlacementReveal, PlacementDots } from "./panels/RankedPanel";
@@ -100,7 +100,7 @@ import { postMiniResult, postRoundResult, readBoardChoice, writeBoardChoice, typ
 // Dev-only hole sheet (/?holesheet=<course-id>): every Pro Tour hole drawn whole
 // at one scale. The constant folds to null in production, so the sheet's module
 // is never bundled there.
-const HoleSheet = process.env.NODE_ENV !== "production" ? dynamic(() => import("./dev/HoleSheet"), { ssr: false }) : null;
+const HoleSheet = process.env.NODE_ENV !== "production" ? dynamic(() => Promise.all([import("./dev/HoleSheet"), loadProTour()]).then(([m]) => m), { ssr: false }) : null;
 
 // Menu overlays that only open on a tap load as their own chunks, keeping them
 // out of the first-load bundle. preloadPanels() fetches them once the page is idle
@@ -111,6 +111,8 @@ const loadCareer = () => import("./panels/CareerPanel");
 const loadShop = () => import("./panels/ShopPanel");
 const loadProfile = () => import("./panels/ProfilePanel");
 const loadAuth = () => import("./panels/AuthPanel");
+// The Pro Tour panel draws every hole, so it waits for the course data too.
+const loadProTourPanel = () => Promise.all([import("./panels/ProTourPanel"), loadProTour()]).then(([m]) => m);
 const ChallengePanel = dynamic(() => loadOnline().then((m) => m.ChallengePanel), { ssr: false });
 const PartyPanel = dynamic(() => loadOnline().then((m) => m.PartyPanel), { ssr: false });
 const LobbyPanel = dynamic(() => loadOnline().then((m) => m.LobbyPanel), { ssr: false });
@@ -120,8 +122,18 @@ const CareerPanel = dynamic(() => loadCareer().then((m) => m.CareerPanel), { ssr
 const ShopPanel = dynamic(() => loadShop().then((m) => m.ShopPanel), { ssr: false });
 const ProfilePanel = dynamic(() => loadProfile().then((m) => m.ProfilePanel), { ssr: false });
 const AuthPanel = dynamic(() => loadAuth().then((m) => m.AuthPanel), { ssr: false });
+const ProTourPanel = dynamic(() => loadProTourPanel().then((m) => m.ProTourPanel), { ssr: false });
+// Pro Tour holes load on demand (engine loadProTour; the Pro Tour panel and the
+// idle preload fetch them). Menu entries that can start a Pro Tour round before
+// that (a resume banner, a ?ch= challenge link) run through here: now if the
+// holes are in, else once they load.
+const PRO_TOUR_LOAD_ERR = "Couldn't load that Pro Tour course. Check your connection and try again.";
+function runWithProTour(mode: Mode, seed: number | undefined, run: () => void, onError: (msg: string) => void) {
+  if (needsProTour(mode, seed)) loadProTour().then(run, () => onError(PRO_TOUR_LOAD_ERR));
+  else run();
+}
 function preloadPanels() {
-  for (const load of [loadOnline, loadTournament, loadCareer, loadShop, loadProfile, loadAuth]) load().catch(() => {});
+  for (const load of [loadOnline, loadTournament, loadCareer, loadShop, loadProfile, loadAuth, loadProTourPanel]) load().catch(() => {});
 }
 
 export function DiscGolfGame() {
@@ -1857,7 +1869,8 @@ export function DiscGolfGame() {
     const id = new URLSearchParams(location.search).get("rp");
     if (!id) return;
     let alive = true;
-    loadReplay(id).then((r) => {
+    loadReplay(id).then(async (r) => {
+      if (r && needsProTour(r.mode, r.seed)) await loadProTour();
       if (!alive) return;
       if (r) setPendingReplay(r); else setReplayLoadErr("That replay link has expired or is broken.");
     }).catch(() => { if (alive) setReplayLoadErr("Couldn't load that replay."); });
@@ -3613,7 +3626,7 @@ export function DiscGolfGame() {
         // Career venues and the real 2026 courses get a venue line; a real
         // course shows "Maple Hill · 8" with the hole's one-line note under it.
         const proIntro = g.mode === "tour" ? proTourCourseBySeed(g.seed) : undefined;
-        const proHole = proIntro?.course.holes[(g.practiceHole ?? g.holeIndex + 1) - 1];
+        const proHole = proIntro?.proHoles[(g.practiceHole ?? g.holeIndex + 1) - 1];
         const venue = proIntro ? `${proIntro.course.name} · ${proHole?.n ?? g.holeIndex + 1}` : g.career?.venue;
         const venueSub = proIntro ? `${hole.bookFt ?? ""} ft · ${proHole?.note ?? ""}` : g.career?.character;
         ctx.fillStyle = "rgba(0,0,0,0.55)";
@@ -3999,7 +4012,7 @@ export function DiscGolfGame() {
               {challenge && (
                 <button
                   type="button"
-                  onClick={() => { startGame(challenge.mode, challenge.seed); challengePlayRef.current = true; }}
+                  onClick={() => runWithProTour(challenge.mode, challenge.seed, () => { startGame(challenge.mode, challenge.seed); challengePlayRef.current = true; }, setReplayLoadErr)}
                   className="w-full rounded-xl border border-[#e0923b]/60 bg-[#e0923b]/15 hover:bg-[#e0923b]/25 text-white font-bold py-3 px-3 mt-4 transition text-sm"
                 >
                   ⚔ {challenge.name} challenged you: {challenge.score} on {challenge.label} — play it!
@@ -4011,7 +4024,7 @@ export function DiscGolfGame() {
               {resumeBanner && (
                 <button
                   type="button"
-                  onClick={() => startResume(resumeBanner)}
+                  onClick={() => runWithProTour(resumeBanner.mode, resumeBanner.seed, () => startResume(resumeBanner), setReplayLoadErr)}
                   className="w-full rounded-xl border border-[#36D7B7]/60 bg-[#36D7B7]/15 hover:bg-[#36D7B7]/25 text-white font-bold py-3 px-3 mt-4 transition text-sm"
                 >
                   ↻ Continue round · {resumeBanner.mode === "course" ? "Glendoveer" : resumeBanner.mode === "winthrop" ? "Winthrop Lake" : resumeBanner.mode === "olympus" ? "Olympus" : resumeBanner.mode === "tour" ? tourVenue(resumeBanner.seed) : resumeBanner.mode === "ranked" ? "Ranked" : "round"} · hole {resumeBanner.scores.length + 1}

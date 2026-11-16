@@ -4,35 +4,8 @@
 // Imported by components/disc-golf-game.tsx.
 import { centralDay } from "./time";
 import { TIERS, type Tier } from "./ranked";
-import type { ProHole, ProCourse, ProHazard } from "./protour/types";
-import { MAPLE_HILL } from "./protour/maple-hill";
-import { BREWSTER_RIDGE } from "./protour/brewster-ridge";
-import { IDLEWILD } from "./protour/idlewild";
-import { WINTHROP_GOLD } from "./protour/winthrop-gold";
-import { KENSINGTON_TOBOGGAN } from "./protour/kensington-toboggan";
-import { FOX_RUN_MEADOWS } from "./protour/fox-run-meadows";
-import { IVY_HILL } from "./protour/ivy-hill";
-import { NORTHWOOD_BLACK } from "./protour/northwood-black";
-import { HARVEY_PENICK } from "./protour/harvey-penick";
-import { BRIGHTON_MAJESTIC } from "./protour/brighton-majestic";
-import { BLACK_LOCUST_SOUTH } from "./protour/black-locust-south";
-import { DISC_SIDE_OF_HEAVEN } from "./protour/disc-side-of-heaven";
-import { BAD_ROCK_CREEK } from "./protour/bad-rock-creek";
-import { PICKARD_PARK } from "./protour/pickard-park";
-import { OLYMPUS } from "./protour/olympus";
-import { PARC_DES_FAMILLES } from "./protour/parc-des-familles";
-import { HORNETS_NEST } from "./protour/hornets-nest";
-import { SWENSON_PARK_A } from "./protour/swenson-park-a";
-import { MILO_MCIVER } from "./protour/milo-mciver";
-import { THE_PRESERVE } from "./protour/the-preserve";
-import { YMERGARDEN } from "./protour/ymergarden";
-import { ALE_DGC } from "./protour/ale-dgc";
-import { KIPPIS } from "./protour/kippis";
-import { SWENSON_PARK_B } from "./protour/swenson-park-b";
-import { SPRINKLE_VALLEY } from "./protour/sprinkle-valley";
-import { EUREKA_LAKE } from "./protour/eureka-lake";
-import { SUNSET_HILLS } from "./protour/sunset-hills";
-import { GLENDOVEER_EAST } from "./protour/glendoveer-east";
+import type { ProHole, ProCourse, ProCourseMeta, ProHazard } from "./protour/types";
+import { PRO_COURSE_META } from "./protour/meta";
 
 const W = 320;
 const H = 448;
@@ -653,21 +626,41 @@ function proHoleToHole(h: ProHole): Hole {
 // generateTourCourse / tourVenue / tourCharacter intercept these seeds first.
 // Append only: seeds are PROTOUR_SEED_BASE + index + 1 and saved bests are keyed
 // by seed, so inserting a course would orphan the bests of every course after it.
-const PRO_COURSES: ProCourse[] = [MAPLE_HILL, BREWSTER_RIDGE, IDLEWILD, WINTHROP_GOLD, KENSINGTON_TOBOGGAN, FOX_RUN_MEADOWS, IVY_HILL, NORTHWOOD_BLACK, HARVEY_PENICK, BRIGHTON_MAJESTIC, BLACK_LOCUST_SOUTH, DISC_SIDE_OF_HEAVEN, BAD_ROCK_CREEK, PICKARD_PARK, OLYMPUS, PARC_DES_FAMILLES, HORNETS_NEST, SWENSON_PARK_A, MILO_MCIVER, THE_PRESERVE, YMERGARDEN, ALE_DGC, KIPPIS, SWENSON_PARK_B, SPRINKLE_VALLEY, EUREKA_LAKE, SUNSET_HILLS, GLENDOVEER_EAST];
 const PROTOUR_SEED_BASE = 0x2026c000 >>> 0;
-type ProTourCourse = { seed: number; course: ProCourse; holes: Hole[]; par: number; lengthFt: number };
-const PROTOUR_COURSES: ProTourCourse[] = PRO_COURSES.map((course, i) => {
+// The hole data (~50 KB gzip) loads on demand: loadProTour() before building a
+// round, practice hole or replay on a Pro Tour seed. The menus only need the meta.
+let PRO_HOLES_BY_ID: Map<string, ProHole[]> | null = null;
+let proTourLoading: Promise<void> | null = null;
+function loadProTour(): Promise<void> {
+  return (proTourLoading ??= import("./protour/courses").then((m) => {
+    PRO_HOLES_BY_ID = new Map(m.PRO_COURSES.map((c: ProCourse) => [c.id, c.holes]));
+  }).catch((e) => { proTourLoading = null; throw e; })); // a failed fetch can be retried
+}
+function proTourLoaded(): boolean {
+  return PRO_HOLES_BY_ID != null;
+}
+// True when (mode, seed) is a Pro Tour course whose holes haven't loaded yet.
+function needsProTour(mode: Mode, seed: number | undefined): boolean {
+  return mode === "tour" && !proTourLoaded() && isProTourSeed(seed);
+}
+type ProTourCourse = { seed: number; course: ProCourseMeta; proHoles: ProHole[]; holes: Hole[]; par: number; lengthFt: number };
+const PROTOUR_COURSES: ProTourCourse[] = PRO_COURSE_META.map((course, i) => {
   let holes: Hole[] | undefined;
   return {
     seed: (PROTOUR_SEED_BASE + i + 1) >>> 0,
     course,
+    get proHoles() {
+      const h = PRO_HOLES_BY_ID?.get(course.id);
+      if (!h) throw new Error(`Pro Tour holes not loaded (${course.id}): await loadProTour() first`);
+      return h;
+    },
     // Built on first use: converting all 504 holes (tree fill included) up front
     // cost ~15 ms of main-thread time at every page load.
     get holes() {
-      return (holes ??= course.holes.map((h) => ({ ...proHoleToHole(h), theme: course.theme })));
+      return (holes ??= this.proHoles.map((h) => ({ ...proHoleToHole(h), theme: course.theme })));
     },
-    par: course.holes.reduce((s, h) => s + h.par, 0),
-    lengthFt: course.holes.reduce((s, h) => s + h.lengthFt, 0),
+    par: course.par,
+    lengthFt: course.lengthFt,
   };
 });
 const PROTOUR_BY_SEED = new Map<number, ProTourCourse>(PROTOUR_COURSES.map((c) => [c.seed, c]));
@@ -2742,6 +2735,9 @@ export {
   proHoleBoundsFt,
   pathLength as pathLengthPx,
   PROTOUR_COURSES,
+  loadProTour,
+  proTourLoaded,
+  needsProTour,
   isProTourSeed,
   proTourCourseBySeed,
   proTourCourseById,
