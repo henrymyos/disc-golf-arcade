@@ -45,3 +45,6 @@ CONTEXT.md
 
 # Claude Code worktrees
 .claude/worktrees/
+
+# dev-only verify tooling (npm run verify)
+scripts/verify/node_modules/

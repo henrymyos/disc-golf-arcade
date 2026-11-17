@@ -176,6 +176,7 @@ export function DiscGolfGame() {
     (window as unknown as { __dga?: unknown }).__dga = {
       power: () => stateRef.current?.power ?? null,
       ring: () => powerRingDebugRef.current,
+      screen: () => screenRef.current, // which screen is up (scripts/verify waits on it)
       // Where the disc and basket are (canvas units), for headless play-throughs.
       lie: () => {
         const g = stateRef.current;
