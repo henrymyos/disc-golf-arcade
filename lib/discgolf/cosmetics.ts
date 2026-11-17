@@ -69,6 +69,7 @@ export const CELEBRATIONS: Celebration[] = [
   { key: "classic", name: "Classic", desc: "The standard confetti pop", price: 0, colors: ["#36D7B7", "#f5d24a", "#ffffff", "#4B3DFF"], count: 42, speed: 2.3, grav: 0.05, life: 40 },
   { key: "bubbles", name: "Bubbles", desc: "Floaty blue bubbles", price: 2500, colors: ["#bdecff", "#5fb0e8", "#ffffff"], count: 40, speed: 1.6, grav: -0.01, life: 60 },
   { key: "confetti", name: "Party", desc: "A big rainbow confetti shower", price: 3000, colors: ["#e23b3b", "#f5a623", "#f5d24a", "#36D7B7", "#5fb0e8", "#b85cd6"], count: 64, speed: 2.1, grav: 0.03, life: 66 },
+  { key: "snowfall", name: "Snowfall", desc: "Flakes drifting down over the basket", price: 3000, colors: ["#ffffff", "#e3f2ff", "#b8dcf5"], count: 44, speed: 1.4, grav: 0.012, life: 80 },
   { key: "stars", name: "Stars", desc: "A golden starburst", price: 3500, colors: ["#fff7cf", "#f5d24a", "#ffe9a0"], count: 40, speed: 2.3, grav: 0.02, life: 52 },
   { key: "inferno", name: "Inferno", desc: "Erupting flames", price: 4200, colors: ["#e23b3b", "#e0923b", "#f5d24a"], count: 52, speed: 2.6, grav: -0.005, life: 46, bursts: 2 },
   { key: "fireworks", name: "Fireworks", desc: "Multiple booming pops", price: 5500, colors: ["#ff4d4d", "#f5d24a", "#36D7B7", "#5fb0e8", "#ffffff"], count: 24, speed: 2.9, grav: 0.04, life: 40, bursts: 4 },
