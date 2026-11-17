@@ -127,6 +127,14 @@ export async function open(urlPath, { width, height, pad = false }) {
     aborted.set(host, (aborted.get(host) || 0) + 1);
     r.abort();
   });
+  // Headless Chrome paces requestAnimationFrame off the Mac's display: lid closed (night
+  // sweeps) = ~13 fps and a round takes 5+ min. Timers stay at full speed, so drive rAF
+  // from a 16 ms timer: same frame-stepped game, ~60 fps, lid open or shut.
+  // shortcut: real vsync pacing isn't exercised; drop this if headless rAF stops depending on a display.
+  await page.evaluateOnNewDocument(() => {
+    window.requestAnimationFrame = cb => setTimeout(() => cb(performance.now()), 16);
+    window.cancelAnimationFrame = id => clearTimeout(id);
+  });
   if (pad) {
     await page.evaluateOnNewDocument(() => {
       const pad = { id: "verify-pad", index: 0, connected: true, mapping: "standard", timestamp: 0, axes: [0, 0, 0, 0],

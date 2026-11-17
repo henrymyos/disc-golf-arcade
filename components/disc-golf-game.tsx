@@ -176,7 +176,6 @@ export function DiscGolfGame() {
     (window as unknown as { __dga?: unknown }).__dga = {
       power: () => stateRef.current?.power ?? null,
       ring: () => powerRingDebugRef.current,
-      screen: () => screenRef.current, // which screen is up (scripts/verify waits on it)
       // Where the disc and basket are (canvas units), for headless play-throughs.
       lie: () => {
         const g = stateRef.current;
@@ -1970,6 +1969,7 @@ export function DiscGolfGame() {
     const dga = (window as unknown as { __dga?: Record<string, unknown> }).__dga;
     if (dga) {
       dga.plan = plan;
+      dga.screen = () => screenRef.current; // which screen is up (scripts/verify waits on it)
       // Throw a planned shot without simulating a drag (headless play-throughs).
       dga.throw = (angle: number, power: number) => {
         const g = stateRef.current;
