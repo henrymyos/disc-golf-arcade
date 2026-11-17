@@ -56,6 +56,15 @@ Everything works offline except sign-in, leaderboards and online lobbies (board 
 
 `npm run dev` runs `scripts/dev-cache-guard.mjs` first. It clears Turbopack's dev cache (`.next/dev`) if the project has moved folders since the cache was built, which used to crash dev with "Next.js package not found".
 
+### Verify (smoke test)
+
+```bash
+npm run verify             # ~1.5 min: boots next dev on :4990, plays a full round at 390 + 1440 px
+npm run verify -- --full   # tsc, eslint, vitest and next build first; run before every merge to main
+```
+
+`scripts/verify/verify.mjs` drives headless system Chrome through the dev-only `window.__dga` hooks: the home menu, a full challenge round to the results screen (Skip on the name prompt), keyboard and gamepad throw/pause, Daily and a Pro Tour stop. It prints PASS/FAIL per check, exits with the failure count and saves screenshots to `/private/tmp/dga-verify/<timestamp>/`. Requests that would leave the machine are aborted and Supabase points at a dead address, so a run never touches the live leaderboard. Agent notes: `.claude/skills/verify/SKILL.md`.
+
 ### The README clip
 
 `scripts/capture-hole.mjs` records `docs/hole.webp` from a local dev server: a bot plays a practice hole using the dev-only `window.__dga` probe, and `img2webp` (`brew install webp`) stitches the frames. The comment at the top of the script has the command.

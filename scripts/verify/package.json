@@ -1,0 +1,12 @@
+{
+  "name": "disc-golf-arcade-verify",
+  "private": true,
+  "description": "Dev-only smoke checks (npm run verify). Never imported by the app.",
+  "type": "module",
+  "scripts": {
+    "verify": "node verify.mjs"
+  },
+  "devDependencies": {
+    "puppeteer-core": "25.17.0"
+  }
+}
