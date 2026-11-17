@@ -1554,6 +1554,14 @@ function seededWind(rng: () => number): { wind: Vec; windMag: number } {
   const mag = 0.004 + rng() * 0.014; // per-frame airborne push (gentle)
   return { wind: { x: Math.cos(ang) * mag, y: Math.sin(ang) * mag }, windMag: mag };
 }
+// Hole Practice wind override: keep the hole's wind direction (east if calm), set its
+// speed in mph. 0.018 per frame = 15 mph, the HUD's scale.
+export function withWindMph<H extends { wind?: Vec; windMag?: number }>(h: H, mph: number): H {
+  const mag = (mph / 15) * 0.018;
+  const w = h.wind && (h.wind.x || h.wind.y) ? h.wind : { x: 1, y: 0 };
+  const len = Math.hypot(w.x, w.y);
+  return { ...h, wind: { x: (w.x / len) * mag, y: (w.y / len) * mag }, windMag: mag };
+}
 // A point a fraction `t` along a polyline (by arc length).
 function pointOnPath(pts: Vec[], t: number): Vec {
   const segs: number[] = [];

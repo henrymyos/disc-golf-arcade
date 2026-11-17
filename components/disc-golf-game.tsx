@@ -33,7 +33,7 @@ import {
   dailyChallenges, weeklyChallenges, roundsThisDay, roundsThisWeek, challengeDone, dailyClaimKey, eventClaimKey, type EventRound,
 } from "@/lib/discgolf/events";
 import {
-  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, leaderboardCourse, TOURN_KEY, TOURNAMENTS, tournDef, tournRoundPlayHoles, tournPlace, tournFieldRound, tournLiveStandings, ACHIEVEMENTS, earnedAchievements, achievementReward, scoreLabel, STRAIGHT_SPEED_MUL, releaseSpeedMul, ADV_DISCS, levelUpChoices, validDiscIndex, DEFAULT_DISC_INDEX, BAG_MAX, discIndexByKey, unlockedDiscKeys, reconcileBag, tourVenue, isProTourSeed, proTourCourseBySeed, loadProTour, needsProTour, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, dailySeed, dailyStarThresholds, dailyStarsEarned, buildRound, elevAt, vibrate, pxToFeet, distBetween, autoDiscIndex, windAlong, resolvePenalty, isTeeLie, catchRFor, treesAtLie, stepFlight, type Vec, type Hole, type Mode, type Tournament, type TournLiveRow, type Achievement, type FlightPath, type Release, type Flight, type GhostState,
+  W, H, DISC_R, CATCH_R, MAX_DRAG, CANCEL_R, CANCEL_POWER, HOLES, leaderboardCourse, TOURN_KEY, TOURNAMENTS, tournDef, tournRoundPlayHoles, tournPlace, tournFieldRound, tournLiveStandings, ACHIEVEMENTS, earnedAchievements, achievementReward, scoreLabel, STRAIGHT_SPEED_MUL, releaseSpeedMul, ADV_DISCS, levelUpChoices, validDiscIndex, DEFAULT_DISC_INDEX, BAG_MAX, discIndexByKey, unlockedDiscKeys, reconcileBag, tourVenue, isProTourSeed, proTourCourseBySeed, loadProTour, needsProTour, aimAt, camXFor, buildTournGhosts, buildRacerGhosts, ghostPosAt, AudioEngine, dailySeed, dailyStarThresholds, dailyStarsEarned, buildRound, withWindMph, elevAt, vibrate, pxToFeet, distBetween, autoDiscIndex, windAlong, resolvePenalty, isTeeLie, catchRFor, treesAtLie, stepFlight, type Vec, type Hole, type Mode, type Tournament, type TournLiveRow, type Achievement, type FlightPath, type Release, type Flight, type GhostState,
 } from "@/lib/discgolf/engine";
 import { parseChallenge, challengeParam, isChallengeTourSeed } from "@/lib/discgolf/challenge";
 import { buildReplay, replayFrame, type Replay } from "@/lib/discgolf/replay";
@@ -223,6 +223,8 @@ export function DiscGolfGame() {
   const [finalTotal, setFinalTotal] = useState(0);
   const [finalSeed, setFinalSeed] = useState(0);
   const [finalPracticeHole, setFinalPracticeHole] = useState<number | null>(null);
+  // Hole Practice wind pick (mph, null = the course's own wind), reused by Retry hole.
+  const practiceWindRef = useRef<number | null>(null);
   const [statsOpen, setStatsOpen] = useState(false);
   const [boardsOpen, setBoardsOpen] = useState(false);
   const [coursesOpen, setCoursesOpen] = useState(false);
@@ -1388,7 +1390,8 @@ export function DiscGolfGame() {
 
   // Practice a single hole: same engine, but nothing counts (no bests,
   // history, achievements, or leaderboard) — pure reps.
-  const startPractice = useCallback((m: Mode, holeIdx: number, seedOverride?: number) => {
+  const startPractice = useCallback((m: Mode, holeIdx: number, seedOverride?: number, windMph: number | null = null) => {
+    practiceWindRef.current = windMph;
     modeRef.current = m;
     if (!audioRef.current) {
       audioRef.current = new AudioEngine();
@@ -1401,7 +1404,8 @@ export function DiscGolfGame() {
     // Tour venues are identified by their seed (the layout); Glendoveer/Winthrop
     // get a random seed for jittered pins.
     const seed = seedOverride ?? ((Math.random() * 1e9) | 0);
-    const roundHoles = [buildRound(seed, m)[holeIdx]];
+    const built = buildRound(seed, m)[holeIdx];
+    const roundHoles = [windMph == null ? built : withWindMph(built, windMph)];
     const discIndex = validDiscIndex(discIndexRef.current, bagRef.current);
     discIndexRef.current = discIndex;
     setDiscIndex(discIndex);
@@ -4192,7 +4196,7 @@ export function DiscGolfGame() {
                 <div className={`w-full ${menuTopMargin}`}>
                   <HolePracticePicker
                     onBack={() => setHub("practice")}
-                    onPick={(m, i, seed) => startPractice(m, i, seed)}
+                    onPick={(m, i, seed, wind) => startPractice(m, i, seed, wind)}
                   />
                 </div>
               )}
@@ -5049,7 +5053,7 @@ export function DiscGolfGame() {
 
             <div className="flex flex-wrap justify-center gap-2">
               {finalPracticeHole != null ? (
-                <button type="button" onClick={() => startPractice(finalMode, finalPracticeHole - 1, finalSeed)} className={btn}>↻ Retry hole</button>
+                <button type="button" onClick={() => startPractice(finalMode, finalPracticeHole - 1, finalSeed, practiceWindRef.current)} className={btn}>↻ Retry hole</button>
               ) : finalTournament ? (
                 tournament && !tournament.finished ? (
                   // More rounds to go — continue straight into the next one (the only
