@@ -63,7 +63,7 @@ npm run verify             # ~1.5 min: boots next dev on :4990, plays a full rou
 npm run verify -- --full   # tsc, eslint, vitest and next build first; run before every merge to main
 ```
 
-`scripts/verify/verify.mjs` drives headless system Chrome through the dev-only `window.__dga` hooks: the home menu, a full challenge round to the results screen (Skip on the name prompt), keyboard and gamepad throw/pause, Daily and a Pro Tour stop. It prints PASS/FAIL per check, exits with the failure count and saves screenshots to `/private/tmp/dga-verify/<timestamp>/`. Requests that would leave the machine are aborted and Supabase points at a dead address, so a run never touches the live leaderboard. Agent notes: `.claude/skills/verify/SKILL.md`.
+`scripts/verify/verify.mjs` drives headless system Chrome through the dev-only `window.__dga` hooks: the home menu, a full challenge round to the results screen (Skip on the name prompt), keyboard and gamepad throw/pause, Daily and a Pro Tour stop. It prints PASS/FAIL per check, exits with the failure count and saves screenshots to `/private/tmp/dga-verify/<timestamp>/`. Browser requests that would leave the machine are aborted and Supabase points at a dead address, so a run never touches the live leaderboard; the Next server and build still GET Google Fonts (read-only), and the first run installs `scripts/verify/node_modules` from npm. Not covered: sign-in, online play, leaderboards, and real display-synced frame pacing (rAF runs on a 16 ms timer). Agent notes: `.claude/skills/verify/SKILL.md`.
 
 ### The README clip
 

@@ -3,7 +3,7 @@
 //   node scripts/verify/verify.mjs [--full] [group …]     (npm run verify [-- --full])
 // --full runs tsc, eslint, vitest and `next build --webpack` first. Exit code = failures.
 import path from "node:path";
-import { OUT, log, check, laneFails, lane, summary, step, startServer, stopServer, launch, closeBrowser, open, clickText, waitText, aborted, supabaseWrites } from "./lib.mjs";
+import { OUT, log, closeLog, check, laneFails, lane, summary, step, startServer, stopServer, launch, closeBrowser, open, clickText, waitText, aborted, supabaseWrites } from "./lib.mjs";
 
 const SIZES = [{ width: 390, height: 844 }, { width: 1440, height: 900 }];
 const CHALLENGE = "/?ch=course.1.60.Tester";
@@ -149,8 +149,9 @@ groups.pause = async size => {
 
 groups.modes = async size => {
   const shots = [];
+  let dailyFailed = false;
   for (const [name, route] of [["Daily", ["^Daily Challenge"]], ["Pro Tour", ["^2026 Pro Tour", "STOP", "^Play 18$"]]]) {
-    const p = await open("/", size);
+    const p = await open("/", size), before = laneFails();
     await waitText(p, "^Single Player$").catch(() => {});
     let ok = await clickText(p, "^Single Player$");
     for (const s of route) {
@@ -165,9 +166,10 @@ groups.modes = async size => {
       check(r.ok && r.flew && (await discMoved(p, from)), `${name}: first __dga.throw moves the disc`);
     }
     check(p.errors.length === 0, `${name}: 0 console errors${p.errors.length ? ": " + p.errors.slice(0, 3).join(" | ") : ""}`);
+    if (name === "Daily") dailyFailed = laneFails() > before;
     shots.push(p);
   }
-  await shots[0].screenshot({ path: path.join(OUT, `${size.width}-modes-daily.png`) }).catch(() => {});
+  await shots[0].screenshot({ path: path.join(OUT, `${size.width}-modes-daily${dailyFailed ? "-FAIL" : ""}.png`) }).catch(() => {});
   await shots[0].ctx.close().catch(() => {});
   return shots[1];
 };
@@ -181,7 +183,19 @@ const picked = argv.filter(a => groups[a]);
 const run = picked.length ? picked : Object.keys(groups);
 const t0 = Date.now();
 let interrupted = false;
-const bail = sig => { interrupted = true; log(`\n${sig}: stopping the dev server`); stopServer(); closeBrowser().finally(() => process.exit(130)); };
+const halt = () => new Promise(() => {}); // after Ctrl-C, bail() alone writes the log and exits
+const stores = SIZES.map(() => ({ lines: [], fails: 0 })); // per-width lines, buffered until the end
+const bail = async sig => {
+  if (interrupted) return;
+  interrupted = true;
+  for (const l of stores) l.lines.splice(0).forEach(s => log(s)); // keep what the lanes got through
+  log(`\n${sig}: stopping the dev server and Chrome`);
+  stopServer();
+  await closeBrowser();
+  log(`${sig}: stopped (partial run). Screenshots + log: ${OUT}`);
+  closeLog();
+  process.exit(130);
+};
 process.on("SIGINT", () => bail("SIGINT"));
 process.on("SIGTERM", () => bail("SIGTERM"));
 
@@ -198,7 +212,7 @@ try {
   await startServer();
   log(`  up in ${((Date.now() - ts) / 1000).toFixed(0)} s`);
   await launch();
-  const lanes = await Promise.all(SIZES.map(size => lane.run({ lines: [], fails: 0 }, async () => {
+  const lanes = await Promise.all(SIZES.map((size, i) => lane.run(stores[i], async () => {
     for (const g of run) {
       log(`\n[${size.width}] ${g}`);
       const before = laneFails(), tg = Date.now();
@@ -213,15 +227,19 @@ try {
     }
     return lane.getStore();
   })));
+  if (interrupted) await halt();
   for (const l of lanes) l.lines.forEach(s => log(s));
   if (!picked.length || argv.includes("offline-safe")) {
     log("\n[all] offline-safe");
+    log("  (browser requests only; the Next server and build may still GET Google Fonts)");
     log(`  blocked hosts: ${aborted.size ? [...aborted].map(([h, n]) => `${h} x${n}`).join(", ") : "none"}`);
     check(supabaseWrites.length === 0, `no POST/PATCH aimed at Supabase${supabaseWrites.length ? ": " + supabaseWrites.slice(0, 3).join(" | ") : ""}`);
   }
 } catch (e) {
+  if (interrupted) await halt();
   check(false, `verify crashed: ${String(e.message || e).split("\n")[0]}`);
 } finally {
+  if (interrupted) await halt();
   await closeBrowser();
   stopServer();
 }
