@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "verify": "test -d scripts/verify/node_modules || npm --prefix scripts/verify ci --no-audit --no-fund; node scripts/verify/verify.mjs"
+    "verify": "(test -d scripts/verify/node_modules || npm --prefix scripts/verify ci --no-audit --no-fund) && node scripts/verify/verify.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.0",

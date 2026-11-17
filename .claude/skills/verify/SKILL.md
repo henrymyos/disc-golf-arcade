@@ -11,7 +11,7 @@ Run from the repo root (a worktree is fine):
 - `npm run verify -- --full`: tsc, eslint, vitest and `next build --webpack` first, then the smoke run. Before every merge to main.
 - `node scripts/verify/verify.mjs round pause`: only some groups (boot, round, keyboard, pause, modes, offline-safe).
 
-It installs `scripts/verify/node_modules` (puppeteer-core, dev-only, git-ignored) on first use, uses system Chrome headless with a throwaway profile, dark mode, and never touches Henry's browser window. Every request that would leave this Mac is aborted and logged, and Supabase is pointed at a dead local address, so a run can never write to the live leaderboard. The dev server is killed on exit, on failure and on Ctrl-C.
+It installs `scripts/verify/node_modules` (puppeteer-core, dev-only, git-ignored) on first use, uses system Chrome headless with a throwaway profile, dark mode, and never touches Henry's browser window. Every browser request that would leave this Mac is aborted and logged, and Supabase is pointed at a dead local address, so a run can never write to the live leaderboard. Not fully offline: the Next server and build still GET Google Fonts (`next/font/google`, read-only), and the first-run `npm ci` reaches the npm registry. The dev server, Chrome and its throwaway profile are cleaned up on exit, on failure and on Ctrl-C (the log keeps the partial run and ends with the SIGINT line).
 
 ## Reading the result
 
@@ -24,5 +24,5 @@ It installs `scripts/verify/node_modules` (puppeteer-core, dev-only, git-ignored
 
 - Never skip, retry or add a sleep to a flaky check. Fix it (wait on a condition with `waitForFunction`), or delete it and say why in your report.
 - Three rounds of fix + verify that still fail: stop and hand off. Report the failing lines, the screenshot path and what you tried.
-- Report what verify covered and what it didn't (sign-in, online lobbies, leaderboards and anything that needs the network are not covered).
+- Report what verify covered and what it didn't. Not covered: sign-in, online lobbies, leaderboards and anything that needs the network; real display-synced frame pacing (rAF is driven by a 16 ms timer so lid-closed runs stay fast); the first-run `npm ci` (reaches the npm registry).
 - New player-facing flow? Add a check to `scripts/verify/verify.mjs` in the same change.

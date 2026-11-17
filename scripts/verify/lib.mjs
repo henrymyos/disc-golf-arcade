@@ -26,13 +26,16 @@ export const SAFE_ENV = {
 const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
 export const OUT = path.join("/private/tmp/dga-verify", stamp);
 fs.mkdirSync(OUT, { recursive: true });
-const logFile = fs.createWriteStream(path.join(OUT, "verify.log"));
+// Sync writes: process.exit (pass, fail or Ctrl-C) can't cut the log off mid-buffer.
+const logFd = fs.openSync(path.join(OUT, "verify.log"), "w");
+let logClosed = false;
 // Each width runs in its own lane (in parallel); its lines are buffered and printed in order at the end.
 export const lane = new AsyncLocalStorage();
 export function log(s = "") {
   const l = lane.getStore();
-  if (l) l.lines.push(s); else { console.log(s); logFile.write(s + "\n"); }
+  if (l) l.lines.push(s); else if (!logClosed) { console.log(s); fs.writeSync(logFd, s + "\n"); }
 }
+export function closeLog() { if (!logClosed) { logClosed = true; fs.closeSync(logFd); } }
 
 // ── checks ─────────────────────────────────────────────────────────────
 let passes = 0, failures = 0;
@@ -45,7 +48,7 @@ export const laneFails = () => lane.getStore()?.fails ?? failures;
 export function summary(seconds) {
   log(`\n${passes} passed, ${failures} failed in ${seconds.toFixed(0)} s`);
   log(`Screenshots + log: ${OUT}`);
-  logFile.end();
+  closeLog();
   return failures;
 }
 
@@ -93,13 +96,25 @@ export function stopServer() {
 let browser = null, profile = null;
 export async function launch() {
   profile = fs.mkdtempSync(path.join(os.tmpdir(), "dga-verify-profile-"));
-  browser = await puppeteer.launch({ executablePath: CHROME, headless: true, userDataDir: profile, args: ["--mute-audio"] });
+  // handleSIGINT/SIGTERM off: puppeteer's own handler calls process.exit(130) before our
+  // bail() can stop the server, finish the log and remove this profile.
+  browser = await puppeteer.launch({ executablePath: CHROME, headless: true, userDataDir: profile, args: ["--mute-audio"],
+    handleSIGINT: false, handleSIGTERM: false });
   return browser;
 }
-export async function closeBrowser() {
+// Once only: Ctrl-C's bail() and the main flow's finally can both call it.
+let closing = null;
+export const closeBrowser = () => closing ??= (async () => {
   try { await browser?.close(); } catch { /* ignore */ }
-  if (profile) fs.rmSync(profile, { recursive: true, force: true });
+  removeProfile();
+})();
+// Retries: Chrome can still be writing into the profile for a moment after close.
+function removeProfile() {
+  if (!profile) return;
+  try { fs.rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); }
+  catch (e) { console.error(`could not remove ${profile}: ${e.code || e.message}`); }
 }
+process.on("exit", removeProfile);
 
 const LOCAL = /^(https?|wss?):\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?\//;
 const SUPABASE = /supabase\.(co|in)\b|^https?:\/\/127\.0\.0\.1:9\//;
