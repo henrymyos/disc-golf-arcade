@@ -54,6 +54,27 @@ groups.boot = async size => {
   check(menu, "home menu renders (Single Player button)");
   const ov = await p.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: innerWidth }));
   check(ov.sw <= ov.iw, `no horizontal overflow (scrollWidth ${ov.sw} <= ${ov.iw})`);
+  // Front door (Nova 2026-11-18): one Daily card, Pro Tour on home, distinct names, utilities above the fold.
+  const home = await p.evaluate(() => {
+    const btns = [...document.querySelectorAll("button")].map(b => ({ t: b.textContent.replace(/\s+/g, " ").trim(), r: b.getBoundingClientRect() }));
+    const find = re => btns.find(b => re.test(b.t));
+    const utils = ["^Bag$", "^Shop$", "^Goals", "^Leaderboards$"].map(s => find(new RegExp(s)));
+    return {
+      daily: btns.filter(b => /Daily/.test(b.t) && !/Daily reward/.test(b.t)).length,
+      proTour: !!find(/^2026 Pro Tour/),
+      oldNames: btns.filter(b => /^Challenges|Challenge the Arcade/.test(b.t)).map(b => b.t),
+      utilsBottom: utils.every(Boolean) ? Math.max(...utils.map(u => u.r.bottom)) : null,
+      vh: innerHeight,
+    };
+  });
+  check(home.daily === 1, `one Daily entry on home (found ${home.daily})`);
+  check(home.proTour, "2026 Pro Tour card on home");
+  check(home.oldNames.length === 0, `no "Challenges"/"Challenge the Arcade" buttons${home.oldNames.length ? ": " + home.oldNames.join(", ") : ""}`);
+  if (await clickText(p, "^🎁 Daily reward$")) // the reward claim moved into the Daily card
+    check(await waitText(p, "^Daily reward · ", 5000).then(() => true, () => false), "Daily reward claim opens the reward popup");
+  else check(false, "Daily reward button on the Daily card");
+  await p.reload(); await waitText(p, "^Single Player$").catch(() => {}); // screenshot the home, not the popup
+  check(home.utilsBottom != null && home.utilsBottom <= home.vh, `Bag/Shop/Goals/Leaderboards above the fold (bottom ${home.utilsBottom == null ? "missing" : Math.round(home.utilsBottom)} <= ${home.vh})`);
   check(p.errors.length === 0, `0 console errors${p.errors.length ? ": " + p.errors.slice(0, 3).join(" | ") : ""}`);
   return p;
 };
@@ -101,6 +122,21 @@ groups.round = async size => {
     await clickText(p, "^Skip$");
     check(await p.waitForFunction(() => /Not posted \(you chose Skip\)/.test(document.body.innerText), { timeout: 5000, polling: 50 }).then(() => true, () => false),
       "Skip -> \"Not posted (you chose Skip)\"");
+  }
+  // Share-first results: the share action sits above the fold, achievements fold into one line.
+  const res2 = await p.evaluate(() => {
+    const share = [...document.querySelectorAll("button")].find(b => /^⚔ Send it back to Tester$|^Share$/.test(b.textContent.replace(/\s+/g, " ").trim()));
+    let box = share; while (box && getComputedStyle(box).overflowY !== "auto") box = box.parentElement;
+    if (box) box.scrollTop = 0;
+    const ach = document.querySelector("details summary");
+    return { bottom: share ? share.getBoundingClientRect().bottom : null, vh: innerHeight, ach: ach ? { open: ach.parentElement.open, t: ach.textContent.trim(), h: ach.getBoundingClientRect().height } : null };
+  });
+  check(res2.bottom != null && res2.bottom <= res2.vh, `results Share above the fold (bottom ${res2.bottom == null ? "missing" : Math.round(res2.bottom)} <= ${res2.vh})`);
+  check(res2.ach && !res2.ach.open && /^🏅 \d+ achievements? unlocked/.test(res2.ach.t) && res2.ach.h >= 44, `achievements collapsed into one 44 px line${res2.ach ? ` ("${res2.ach.t.slice(0, 40)}", ${Math.round(res2.ach.h)} px)` : " (missing)"}`);
+  if (res2.ach) {
+    const tap = () => p.evaluate(() => { document.querySelector("details summary").click(); return document.querySelector("details").open; });
+    const opened = await tap(), closed = !(await tap()); // leave it folded for the screenshot
+    check(opened && closed, "tapping the achievements line expands it, tapping again folds it");
   }
   check(p.errors.length === 0, `0 console errors over the round${p.errors.length ? ": " + p.errors.slice(0, 3).join(" | ") : ""}`);
   return p;
@@ -150,10 +186,10 @@ groups.pause = async size => {
 groups.modes = async size => {
   const shots = [];
   let dailyFailed = false;
-  for (const [name, route] of [["Daily", ["^Daily Challenge"]], ["Pro Tour", ["^2026 Pro Tour", "STOP", "^Play 18$"]]]) {
+  for (const [name, route] of [["Daily", ["^▶ Play today's Daily"]], ["Pro Tour", ["^2026 Pro Tour", "STOP", "^Play 18$"]]]) {
     const p = await open("/", size), before = laneFails();
     await waitText(p, "^Single Player$").catch(() => {});
-    let ok = await clickText(p, "^Single Player$");
+    let ok = true; // both start from the home screen
     for (const s of route) {
       if (!ok) break;
       if (s === "STOP") ok = await p.waitForSelector("button[data-stop]", { timeout: 15_000 }).then(b => b.click()).then(() => true, () => false);

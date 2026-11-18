@@ -70,10 +70,10 @@ import { RankedPanel, PlacementReveal, PlacementDots } from "./panels/RankedPane
 import { ChallengesPanel } from "./panels/ChallengesPanel";
 import { SettingsPanel } from "./panels/SettingsPanel";
 import { AttractBackdrop } from "./menu/AttractBackdrop";
-import { DailyButton } from "./menu/DailyButton";
+import { DailyCard } from "./menu/DailyCard";
 import { SupportLink, SupportNudge } from "./support/Support";
 import { nudgeEligible } from "@/lib/support";
-import { NextGoalCard, GoalToast } from "./menu/NextGoal";
+import { GoalToast } from "./menu/NextGoal";
 import { useNextGoal } from "./menu/useNextGoal";
 import { BoardNamePrompt } from "./menu/BoardNamePrompt";
 import { ControlPanel } from "./play/ControlPanel";
@@ -376,7 +376,8 @@ export function DiscGolfGame() {
   // Re-entry points for the name prompt (the posting callbacks resume through these).
   const saveScoreRef = useRef<(c?: BoardChoice) => Promise<void>>(async () => {});
   const runMiniPostRef = useRef<(res: { kind: "putt" | "target"; makes: number; best: number; points: number; coins: number }, c: BoardChoice | null, isActive: () => boolean) => Promise<void>>(async () => {});
-  const [shareMsg, setShareMsg] = useState<string | null>(null); // transient share/copy confirmation
+  const [shareMsg, setShareMsg] = useState<string | null>(null); // transient share/copy confirmation (replay link, bottom)
+  const [cardMsg, setCardMsg] = useState<string | null>(null); // same for the results Share button (top)
   // Disc golf 101: a one-line rules tip, shown once per device per moment.
   const [tip, setTip] = useState<TipId | null>(null);
   const tipTimerRef = useRef(0);
@@ -2442,7 +2443,7 @@ export function DiscGolfGame() {
       streak: isDaily ? dailyStreak(finishedDailyDays(dayBests, dayStars), finalSeed) : undefined,
     });
 
-    const flash = (msg: string) => { setShareMsg(msg); window.setTimeout(() => setShareMsg(null), 2200); };
+    const flash = (msg: string) => { setCardMsg(msg); window.setTimeout(() => setCardMsg(null), 2200); };
     const blob = await renderShareCard(r, card, kicker).catch(() => null);
     // 1) Native share sheet with the card image + text and link (mobile). If the
     //    sheet opens we're done, success OR cancel; never fall back to a download.
@@ -3861,9 +3862,7 @@ export function DiscGolfGame() {
   // The personal best for the course just played (null for the daily).
   const finalBest = finalMode === "course" ? bestScore : finalMode === "winthrop" ? winthropBest : finalMode === "olympus" ? olympusBest : finalMode === "tour" ? (tourBests[finalSeed] ?? null) : null;
   const overStr = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
-  // Today's Daily star goals (difficulty-adjusted, same for everyone) and the
-  // stars already banked today — for the Daily Challenge menu card. Deferred to
-  // the Single Player page so the daily hole pool isn't built on first paint.
+  // Stars already banked today, for the home menu's Daily card.
   const todayStars = today ? (dayStars[today] ?? 0) : 0;
   // ── Next goal + Daily streak (components/menu/useNextGoal) ──
   const playGoalSound = useCallback(() => { audioRef.current?.sfx("win"); vibrate([15, 30, 15]); }, []);
@@ -3876,7 +3875,6 @@ export function DiscGolfGame() {
   // board than one (lib/discgolf/layout), the desktop layout applies.
   const inRoundLayout = (screen === "playing" || screen === "holeComplete") && !replayView;
   const sideLayout = inRoundLayout && viewportLayout?.sides ? viewportLayout : null;
-  const todayGoals = useMemo(() => (hub === "solo" && today ? dailyStarThresholds(today) : null), [hub, today]);
 
   // Replay HUD text (derived during render; only shown while watching a replay)
   const replayCap = replayView ? replayCaption(replayView.data) : null;
@@ -3984,15 +3982,19 @@ export function DiscGolfGame() {
                   >
                     <span className="text-2xl leading-none shrink-0">{profile.avatar || DEFAULT_AVATAR}</span>
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-baseline justify-between gap-2">
-                        <span className="text-white font-bold text-sm truncate">{profile.name?.trim() || "Set up profile"}</span>
-                        <span className="text-[#36D7B7] font-bold text-[11px] shrink-0">Lv {lvl.level}</span>
-                      </div>
-                      <div className="mt-1 h-1.5 bg-white/10 rounded overflow-hidden">
-                        <div className="h-full bg-[#36D7B7] rounded" style={{ width: `${lvl.need ? Math.round((lvl.into / lvl.need) * 100) : 100}%` }} />
+                      <span className="block text-white font-bold text-sm truncate">{profile.name?.trim() || "Set up profile"}</span>
+                      <div className="mt-1 flex items-center gap-1.5">
+                        <div className="flex-1 h-1.5 bg-white/10 rounded overflow-hidden">
+                          <div className="h-full bg-[#36D7B7] rounded" style={{ width: `${lvl.need ? Math.round((lvl.into / lvl.need) * 100) : 100}%` }} />
+                        </div>
+                        <span className="text-[#36D7B7] font-bold text-[11px] leading-none shrink-0">Lv {lvl.level}</span>
                       </div>
                     </div>
                   </button>
+                  <div className="shrink-0 flex items-center gap-1.5 rounded-xl bg-[#f5d24a]/10 border border-[#f5d24a]/30 px-2.5" aria-label={`${fmtCoins(coins)} coins`}>
+                    <Coin />
+                    <span className="text-[#f5d24a] font-bold text-sm font-mono">{fmtCoins(coins)}</span>
+                  </div>
                   {/* Optional account: sign in to sync across devices. Guests play
                       everything; this is the only place the menu asks. */}
                   {supa && !user && (
@@ -4007,24 +4009,6 @@ export function DiscGolfGame() {
                   </div>
                 );
               })()}
-
-              {/* Coins + daily reward */}
-              <div className="w-full flex items-center gap-2 mt-3">
-                <div className="self-stretch flex items-center gap-1.5 rounded-lg bg-[#f5d24a]/10 border border-[#f5d24a]/30 px-2.5 py-1.5">
-                  <Coin />
-                  <span className="text-[#f5d24a] font-bold text-sm font-mono">{fmtCoins(coins)}</span>
-                </div>
-                {dailyAvailable(daily, today) ? (
-                  <button type="button" onClick={claimDaily}
-                    className="flex-1 rounded-lg bg-[#36D7B7] hover:bg-[#2bc4a6] active:scale-[0.99] text-[#0f1117] font-bold text-sm min-h-11 py-2 transition motion-safe:animate-pulse">
-                    🎁 Daily reward
-                  </button>
-                ) : (
-                  <div className="flex-1 min-h-11 flex items-center justify-center rounded-lg border border-white/10 text-gray-400 text-xs font-semibold py-2 text-center">
-                    🎁 Claimed · 🔥 {daily?.streak ?? 0}d
-                  </div>
-                )}
-              </div>
 
               {/* A pending challenge from a shared link */}
               {challenge && (
@@ -4077,22 +4061,29 @@ export function DiscGolfGame() {
               {hub === "home" && (
                 <>
                   <div className={`w-full flex flex-col gap-3 ${menuTopMargin}`}>
-                    <DailyButton
+                    <DailyCard
                       stars={todayStars}
                       best={today ? (dayBests[today] ?? null) : null}
                       streak={streak}
                       onPlay={() => startGame("daily")}
+                      reward={{ available: dailyAvailable(daily, today), streak: daily?.streak ?? 0, onClaim: claimDaily }}
+                      goal={goal}
                     />
-                    {goal && <NextGoalCard goal={goal} />}
+                    <button type="button" onClick={() => setProTourOpen(true)} className={`${hubCard} !flex-col gap-0.5`} data-testid="hub-protour">
+                      <span className="font-black text-lg">2026 Pro Tour</span>
+                      <span className="text-gray-400 text-[11px]">Real courses · {PRO_STOPS_BUILT} of {SEASON_2026.length} stops</span>
+                    </button>
                     <button type="button" onClick={() => setHub("solo")} className={hubCard}>
                       <span className="font-black text-lg">Single Player</span>
                     </button>
-                    <button type="button" onClick={() => setHub("online")} className={hubCard}>
-                      <span className="font-black text-lg">Online</span>
-                    </button>
-                    <button type="button" onClick={() => setHub("practice")} className={hubCard}>
-                      <span className="font-black text-lg">Practice</span>
-                    </button>
+                    <div className="flex gap-3">
+                      <button type="button" onClick={() => setHub("online")} className={hubCard}>
+                        <span className="font-black text-lg">Online</span>
+                      </button>
+                      <button type="button" onClick={() => setHub("practice")} className={hubCard}>
+                        <span className="font-black text-lg">Practice</span>
+                      </button>
+                    </div>
                     {newPlayer && roundsPlayed === 0 && (
                       <button type="button" onClick={() => setTutorialOpen(true)} className="min-h-11 self-center px-3 text-sm text-[#36D7B7] hover:text-white underline underline-offset-4">
                         New here? Watch How to Play
@@ -4100,14 +4091,14 @@ export function DiscGolfGame() {
                     )}
                   </div>
 
-                  {/* Utilities — Bag, Shop, Challenges, Leaderboards (Settings = top-right gear) */}
+                  {/* Utilities — Bag, Shop, Goals, Leaderboards (Settings = top-right gear) */}
                   <div className="w-full flex gap-2 mt-4">
                     <button type="button" onClick={() => setBagOpen(true)} className={titleCardSm}>Bag</button>
                     <button type="button" onClick={() => setShopOpen(true)} className={titleCardSm}>Shop</button>
                   </div>
                   <div className="w-full flex gap-2 mt-2">
                     <button type="button" onClick={() => setChallengesOpen(true)} className={titleCardSm}>
-                      Challenges{claimableEvents > 0 ? ` (${claimableEvents})` : ""}
+                      Goals{claimableEvents > 0 ? ` (${claimableEvents})` : ""}
                     </button>
                     <button type="button" onClick={() => setBoardsOpen(true)} className={titleCardSm}>Leaderboards</button>
                   </div>
@@ -4119,25 +4110,8 @@ export function DiscGolfGame() {
               {hub === "solo" && (
                 <div className={`w-full flex flex-col gap-3 ${menuTopMargin}`}>
                   <button type="button" onClick={() => setHub("home")} className={`${titleCardSm} !flex-none self-start px-3`}>‹ Back</button>
-                  <button type="button" onClick={() => startGame("daily")} className={`${hubCard} !flex-col gap-1 !py-4`}>
-                    <span className="font-black text-lg">Daily Challenge</span>
-                    {todayGoals && (
-                      <span className="flex items-center justify-center gap-1">
-                        {todayGoals.map((t, i) => (
-                          <GoalStar key={i} lit={todayStars > i} label={overStr(t)} size={44} />
-                        ))}
-                      </span>
-                    )}
-                  </button>
                   <button type="button" onClick={() => setCoursesOpen(true)} className={hubCard}>
-                    <span className="font-black text-lg">Challenge the Arcade</span>
-                  </button>
-                  <button type="button" onClick={() => setProTourOpen(true)} className={`${hubCard} !flex-col gap-0.5`} data-testid="hub-protour">
-                    <span className="flex items-center gap-2">
-                      <span className="font-black text-lg">2026 Pro Tour</span>
-                      <span className="rounded-full bg-[#36D7B7] text-[#0f1117] text-[9px] font-black px-1.5 py-px tracking-wide">NEW</span>
-                    </span>
-                    <span className="text-gray-400 text-[11px]">Real courses · {PRO_STOPS_BUILT} of {SEASON_2026.length} stops</span>
+                    <span className="font-black text-lg">Courses</span>
                   </button>
                   <button type="button" onClick={() => { setCareerLastResult(null); setCareerNotes([]); leaveCareer(); setCareerOpen(true); }} className={hubCard}>
                     <span className="font-black text-lg">Career</span>
@@ -4783,6 +4757,34 @@ export function DiscGolfGame() {
                 {coinReward > 0 && (
                   <p className="text-[#f5d24a] text-sm font-bold mt-1">+{coinReward} <Coin /></p>
                 )}
+              </>)}
+              {/* Share right under the score, above the fold on phones: the moment
+                  a player is most likely to share. A challenge round shares as
+                  "Send it back" (same card, the text names the challenger). */}
+              {finalChallenge && (
+                <p className={`text-sm font-bold mt-1.5 ${finalTotal < finalChallenge.score ? "text-[#36D7B7]" : finalTotal === finalChallenge.score ? "text-gray-300" : "text-[#e08a3b]"}`}>
+                  ⚔ vs {finalChallenge.name} ({finalChallenge.score}):{" "}
+                  {finalTotal < finalChallenge.score ? "You win!" : finalTotal === finalChallenge.score ? "Tied!" : "They got you."}
+                </p>
+              )}
+              {finalChallenge ? (
+                <button type="button" onClick={() => void shareCard()}
+                  className="mt-2 min-h-11 rounded-lg border border-[#e0923b]/60 bg-[#e0923b]/15 hover:bg-[#e0923b]/25 text-white font-bold px-4 py-2 text-sm transition">
+                  ⚔ Send it back to {finalChallenge.name}
+                </button>
+              ) : (
+                <button type="button" onClick={() => void shareCard()}
+                  className="mt-2 min-h-11 inline-flex items-center justify-center gap-2 rounded-lg border border-[#36D7B7]/60 bg-[#36D7B7]/15 hover:bg-[#36D7B7]/25 text-white font-bold px-5 py-2 text-sm transition">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 -mt-px" aria-hidden="true">
+                    <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+                    <path d="m16 6-4-4-4 4" />
+                    <path d="M12 2v13" />
+                  </svg>
+                  Share
+                </button>
+              )}
+              {cardMsg && <p role="status" className="text-[#36D7B7] text-[11px] mt-1">{cardMsg}</p>}
+              {!finalParty && !finalOnline && (<>
                 {/* Tip-jar nudge: finished Daily or 18-hole rounds only (lib/support.ts nudgeEligible). */}
                 {nudgeEligible({ practice: finalPracticeHole != null, proTour: finalIsProTour, multiplayer: !!finalParty || finalOnline, daily: finalIsDaily, holes: finalPars.length }) && (
                   <div className="mt-2.5"><SupportNudge /></div>
@@ -4852,18 +4854,6 @@ export function DiscGolfGame() {
                   </div>
                 );
               })()}
-              {finalChallenge && (
-                <p className={`text-sm font-bold mt-1.5 ${finalTotal < finalChallenge.score ? "text-[#36D7B7]" : finalTotal === finalChallenge.score ? "text-gray-300" : "text-[#e08a3b]"}`}>
-                  ⚔ vs {finalChallenge.name} ({finalChallenge.score}):{" "}
-                  {finalTotal < finalChallenge.score ? "You win!" : finalTotal === finalChallenge.score ? "Tied!" : "They got you."}
-                </p>
-              )}
-              {finalChallenge && (
-                <button type="button" onClick={() => void shareCard()}
-                  className="mt-2 min-h-11 rounded-lg border border-[#e0923b]/60 bg-[#e0923b]/15 hover:bg-[#e0923b]/25 text-white font-bold px-4 py-2 text-sm transition">
-                  ⚔ Send it back to {finalChallenge.name}
-                </button>
-              )}
             </div>
 
             {/* Pass-and-play standings */}
@@ -4907,26 +4897,6 @@ export function DiscGolfGame() {
                 </div>
               );
             })()}
-
-            {/* Newly-unlocked achievements */}
-            {newAchievements.length > 0 && (
-              <div className="bg-[#f5d24a]/10 border border-[#f5d24a]/30 rounded-2xl p-3">
-                <p className="text-[#f5d24a] font-bold text-sm mb-2">
-                  🏅 Achievement{newAchievements.length > 1 ? "s" : ""} unlocked!
-                  <span className="text-[#f5d24a]/80 font-mono"> +{newAchievements.reduce((s, a) => s + a.coins, 0)} <Coin /></span>
-                </p>
-                <div className="flex flex-col gap-1.5">
-                  {newAchievements.map((a) => (
-                    <div key={a.id} className="flex items-center gap-2 text-sm">
-                      <span className="text-lg">{a.emoji}</span>
-                      <span className="text-white font-semibold">{a.name}</span>
-                      <span className="text-gray-400 text-xs flex-1 truncate">— {a.desc}</span>
-                      <span className="text-[#f5d24a] font-mono text-xs shrink-0 inline-flex items-center gap-1">+{a.coins} <Coin /></span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
 
             {/* Scorecard — one row per nine. Skipped for Pass & Play, where
                 `scorecard` is only the last player's card (the standings table
@@ -4978,6 +4948,30 @@ export function DiscGolfGame() {
                 <span className="font-mono">{finalTotal} · par {finalParTotal}</span>
               </div>
             </div>
+            )}
+
+            {/* Newly-unlocked achievements: one summary line that expands on tap,
+                so a big first round doesn't push the scorecard off the screen. */}
+            {newAchievements.length > 0 && (
+              <details className="group bg-[#f5d24a]/10 border border-[#f5d24a]/30 rounded-2xl px-3">
+                <summary className="min-h-11 flex items-center gap-2 cursor-pointer list-none [&::-webkit-details-marker]:hidden text-[#f5d24a] font-bold text-sm">
+                  <span className="flex-1">
+                    🏅 {newAchievements.length} achievement{newAchievements.length > 1 ? "s" : ""} unlocked
+                    <span className="text-[#f5d24a]/80 font-mono"> · +{newAchievements.reduce((s, a) => s + a.coins, 0)} <Coin /></span>
+                  </span>
+                  <span aria-hidden className="text-xs transition-transform group-open:rotate-180">▾</span>
+                </summary>
+                <div className="flex flex-col gap-1.5 pb-3">
+                  {newAchievements.map((a) => (
+                    <div key={a.id} className="flex items-center gap-2 text-sm">
+                      <span className="text-lg">{a.emoji}</span>
+                      <span className="text-white font-semibold">{a.name}</span>
+                      <span className="text-gray-400 text-xs flex-1 truncate">— {a.desc}</span>
+                      <span className="text-[#f5d24a] font-mono text-xs shrink-0 inline-flex items-center gap-1">+{a.coins} <Coin /></span>
+                    </div>
+                  ))}
+                </div>
+              </details>
             )}
 
             {/* Save + per-course leaderboard (the daily board resets each day);
@@ -5079,13 +5073,6 @@ export function DiscGolfGame() {
                 // Retry is the same one-tap restart of today's course.
                 <button type="button" onClick={() => (finalMode === "tour" ? startGame("tour", finalSeed) : finalIsDaily ? startGame("daily") : startGame())} className={btn}>{finalIsDaily ? "↻ Retry Daily" : "↻ Play again"}</button>
               )}
-              <button type="button" onClick={shareCard} aria-label="Share card" title="Share card" className="mt-1 flex items-center justify-center bg-[#1a1d23] border border-white/15 hover:border-white/35 text-white px-3.5 py-3 rounded-lg transition">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5 -mt-px" aria-hidden="true">
-                  <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
-                  <path d="m16 6-4-4-4 4" />
-                  <path d="M12 2v13" />
-                </svg>
-              </button>
               {lastReplay && (
                 <div className="w-full flex justify-center gap-2">
                   <button type="button" onClick={() => startReplay(lastReplay, true)}

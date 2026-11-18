@@ -62,7 +62,7 @@ export function ChallengesPanel({ history, owned, coins, today, onClaim, onClose
     <div className="absolute inset-0 z-30 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start justify-center rounded-lg">
       <div className="w-full max-w-xs space-y-1.5 my-auto text-left">
         <div className="flex items-center justify-between pb-0.5">
-          <h2 className="text-white font-black text-xl">Challenges</h2>
+          <h2 className="text-white font-black text-xl">Goals</h2>
           <div className="flex items-center gap-2">
             <span className="text-[#f5d24a] font-bold font-mono text-sm inline-flex items-center gap-1">{fmtCoins(coins)} <Coin /></span>
             <button type="button" onClick={onClose} aria-label="Close" className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
