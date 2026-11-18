@@ -58,13 +58,17 @@ groups.boot = async size => {
   const home = await p.evaluate(() => {
     const btns = [...document.querySelectorAll("button")].map(b => ({ t: b.textContent.replace(/\s+/g, " ").trim(), r: b.getBoundingClientRect() }));
     const find = re => btns.find(b => re.test(b.t));
-    const utils = ["^Bag$", "^Shop$", "^Goals", "^Leaderboards$"].map(s => find(new RegExp(s)));
+    // Utilities are icon squares: found by accessible name (aria-label starts with the full word).
+    const utils = ["Bag", "Shop", "Goals", "Leaderboards"].map(n => [...document.querySelectorAll("button[aria-label]")].find(b => b.getAttribute("aria-label").split(",")[0] === n)?.getBoundingClientRect());
+    const sc = [...document.querySelectorAll("div")].find(d => getComputedStyle(d).overflowY === "auto" && d.querySelector("h1"));
     return {
       daily: btns.filter(b => /Daily/.test(b.t) && !/Daily reward/.test(b.t)).length,
       proTour: !!find(/^2026 Pro Tour/),
       weekly: !!find(/^Weekly Tour Stop[A-Z]/),
       oldNames: btns.filter(b => /^Challenges|Challenge the Arcade/.test(b.t)).map(b => b.t),
-      utilsBottom: utils.every(Boolean) ? Math.max(...utils.map(u => u.r.bottom)) : null,
+      utilsBottom: utils.every(Boolean) ? Math.max(...utils.map(u => u.bottom)) : null,
+      utilsRow: utils.every(Boolean) && utils.every((u, i) => u.top === utils[0].top && u.width >= 44 && u.height >= 44 && (i === 0 || u.left > utils[i - 1].left)),
+      scroll: sc ? sc.scrollHeight - sc.clientHeight : null,
       vh: innerHeight,
     };
   });
@@ -77,6 +81,8 @@ groups.boot = async size => {
   else check(false, "Daily reward button on the Daily card");
   await p.reload(); await waitText(p, "^Single Player$").catch(() => {}); // screenshot the home, not the popup
   check(home.utilsBottom != null && home.utilsBottom <= home.vh, `Bag/Shop/Goals/Leaderboards above the fold (bottom ${home.utilsBottom == null ? "missing" : Math.round(home.utilsBottom)} <= ${home.vh})`);
+  check(home.utilsRow, "Bag, Shop, Goals, Leaderboards: one row, in order, each >= 44 px");
+  check(home.scroll === 0, `home fits the viewport without scrolling (overflow ${home.scroll} px)`);
   check(p.errors.length === 0, `0 console errors${p.errors.length ? ": " + p.errors.slice(0, 3).join(" | ") : ""}`);
   return p;
 };
@@ -235,7 +241,7 @@ groups.weekly = async size => {
   }
   check(await waitText(p, "^Share$", 5000).then(() => true, () => false), "weekly results offer Share");
   await p.screenshot({ path: path.join(OUT, `${size.width}-weekly-results.png`) }).catch(() => {});
-  await p.goto(`${BASE}/`); await waitText(p, "^Leaderboards$").then(() => clickText(p, "^Leaderboards$"), () => {});
+  await p.goto(`${BASE}/`); await p.waitForSelector('button[aria-label="Leaderboards"]', { timeout: 20_000 }).then(b => b.evaluate(e => e.click()), () => {});
   check(await waitText(p, "^This week · top 10 · \\d+[dhm]", 10_000).then(() => true, () => false), "Leaderboards opens on the weekly board with time left");
   check(p.errors.length === 0, `0 console errors${p.errors.length ? ": " + p.errors.slice(0, 3).join(" | ") : ""}`);
   return p;
