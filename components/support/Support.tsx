@@ -9,7 +9,7 @@ export function SupportLink() {
   const url = supportUrl();
   if (!url) return null;
   return (
-    <div className="w-full text-center mt-4" data-testid="support-link">
+    <div className="w-full text-center mt-2" data-testid="support-link">
       <a href={url} target="_blank" rel="noopener" className="text-[#36D7B7] text-sm font-semibold hover:underline">
         Support the Arcade
       </a>

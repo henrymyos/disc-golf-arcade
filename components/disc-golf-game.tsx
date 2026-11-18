@@ -72,6 +72,7 @@ import { SettingsPanel } from "./panels/SettingsPanel";
 import { AttractBackdrop } from "./menu/AttractBackdrop";
 import { DailyCard } from "./menu/DailyCard";
 import { SupportLink, SupportNudge } from "./support/Support";
+import { UtilityRow } from "./menu/UtilityRow";
 import { nudgeEligible } from "@/lib/support";
 import { GoalToast } from "./menu/NextGoal";
 import { useNextGoal } from "./menu/useNextGoal";
@@ -694,7 +695,7 @@ export function DiscGolfGame() {
   // An interrupted solo round shows as a resume banner above the menu. The Daily is
   // deliberately excluded — it's one-and-done, so exiting it means starting over.
   const resumeBanner = resumeRound && resumeRound.mode !== "daily" ? resumeRound : null;
-  const menuTopMargin = challenge || resumeBanner ? "mt-3" : "mt-7";
+  const menuTopMargin = challenge || resumeBanner ? "mt-3" : "mt-4";
 
   // Per-venue best scores for the standalone pro-tour courses (keyed by seed).
   const [tourBests, setTourBests] = useState<Record<number, number>>({});
@@ -3976,7 +3977,7 @@ export function DiscGolfGame() {
               className="relative min-h-full flex items-start justify-center px-5"
               style={{ paddingTop: "max(env(safe-area-inset-top), 1.5rem)", paddingBottom: "max(env(safe-area-inset-bottom), 0.75rem)" }}
             >
-            <div className="w-full max-w-[300px] flex flex-col items-center text-center pt-1 pb-4">
+            <div className="w-full max-w-[300px] flex flex-col items-center text-center pt-1 pb-1">
               {/* Title + the hero: the demo hole looping on its side (tee → basket) */}
               <div className="w-full flex flex-col items-center gap-2">
                 <h1 className="text-white font-black text-[30px] leading-none tracking-tight">
@@ -4076,7 +4077,7 @@ export function DiscGolfGame() {
               {/* Hub: three category cards keep the menu uncluttered */}
               {hub === "home" && (
                 <>
-                  <div className={`w-full flex flex-col gap-3 ${menuTopMargin}`}>
+                  <div className={`w-full flex flex-col gap-2.5 ${menuTopMargin}`}>
                     <DailyCard
                       stars={todayStars}
                       best={today ? (dayBests[today] ?? null) : null}
@@ -4085,7 +4086,7 @@ export function DiscGolfGame() {
                       reward={{ available: dailyAvailable(daily, today), streak: daily?.streak ?? 0, onClaim: claimDaily }}
                       goal={goal}
                     />
-                    <div className="flex gap-3">
+                    <div className="flex gap-2.5">
                       <WeeklyStopCard className={`${hubCard} px-2`} onPlay={(seed) => runWithProTour("tour", seed, () => startGame("tour", seed), setReplayLoadErr)} />
                       <button type="button" onClick={() => setProTourOpen(true)} className={`${hubCard} !flex-col gap-0.5 min-w-0 flex-1 px-2`} data-testid="hub-protour">
                         <span className="font-black text-lg leading-tight whitespace-nowrap">2026 Pro Tour</span>
@@ -4096,7 +4097,7 @@ export function DiscGolfGame() {
                     <button type="button" onClick={() => setHub("solo")} className={hubCard}>
                       <span className="font-black text-lg">Single Player</span>
                     </button>
-                    <div className="flex gap-3">
+                    <div className="flex gap-2.5">
                       <button type="button" onClick={() => setHub("online")} className={hubCard}>
                         <span className="font-black text-lg">Online</span>
                       </button>
@@ -4111,17 +4112,14 @@ export function DiscGolfGame() {
                     )}
                   </div>
 
-                  {/* Utilities — Bag, Shop, Goals, Leaderboards (Settings = top-right gear) */}
-                  <div className="w-full flex gap-2 mt-4">
-                    <button type="button" onClick={() => setBagOpen(true)} className={titleCardSm}>Bag</button>
-                    <button type="button" onClick={() => setShopOpen(true)} className={titleCardSm}>Shop</button>
-                  </div>
-                  <div className="w-full flex gap-2 mt-2">
-                    <button type="button" onClick={() => setChallengesOpen(true)} className={titleCardSm}>
-                      Goals{claimableEvents > 0 ? ` (${claimableEvents})` : ""}
-                    </button>
-                    <button type="button" onClick={() => setBoardsOpen(true)} className={titleCardSm}>Leaderboards</button>
-                  </div>
+                  {/* Utilities: Bag, Shop, Goals, Leaderboards as one icon row (Settings = top-right gear) */}
+                  <UtilityRow
+                    goalsReady={claimableEvents}
+                    onBag={() => setBagOpen(true)}
+                    onShop={() => setShopOpen(true)}
+                    onGoals={() => setChallengesOpen(true)}
+                    onBoards={() => setBoardsOpen(true)}
+                  />
                   <SupportLink />
                 </>
               )}
