@@ -151,7 +151,7 @@ export function emojiCard(holes: HoleResult[]): string {
 // card, and a link that drops the recipient straight onto the same course.
 // `vs` answers a challenge (the link then carries my score back to them);
 // `streak` is the Daily streak, shown from 2 days.
-export function shareText(card: ReplayCard, o: { link: string; daily?: { date: string; stars: number }; vs?: { name: string; score: number }; streak?: number }): string {
+export function shareText(card: ReplayCard, o: { link: string; daily?: { date: string; stars: number }; vs?: { name: string; score: number }; streak?: number; weekly?: { rank: number | null } }): string {
   const grid = emojiCard(card.holes);
   const vs = o.vs
     ? card.total < o.vs.score ? `Beat ${o.vs.name}'s ${o.vs.score} with a ${card.total} (${card.toPar})`
@@ -163,6 +163,10 @@ export function shareText(card: ReplayCard, o: { link: string; daily?: { date: s
     const fire = o.streak && o.streak >= 2 ? ` 🔥${o.streak}` : "";
     const line2 = vs ?? `${card.total} (${card.toPar})${card.highlight ? ` · ${card.headline}` : ""}`;
     return `Disc Golf Arcade Daily · ${o.daily.date} ${stars}${fire}\n${line2}\n${grid}\n${o.link}`;
+  }
+  if (o.weekly) {
+    const rank = o.weekly.rank ? ` · #${o.weekly.rank} this week` : "";
+    return `Disc Golf Arcade Weekly Tour Stop · ${card.course}\n${vs ?? `${card.total} (${card.toPar})`}${rank}\n${grid}\nBeat it before Sunday: ${o.link}`;
   }
   if (vs) return `${vs} at ${card.course} on Disc Golf Arcade\n${grid}\nYour move: ${o.link}`;
   return `${card.headline} at ${card.course}: ${card.total} (${card.toPar}) on Disc Golf Arcade\n${grid}\nBeat it: ${o.link}`;
