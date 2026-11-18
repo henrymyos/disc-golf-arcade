@@ -3,7 +3,7 @@
 //   node scripts/verify/verify.mjs [--full] [group …]     (npm run verify [-- --full])
 // --full runs tsc, eslint, vitest and `next build --webpack` first. Exit code = failures.
 import path from "node:path";
-import { OUT, log, closeLog, check, laneFails, lane, summary, step, startServer, stopServer, launch, closeBrowser, open, clickText, waitText, aborted, supabaseWrites } from "./lib.mjs";
+import { BASE, OUT, log, closeLog, check, laneFails, lane, summary, step, startServer, stopServer, launch, closeBrowser, open, clickText, waitText, aborted, supabaseWrites } from "./lib.mjs";
 
 const SIZES = [{ width: 390, height: 844 }, { width: 1440, height: 900 }];
 const CHALLENGE = "/?ch=course.1.60.Tester";
@@ -62,6 +62,7 @@ groups.boot = async size => {
     return {
       daily: btns.filter(b => /Daily/.test(b.t) && !/Daily reward/.test(b.t)).length,
       proTour: !!find(/^2026 Pro Tour/),
+      weekly: !!find(/^Weekly Tour Stop[A-Z]/),
       oldNames: btns.filter(b => /^Challenges|Challenge the Arcade/.test(b.t)).map(b => b.t),
       utilsBottom: utils.every(Boolean) ? Math.max(...utils.map(u => u.r.bottom)) : null,
       vh: innerHeight,
@@ -69,6 +70,7 @@ groups.boot = async size => {
   });
   check(home.daily === 1, `one Daily entry on home (found ${home.daily})`);
   check(home.proTour, "2026 Pro Tour card on home");
+  check(home.weekly, "Weekly Tour Stop card on home");
   check(home.oldNames.length === 0, `no "Challenges"/"Challenge the Arcade" buttons${home.oldNames.length ? ": " + home.oldNames.join(", ") : ""}`);
   if (await clickText(p, "^🎁 Daily reward$")) // the reward claim moved into the Daily card
     check(await waitText(p, "^Daily reward · ", 5000).then(() => true, () => false), "Daily reward claim opens the reward popup");
@@ -186,7 +188,7 @@ groups.pause = async size => {
 groups.modes = async size => {
   const shots = [];
   let dailyFailed = false;
-  for (const [name, route] of [["Daily", ["^▶ Play today's Daily"]], ["Pro Tour", ["^2026 Pro Tour", "STOP", "^Play 18$"]]]) {
+  for (const [name, route] of [["Daily", ["^▶ Play today's Daily"]], ["Pro Tour", ["^2026 Pro Tour", "STOP", "^Play 18$"]], ["Weekly Tour Stop", ["^Weekly Tour Stop[A-Z]"]]]) {
     const p = await open("/", size), before = laneFails();
     await waitText(p, "^Single Player$").catch(() => {});
     let ok = true; // both start from the home screen
@@ -208,6 +210,35 @@ groups.modes = async size => {
   await shots[0].screenshot({ path: path.join(OUT, `${size.width}-modes-daily${dailyFailed ? "-FAIL" : ""}.png`) }).catch(() => {});
   await shots[0].ctx.close().catch(() => {});
   return shots[1];
+};
+
+// Weekly Tour Stop: the home card plays this week's course; its results show the
+// weekly board (top 10 + time left); Leaderboards opens on it. Supabase is dead
+// here, so the board is empty and nothing posts (Skip at the name prompt).
+groups.weekly = async size => {
+  const p = await open("/", size);
+  const ok = await waitText(p, "^Weekly Tour Stop[A-Z]").then(() => clickText(p, "^Weekly Tour Stop[A-Z]"), () => false);
+  const st = ok ? await nextState(p).catch(() => "timeout") : "menu";
+  if (!check(st === "aim", `weekly card loads to the first tee${st === "aim" ? "" : ` (got ${st})`}`)) return p;
+  await p.evaluate(() => window.__dga.finish(-1));
+  check(await waitText(p, "^🏆 Weekly Tour Stop · .+Top 10 · \\d+[dhm]", 10_000).then(() => true, () => false), "results show the weekly board with time left");
+  for (let i = 0; i < 10; i++) { // level-up picks, then the name prompt: Skip posts nothing
+    const r = await p.evaluate(() => {
+      if ([...document.querySelectorAll("button")].some(b => b.textContent.trim() === "Skip")) return "skip";
+      const h = [...document.querySelectorAll("p,h2,h3")].find(e => /Pick a new disc/.test(e.textContent));
+      let box = h; while (box && !box.querySelector("button")) box = box.parentElement;
+      box?.querySelector("button").click();
+      return box ? "level" : "none";
+    });
+    if (r === "skip") { await clickText(p, "^Skip$"); break; }
+    if (r === "none") await new Promise(r => setTimeout(r, 150));
+  }
+  check(await waitText(p, "^Share$", 5000).then(() => true, () => false), "weekly results offer Share");
+  await p.screenshot({ path: path.join(OUT, `${size.width}-weekly-results.png`) }).catch(() => {});
+  await p.goto(`${BASE}/`); await waitText(p, "^Leaderboards$").then(() => clickText(p, "^Leaderboards$"), () => {});
+  check(await waitText(p, "^This week · top 10 · \\d+[dhm]", 10_000).then(() => true, () => false), "Leaderboards opens on the weekly board with time left");
+  check(p.errors.length === 0, `0 console errors${p.errors.length ? ": " + p.errors.slice(0, 3).join(" | ") : ""}`);
+  return p;
 };
 
 // ── main ────────────────────────────────────────────────────────────────

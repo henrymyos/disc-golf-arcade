@@ -1,22 +1,26 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getArcadeLeaderboard } from "@/actions/arcade";
+import { getArcadeLeaderboard, getWeeklyLeaderboard } from "@/actions/arcade";
+import { currentWeeklyStop, weeklyStop, timeLeftLabel } from "@/lib/discgolf/weekly";
 import type { ArcadeScore } from "@/lib/arcade-types";
 import { TOTAL_PAR, WINTHROP_PAR, OLYMPUS_PAR, dailySeed, buildRound } from "@/lib/discgolf/engine";
 import { TOUR_COURSE_INFOS } from "../game/courses";
 import { StyledDropdown } from "./ui";
+import { useMinuteClock } from "../menu/WeeklyStopCard";
 
 
 // Browse the global (Supabase) leaderboard for any course from the title
-// screen. Daily uses today's seed; the fixed courses are all-time.
+// screen. The Weekly Tour Stop and the Daily reset; the fixed courses are all-time.
 export function LeaderboardPanel({ onClose }: { onClose: () => void }) {
   // Daily first, then the two fixed venues, then every pro-tour course on the app.
-  type Board = { label: string; courseKey: string; par: number; daily?: boolean };
+  type Board = { label: string; courseKey: string; par: number; daily?: boolean; week?: number; end?: number };
   const [boards] = useState<Board[]>(() => {
     const dSeed = dailySeed();
     const dPar = buildRound(dSeed, "daily").reduce((s, h) => s + h.par, 0);
+    const wk = currentWeeklyStop(Date.now());
     return [
+      { label: `Weekly Tour Stop · ${wk.name}`, courseKey: wk.key, par: wk.par, week: wk.week, end: wk.end },
       { label: "Daily Challenge", courseKey: `daily-${dSeed}`, par: dPar, daily: true },
       { label: "Glendoveer East", courseKey: "glendoveer", par: TOTAL_PAR },
       { label: "Winthrop Lake", courseKey: "winthrop", par: WINTHROP_PAR },
@@ -26,12 +30,20 @@ export function LeaderboardPanel({ onClose }: { onClose: () => void }) {
   });
   const [pick, setPick] = useState<Board>(boards[0]);
   const [rows, setRows] = useState<ArcadeScore[] | null>(null);
+  // Last week's Tour Stop winner, shown under the weekly board.
+  const [lastWinner, setLastWinner] = useState<{ row: ArcadeScore; name: string; par: number } | null>(null);
+  const clock = useMinuteClock();
   const over = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     let active = true;
     setRows(null);
-    getArcadeLeaderboard(pick.courseKey, 25).then((r) => { if (active) setRows(r); }).catch(() => { if (active) setRows([]); });
+    const week = pick.week;
+    (week != null ? getWeeklyLeaderboard(week, 10) : getArcadeLeaderboard(pick.courseKey, 25)).then((r) => { if (active) setRows(r); }).catch(() => { if (active) setRows([]); });
+    if (week != null) {
+      const prev = weeklyStop(week - 1);
+      getWeeklyLeaderboard(prev.week, 1).then((r) => { if (active) setLastWinner(r[0] ? { row: r[0], name: prev.name, par: prev.par } : null); }).catch(() => {});
+    }
     return () => { active = false; };
   }, [pick]);
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -50,7 +62,7 @@ export function LeaderboardPanel({ onClose }: { onClose: () => void }) {
           options={boards.map((b) => ({ key: b.courseKey, label: b.label, group: b.courseKey.startsWith("tour-") ? "Pro Tour" : undefined }))}
         />
         <p className="text-gray-500 text-[11px]">
-          {pick.daily ? "Today's course · par " : "All-time · par "}{pick.par}
+          {pick.end != null ? `This week · top 10 · ${timeLeftLabel(pick.end, clock ?? pick.end)} · par ` : pick.daily ? "Today's course · par " : "All-time · par "}{pick.par}
         </p>
         <div className="bg-[#1a1d23] border border-white/5 rounded-2xl overflow-hidden">
           {rows === null ? (
@@ -73,6 +85,11 @@ export function LeaderboardPanel({ onClose }: { onClose: () => void }) {
             </ol>
           )}
         </div>
+        {pick.week != null && lastWinner && (
+          <p className="text-gray-400 text-xs">
+            Last week at {lastWinner.name}: <span className="text-[#f5d24a]">👑 {lastWinner.row.name}</span> {over(lastWinner.row.strokes - lastWinner.par)}
+          </p>
+        )}
       </div>
     </div>
   );

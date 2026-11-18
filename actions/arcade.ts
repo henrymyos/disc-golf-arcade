@@ -5,6 +5,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { ArcadeScore } from "@/lib/arcade-types";
 import { isValidCourse } from "@/lib/boards";
 import { writeScore, userIdFromToken, isMissingColumn, type AdminLike } from "@/lib/leaderboard/server-core";
+import { loadProTour, proTourCourseBySeed } from "@/lib/discgolf/engine";
+import { weeklyStop, weekOpenForPosts, weeklyCardError } from "@/lib/discgolf/weekly";
 
 // Scores are scoped per course: the fixed courses keep all-time boards,
 // and each daily seed gets its own board (so it naturally resets every day).
@@ -107,6 +109,45 @@ export async function getMiniLeaderboard(kind: string, limit = 15): Promise<Arca
   }
   // Decode each row back to the real (higher-is-better) score for display.
   return (data ?? []).map((r) => ({ ...r, strokes: MINI_BASE - r.strokes })) as ArcadeScore[];
+}
+
+// Weekly Tour Stop (lib/discgolf/weekly). The client sends the per-hole card,
+// not a total: the server picks the week's course itself, checks the week is
+// still open and the card is plausible for that course's pars, then posts the
+// total to that week's board (one best row per player, like every board).
+export async function submitWeeklyScore(name: string, week: number, scores: number[], accessToken?: string | null): Promise<{ ok: boolean; error?: string; name?: string }> {
+  if (!Number.isInteger(week) || !weekOpenForPosts(week, Date.now())) return { ok: false, error: "This week's Tour Stop has closed." };
+  const stop = weeklyStop(week);
+  await loadProTour();
+  const pars = proTourCourseBySeed(stop.seed)?.proHoles.map((h) => h.par);
+  if (!pars || weeklyCardError(scores, pars)) return { ok: false, error: "Invalid score" };
+  if (rateLimited(await clientKey())) {
+    return { ok: false, error: "You're saving scores too fast — give it a minute." };
+  }
+  const admin = createAdminClient() as unknown as AdminLike;
+  const userId = await userIdFromToken(admin, accessToken);
+  if (accessToken && !userId) return { ok: false, error: "Your sign-in expired — sign in again to post this score." };
+  return writeScore(admin, { name, strokes: scores.reduce((a, b) => a + b, 0), course: stop.key, userId });
+}
+
+export async function getWeeklyLeaderboard(week: number, limit = 10): Promise<ArcadeScore[]> {
+  if (!Number.isInteger(week) || week < 0 || week > 1e6) return [];
+  return readBoard(weeklyStop(week).key, Math.min(limit, 25));
+}
+
+async function readBoard(course: string, limit: number): Promise<ArcadeScore[]> {
+  const { data, error } = await createAdminClient()
+    .from("arcade_scores")
+    .select("name, strokes, created_at")
+    .eq("course", course)
+    .order("strokes", { ascending: true })
+    .order("created_at", { ascending: true })
+    .limit(limit);
+  if (error) {
+    console.error("readBoard failed:", error.code, error.message);
+    return [];
+  }
+  return (data ?? []) as ArcadeScore[];
 }
 
 export async function getArcadeLeaderboard(course = "glendoveer", limit = 15): Promise<ArcadeScore[]> {

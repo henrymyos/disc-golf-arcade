@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import {
-  submitArcadeScore, getArcadeLeaderboard, submitMiniScore, getMiniLeaderboard,
+  submitArcadeScore, getArcadeLeaderboard, submitMiniScore, getMiniLeaderboard, submitWeeklyScore, getWeeklyLeaderboard,
 } from "@/actions/arcade";
 import type { ArcadeScore } from "@/lib/arcade-types";
 import { getSupabase } from "@/lib/supabase/browser";
@@ -84,6 +84,8 @@ import { roundStats, type RoundStats } from "@/lib/discgolf/stats";
 import { TIPS, claimTip, lieTips, type TipId } from "@/lib/discgolf/tips";
 import { keyAim, pullFor, KEY_AIM_START_POWER } from "@/lib/discgolf/keyAim";
 import { padKeys, padPresses, cycleBag, spatialNext, menuLayer, MENU_FOCUSABLE } from "@/lib/discgolf/gamepad";
+import { weeklyStopForRound, timeLeftLabel, type WeeklyStop } from "@/lib/discgolf/weekly";
+import { WeeklyStopCard, useMinuteClock } from "./menu/WeeklyStopCard";
 import { postMiniResult, postRoundResult, readBoardChoice, writeBoardChoice, type BoardChoice, type PostOutcome } from "@/lib/leaderboard/post";
 
 
@@ -222,6 +224,7 @@ export function DiscGolfGame() {
   const [scorecard, setScorecard] = useState<number[]>([]);
   const [finalTotal, setFinalTotal] = useState(0);
   const [finalSeed, setFinalSeed] = useState(0);
+  const [finalWeekly, setFinalWeekly] = useState<WeeklyStop | null>(null); // this round counts for a Weekly Tour Stop board
   const [finalPracticeHole, setFinalPracticeHole] = useState<number | null>(null);
   // Hole Practice wind pick (mph, null = the course's own wind), reused by Retry hole.
   const practiceWindRef = useRef<number | null>(null);
@@ -2227,9 +2230,13 @@ export function DiscGolfGame() {
     setFinalSeed(g?.seed ?? 0);
     setFinalChallenge(challengePlayRef.current ? challengeRef.current : null);
     setLeaderboard([]);
+    // A full solo round on this week's Pro Tour course posts to the Weekly Tour Stop board.
+    const weekly = !practice && !g?.party && mode === "tour" && isProTourSeed(g?.seed) && scores.length === pars.length ? weeklyStopForRound(g?.seed, Date.now()) : null;
+    setFinalWeekly(weekly);
     // Ranked posts to a single global all-time board (handled in saveScore), not a
     // per-round course board — so skip the per-seed fetch and show the field instead.
-    if (!practice && mode !== "ranked" && !(mode === "tour" && isProTourSeed(g?.seed))) void getArcadeLeaderboard(leaderboardCourse(mode, g?.seed ?? 0)).then(setLeaderboard).catch(() => {});
+    if (weekly) void getWeeklyLeaderboard(weekly.week).then(setLeaderboard).catch(() => {});
+    else if (!practice && mode !== "ranked" && !(mode === "tour" && isProTourSeed(g?.seed))) void getArcadeLeaderboard(leaderboardCourse(mode, g?.seed ?? 0)).then(setLeaderboard).catch(() => {});
     // Ranked round: place against the AI field → RP (placement + streak bonus), so
     // you climb or fall the tiers. Your best to-par still posts to the global board.
     if (!practice && mode === "ranked" && rankedFieldRef.current) {
@@ -2266,6 +2273,11 @@ export function DiscGolfGame() {
       addCoins(reward);
     }
   }, [saveProgress, saveTournament, clearResume, saveCareer, addCoins, applyAccountLook]);
+  // Dev-only (verify): end the round now, every hole scored par + delta.
+  useEffect(() => {
+    const dga = (window as unknown as { __dga?: Record<string, unknown> }).__dga;
+    if (dga) dga.finish = (delta = 0) => { const g = stateRef.current; if (g) finishGame(g.roundHoles.map((h) => h.par + delta)); };
+  }, [finishGame]);
 
   // Bail out of a played Career round already in progress and let it sim from
   // your skills instead — the same instant result as the hub "⚡ Sim", but
@@ -2361,10 +2373,12 @@ export function DiscGolfGame() {
       const isRanked = finalMode === "ranked";
       const course = isRanked ? RANKED_BOARD_KEY : leaderboardCourse(finalMode, finalSeed);
       const strokes = isRanked ? encodeToParScore(finalTotal - finalPars.reduce((s, n) => s + n, 0)) : finalTotal;
+      const weekly = finalWeekly;
       const out = await postRoundResult(
         { strokes, course },
         { signedIn: !!user, accountName: profile.name, choice: choiceOverride ?? readBoardChoice(localStorage), getToken: sessionToken },
-        submitArcadeScore,
+        // The weekly board gets the per-hole card, which the server checks.
+        weekly ? (name, _s, _c, token) => submitWeeklyScore(name, weekly.week, scorecard, token) : submitArcadeScore,
       );
       if (out.status === "ask" || (out.status === "error" && out.reserved)) {
         if (out.status === "error") { writeBoardChoice(localStorage, null); setBoardChoice(null); }
@@ -2378,7 +2392,7 @@ export function DiscGolfGame() {
       setPostedAs(out.as);
       setSaved(true);
       if (!isRanked) {
-        const lb = await getArcadeLeaderboard(course);
+        const lb = await (weekly ? getWeeklyLeaderboard(weekly.week) : getArcadeLeaderboard(course));
         setLeaderboard(lb);
       }
     } catch (e) {
@@ -2386,7 +2400,7 @@ export function DiscGolfGame() {
     } finally {
       setSaving(false);
     }
-  }, [saving, saved, user, profile.name, finalTotal, finalMode, finalSeed, finalPars, sessionToken]);
+  }, [saving, saved, user, profile.name, finalTotal, finalMode, finalSeed, finalPars, sessionToken, finalWeekly, scorecard]);
   useEffect(() => { saveScoreRef.current = saveScore; }, [saveScore]);
 
   // Auto-save the round to the leaderboard when the results screen appears
@@ -2394,11 +2408,11 @@ export function DiscGolfGame() {
   useEffect(() => {
     if (screen !== "gameComplete") return;
     if (finalPracticeHole != null || finalParty || finalOnline) return;
-    if (finalMode === "tour" && isProTourSeed(finalSeed)) return; // no boards for the real 2026 courses (v1)
+    if (finalMode === "tour" && isProTourSeed(finalSeed) && !finalWeekly) return; // the real 2026 courses only have the weekly board
     if (saved || saving || postStatus) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- genuine effect: posts to the leaderboard once the results screen is committed
     void saveScore();
-  }, [screen, finalPracticeHole, finalParty, finalOnline, finalMode, finalSeed, saved, saving, postStatus, saveScore]);
+  }, [screen, finalPracticeHole, finalParty, finalOnline, finalMode, finalSeed, finalWeekly, saved, saving, postStatus, saveScore]);
 
   // The guest answered the name prompt: remember it and carry on posting.
   const answerNamePrompt = useCallback((c: BoardChoice) => {
@@ -2431,7 +2445,7 @@ export function DiscGolfGame() {
     });
     const card = replayCard(r, finalPracticeHole ?? 1);
     const dailyDate = isDaily ? dailyDateLabel(finalSeed) : null;
-    const kicker = finalPracticeHole != null ? "Practice" : dailyDate ? `Daily Challenge · ${dailyDate}` : card.stop ?? (finalMode === "ranked" ? "Ranked" : "Round");
+    const kicker = finalPracticeHole != null ? "Practice" : finalWeekly ? `Weekly Tour Stop · ${finalWeekly.name}` : dailyDate ? `Daily Challenge · ${dailyDate}` : card.stop ?? (finalMode === "ranked" ? "Ranked" : "Round");
     // A challenge link when the round is replayable as-is (fixed courses, the Daily, tour courses at full length), else just the app.
     const canLink = finalPracticeHole == null && !finalParty
       && (finalMode === "course" || finalMode === "winthrop" || finalMode === "olympus" || finalMode === "daily" || (finalMode === "tour" && isChallengeTourSeed(finalSeed)));
@@ -2441,6 +2455,7 @@ export function DiscGolfGame() {
       daily: dailyDate ? { date: dailyDate, stars: finalDailyStars?.earned ?? 0 } : undefined,
       vs: finalChallenge && finalPracticeHole == null ? { name: finalChallenge.name, score: finalChallenge.score } : undefined,
       streak: isDaily ? dailyStreak(finishedDailyDays(dayBests, dayStars), finalSeed) : undefined,
+      weekly: finalWeekly ? { rank: saved && postedAs ? (leaderboard.findIndex((row) => row.name === postedAs) + 1 || null) : null } : undefined,
     });
 
     const flash = (msg: string) => { setCardMsg(msg); window.setTimeout(() => setCardMsg(null), 2200); };
@@ -2479,7 +2494,7 @@ export function DiscGolfGame() {
       }
     } catch { /* ignore */ }
     flash("Sharing isn't available here");
-  }, [finalTotal, finalPars, finalMode, finalSeed, finalPracticeHole, finalParty, finalDailyStars, finalChallenge, dayBests, dayStars, scorecard, profile.name, lastReplay]);
+  }, [finalTotal, finalPars, finalMode, finalSeed, finalPracticeHole, finalParty, finalDailyStars, finalChallenge, dayBests, dayStars, scorecard, profile.name, lastReplay, finalWeekly, saved, postedAs, leaderboard]);
 
   // When a hole finishes, record/show the best-ever strokes for that hole.
   // Only for premade courses (Glendoveer, Winthrop, Olympus, tour venues) — the
@@ -3859,6 +3874,7 @@ export function DiscGolfGame() {
   const finalOver = finalTotal - finalParTotal;
   const finalIsDaily = finalMode === "daily";
   const finalIsProTour = finalMode === "tour" && isProTourSeed(finalSeed);
+  const clock = useMinuteClock(); // the weekly board's time left
   // The personal best for the course just played (null for the daily).
   const finalBest = finalMode === "course" ? bestScore : finalMode === "winthrop" ? winthropBest : finalMode === "olympus" ? olympusBest : finalMode === "tour" ? (tourBests[finalSeed] ?? null) : null;
   const overStr = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
@@ -4069,10 +4085,14 @@ export function DiscGolfGame() {
                       reward={{ available: dailyAvailable(daily, today), streak: daily?.streak ?? 0, onClaim: claimDaily }}
                       goal={goal}
                     />
-                    <button type="button" onClick={() => setProTourOpen(true)} className={`${hubCard} !flex-col gap-0.5`} data-testid="hub-protour">
-                      <span className="font-black text-lg">2026 Pro Tour</span>
-                      <span className="text-gray-400 text-[11px]">Real courses · {PRO_STOPS_BUILT} of {SEASON_2026.length} stops</span>
-                    </button>
+                    <div className="flex gap-3">
+                      <WeeklyStopCard className={`${hubCard} px-2`} onPlay={(seed) => runWithProTour("tour", seed, () => startGame("tour", seed), setReplayLoadErr)} />
+                      <button type="button" onClick={() => setProTourOpen(true)} className={`${hubCard} !flex-col gap-0.5 min-w-0 flex-1 px-2`} data-testid="hub-protour">
+                        <span className="font-black text-lg leading-tight whitespace-nowrap">2026 Pro Tour</span>
+                        <span className="text-gray-400 text-[11px]">Real courses</span>
+                        <span className="text-gray-400 text-[11px]">{PRO_STOPS_BUILT} of {SEASON_2026.length} stops</span>
+                      </button>
+                    </div>
                     <button type="button" onClick={() => setHub("solo")} className={hubCard}>
                       <span className="font-black text-lg">Single Player</span>
                     </button>
@@ -4977,10 +4997,10 @@ export function DiscGolfGame() {
             {/* Save + per-course leaderboard (the daily board resets each day);
                 practice rounds skip all of it. */}
             {/* Real 2026 Pro Tour courses have no leaderboards in v1 (Henry's call). */}
-            {finalPracticeHole == null && !finalParty && !finalOnline && finalIsProTour && (
-              <p className="text-center text-gray-500 text-xs">Leaderboards for the real 2026 courses are off for now. Your best is saved on this device.</p>
+            {finalPracticeHole == null && !finalParty && !finalOnline && finalIsProTour && !finalWeekly && (
+              <p className="text-center text-gray-500 text-xs">This course has a leaderboard in the weeks it&apos;s the Weekly Tour Stop. Your best is saved on this device.</p>
             )}
-            {finalPracticeHole == null && !finalParty && !finalOnline && !finalIsProTour && (<>
+            {finalPracticeHole == null && !finalParty && !finalOnline && (!finalIsProTour || finalWeekly) && (<>
             {saved ? (
               <p className="text-center text-[#36D7B7] text-sm font-semibold">Saved to the leaderboard as {postedAs ?? myBoardName} ✓</p>
             ) : postStatus === "skipped" ? (
@@ -5020,7 +5040,8 @@ export function DiscGolfGame() {
             ) : (
             <div className="bg-[#1a1d23] border border-white/5 rounded-2xl overflow-hidden">
               <p className="text-white font-bold text-sm px-4 py-2.5 border-b border-white/5">
-                🏆 {finalIsDaily ? "Today's leaderboard" : finalMode === "tour" ? `${tourVenue(finalSeed)} leaderboard` : `${finalMode === "winthrop" ? "Winthrop Lake" : finalMode === "olympus" ? "Olympus" : "Glendoveer East"} leaderboard`}
+                🏆 {finalWeekly ? `Weekly Tour Stop · ${finalWeekly.name}` : finalIsDaily ? "Today's leaderboard" : finalMode === "tour" ? `${tourVenue(finalSeed)} leaderboard` : `${finalMode === "winthrop" ? "Winthrop Lake" : finalMode === "olympus" ? "Olympus" : "Glendoveer East"} leaderboard`}
+                {finalWeekly && <span className="block text-gray-500 text-[11px] font-normal mt-0.5">Top 10 · {clock == null ? "" : timeLeftLabel(finalWeekly.end, clock)}</span>}
               </p>
               {leaderboard.length === 0 ? (
                 <p className="text-gray-400 text-sm text-center py-6">No scores yet — be the first!</p>
