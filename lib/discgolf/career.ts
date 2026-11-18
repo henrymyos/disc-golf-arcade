@@ -444,7 +444,7 @@ function parForMode(mode: Mode): { par: number; holes: number } {
 
 // Venue naming + the procedural layouts live in the engine (tourVenue /
 // tourPars / tourCharacter / generateTourCourse), so the same courses are
-// playable standalone from "Challenge the Arcade".
+// playable standalone from "Courses".
 function tourCourseSeed(careerSeed: number, fullId: string): number {
   return (careerSeed ^ hashId(fullId) ^ 0x51ed270b) >>> 0;
 }

@@ -1,7 +1,7 @@
 import { TOTAL_PAR, WINTHROP_PAR, OLYMPUS_PAR, TOUR_COURSES, type Mode } from "@/lib/discgolf/engine";
 
 
-// Every fixed course in the app (shown on the "Challenge the Arcade" page). Add new
+// Every fixed course in the app (shown on the "Courses" page). Add new
 // hand-authored courses here. `seed` is set for procedural pro-tour venues
 // (mode "tour"); the two hand-authored layouts need none.
 export type CourseInfo = { mode: Mode; name: string; holes: number; par: number; blurb: string; seed?: number };
