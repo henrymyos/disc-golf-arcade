@@ -14,13 +14,6 @@ export const SKILL_LABEL: Record<keyof CareerSkills, string> = {
 // What each skill does — shown in the hub so the benefit of training is obvious.
 // Power/Control/Putt change how you PLAY a round; Stamina is an economy stat that
 // sets how much season ENERGY you have to enter events (see seasonEnergy).
-export const SKILL_DESC: Record<keyof CareerSkills, string> = {
-  power: "Throw distance — 99 = full range",
-  control: "Aim accuracy — low spreads your shots into a cone",
-  putt: "Basket catch size — 99 = normal",
-  stamina: "Season energy — more events you can enter each year (99 = the full slate)",
-};
-
 // How skills bend the real game when you PLAY an event. At 99 every skill plays
 // exactly like normal (outside-career) golf; below 99 it gets harder:
 //   power      → throw distance        (99 = full, lower = every shot is shorter)
@@ -431,8 +424,6 @@ export function normalizeCareer(c: Career): Career {
 }
 
 // PDGA rating expected for an internal skill level (used as the early-career seed).
-export const pdgaEstimate = (s: CareerSkills): number => pdgaFromInternal(careerRating(s));
-
 export const rivalRating = (r: Rival): number => careerRating(r.skills);
 
 function parForMode(mode: Mode): { par: number; holes: number } {

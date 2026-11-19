@@ -22,8 +22,6 @@ export type Challenge = {
   // Progress toward the goal given the window's rounds (clamped by the caller).
   measure: (rows: EventRound[]) => number;
 };
-// Back-compat alias.
-export type WeeklyChallenge = Challenge;
 
 // Count holes across a window's rounds matching a per-hole predicate.
 function countHoles(rows: EventRound[], pred: (score: number, par: number) => boolean): number {
