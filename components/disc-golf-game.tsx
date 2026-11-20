@@ -2,12 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import type { RealtimeChannel } from "@supabase/supabase-js";
+import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
 import {
   submitArcadeScore, getArcadeLeaderboard, submitMiniScore, getMiniLeaderboard, submitWeeklyScore, getWeeklyLeaderboard,
 } from "@/actions/arcade";
 import type { ArcadeScore } from "@/lib/arcade-types";
-import { getSupabase } from "@/lib/supabase/browser";
 import {
   BEST_KEY, WBEST_KEY, OBEST_KEY, HOLEBEST_KEY, COURSEHOLEBEST_KEY, courseHoleBestKey, readCourseHoleBest, SETTINGS_KEY, ACH_KEY, HIST_KEY, CAREER_KEY, CAREERS_KEY, CAREER_SLOTS, COINS_KEY, DAILY_KEY, OWNED_KEY, PROFILE_KEY, RANKED_KEY, BAG_KEY, BAGSEEN_KEY, LEVELREWARD_KEY, DAILYSTARS_KEY, DAILYBEST_KEY, COINSEARNED_KEY, COINSSPENT_KEY, UPDATEDAT_KEY, LIFETIME_KEY, readLifetime, nextLifetime, readLocalProgress, applyProgress, mergeProgress, clearLocalProgress, trimDailyStars, trimDailyBests, type Progress,
 } from "@/lib/progress";
@@ -841,7 +840,13 @@ export function DiscGolfGame() {
   /* eslint-enable react-hooks/set-state-in-effect */
 
   // ── Optional login + cloud progress (Supabase, the arcade_progress table) ──
-  const supa = getSupabase();
+  // Loaded after first paint so supabase-js stays out of the initial bundle; null until then (and when unconfigured or offline).
+  const [supa, setSupa] = useState<SupabaseClient | null>(null);
+  useEffect(() => {
+    let on = true;
+    import("@/lib/supabase/browser").then((m) => { if (on) setSupa(m.getSupabase()); }).catch(() => { /* stay local-only */ });
+    return () => { on = false; };
+  }, []);
   // Guest-first: open straight to the title menu (no login gate).
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
