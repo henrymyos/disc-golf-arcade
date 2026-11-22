@@ -37,7 +37,7 @@ export function AuthPanel(props: {
             </div>
             <form onSubmit={(e) => { e.preventDefault(); if (!busy && password) onUpdatePassword(); }} className="space-y-3">
               <div className="relative">
-                <input type={showPw ? "text" : "password"} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="New password (min 6 characters)" className={`${input} pr-14`} />
+                <input aria-label="New password" type={showPw ? "text" : "password"} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="New password (min 6 characters)" className={`${input} pr-14`} />
                 <button type="button" onClick={() => setShowPw((v) => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 text-[11px] font-bold px-1">{showPw ? "HIDE" : "SHOW"}</button>
               </div>
               {error && <p className="text-red-400 text-xs">{error}</p>}
@@ -80,9 +80,9 @@ export function AuthPanel(props: {
             </div>
 
             <form onSubmit={(e) => { e.preventDefault(); if (!busy && email && password) { if (mode === "login") onSignIn(); else onSignUp(); } }} className="space-y-3">
-              <input type="email" inputMode="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" className={input} />
+              <input aria-label="Email" type="email" inputMode="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" className={input} />
               <div className="relative">
-                <input
+                <input aria-label="Password"
                   type={showPw ? "text" : "password"}
                   autoComplete={mode === "login" ? "current-password" : "new-password"}
                   value={password}

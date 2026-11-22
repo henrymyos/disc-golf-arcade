@@ -50,7 +50,7 @@ export function ProfilePanel({ profile, coins, owned, unlocked, roundsPlayed, be
         <div className="flex items-center gap-3 bg-[#1a1d23] border border-white/10 rounded-xl px-3 py-3">
           <span className="text-4xl leading-none shrink-0">{profile.avatar || DEFAULT_AVATAR}</span>
           <div className="min-w-0 flex-1">
-            <input
+            <input aria-label="Your name"
               value={profile.name}
               onChange={(e) => onSave({ ...profile, name: e.target.value.slice(0, 16) })}
               placeholder="Your name"

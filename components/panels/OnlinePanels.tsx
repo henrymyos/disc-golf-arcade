@@ -37,7 +37,7 @@ export function ChallengePanel({ online, onBack, onCreate, onJoin }: {
       {step === "join" && (
         <div className="space-y-3 text-left mt-1">
           <p className="text-gray-400 text-xs">Enter the 4-character game code your friend shared.</p>
-          <input type="text" inputMode="text" autoCapitalize="characters" autoComplete="off" value={code} maxLength={4}
+          <input aria-label="Game code" type="text" inputMode="text" autoCapitalize="characters" autoComplete="off" value={code} maxLength={4}
             onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4))}
             placeholder="CODE" className={`${input} tracking-[0.3em] text-center font-mono uppercase`} />
           <button type="button" onClick={() => code.trim().length === 4 && onJoin(code)} disabled={code.trim().length !== 4} className={`${btn} w-full disabled:opacity-50`}>Join Game</button>
@@ -149,7 +149,7 @@ export function PartyPanel({ onClose, onStart }: { onClose: () => void; onStart:
         </div>
         <div className="space-y-1.5">
           {Array.from({ length: count }, (_, i) => (
-            <input
+            <input aria-label={`Player ${i + 1} name`}
               key={i}
               type="text"
               value={names[i]}
