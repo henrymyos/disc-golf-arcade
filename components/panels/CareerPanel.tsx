@@ -158,7 +158,7 @@ export function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onS
           <li className="flex gap-2"><span className="text-[#36D7B7]">▸</span><span>Each season, spend <span className="text-[#f5d24a]">energy</span> to pick your events — bigger ones cost more and pay more.</span></li>
           <li className="flex gap-2"><span className="text-[#36D7B7]">▸</span><span>Climb from high school to the pro tour and chase <span className="text-[#f5d24a]">World #1</span> — coins you earn go to your account.</span></li>
         </ul>
-        <input type="text" value={name} maxLength={16} onChange={(e) => setName(e.target.value)} placeholder="Your name" className="w-full bg-[#1a1d23] border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-[#e0923b]" />
+        <input aria-label="Your name" type="text" value={name} maxLength={16} onChange={(e) => setName(e.target.value)} placeholder="Your name" className="w-full bg-[#1a1d23] border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-[#e0923b]" />
         <button type="button" onClick={() => onStart(name)} className={`${btn} w-full`}>Begin career</button>
       </div></div>
     );

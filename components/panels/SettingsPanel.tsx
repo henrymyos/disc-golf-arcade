@@ -115,7 +115,7 @@ export function SettingsPanel(props: {
 
         <div>
           <p className="text-gray-400 text-xs font-semibold mb-1">Music volume</p>
-          <input
+          <input aria-label="Music volume"
             type="range" min={0} max={1} step={0.05} value={musicVolume}
             onChange={(e) => setMusicVolume(Number(e.target.value))}
             className="w-full accent-[#36D7B7]"
