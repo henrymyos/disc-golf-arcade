@@ -25,9 +25,9 @@ export function WeeklyStopCard({ className, onPlay }: { className: string; onPla
       data-testid="hub-weekly"
       aria-label={stop ? `Weekly Tour Stop: ${stop.name}, ${timeLeftLabel(stop.end, now!)}. Play` : "Weekly Tour Stop"}
     >
-      <span className="text-[#f5d24a] text-[11px] font-bold uppercase tracking-wide">Weekly Tour Stop</span>
-      <span className="font-black text-lg leading-tight truncate max-w-full">{stop ? stop.name : "…"}</span>
-      <span className="text-gray-400 text-[11px]">{stop ? `${timeLeftLabel(stop.end, now!)} · ▶ Play` : " "}</span>
+      <span className="text-[#f5d24a] text-[11px] lg:text-xs font-bold uppercase tracking-wide">Weekly Tour Stop</span>
+      <span className="font-black text-lg lg:text-xl leading-tight truncate max-w-full">{stop ? stop.name : "…"}</span>
+      <span className="text-gray-400 text-[11px] lg:text-sm lg:font-medium">{stop ? `${timeLeftLabel(stop.end, now!)} · ▶ Play` : " "}</span>
     </button>
   );
 }

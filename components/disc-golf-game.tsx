@@ -70,6 +70,7 @@ import { ChallengesPanel } from "./panels/ChallengesPanel";
 import { SettingsPanel } from "./panels/SettingsPanel";
 import { AttractBackdrop } from "./menu/AttractBackdrop";
 import { DailyCard } from "./menu/DailyCard";
+import { WeeklyBoardPreview, useWideMenu } from "./menu/WeeklyBoardPreview";
 import { SupportLink, SupportNudge } from "./support/Support";
 import { UtilityRow } from "./menu/UtilityRow";
 import { nudgeEligible } from "@/lib/support";
@@ -3901,6 +3902,18 @@ export function DiscGolfGame() {
   // Replay HUD text (derived during render; only shown while watching a replay)
   const replayCap = replayView ? replayCaption(replayView.data) : null;
   const replayOnHole = replayView ? replayView.data.scores[hud.hole - 1] : undefined;
+  // Desktop home: the Daily moves to the left column (rendered once either way).
+  const wideMenu = useWideMenu();
+  const dailyCard = (
+    <DailyCard
+      stars={todayStars}
+      best={today ? (dayBests[today] ?? null) : null}
+      streak={streak}
+      onPlay={() => startGame("daily")}
+      reward={{ available: dailyAvailable(daily, today), streak: daily?.streak ?? 0, onClaim: claimDaily }}
+      goal={goal}
+    />
+  );
   if (HoleSheet && holeSheetId) return <HoleSheet courseId={holeSheetId} />;
   return (
     <div className={`app-root w-full bg-[#0f1117] flex select-none overflow-hidden ${sideLayout ? "flex-row" : "flex-col"}`}>
@@ -3968,27 +3981,31 @@ export function DiscGolfGame() {
             type="button"
             onClick={() => setSettingsOpen(true)}
             aria-label="Settings"
-            className="absolute z-10 w-11 h-11 flex items-center justify-center rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 active:bg-white/15 text-gray-300 hover:text-white text-lg transition"
             // Pin to the top-right of the app's centered mobile-width column (the
             // same 480px frame the in-round HUD caps at), not the window edge — on
             // a wide desktop the window's corner is nowhere near the app. The max()
-            // keeps it 12px from the screen edge on phones.
-            style={{ top: "max(env(safe-area-inset-top), 0.5rem)", right: "max(0.75rem, calc(50% - 240px + 0.75rem))" }}
+            // keeps it 12px from the screen edge on phones. >= 1024 px: the corner
+            // of the 1120px two-column home instead.
+            className="absolute z-10 w-11 h-11 flex items-center justify-center rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 active:bg-white/15 text-gray-300 hover:text-white text-lg transition right-[max(0.75rem,calc(50%_-_240px_+_0.75rem))] lg:right-[max(1.25rem,calc(50%_-_560px_+_1.25rem))]"
+            style={{ top: "max(env(safe-area-inset-top), 0.5rem)" }}
           >
             ⚙
           </button>
           <div className="absolute inset-0 overflow-y-auto rounded-lg bg-gradient-to-b from-[#1c2233] via-[#141926] to-[#0f1117]">
             <div
-              className="relative min-h-full flex items-start justify-center px-5"
+              className="relative min-h-full flex items-start lg:items-center justify-center px-5 lg:px-10"
               style={{ paddingTop: "max(env(safe-area-inset-top), 1.5rem)", paddingBottom: "max(env(safe-area-inset-bottom), 0.75rem)" }}
             >
-            <div className="w-full max-w-[300px] flex flex-col items-center text-center pt-1 pb-1">
+            {/* Phones: one 300px column. >= 1024 px (Nova's UI audit): a 1120px frame,
+                left 520px = title, bigger course art, profile and the Daily; right = the rest. */}
+            <div className="w-full max-w-[300px] lg:max-w-[1120px] lg:mt-8 flex flex-col lg:flex-row lg:items-start lg:gap-12 items-center text-center pt-1 pb-1">
+            <div className="w-full lg:w-[520px] lg:shrink-0 flex flex-col items-center">
               {/* Title + the hero: the demo hole looping on its side (tee → basket) */}
               <div className="w-full flex flex-col items-center gap-2">
-                <h1 className="text-white font-black text-[30px] leading-none tracking-tight">
+                <h1 className="text-white font-black text-[30px] lg:text-[40px] lg:font-extrabold lg:tracking-[-0.02em] leading-none tracking-tight">
                   Disc Golf <span className="text-[#36D7B7]">Arcade</span>
                 </h1>
-                <p className="text-gray-400 text-[11px] leading-none tracking-wide">Free · no sign-up · plays offline</p>
+                <p className="text-gray-400 text-[11px] lg:text-sm lg:font-medium leading-none tracking-wide">Free · no sign-up · plays offline</p>
                 <AttractBackdrop />
               </div>
 
@@ -4009,7 +4026,7 @@ export function DiscGolfGame() {
                         <div className="flex-1 h-1.5 bg-white/10 rounded overflow-hidden">
                           <div className="h-full bg-[#36D7B7] rounded" style={{ width: `${lvl.need ? Math.round((lvl.into / lvl.need) * 100) : 100}%` }} />
                         </div>
-                        <span className="text-[#36D7B7] font-bold text-[11px] leading-none shrink-0">Lv {lvl.level}</span>
+                        <span className="text-[#36D7B7] font-bold text-[11px] lg:text-xs leading-none shrink-0">Lv {lvl.level}</span>
                       </div>
                     </div>
                   </button>
@@ -4023,7 +4040,7 @@ export function DiscGolfGame() {
                     <button
                       type="button"
                       onClick={openSignIn}
-                      className="shrink-0 rounded-xl border border-[#36D7B7]/40 bg-[#36D7B7]/10 hover:bg-[#36D7B7]/20 px-2.5 text-[11px] font-bold leading-tight text-[#36D7B7] transition"
+                      className="shrink-0 rounded-xl border border-[#36D7B7]/40 bg-[#36D7B7]/10 hover:bg-[#36D7B7]/20 px-2.5 text-[11px] lg:text-xs font-bold leading-tight text-[#36D7B7] transition"
                     >
                       ☁ Sign in<br />to sync
                     </button>
@@ -4079,35 +4096,34 @@ export function DiscGolfGame() {
                 </div>
               )}
 
+              {wideMenu && hub === "home" && <div className="w-full mt-4">{dailyCard}</div>}
+            </div>
+
+            {/* Right column on desktop; on phones it simply continues the column. */}
+            <div className="w-full lg:flex-1 lg:min-w-0 flex flex-col items-center lg:[&>*:first-child]:mt-0">
+
               {/* Hub: three category cards keep the menu uncluttered */}
               {hub === "home" && (
                 <>
                   <div className={`w-full flex flex-col gap-2.5 ${menuTopMargin}`}>
-                    <DailyCard
-                      stars={todayStars}
-                      best={today ? (dayBests[today] ?? null) : null}
-                      streak={streak}
-                      onPlay={() => startGame("daily")}
-                      reward={{ available: dailyAvailable(daily, today), streak: daily?.streak ?? 0, onClaim: claimDaily }}
-                      goal={goal}
-                    />
+                    {!wideMenu && dailyCard}
                     <div className="flex gap-2.5">
                       <WeeklyStopCard className={`${hubCard} px-2`} onPlay={(seed) => runWithProTour("tour", seed, () => startGame("tour", seed), setReplayLoadErr)} />
                       <button type="button" onClick={() => setProTourOpen(true)} className={`${hubCard} !flex-col gap-0.5 min-w-0 flex-1 px-2`} data-testid="hub-protour">
-                        <span className="font-black text-lg leading-tight whitespace-nowrap">2026 Pro Tour</span>
-                        <span className="text-gray-400 text-[11px]">Real courses</span>
-                        <span className="text-gray-400 text-[11px]">{PRO_STOPS_BUILT} of {SEASON_2026.length} stops</span>
+                        <span className="font-black text-lg lg:text-xl leading-tight whitespace-nowrap">2026 Pro Tour</span>
+                        <span className="text-gray-400 text-[11px] lg:text-sm lg:font-medium">Real courses</span>
+                        <span className="text-gray-400 text-[11px] lg:text-sm lg:font-medium">{PRO_STOPS_BUILT} of {SEASON_2026.length} stops</span>
                       </button>
                     </div>
                     <button type="button" onClick={() => setHub("solo")} className={hubCard}>
-                      <span className="font-black text-lg">Single Player</span>
+                      <span className="font-black text-lg lg:text-xl">Single Player</span>
                     </button>
                     <div className="flex gap-2.5">
                       <button type="button" onClick={() => setHub("online")} className={hubCard}>
-                        <span className="font-black text-lg">Online</span>
+                        <span className="font-black text-lg lg:text-xl">Online</span>
                       </button>
                       <button type="button" onClick={() => setHub("practice")} className={hubCard}>
-                        <span className="font-black text-lg">Practice</span>
+                        <span className="font-black text-lg lg:text-xl">Practice</span>
                       </button>
                     </div>
                     {newPlayer && roundsPlayed === 0 && (
@@ -4116,6 +4132,8 @@ export function DiscGolfGame() {
                       </button>
                     )}
                   </div>
+
+                  {wideMenu && <div className="w-full mt-4"><WeeklyBoardPreview onOpenBoards={() => setBoardsOpen(true)} /></div>}
 
                   {/* Utilities: Bag, Shop, Goals, Leaderboards as one icon row (Settings = top-right gear) */}
                   <UtilityRow
@@ -4198,6 +4216,7 @@ export function DiscGolfGame() {
                   />
                 </div>
               )}
+            </div>
             </div>
             </div>
           </div>
@@ -4750,9 +4769,11 @@ export function DiscGolfGame() {
 
       {screen === "gameComplete" && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-[#0f1117]/95 backdrop-blur-sm px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-start sm:items-center justify-center">
-          <div className="w-full max-w-lg space-y-3 my-auto">
+          {/* >= 1024 px: two columns (score + card | achievements, board, actions); phones keep one. */}
+          <div className="w-full max-w-lg lg:max-w-[1120px] space-y-3 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-8 lg:items-start my-auto">
+            <div className="space-y-3">
             <div className="text-center">
-              <p className="text-gray-400 text-[11px] font-semibold uppercase tracking-wide">
+              <p className="text-gray-400 text-[11px] lg:text-xs font-semibold uppercase tracking-wide">
                 {finalPracticeHole != null
                   ? `${finalMode === "winthrop" ? "Winthrop Lake" : finalMode === "olympus" ? "Olympus" : finalMode === "tour" ? tourVenue(finalSeed) : "Glendoveer East"} · hole ${finalPracticeHole} · par ${finalParTotal}`
                   : finalIsDaily
@@ -4806,7 +4827,7 @@ export function DiscGolfGame() {
                   Share
                 </button>
               )}
-              {cardMsg && <p role="status" className="text-[#36D7B7] text-[11px] mt-1">{cardMsg}</p>}
+              {cardMsg && <p role="status" className="text-[#36D7B7] text-[11px] lg:text-xs mt-1">{cardMsg}</p>}
               {!finalParty && !finalOnline && (<>
                 {/* Tip-jar nudge: finished Daily or 18-hole rounds only (lib/support.ts nudgeEligible). */}
                 {nudgeEligible({ practice: finalPracticeHole != null, proTour: finalIsProTour, multiplayer: !!finalParty || finalOnline, daily: finalIsDaily, holes: finalPars.length }) && (
@@ -4824,7 +4845,7 @@ export function DiscGolfGame() {
                       <p className="text-[#f5d24a] text-sm font-bold mt-1">+{finalDailyStars.coins} <Coin /> star bonus</p>
                     )}
                     {streak >= 2 && <p className="text-[#e0923b] text-xs font-bold mt-1.5">🔥 {streak}-day Daily streak</p>}
-                    <p className="text-gray-400 text-[10px] mt-1.5">
+                    <p className="text-gray-400 text-[10px] lg:text-xs mt-1.5">
                       {finalDailyStars.earned === 3
                         ? "All 3 stars — today's course, conquered!"
                         : finalDailyStars.best > finalDailyStars.earned
@@ -4850,7 +4871,7 @@ export function DiscGolfGame() {
                         <span className="text-xl leading-none">{r.tier.emoji}</span>
                         <span className="font-bold text-sm" style={{ color: r.tier.color }}>{r.placed ? "" : "Projected: "}{r.tier.name}</span>
                       </div>
-                      <p className="text-gray-400 text-[11px] mt-1.5">
+                      <p className="text-gray-400 text-[11px] lg:text-xs mt-1.5">
                         {r.placed
                           ? `You've been placed in ${r.tier.name}. Ranked rounds from here move your RP up or down.`
                           : `${r.remaining} placement round${r.remaining === 1 ? "" : "s"} to go — your projected rank adjusts as you play.`}
@@ -4868,12 +4889,12 @@ export function DiscGolfGame() {
                     <div className="flex items-center gap-2 mt-1.5">
                       <span className="text-xl leading-none">{tr.tier.emoji}</span>
                       <span className="font-bold text-sm" style={{ color: tr.tier.color }}>{tr.tier.name}</span>
-                      <span className="text-gray-400 font-mono text-[11px]">{ranked?.rp ?? 0} RP</span>
-                      {r.tierUp && <span className="text-[#36D7B7] text-[11px] font-bold">▲ Promoted!</span>}
-                      {r.tierDown && <span className="text-[#e08a3b] text-[11px] font-bold">▼ Demoted</span>}
+                      <span className="text-gray-400 font-mono text-[11px] lg:text-xs">{ranked?.rp ?? 0} RP</span>
+                      {r.tierUp && <span className="text-[#36D7B7] text-[11px] lg:text-xs font-bold">▲ Promoted!</span>}
+                      {r.tierDown && <span className="text-[#e08a3b] text-[11px] lg:text-xs font-bold">▼ Demoted</span>}
                     </div>
-                    {r.streak >= 2 && <p className="text-[#f5d24a] text-[11px] font-bold mt-1.5">🔥 {r.streak}-podium streak{r.bonus > 0 ? ` · +${r.bonus} bonus RP` : ""}</p>}
-                    {r.weight > 1.05 && <p className="text-[#6cb6ff] text-[11px] font-bold mt-1.5">⚡ Settling in · ×{r.weight.toFixed(1)} RP (early rounds count more)</p>}
+                    {r.streak >= 2 && <p className="text-[#f5d24a] text-[11px] lg:text-xs font-bold mt-1.5">🔥 {r.streak}-podium streak{r.bonus > 0 ? ` · +${r.bonus} bonus RP` : ""}</p>}
+                    {r.weight > 1.05 && <p className="text-[#6cb6ff] text-[11px] lg:text-xs font-bold mt-1.5">⚡ Settling in · ×{r.weight.toFixed(1)} RP (early rounds count more)</p>}
                   </div>
                 );
               })()}
@@ -4938,7 +4959,7 @@ export function DiscGolfGame() {
                     {/* Same look as the in-round card: hole # / line / par / boxed, color-coded score. */}
                     <div className="grid gap-x-1 gap-y-0.5 justify-center items-center" style={{ gridTemplateColumns: `repeat(${cells.length}, 24px)` }}>
                       {cells.map((_, i) => (
-                        <span key={`n${from + i}`} className="text-center text-[10px] font-semibold leading-none text-gray-300">{finalPracticeHole ?? from + i + 1}</span>
+                        <span key={`n${from + i}`} className="text-center text-[10px] lg:text-xs font-semibold leading-none text-gray-300">{finalPracticeHole ?? from + i + 1}</span>
                       ))}
                       <div className="col-span-full border-t border-white/15" />
                       {cells.map((p, i) => (
@@ -4959,7 +4980,7 @@ export function DiscGolfGame() {
                           diff === 2 ? "#b02525" :
                           "#7d2b1e";
                         return (
-                          <span key={`s${from + i}`} className={`w-6 h-6 flex items-center justify-center text-[11px] font-mono font-bold leading-none border ${boxed ? "rounded-md" : ""}`} style={{ color, borderColor: boxed ? color : "transparent" }}>{s ?? "–"}</span>
+                          <span key={`s${from + i}`} className={`w-6 h-6 flex items-center justify-center text-[11px] lg:text-xs font-mono font-bold leading-none border ${boxed ? "rounded-md" : ""}`} style={{ color, borderColor: boxed ? color : "transparent" }}>{s ?? "–"}</span>
                         );
                       })}
                     </div>
@@ -4973,6 +4994,8 @@ export function DiscGolfGame() {
             </div>
             )}
 
+            </div>
+            <div className="space-y-3">
             {/* Newly-unlocked achievements: one summary line that expands on tap,
                 so a big first round doesn't push the scorecard off the screen. */}
             {newAchievements.length > 0 && (
@@ -5044,7 +5067,7 @@ export function DiscGolfGame() {
             <div className="bg-[#1a1d23] border border-white/5 rounded-2xl overflow-hidden">
               <p className="text-white font-bold text-sm px-4 py-2.5 border-b border-white/5">
                 🏆 {finalWeekly ? `Weekly Tour Stop · ${finalWeekly.name}` : finalIsDaily ? "Today's leaderboard" : finalMode === "tour" ? `${tourVenue(finalSeed)} leaderboard` : `${finalMode === "winthrop" ? "Winthrop Lake" : finalMode === "olympus" ? "Olympus" : "Glendoveer East"} leaderboard`}
-                {finalWeekly && <span className="block text-gray-500 text-[11px] font-normal mt-0.5">Top 10 · {clock == null ? "" : timeLeftLabel(finalWeekly.end, clock)}</span>}
+                {finalWeekly && <span className="block text-gray-500 text-[11px] lg:text-xs font-normal mt-0.5">Top 10 · {clock == null ? "" : timeLeftLabel(finalWeekly.end, clock)}</span>}
               </p>
               {leaderboard.length === 0 ? (
                 <p className="text-gray-400 text-sm text-center py-6">No scores yet — be the first!</p>
@@ -5109,7 +5132,7 @@ export function DiscGolfGame() {
                   </button>
                 </div>
               )}
-              {shareMsg && <p className="text-[#36D7B7] text-[11px] text-center -mt-0.5 break-all select-all">{shareMsg}</p>}
+              {shareMsg && <p className="text-[#36D7B7] text-[11px] lg:text-xs text-center -mt-0.5 break-all select-all">{shareMsg}</p>}
               {finalMode !== "ranked" && (
                 <button
                   type="button"
@@ -5119,6 +5142,7 @@ export function DiscGolfGame() {
                   🏠 Home
                 </button>
               )}
+            </div>
             </div>
           </div>
         </div>

@@ -17,7 +17,7 @@ export function GameStatsGrid({ stats, className = "" }: { stats: RoundStats; cl
     <div className={`grid grid-cols-2 gap-1.5 text-left ${className}`}>
       {cells.map((c) => (
         <div key={c.label} className="bg-[#1a1d23] border border-white/10 rounded-lg px-2.5 py-1.5">
-          <p className="text-gray-400 text-[10px] font-semibold uppercase tracking-wide">{c.label} <span className="normal-case tracking-normal font-normal text-gray-500">· {c.hint}</span></p>
+          <p className="text-gray-400 text-[10px] lg:text-xs font-semibold uppercase tracking-wide">{c.label} <span className="normal-case tracking-normal font-normal text-gray-500">· {c.hint}</span></p>
           <p className="text-white font-mono font-bold text-sm">{c.value}</p>
         </div>
       ))}
