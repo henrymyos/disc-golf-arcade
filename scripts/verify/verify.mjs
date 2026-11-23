@@ -70,11 +70,13 @@ groups.boot = async size => {
       utilsRow: utils.every(Boolean) && utils.every((u, i) => u.top === utils[0].top && u.width >= 44 && u.height >= 44 && (i === 0 || u.left > utils[i - 1].left)),
       scroll: sc ? sc.scrollHeight - sc.clientHeight : null,
       vh: innerHeight,
+      board: !!document.querySelector('[data-testid="home-board"]'),
     };
   });
   check(home.daily === 1, `one Daily entry on home (found ${home.daily})`);
   check(home.proTour, "2026 Pro Tour card on home");
   check(home.weekly, "Weekly Tour Stop card on home");
+  check(home.board === size.width >= 1024, `top-5 weekly board ${size.width >= 1024 ? "on the desktop home" : "absent on phones"}`);
   check(home.oldNames.length === 0, `no "Challenges"/"Challenge the Arcade" buttons${home.oldNames.length ? ": " + home.oldNames.join(", ") : ""}`);
   if (await clickText(p, "^🎁 Daily reward$")) // the reward claim moved into the Daily card
     check(await waitText(p, "^Daily reward · ", 5000).then(() => true, () => false), "Daily reward claim opens the reward popup");

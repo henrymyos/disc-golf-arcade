@@ -90,3 +90,6 @@ body {
 
 /* Controller menu focus (set by the pad handler, cleared by the next pointer press). */
 html[data-pad] :focus { outline: 2px solid #36D7B7; outline-offset: 2px; }
+
+/* Keyboard focus (Nova's UI audit 2026-11-21): 2px accent ring, 2px offset. Taps don't trigger :focus-visible. */
+:focus-visible { outline: 2px solid #36D7B7; outline-offset: 2px; }

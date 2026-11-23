@@ -34,7 +34,7 @@ export function UtilityRow({ goalsReady, onBag, onShop, onGoals, onBoards }: {
               </span>
             )}
           </span>
-          <span className="text-[10px] font-semibold leading-none" aria-hidden="true">{label}</span>
+          <span className="text-[10px] lg:text-xs font-semibold leading-none" aria-hidden="true">{label}</span>
         </button>
       ))}
     </div>

@@ -26,7 +26,7 @@ export function DailyCard({ stars, best, streak, onPlay, reward, goal }: {
         className="w-full bg-[#36D7B7] hover:bg-[#2ec2a6] active:bg-[#2bc4a6] text-[#0f1117] px-4 py-3 transition text-left"
       >
         <span className="flex items-center justify-between gap-2">
-          <span className="font-black text-lg leading-tight">▶ Play today&apos;s Daily</span>
+          <span className="font-black text-lg lg:text-xl leading-tight">▶ Play today&apos;s Daily</span>
           {streak > 0 && (
             <span className="shrink-0 rounded-full bg-[#0f1117]/15 px-2 py-0.5 text-xs font-black" aria-label={`Daily streak ${streak} days`}>
               🔥 {streak}
@@ -49,7 +49,7 @@ export function DailyCard({ stars, best, streak, onPlay, reward, goal }: {
             🎁 Daily reward
           </button>
         ) : (
-          <span className="shrink-0 min-h-11 flex items-center rounded-lg border border-white/10 text-gray-400 text-[11px] font-semibold px-2.5">
+          <span className="shrink-0 min-h-11 flex items-center rounded-lg border border-white/10 text-gray-400 text-[11px] lg:text-xs font-semibold px-2.5">
             🎁 Claimed · 🔥 {reward.streak}d
           </span>
         )}

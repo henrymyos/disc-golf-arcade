@@ -10,10 +10,10 @@ export function SupportLink() {
   if (!url) return null;
   return (
     <div className="w-full text-center mt-2" data-testid="support-link">
-      <a href={url} target="_blank" rel="noopener" className="text-[#36D7B7] text-sm font-semibold hover:underline">
+      <a href={url} target="_blank" rel="noopener" className="text-[#36D7B7] text-sm font-semibold hover:underline lg:inline-flex lg:items-center lg:min-h-11">
         Support the Arcade
       </a>
-      <p className="text-gray-500 text-[11px] mt-0.5">Free, no ads, no paywalls. Tips help pay for new courses.</p>
+      <p className="text-gray-500 text-[11px] lg:text-xs mt-0.5">Free, no ads, no paywalls. Tips help pay for new courses.</p>
     </div>
   );
 }
