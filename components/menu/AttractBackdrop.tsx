@@ -47,7 +47,8 @@ export function AttractBackdrop() {
     let offset = 0;      // ms of loop already played before the last pause
     let startT = 0;
     const render = (now: number) => {
-      paint((offset + now - startT) % demo.total, now);
+      // Hidden on short phones (CSS below): keep the loop clock, skip the draw.
+      if (cv.clientWidth) paint((offset + now - startT) % demo.total, now);
       raf = requestAnimationFrame(render);
     };
     const start = () => {
@@ -77,7 +78,8 @@ export function AttractBackdrop() {
       height={STRIP_H}
       data-attract
       aria-hidden
-      className="pointer-events-none block w-full"
+      // Short phones (<= 760 px tall, e.g. 360x740, 375x667): drop the ~123 px strip so the home menu fits.
+      className="pointer-events-none block w-full max-lg:[@media(max-height:760px)]:hidden"
       style={{
         imageRendering: "pixelated",
         aspectRatio: `${STRIP_W} / ${STRIP_H}`,
