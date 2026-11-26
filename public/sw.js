@@ -4,6 +4,17 @@
 // pin an old JS bundle across deploys — hence this rewrite. Bump CACHE to purge
 // any stale cache from older service workers on the next activation.
 const CACHE = "dga-v3";
+// Every deploy renames the hashed /_next/static chunks, so without a cap the
+// cache keeps every old build forever. One build is ~45 files; keep ~3 builds.
+const MAX_ENTRIES = 150;
+
+// Cache keys are in insertion order and put() re-appends a key, so files the
+// current build still uses stay at the end; trim the oldest from the front.
+function trim(cache) {
+  return cache.keys().then((keys) =>
+    Promise.all(keys.slice(0, Math.max(0, keys.length - MAX_ENTRIES)).map((k) => cache.delete(k))),
+  );
+}
 
 self.addEventListener("install", () => {
   self.skipWaiting();
@@ -31,7 +42,7 @@ self.addEventListener("fetch", (event) => {
       .then((res) => {
         if (res.ok) {
           const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put(request, copy));
+          caches.open(CACHE).then((c) => c.put(request, copy).then(() => trim(c)));
         }
         return res;
       })
