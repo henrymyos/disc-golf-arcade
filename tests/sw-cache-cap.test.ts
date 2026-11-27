@@ -23,7 +23,9 @@ function boot() {
     const request = new Request(`https://example.test${path}`);
     handlers.fetch({ request, respondWith: (p: Promise<unknown>) => (done = p) });
     await done;
-    for (let i = 0; i < 10; i++) await new Promise((r) => setTimeout(r, 0)); // let put + trim settle
+    // The mocks resolve via microtasks only, so one setImmediate runs after put + trim
+    // settle; setTimeout ticks get coalesced by macOS for background runs (minutes).
+    await new Promise((r) => setImmediate(r));
   }
   return { store, get };
 }
