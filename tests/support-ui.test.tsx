@@ -29,6 +29,12 @@ describe("support UI", () => {
     expect(SUPPORTERS).toEqual([]);
     expect(renderToStaticMarkup(h(SupportSettingsRow, { supporters: ["Ann", "Bo", "Cy"] }))).toContain("Thanks to our supporters: Ann, Bo, Cy");
   });
+  it("menu link: 44 px phone hit area from inline padding (no layout shift), min-h-11 on desktop", () => {
+    vi.stubEnv("NEXT_PUBLIC_SUPPORT_URL", URL);
+    const cls = renderToStaticMarkup(h(SupportLink)).match(/<a [^>]*class="([^"]+)"/)![1].split(" ");
+    expect(cls).toEqual(expect.arrayContaining(["max-lg:relative", "max-lg:pt-2", "max-lg:pb-4", "lg:min-h-11"]));
+    expect(cls).not.toContain("inline-block"); // padding must stay inline so the 390x844 home still fits
+  });
   it("Settings row: the whole row is the link, at least 44 px tall", () => {
     vi.stubEnv("NEXT_PUBLIC_SUPPORT_URL", URL);
     const row = renderToStaticMarkup(h(SupportSettingsRow));

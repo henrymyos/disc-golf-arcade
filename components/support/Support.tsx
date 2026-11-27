@@ -10,7 +10,9 @@ export function SupportLink() {
   if (!url) return null;
   return (
     <div className="w-full text-center mt-2" data-testid="support-link">
-      <a href={url} target="_blank" rel="noopener" className="text-[#36D7B7] text-sm font-semibold hover:underline lg:inline-flex lg:items-center lg:min-h-11">
+      {/* Phone: inline padding grows the hit area to 44 px (8 + 20 + 16) without moving layout;
+          relative keeps it above the caption below. Desktop: min-h-11. */}
+      <a href={url} target="_blank" rel="noopener" className="text-[#36D7B7] text-sm font-semibold hover:underline max-lg:relative max-lg:pt-2 max-lg:pb-4 lg:inline-flex lg:items-center lg:min-h-11">
         Support the Arcade
       </a>
       <p className="text-gray-500 text-[11px] lg:text-xs mt-0.5">Free, no ads, no paywalls. Tips help pay for new courses.</p>
