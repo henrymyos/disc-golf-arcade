@@ -4655,7 +4655,7 @@ export function DiscGolfGame() {
       {/* A shared replay link (?rp=) waits for a tap so audio can start. */}
       {(pendingReplay || replayLoadErr) && screen !== "playing" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0f1117]/85 backdrop-blur-sm px-6">
-          <div className="w-full max-w-[340px] max-h-[calc(100dvh-2rem)] overflow-y-auto bg-[#1a1d23] border border-white/15 rounded-xl p-5 flex flex-col gap-3 text-center">
+          <div role="dialog" aria-modal="true" aria-label={pendingReplay ? "Shared replay" : "Replay link"} className="w-full max-w-[340px] max-h-[calc(100dvh-2rem)] overflow-y-auto bg-[#1a1d23] border border-white/15 rounded-xl p-5 flex flex-col gap-3 text-center">
             {pendingReplay ? (<>
               <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#36D7B7]">Shared replay{pendingCard?.stop ? ` · ${pendingCard.stop}` : ""}</div>
               <div className={`font-black text-2xl leading-tight ${pendingCard?.highlight ? (pendingCard.highlight.diff <= -2 || pendingCard.highlight.score === 1 ? "text-[#f5d24a]" : "text-[#36D7B7]") : "text-white"}`}>{pendingCard?.headline}</div>
@@ -4715,7 +4715,7 @@ export function DiscGolfGame() {
 
       {miniResult && (
         <div className="fixed inset-0 z-50 overflow-y-auto flex items-start sm:items-center justify-center bg-[#0f1117]/95 backdrop-blur-sm px-6 pt-[max(env(safe-area-inset-top),1.5rem)] pb-[max(env(safe-area-inset-bottom),1.5rem)]">
-          <div className="w-full max-w-xs text-center space-y-3 my-auto">
+          <div role="dialog" aria-modal="true" aria-label={miniResult.kind === "putt" ? "Putting Practice" : "Accuracy Practice"} className="w-full max-w-xs text-center space-y-3 my-auto">
             <p className="text-5xl">{miniResult.kind === "putt" ? "⛳" : "🎯"}</p>
             <h2 className="text-white font-black text-2xl">{miniResult.kind === "putt" ? "Putting Practice" : "Accuracy Practice"}</h2>
             {miniResult.kind === "putt" ? (

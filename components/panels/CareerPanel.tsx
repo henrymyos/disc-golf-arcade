@@ -550,7 +550,7 @@ export function CareerPanel({ career, lastResult, lastCoins, notes, onClose, onS
         const nums = (d.blurb.split("· ")[1] ?? d.blurb).trim();
         return (
           <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 backdrop-blur-sm p-5" onClick={() => setDiscInfo(null)}>
-            <div className="w-full max-w-[270px] rounded-2xl bg-gradient-to-b from-[#1c2233] to-[#12151c] border border-white/15 p-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div role="dialog" aria-modal="true" aria-label={d.name} className="w-full max-w-[270px] rounded-2xl bg-gradient-to-b from-[#1c2233] to-[#12151c] border border-white/15 p-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center gap-2.5">
                 <span className="w-6 h-6 rounded-full shrink-0 border border-black/40" style={{ background: d.color }} />
                 <div className="min-w-0">
