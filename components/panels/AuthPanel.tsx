@@ -38,7 +38,7 @@ export function AuthPanel(props: {
             <form onSubmit={(e) => { e.preventDefault(); if (!busy && password) onUpdatePassword(); }} className="space-y-3">
               <div className="relative">
                 <input aria-label="New password" type={showPw ? "text" : "password"} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="New password (min 6 characters)" className={`${input} pr-14`} />
-                <button type="button" onClick={() => setShowPw((v) => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 text-[11px] font-bold px-1">{showPw ? "HIDE" : "SHOW"}</button>
+                <button type="button" onClick={() => setShowPw((v) => !v)} aria-label={showPw ? "Hide password" : "Show password"} className="absolute right-0 top-1/2 -translate-y-1/2 h-11 min-w-11 px-2 text-gray-500 hover:text-gray-300 text-xs font-bold">{showPw ? "HIDE" : "SHOW"}</button>
               </div>
               {error && <p className="text-red-400 text-xs">{error}</p>}
               {message && <p className="text-[#36D7B7] text-xs">{message}</p>}
@@ -54,7 +54,7 @@ export function AuthPanel(props: {
               <h2 className="text-white font-black text-xl">Account</h2>
             </div>
             <div className="bg-[#1a1d23] border border-white/10 rounded-xl px-3 py-3">
-              <p className="text-gray-500 text-[11px] uppercase tracking-wide font-semibold">Signed in as</p>
+              <p className="text-gray-500 text-xs uppercase tracking-wide font-semibold">Signed in as</p>
               <p className="text-white font-semibold break-all text-sm mt-0.5">{user.email}</p>
             </div>
             <p className="text-[#36D7B7] text-xs font-semibold">✓ Best scores, coins &amp; achievements sync across devices.</p>
@@ -90,7 +90,7 @@ export function AuthPanel(props: {
                   placeholder={mode === "login" ? "Password" : "Password (min 6 characters)"}
                   className={`${input} pr-14`}
                 />
-                <button type="button" onClick={() => setShowPw((v) => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 text-[11px] font-bold px-1">
+                <button type="button" onClick={() => setShowPw((v) => !v)} aria-label={showPw ? "Hide password" : "Show password"} className="absolute right-0 top-1/2 -translate-y-1/2 h-11 min-w-11 px-2 text-gray-500 hover:text-gray-300 text-xs font-bold">
                   {showPw ? "HIDE" : "SHOW"}
                 </button>
               </div>
@@ -104,7 +104,7 @@ export function AuthPanel(props: {
             </form>
 
             {mode === "login" && (
-              <button type="button" onClick={onResetPassword} disabled={busy} className="w-full text-center text-gray-500 hover:text-gray-300 text-[11px] transition disabled:opacity-50">
+              <button type="button" onClick={onResetPassword} disabled={busy} className="w-full min-h-11 text-center text-gray-500 hover:text-gray-300 text-xs transition disabled:opacity-50">
                 Forgot password?
               </button>
             )}
@@ -116,7 +116,7 @@ export function AuthPanel(props: {
                 <>Already have an account? <button type="button" onClick={() => switchTo("login")} className="text-[#36D7B7] font-semibold hover:brightness-110">Log in</button></>
               )}
             </p>
-            <p className="text-gray-600 text-[11px] text-center">Your scores also save on this device without an account.</p>
+            <p className="text-gray-600 text-xs text-center">Your scores also save on this device without an account.</p>
           </div>
         )}
       </div>
