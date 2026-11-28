@@ -18,6 +18,9 @@ export function BoardNamePrompt({ initialName, error, canSignIn, onPost, onSkip,
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-[#0f1117]/85 backdrop-blur-sm px-5">
       <form
+        role="dialog"
+        aria-modal="true"
+        aria-label="Post to the leaderboard?"
         className="w-full max-w-[300px] rounded-2xl border border-white/10 bg-[#1a1d23] p-4 space-y-3"
         onSubmit={(e) => { e.preventDefault(); if (clean) onPost(clean); }}
       >

@@ -16,7 +16,7 @@ export function LevelUpPanel({ level, choices, bagHasRoom, onPick }: {
   const discs = choices.map((k) => discByKey(k)).filter((d): d is NonNullable<typeof d> => !!d);
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-[#0f1117]/85 backdrop-blur-sm p-5">
-      <div className="w-full max-w-xs rounded-2xl bg-gradient-to-b from-[#1c2233] to-[#0f1117] border border-[#36D7B7]/30 p-5 text-center shadow-2xl">
+      <div role="dialog" aria-modal="true" aria-label={`Level ${level}: pick a new disc`} className="w-full max-w-xs rounded-2xl bg-gradient-to-b from-[#1c2233] to-[#0f1117] border border-[#36D7B7]/30 p-5 text-center shadow-2xl">
         <p className="text-[#f5d24a] font-black text-xs tracking-[0.2em]">⬆ LEVEL UP</p>
         <h2 className="text-white font-black text-3xl mt-0.5 leading-none">Level {level}</h2>
         <p className="text-gray-300 text-sm font-semibold mt-2">Pick a new disc for your bag</p>
